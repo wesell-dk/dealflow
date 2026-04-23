@@ -4,6 +4,7 @@ import { randomUUID } from 'node:crypto';
 import { ObjectStorageService } from '../lib/objectStorage';
 import { validateInline } from '../middlewares/validate';
 import * as Z from '@workspace/api-zod';
+import { z } from 'zod';
 
 async function resolveLogoForPdf(logoUrl: string | null | undefined): Promise<string | null> {
   if (!logoUrl) return null;
@@ -261,6 +262,7 @@ router.post('/accounts', async (req, res) => {
 });
 
 router.get('/accounts/:id', async (req, res) => {
+  if (!validateInline(req, res, { params: Z.GetAccountParams })) return;
   if (!(await gateAccount(req, res, req.params.id))) return;
   const [a] = await db.select().from(accountsTable).where(eq(accountsTable.id, req.params.id));
   if (!a) { res.status(404).json({ error: 'not found' }); return; }
@@ -278,6 +280,7 @@ router.get('/accounts/:id', async (req, res) => {
 });
 
 router.get('/contacts', async (req, res) => {
+  if (!validateInline(req, res, { query: Z.ListContactsQueryParams })) return;
   const accountId = (req.query.accountId as string | undefined) ?? null;
   const accIds = await allowedAccountIds(req);
   const list = accountId
@@ -301,6 +304,7 @@ router.get('/contacts', async (req, res) => {
 
 // ── DEALS ──
 router.get('/deals', async (req, res) => {
+  if (!validateInline(req, res, { query: Z.ListDealsQueryParams })) return;
   const scope = getScope(req);
   const filters = [];
   if (req.query.stage)     filters.push(eq(dealsTable.stage, String(req.query.stage)));
@@ -371,6 +375,7 @@ router.get('/deals/pipeline', async (req, res) => {
 });
 
 router.get('/deals/:id', async (req, res) => {
+  if (!validateInline(req, res, { params: Z.GetDealParams })) return;
   if (!(await gateDeal(req, res, req.params.id))) return;
   const [d] = await db.select().from(dealsTable).where(eq(dealsTable.id, req.params.id));
   if (!d) { res.status(404).json({ error: 'not found' }); return; }
@@ -421,6 +426,7 @@ router.patch('/deals/:id', async (req, res) => {
 });
 
 router.get('/deals/:id/timeline', async (req, res) => {
+  if (!validateInline(req, res, { params: Z.GetDealTimelineParams })) return;
   if (!(await gateDeal(req, res, req.params.id))) return;
   const rows = await db.select().from(timelineEventsTable)
     .where(eq(timelineEventsTable.dealId, req.params.id))
@@ -459,6 +465,7 @@ async function enrichQuote(q: typeof quotesTable.$inferSelect, dealName: string)
 }
 
 router.get('/quotes', async (req, res) => {
+  if (!validateInline(req, res, { query: Z.ListQuotesQueryParams })) return;
   const filters = [];
   if (req.query.dealId) filters.push(eq(quotesTable.dealId, String(req.query.dealId)));
   if (req.query.status) filters.push(eq(quotesTable.status, String(req.query.status)));
@@ -496,6 +503,7 @@ router.post('/quotes', async (req, res) => {
 });
 
 router.get('/quotes/:id', async (req, res) => {
+  if (!validateInline(req, res, { params: Z.GetQuoteParams })) return;
   const [q] = await db.select().from(quotesTable).where(eq(quotesTable.id, req.params.id));
   if (!q) { res.status(404).json({ error: 'not found' }); return; }
   if (!(await gateDeal(req, res, q.dealId))) return;
@@ -526,6 +534,7 @@ router.get('/quotes/:id', async (req, res) => {
 });
 
 router.get('/quotes/:id/pdf', async (req, res) => {
+  if (!validateInline(req, res, { params: Z.GetQuotePdfParams })) return;
   const [q] = await db.select().from(quotesTable).where(eq(quotesTable.id, req.params.id));
   if (!q) { res.status(404).json({ error: 'not found' }); return; }
   if (!(await gateDeal(req, res, q.dealId))) return;
@@ -747,6 +756,7 @@ function mapApproval(
 }
 
 router.get('/approvals', async (req, res) => {
+  if (!validateInline(req, res, { query: Z.ListApprovalsQueryParams })) return;
   const filters = [];
   if (req.query.status) filters.push(eq(approvalsTable.status, String(req.query.status)));
   if (req.query.amendmentId) filters.push(eq(approvalsTable.amendmentId, String(req.query.amendmentId)));
@@ -790,6 +800,7 @@ function mapContract(c: typeof contractsTable.$inferSelect, dealName: string, cl
 }
 
 router.get('/contracts', async (req, res) => {
+  if (!validateInline(req, res, { query: Z.ListContractsQueryParams })) return;
   const dealIds = await scopedDealIds(req);
   if (dealIds.length === 0) { res.json([]); return; }
   const filters = [inArray(contractsTable.dealId, dealIds)];
@@ -981,6 +992,7 @@ router.patch('/brands/:id/default-clauses', async (req, res) => {
 });
 
 router.get('/contracts/:id', async (req, res) => {
+  if (!validateInline(req, res, { params: Z.GetContractParams })) return;
   const [c] = await db.select().from(contractsTable).where(eq(contractsTable.id, req.params.id));
   if (!c) { res.status(404).json({ error: 'not found' }); return; }
   if (!(await gateDeal(req, res, c.dealId))) return;
@@ -1045,6 +1057,7 @@ async function nextAmendmentNumber(originalContractId: string): Promise<string> 
 }
 
 router.get('/contracts/:id/amendments', async (req, res) => {
+  if (!validateInline(req, res, { params: Z.ListContractAmendmentsParams })) return;
   const [c] = await db.select().from(contractsTable).where(eq(contractsTable.id, req.params.id));
   if (!c) { res.status(404).json({ error: 'not found' }); return; }
   if (!(await gateDeal(req, res, c.dealId))) return;
@@ -1106,6 +1119,7 @@ router.post('/contracts/:id/amendments', async (req, res) => {
 });
 
 router.get('/amendments/:id', async (req, res) => {
+  if (!validateInline(req, res, { params: Z.GetContractAmendmentParams })) return;
   const [a] = await db.select().from(contractAmendmentsTable).where(eq(contractAmendmentsTable.id, req.params.id));
   if (!a) { res.status(404).json({ error: 'not found' }); return; }
   const [c] = await db.select().from(contractsTable).where(eq(contractsTable.id, a.originalContractId));
@@ -1209,6 +1223,7 @@ router.patch('/amendments/:id', async (req, res) => {
 });
 
 router.get('/contracts/:id/effective-state', async (req, res) => {
+  if (!validateInline(req, res, { params: Z.GetContractEffectiveStateParams })) return;
   const [c] = await db.select().from(contractsTable).where(eq(contractsTable.id, req.params.id));
   if (!c) { res.status(404).json({ error: 'not found' }); return; }
   if (!(await gateDeal(req, res, c.dealId))) return;
@@ -1300,6 +1315,7 @@ router.get('/contracts/:id/effective-state', async (req, res) => {
 });
 
 router.get('/contracts/:id/pdf', async (req, res) => {
+  if (!validateInline(req, res, { params: Z.GetContractPdfParams })) return;
   const [c] = await db.select().from(contractsTable).where(eq(contractsTable.id, req.params.id));
   if (!c) { res.status(404).json({ error: 'not found' }); return; }
   if (!(await gateDeal(req, res, c.dealId))) return;
@@ -1361,6 +1377,7 @@ router.get('/clause-families', async (_req, res) => {
 });
 
 router.get('/contracts/:id/clauses', async (req, res) => {
+  if (!validateInline(req, res, { params: Z.ListContractClausesParams })) return;
   const [c] = await db.select().from(contractsTable).where(eq(contractsTable.id, req.params.id));
   if (!c) { res.status(404).json({ error: 'not found' }); return; }
   if (!(await gateDeal(req, res, c.dealId))) return;
@@ -1474,6 +1491,7 @@ router.patch('/contract-clauses/:id', async (req, res) => {
 });
 
 router.get('/clauses/:fromId/diff/:toId', async (req, res) => {
+  if (!validateInline(req, res, { params: Z.GetClauseDiffParams })) return;
   const [fromV, toV] = await Promise.all([
     db.select().from(clauseVariantsTable).where(eq(clauseVariantsTable.id, req.params.fromId)).then(r => r[0]),
     db.select().from(clauseVariantsTable).where(eq(clauseVariantsTable.id, req.params.toId)).then(r => r[0]),
@@ -1505,6 +1523,7 @@ function mapNegotiation(n: typeof negotiationsTable.$inferSelect, dealName: stri
 }
 
 router.get('/negotiations', async (req, res) => {
+  if (!validateInline(req, res, { query: Z.ListNegotiationsQueryParams })) return;
   const dealIds = await scopedDealIds(req);
   if (dealIds.length === 0) { res.json([]); return; }
   const filters = [inArray(negotiationsTable.dealId, dealIds)];
@@ -1608,6 +1627,7 @@ function computeImpactForReaction(
 }
 
 router.get('/negotiations/:id', async (req, res) => {
+  if (!validateInline(req, res, { params: Z.GetNegotiationParams })) return;
   const [n] = await db.select().from(negotiationsTable).where(eq(negotiationsTable.id, req.params.id));
   if (!n) { res.status(404).json({ error: 'not found' }); return; }
   if (!(await gateDeal(req, res, n.dealId))) return;
@@ -1639,6 +1659,7 @@ router.get('/negotiations/:id', async (req, res) => {
 });
 
 router.get('/negotiations/:id/impact', async (req, res) => {
+  if (!validateInline(req, res, { params: Z.GetNegotiationImpactParams })) return;
   const [n] = await db.select().from(negotiationsTable).where(eq(negotiationsTable.id, req.params.id));
   if (!n) { res.status(404).json({ error: 'not found' }); return; }
   if (!(await gateDeal(req, res, n.dealId))) return;
@@ -1930,6 +1951,7 @@ async function maybeCompletePackageAndCreateOC(pkg: PackageRow, signers: SignerR
 }
 
 router.get('/signatures', async (req, res) => {
+  if (!validateInline(req, res, { query: Z.ListSignaturePackagesQueryParams })) return;
   const dealIds = await scopedDealIds(req);
   if (dealIds.length === 0) { res.json([]); return; }
   const filters = [inArray(signaturePackagesTable.dealId, dealIds)];
@@ -1946,6 +1968,7 @@ router.get('/signatures', async (req, res) => {
 });
 
 router.get('/signatures/:id', async (req, res) => {
+  if (!validateInline(req, res, { params: Z.GetSignaturePackageParams })) return;
   const [s] = await db.select().from(signaturePackagesTable).where(eq(signaturePackagesTable.id, req.params.id));
   if (!s) { res.status(404).json({ error: 'not found' }); return; }
   if (!(await gateDeal(req, res, s.dealId))) return;
@@ -2122,6 +2145,7 @@ router.get('/price-increases', async (req, res) => {
 });
 
 router.get('/price-increases/:id', async (req, res) => {
+  if (!validateInline(req, res, { params: Z.GetPriceIncreaseParams })) return;
   const [c] = await db.select().from(priceIncreaseCampaignsTable).where(eq(priceIncreaseCampaignsTable.id, req.params.id));
   if (!c) { res.status(404).json({ error: 'not found' }); return; }
   const accIds = await allowedAccountIds(req);
@@ -2252,6 +2276,7 @@ function mapInsight(
 }
 
 router.get('/copilot/insights', async (req, res) => {
+  if (!validateInline(req, res, { query: Z.ListCopilotInsightsQueryParams })) return;
   const dealIds = await allowedDealIds(req);
   const status = typeof req.query['status'] === 'string' ? req.query['status'] : null;
   const rows = await db.select().from(copilotInsightsTable).orderBy(desc(copilotInsightsTable.createdAt));
@@ -2441,6 +2466,7 @@ async function writeAudit(args: {
 }
 
 router.get('/audit', async (req, res) => {
+  if (!validateInline(req, res, { query: Z.ListAuditEntriesQueryParams })) return;
   const filters = [];
   if (req.query.entityType) filters.push(eq(auditLogTable.entityType, String(req.query.entityType)));
   if (req.query.entityId)   filters.push(eq(auditLogTable.entityId, String(req.query.entityId)));
@@ -2464,6 +2490,7 @@ router.get('/audit', async (req, res) => {
 
 // ── ENTITY VERSIONS ──
 router.get('/versions/:entityType/:entityId', async (req, res) => {
+  if (!validateInline(req, res, { params: Z.ListEntityVersionsParams })) return;
   const st = await entityScopeStatus(req, req.params.entityType, req.params.entityId);
   if (st !== 'ok') { res.status(st === 'missing' ? 404 : 403).json({ error: st === 'missing' ? 'not found' : 'forbidden' }); return; }
   const rows = await db.select().from(entityVersionsTable)
@@ -2545,6 +2572,7 @@ router.post('/price-positions/:id/versions', async (req, res) => {
 
 // ── PRICING RESOLVE (hierarchical) ──
 router.get('/pricing/resolve', async (req, res) => {
+  if (!validateInline(req, res, { query: Z.ResolvePriceQueryParams })) return;
   const sku = String(req.query.sku ?? '');
   const brandId = req.query.brandId ? String(req.query.brandId) : null;
   const companyId = req.query.companyId ? String(req.query.companyId) : null;
@@ -2741,6 +2769,7 @@ function buildOcDetail(o: typeof orderConfirmationsTable.$inferSelect, dealName:
 }
 
 router.get('/order-confirmations', async (req, res) => {
+  if (!validateInline(req, res, { query: Z.ListOrderConfirmationsQueryParams })) return;
   const dealIds = await scopedDealIds(req);
   if (dealIds.length === 0) { res.json([]); return; }
   const filters = [inArray(orderConfirmationsTable.dealId, dealIds)];
@@ -2804,6 +2833,7 @@ async function reconcileOcState(
 }
 
 router.get('/order-confirmations/:id', async (req, res) => {
+  if (!validateInline(req, res, { params: Z.GetOrderConfirmationParams })) return;
   const [raw] = await db.select().from(orderConfirmationsTable).where(eq(orderConfirmationsTable.id, req.params.id));
   if (!raw) { res.status(404).json({ error: 'not found' }); return; }
   if (!(await gateDeal(req, res, raw.dealId))) return;
@@ -2897,6 +2927,7 @@ router.post('/order-confirmations/:id/complete', async (req, res) => {
 
 // ── COPILOT CHAT ──
 router.get('/copilot/threads/:id/messages', async (req, res) => {
+  if (!validateInline(req, res, { params: Z.ListCopilotMessagesParams })) return;
   if (!(await gateThread(req, res, req.params.id))) return;
   const rows = await db.select().from(copilotMessagesTable)
     .where(eq(copilotMessagesTable.threadId, req.params.id))
@@ -3048,7 +3079,18 @@ router.post('/copilot/help', async (req, res) => {
 // ── EXTEND APPROVAL & DEAL DECISIONS WITH AUDIT ──
 // We hook into existing endpoints by re-using writeAudit at point-of-call would
 // require refactoring. Instead expose a lightweight wrapper for new clients:
+const ManualAuditBody = z.object({
+  entityType: z.string().min(1),
+  entityId: z.string().min(1),
+  action: z.string().min(1),
+  summary: z.string().min(1),
+  actor: z.string().optional(),
+  before: z.unknown().optional(),
+  after: z.unknown().optional(),
+});
+
 router.post('/audit/manual', async (req, res) => {
+  if (!validateInline(req, res, { body: ManualAuditBody })) return;
   const b = req.body;
   await writeAudit(b);
   res.status(201).json({ ok: true });
@@ -3347,6 +3389,7 @@ router.get('/admin/scope-tree', async (req, res) => {
 
 // Search subjects (contacts) within tenant — name/email prefix search.
 router.get('/gdpr/subjects', async (req, res) => {
+  if (!validateInline(req, res, { query: Z.SearchGdprSubjectsQueryParams })) return;
   if (!requireAdmin(req, res)) return;
   const scope = getScope(req);
   const q = String(req.query.query ?? '').toLowerCase().trim();
@@ -3376,6 +3419,7 @@ router.get('/gdpr/subjects', async (req, res) => {
 });
 
 router.get('/gdpr/export', async (req, res) => {
+  if (!validateInline(req, res, { query: Z.ExportGdprSubjectQueryParams })) return;
   if (!requireAdmin(req, res)) return;
   const scope = getScope(req);
   const subjectType = String(req.query.subjectType ?? 'contact');
