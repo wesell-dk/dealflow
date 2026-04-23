@@ -10,6 +10,9 @@ import {
   useCreateAdminUser,
   useUpdateAdminUser,
   useListRoles,
+  useCreateRole,
+  useUpdateRole,
+  useDeleteRole,
   useGetScopeTree,
   type Brand,
   type BrandUpdate,
@@ -226,6 +229,8 @@ export default function Admin() {
       </div>
 
       <UserRolesCard />
+
+      <RolesCard />
 
       {/* GDPR Section */}
       <Card>
@@ -867,5 +872,127 @@ function UserAdminRow(props: {
         </TableRow>
       )}
     </>
+  );
+}
+
+function RolesCard() {
+  const roles = useListRoles();
+  const createRole = useCreateRole();
+  const updateRole = useUpdateRole();
+  const deleteRole = useDeleteRole();
+  const [newName, setNewName] = useState("");
+  const [newDesc, setNewDesc] = useState("");
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editName, setEditName] = useState("");
+  const [editDesc, setEditDesc] = useState("");
+  const [error, setError] = useState<string | null>(null);
+
+  const onCreate = async () => {
+    setError(null);
+    if (!newName.trim() || !newDesc.trim()) { setError("Name und Beschreibung erforderlich."); return; }
+    try {
+      await createRole.mutateAsync({ data: { name: newName.trim(), description: newDesc.trim() } });
+      setNewName(""); setNewDesc("");
+      roles.refetch();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Anlegen fehlgeschlagen.");
+    }
+  };
+
+  const onEdit = (r: { id: string; name: string; description: string }) => {
+    setEditingId(r.id); setEditName(r.name); setEditDesc(r.description);
+  };
+
+  const onSaveEdit = async (id: string) => {
+    await updateRole.mutateAsync({ id, data: { name: editName.trim(), description: editDesc.trim() } });
+    setEditingId(null);
+    roles.refetch();
+  };
+
+  const onDelete = async (r: { id: string; name: string }) => {
+    if (!window.confirm(`Rolle "${r.name}" löschen?`)) return;
+    try {
+      await deleteRole.mutateAsync({ id: r.id });
+      roles.refetch();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Löschen fehlgeschlagen (Rolle evtl. in Benutzung).");
+    }
+  };
+
+  return (
+    <Card>
+      <CardHeader className="flex flex-row items-center gap-2">
+        <Shield className="h-5 w-5 text-primary" />
+        <CardTitle>Rollen-Definitionen</CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        <div className="grid grid-cols-1 md:grid-cols-[1fr_2fr_auto] gap-2 items-end">
+          <div>
+            <Label>Neue Rolle</Label>
+            <Input placeholder="Name" value={newName} onChange={e => setNewName(e.target.value)} />
+          </div>
+          <div>
+            <Label>Beschreibung</Label>
+            <Input placeholder="Beschreibung" value={newDesc} onChange={e => setNewDesc(e.target.value)} />
+          </div>
+          <Button onClick={onCreate} disabled={createRole.isPending}>Hinzufügen</Button>
+        </div>
+        {error && <p className="text-sm text-destructive">{error}</p>}
+        <div className="border rounded-md">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Name</TableHead>
+                <TableHead>Beschreibung</TableHead>
+                <TableHead>Typ</TableHead>
+                <TableHead className="text-right">Aktionen</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {roles.data?.map(r => (
+                <TableRow key={r.id}>
+                  {editingId === r.id ? (
+                    <>
+                      <TableCell><Input value={editName} onChange={e => setEditName(e.target.value)} /></TableCell>
+                      <TableCell><Input value={editDesc} onChange={e => setEditDesc(e.target.value)} /></TableCell>
+                      <TableCell>
+                        {r.isSystem
+                          ? <Badge variant="outline">System</Badge>
+                          : <Badge variant="outline" className="bg-blue-50">Custom</Badge>}
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <div className="flex justify-end gap-2">
+                          <Button size="sm" variant="outline" onClick={() => setEditingId(null)}>Abbrechen</Button>
+                          <Button size="sm" onClick={() => onSaveEdit(r.id)} disabled={updateRole.isPending}>Speichern</Button>
+                        </div>
+                      </TableCell>
+                    </>
+                  ) : (
+                    <>
+                      <TableCell className="font-medium">{r.name}</TableCell>
+                      <TableCell className="text-sm text-muted-foreground">{r.description}</TableCell>
+                      <TableCell>
+                        {r.isSystem
+                          ? <Badge variant="outline">System</Badge>
+                          : <Badge variant="outline" className="bg-blue-50">Custom</Badge>}
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <div className="flex justify-end gap-2">
+                          <Button size="sm" variant="outline" onClick={() => onEdit(r)} disabled={r.isSystem}>Bearbeiten</Button>
+                          <Button size="sm" variant="outline" onClick={() => onDelete(r)} disabled={r.isSystem}>Löschen</Button>
+                        </div>
+                      </TableCell>
+                    </>
+                  )}
+                </TableRow>
+              ))}
+              {!roles.data?.length && (
+                <TableRow><TableCell colSpan={4} className="text-center h-16">Keine Rollen</TableCell></TableRow>
+              )}
+            </TableBody>
+          </Table>
+        </div>
+      </CardContent>
+    </Card>
   );
 }

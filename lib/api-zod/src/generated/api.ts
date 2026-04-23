@@ -240,6 +240,31 @@ export const ListRolesResponseItem = zod.object({
 });
 export const ListRolesResponse = zod.array(ListRolesResponseItem);
 
+export const CreateRoleBody = zod.object({
+  name: zod.string(),
+  description: zod.string(),
+});
+
+export const UpdateRoleParams = zod.object({
+  id: zod.coerce.string(),
+});
+
+export const UpdateRoleBody = zod.object({
+  name: zod.string().optional(),
+  description: zod.string().optional(),
+});
+
+export const UpdateRoleResponse = zod.object({
+  id: zod.string(),
+  name: zod.string(),
+  description: zod.string(),
+  isSystem: zod.boolean(),
+});
+
+export const DeleteRoleParams = zod.object({
+  id: zod.coerce.string(),
+});
+
 export const GetScopeTreeResponse = zod.object({
   companies: zod.array(
     zod.object({

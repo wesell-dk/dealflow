@@ -244,6 +244,52 @@ paths:
               schema:
                 type: array
                 items: { $ref: "#/components/schemas/Role" }
+    post:
+      operationId: createRole
+      tags: [admin]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/RoleCreate" }
+      responses:
+        "201":
+          description: created
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Role" }
+
+  /admin/roles/{id}:
+    patch:
+      operationId: updateRole
+      tags: [admin]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/RoleUpdate" }
+      responses:
+        "200":
+          description: ok
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Role" }
+    delete:
+      operationId: deleteRole
+      tags: [admin]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        "204":
+          description: no content
 
   /admin/scope-tree:
     get:
@@ -1878,6 +1924,19 @@ components:
         name: { type: string }
         description: { type: string }
         isSystem: { type: boolean }
+
+    RoleCreate:
+      type: object
+      required: [name, description]
+      properties:
+        name: { type: string }
+        description: { type: string }
+
+    RoleUpdate:
+      type: object
+      properties:
+        name: { type: string }
+        description: { type: string }
 
     ScopeTree:
       type: object

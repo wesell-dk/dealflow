@@ -3242,10 +3242,78 @@ router.patch('/admin/users/:id', async (req, res) => {
 });
 
 router.get('/admin/roles', async (req, res) => {
-  if (!requireAdmin(req, res)) return;
+  if (!requireTenantAdmin(req, res)) return;
   const scope = getScope(req);
   const rows = await db.select().from(rolesTable).where(eq(rolesTable.tenantId, scope.tenantId));
   res.json(rows.map(r => ({ id: r.id, name: r.name, description: r.description, isSystem: r.isSystem })));
+});
+
+router.post('/admin/roles', async (req, res) => {
+  if (!requireTenantAdmin(req, res)) return;
+  const scope = getScope(req);
+  const b = req.body as { name?: string; description?: string };
+  if (!b.name?.trim() || !b.description?.trim()) {
+    res.status(400).json({ error: 'name and description required' });
+    return;
+  }
+  const [dup] = await db.select().from(rolesTable)
+    .where(and(eq(rolesTable.tenantId, scope.tenantId), eq(rolesTable.name, b.name.trim())));
+  if (dup) { res.status(409).json({ error: 'role name already exists' }); return; }
+  const id = `ro_${randomUUID().slice(0, 8)}`;
+  const [ins] = await db.insert(rolesTable).values({
+    id, name: b.name.trim(), description: b.description.trim(),
+    isSystem: false, tenantId: scope.tenantId,
+  }).returning();
+  await writeAudit({
+    entityType: 'role', entityId: id, action: 'create',
+    summary: `Rolle angelegt: ${b.name}`,
+    after: { name: b.name, description: b.description },
+    actor: scope.user.name,
+  });
+  res.status(201).json({ id: ins!.id, name: ins!.name, description: ins!.description, isSystem: ins!.isSystem });
+});
+
+router.patch('/admin/roles/:id', async (req, res) => {
+  if (!requireTenantAdmin(req, res)) return;
+  const scope = getScope(req);
+  const [r] = await db.select().from(rolesTable).where(eq(rolesTable.id, req.params.id));
+  if (!r || r.tenantId !== scope.tenantId) { res.status(404).json({ error: 'not found' }); return; }
+  if (r.isSystem) { res.status(400).json({ error: 'cannot modify system role' }); return; }
+  const b = req.body as { name?: string; description?: string };
+  const patch: Partial<typeof rolesTable.$inferInsert> = {};
+  if (typeof b.name === 'string' && b.name.trim()) patch.name = b.name.trim();
+  if (typeof b.description === 'string' && b.description.trim()) patch.description = b.description.trim();
+  if (Object.keys(patch).length > 0) {
+    await db.update(rolesTable).set(patch).where(eq(rolesTable.id, r.id));
+    await writeAudit({
+      entityType: 'role', entityId: r.id, action: 'update',
+      summary: `Rolle aktualisiert: ${r.name}`,
+      before: { name: r.name, description: r.description },
+      after: patch,
+      actor: scope.user.name,
+    });
+  }
+  const [updated] = await db.select().from(rolesTable).where(eq(rolesTable.id, r.id));
+  res.json({ id: updated!.id, name: updated!.name, description: updated!.description, isSystem: updated!.isSystem });
+});
+
+router.delete('/admin/roles/:id', async (req, res) => {
+  if (!requireTenantAdmin(req, res)) return;
+  const scope = getScope(req);
+  const [r] = await db.select().from(rolesTable).where(eq(rolesTable.id, req.params.id));
+  if (!r || r.tenantId !== scope.tenantId) { res.status(404).json({ error: 'not found' }); return; }
+  if (r.isSystem) { res.status(400).json({ error: 'cannot delete system role' }); return; }
+  const [userWithRole] = await db.select({ id: usersTable.id }).from(usersTable)
+    .where(and(eq(usersTable.tenantId, scope.tenantId), eq(usersTable.role, r.name)));
+  if (userWithRole) { res.status(400).json({ error: 'role is in use by users' }); return; }
+  await db.delete(rolesTable).where(eq(rolesTable.id, r.id));
+  await writeAudit({
+    entityType: 'role', entityId: r.id, action: 'delete',
+    summary: `Rolle gelöscht: ${r.name}`,
+    before: { name: r.name, description: r.description },
+    actor: scope.user.name,
+  });
+  res.status(204).end();
 });
 
 router.get('/admin/scope-tree', async (req, res) => {

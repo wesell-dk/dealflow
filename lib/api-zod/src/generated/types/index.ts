@@ -138,6 +138,8 @@ export * from "./resolvedPrice";
 export * from "./resolvedPriceChainItem";
 export * from "./resolvePriceParams";
 export * from "./role";
+export * from "./roleCreate";
+export * from "./roleUpdate";
 export * from "./scopeTree";
 export * from "./scopeTreeCompaniesItem";
 export * from "./scopeTreeCompaniesItemBrandsItem";

@@ -139,6 +139,16 @@ export interface Role {
   isSystem: boolean;
 }
 
+export interface RoleCreate {
+  name: string;
+  description: string;
+}
+
+export interface RoleUpdate {
+  name?: string;
+  description?: string;
+}
+
 export type ScopeTreeCompaniesItemBrandsItem = {
   id: string;
   name: string;
