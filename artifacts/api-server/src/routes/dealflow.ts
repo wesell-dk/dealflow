@@ -700,7 +700,9 @@ router.post('/contracts', async (req, res) => {
   // Seed clauses from brand defaults if provided
   if (b.brandId) {
     const [brand] = await db.select().from(brandsTable).where(eq(brandsTable.id, b.brandId));
-    if (brand && brand.defaultClauseVariants) {
+    if (!brand) { res.status(404).json({ error: 'brand not found' }); return; }
+    if (!(await brandVisible(req, brand))) { res.status(403).json({ error: 'forbidden' }); return; }
+    if (brand.defaultClauseVariants) {
       const families = await db.select().from(clauseFamiliesTable);
       const variants = await db.select().from(clauseVariantsTable);
       const vById = new Map(variants.map(v => [v.id, v]));
