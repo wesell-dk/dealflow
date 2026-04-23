@@ -1122,7 +1122,8 @@ async function buildSignatureDetail(s: PackageRow) {
 }
 
 async function maybeCompletePackageAndCreateOC(pkg: PackageRow, signers: SignerRow[]) {
-  const allSigned = signers.every(sg => sg.status === 'signed');
+  const active = signers.filter(sg => sg.status !== 'declined');
+  const allSigned = active.length > 0 && active.every(sg => sg.status === 'signed');
   if (!allSigned || signers.length === 0) return;
   if (pkg.status === 'completed' && pkg.orderConfirmationId) return;
   const dealMap = await getDealMap();
