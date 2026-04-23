@@ -90,7 +90,7 @@ import {
   webhookDeliveriesTable,
 } from '@workspace/db';
 import { emitEvent, WEBHOOK_EVENTS, assertSafeWebhookUrl } from '../lib/webhooks';
-import { parseAsOf, resolveSnapshot } from '../lib/asOf';
+import { parseAsOf, resolveSnapshot, isInvalidAsOf } from '../lib/asOf';
 
 const router: IRouter = Router();
 
@@ -511,6 +511,7 @@ router.get('/quotes/:id', async (req, res) => {
   const [q] = await db.select().from(quotesTable).where(eq(quotesTable.id, req.params.id));
   if (!q) { res.status(404).json({ error: 'not found' }); return; }
   if (!(await gateDeal(req, res, q.dealId))) return;
+  if (isInvalidAsOf(req.query.asOf)) { res.status(422).json({ error: 'invalid asOf' }); return; }
   const asOf = parseAsOf(req.query.asOf);
   if (asOf) {
     // Quote history lives in quote_versions (not entity_versions). Pick the
@@ -1057,6 +1058,7 @@ router.get('/contracts/:id', async (req, res) => {
   const [c] = await db.select().from(contractsTable).where(eq(contractsTable.id, req.params.id));
   if (!c) { res.status(404).json({ error: 'not found' }); return; }
   if (!(await gateDeal(req, res, c.dealId))) return;
+  if (isInvalidAsOf(req.query.asOf)) { res.status(422).json({ error: 'invalid asOf' }); return; }
   const asOf = parseAsOf(req.query.asOf);
   if (asOf) {
     type ContractSnap =
@@ -2704,6 +2706,7 @@ router.post('/price-positions/:id/versions', async (req, res) => {
 // ── PRICING RESOLVE (hierarchical) ──
 router.get('/pricing/resolve', async (req, res) => {
   // Capture asOf before validation strips unknown query params.
+  if (isInvalidAsOf(req.query.asOf)) { res.status(422).json({ error: 'invalid asOf' }); return; }
   const asOf = parseAsOf(req.query.asOf);
   if (!validateInline(req, res, { query: Z.ResolvePriceQueryParams })) return;
   const sku = String(req.query.sku ?? '');

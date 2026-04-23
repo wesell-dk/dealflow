@@ -21,6 +21,16 @@ export function parseAsOf(raw: unknown): Date | null {
 }
 
 /**
+ * Return true iff the caller sent an `asOf` param but it failed to parse as
+ * a valid date. Endpoints use this to reject malformed `asOf` with 422
+ * instead of silently falling back to live data.
+ */
+export function isInvalidAsOf(raw: unknown): boolean {
+  if (typeof raw !== "string" || raw.length === 0) return false;
+  return Number.isNaN(new Date(raw).getTime());
+}
+
+/**
  * Resolve a historical snapshot from entity_versions for a given entity at
  * or before `at`. Returns null if no snapshot at/before that timestamp is
  * available.
