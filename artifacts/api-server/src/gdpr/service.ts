@@ -1,6 +1,7 @@
 import { and, eq, inArray, lt } from "drizzle-orm";
 import archiver from "archiver";
-import { PassThrough, Readable } from "node:stream";
+
+
 import { randomUUID, createHash } from "node:crypto";
 import type { Response } from "express";
 import {
@@ -146,10 +147,14 @@ export async function exportSubjectZip(
     `attachment; filename="gdpr-export-${subjectType}-${subjectId}.zip"`,
   );
 
-  const pass = new PassThrough();
   const archive = archiver("zip", { zlib: { level: 9 } });
-  archive.on("error", (err) => pass.destroy(err));
-  archive.pipe(pass);
+  archive.on("error", (err) => {
+    if (!res.headersSent) res.status(500);
+    res.destroy(err);
+  });
+  // Pipe the archive directly to the response BEFORE appending/finalize
+  // so backpressure is consumed and finalize() cannot deadlock.
+  archive.pipe(res);
 
   const manifest = {
     subjectType,
@@ -167,17 +172,16 @@ export async function exportSubjectZip(
     archive.append(toCsv(rows as unknown[]), { name: `${name}.csv` });
   }
 
-  await archive.finalize();
-  pass.pipe(res);
-  // Wait for stream end so caller can await and attach audit entry afterwards.
-  await new Promise<void>((resolve, reject) => {
-    pass.on("end", () => resolve());
-    pass.on("error", reject);
+  const done = new Promise<void>((resolve, reject) => {
+    archive.on("end", () => resolve());
+    archive.on("close", () => resolve());
+    archive.on("error", reject);
     res.on("close", () => resolve());
   });
+  await archive.finalize();
+  await done;
   return true;
 }
-void Readable; // keep import tree consistent
 
 export async function forgetSubject(
   tenantId: string,
@@ -253,14 +257,17 @@ export async function logPiiAccess(params: {
   await db.insert(accessLogTable).values(rows);
 }
 
-export async function runRetentionSweep(): Promise<{ applied: Record<string, number> }> {
+export async function runRetentionSweepForTenant(
+  tenantId: string,
+): Promise<{ applied: Record<string, number> }> {
   const applied: Record<string, number> = {
     contactsPseudonymized: 0,
     lettersForgotten: 0,
     accessLogPurged: 0,
   };
-  const tenants = await db.select().from(tenantsTable);
-  for (const tenant of tenants) {
+  const [tenant] = await db.select().from(tenantsTable).where(eq(tenantsTable.id, tenantId));
+  if (!tenant) return { applied };
+  {
     const policy = tenant.retentionPolicy ?? {};
 
     // Tenant-scoped account set: accounts that have any deal in a company of this tenant.
@@ -333,4 +340,20 @@ export async function runRetentionSweep(): Promise<{ applied: Record<string, num
     // leak across tenants. When audit_log gains tenantId, we can enable this.
   }
   return { applied };
+}
+
+export async function runRetentionSweep(): Promise<{ applied: Record<string, number> }> {
+  const merged: Record<string, number> = {
+    contactsPseudonymized: 0,
+    lettersForgotten: 0,
+    accessLogPurged: 0,
+  };
+  const tenants = await db.select({ id: tenantsTable.id }).from(tenantsTable);
+  for (const t of tenants) {
+    const { applied } = await runRetentionSweepForTenant(t.id);
+    for (const [k, v] of Object.entries(applied)) {
+      merged[k] = (merged[k] ?? 0) + v;
+    }
+  }
+  return { applied: merged };
 }

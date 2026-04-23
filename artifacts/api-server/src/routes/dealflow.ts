@@ -58,6 +58,7 @@ import {
   forgetSubject,
   logPiiAccess,
   runRetentionSweep,
+  runRetentionSweepForTenant,
 } from '../gdpr/service';
 import {
   subjectsDeletionLogTable,
@@ -2651,7 +2652,7 @@ router.get('/gdpr/deletion-log', async (req, res) => {
 router.post('/gdpr/retention/run', async (req, res) => {
   if (!requireAdmin(req, res)) return;
   const scope = getScope(req);
-  const result = await runRetentionSweep();
+  const result = await runRetentionSweepForTenant(scope.tenantId);
   await writeAudit({
     entityType: 'gdpr',
     entityId: scope.tenantId,
