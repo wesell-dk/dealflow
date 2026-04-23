@@ -276,6 +276,12 @@ router.post('/deals', async (req, res) => {
     brandId: string; companyId: string; ownerId: string; expectedCloseDate: string;
   };
   const scope = getScope(req);
+  // Tenant-bound for every user (including tenantWide): companyId must belong
+  // to the user's tenant.
+  const company = (await db.select().from(companiesTable).where(eq(companiesTable.id, b.companyId)))[0];
+  if (!company || company.tenantId !== scope.tenantId) {
+    res.status(403).json({ error: 'forbidden (out of tenant)' }); return;
+  }
   if (!scope.tenantWide) {
     const okCompany = scope.companyIds.includes(b.companyId);
     const okBrand = scope.brandIds.includes(b.brandId);
@@ -284,7 +290,6 @@ router.post('/deals', async (req, res) => {
     }
   }
   const id = `dl_${randomUUID().slice(0, 8)}`;
-  const company = (await db.select().from(companiesTable).where(eq(companiesTable.id, b.companyId)))[0];
   await db.insert(dealsTable).values({
     id, name: b.name, accountId: b.accountId, stage: b.stage, value: String(b.value),
     currency: company?.currency ?? 'EUR', probability: 30,

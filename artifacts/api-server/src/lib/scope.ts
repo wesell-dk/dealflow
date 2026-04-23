@@ -78,24 +78,25 @@ export async function allowedDealIds(req: Request): Promise<Set<string>> {
   const r = req as Request & { _allowedDealIds?: Set<string>; scope?: Scope };
   if (r._allowedDealIds) return r._allowedDealIds;
   const scope = getScope(req);
-  if (scope.tenantWide) {
-    // Tenant-bound: restrict to deals whose company belongs to the user's tenant.
-    const rows = await db
-      .select({ id: dealsTable.id })
-      .from(dealsTable)
-      .innerJoin(companiesTable, eq(companiesTable.id, dealsTable.companyId))
-      .where(eq(companiesTable.tenantId, scope.tenantId));
-    const set = new Set(rows.map((r2) => r2.id));
-    r._allowedDealIds = set;
-    return set;
-  }
-  if (scope.companyIds.length === 0 && scope.brandIds.length === 0) {
+  // Tenant-bound for every user: always JOIN deals→companies on tenantId. This
+  // is belt-and-suspenders — scope.companyIds/brandIds should never point
+  // outside the user's tenant, but we enforce it in SQL regardless.
+  if (!scope.tenantWide && scope.companyIds.length === 0 && scope.brandIds.length === 0) {
     const set = new Set<string>();
     r._allowedDealIds = set;
     return set;
   }
-  const where = dealScopeSql(scope);
-  const rows = await db.select({ id: dealsTable.id }).from(dealsTable).where(where);
+  const conditions: SQL[] = [eq(companiesTable.tenantId, scope.tenantId)];
+  if (!scope.tenantWide) {
+    const userScope = dealScopeSql(scope);
+    if (userScope) conditions.push(userScope);
+  }
+  const where = conditions.length === 1 ? conditions[0] : and(...conditions);
+  const rows = await db
+    .select({ id: dealsTable.id })
+    .from(dealsTable)
+    .innerJoin(companiesTable, eq(companiesTable.id, dealsTable.companyId))
+    .where(where);
   const set = new Set(rows.map((r2) => r2.id));
   r._allowedDealIds = set;
   return set;
