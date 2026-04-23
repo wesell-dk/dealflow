@@ -183,3 +183,6 @@ exportable user data, redacted secrets in logs.
 ## Known limitations (demo scope)
 - No authentication: `/orgs/me` returns the seeded user `u_priya`. Production needs auth middleware + scope-based RBAC enforcement on every router.
 - Request bodies are cast, not Zod-validated, in handlers. Wire the generated Zod schemas through middleware before exposing publicly.
+
+## Spracheinstellung
+- Kommunikation mit dem Nutzer erfolgt **immer auf Deutsch**.
