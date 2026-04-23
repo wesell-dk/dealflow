@@ -137,6 +137,11 @@ export async function seedIfEmpty(): Promise<void> {
   await db.insert(usersTable).values(users);
 
   await db.insert(rolesTable).values([
+    { id: "ro_account_exec", name: "Account Executive", description: "Klassische Sales-Rolle für Deal-Ownership.", isSystem: true, tenantId: "tn_root" },
+    { id: "ro_senior_ae", name: "Senior AE", description: "Erfahrener Account Executive, größere Deals.", isSystem: true, tenantId: "tn_root" },
+    { id: "ro_deal_desk", name: "Deal Desk", description: "Pricing- und Deal-Support, tenant-weite Sicht.", isSystem: true, tenantId: "tn_root" },
+    { id: "ro_regional_dir", name: "Regional Director", description: "Regionale Verantwortung über Companies.", isSystem: true, tenantId: "tn_root" },
+    { id: "ro_vp_commercial", name: "VP Commercial", description: "Commercial-Leitung, tenant-weite Sicht.", isSystem: true, tenantId: "tn_root" },
     { id: "ro_sales_rep", name: "Sales Rep", description: "Führt Deals im zugewiesenen Scope, kann Angebote und Verträge vorbereiten.", isSystem: true, tenantId: "tn_root" },
     { id: "ro_sales_mgr", name: "Sales Manager", description: "Pipeline-Verantwortung, Approval für Rabatte im Limit.", isSystem: true, tenantId: "tn_root" },
     { id: "ro_revops", name: "RevOps", description: "Preislisten, Pricing-Regeln, Reports, Datenqualität.", isSystem: true, tenantId: "tn_root" },
