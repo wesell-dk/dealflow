@@ -3,11 +3,13 @@ import { and, desc, eq, inArray, sql } from 'drizzle-orm';
 import { randomUUID } from 'node:crypto';
 import {
   allowedAccountIds,
+  allowedBrandIds,
   allowedDealIds,
   dealScopeSql,
   getScope,
   isAccountAllowed,
   entityInScope,
+  entityScopeStatus,
   copilotThreadVisible,
 } from '../lib/scope';
 import {
@@ -120,17 +122,17 @@ async function dealCtx() {
 }
 
 // ── Scope helpers (per request) ──
+// Policy: 404 for truly non-existent IDs; 403 for scope violations on existing rows.
 async function gateDeal(req: Request, res: Response, dealId: string): Promise<boolean> {
-  const ids = await allowedDealIds(req);
-  if (ids.has(dealId)) return true;
-  // Non-enumerable: mask out-of-scope as 404 to prevent existence probing.
-  res.status(404).json({ error: 'not found' });
+  const status = await entityScopeStatus(req, 'deal', dealId);
+  if (status === 'ok') return true;
+  res.status(status === 'missing' ? 404 : 403).json({ error: status === 'missing' ? 'not found' : 'forbidden' });
   return false;
 }
 async function gateAccount(req: Request, res: Response, accountId: string): Promise<boolean> {
-  const ids = await allowedAccountIds(req);
-  if (isAccountAllowed(ids, accountId)) return true;
-  res.status(404).json({ error: 'not found' });
+  const status = await entityScopeStatus(req, 'account', accountId);
+  if (status === 'ok') return true;
+  res.status(status === 'missing' ? 404 : 403).json({ error: status === 'missing' ? 'not found' : 'forbidden' });
   return false;
 }
 async function scopedDealIds(req: Request): Promise<string[]> {
@@ -510,10 +512,21 @@ router.get('/price-positions', async (req, res) => {
 });
 
 router.post('/price-positions', async (req, res) => {
+  const scope = getScope(req);
   const b = req.body as {
     sku: string; name: string; category: string; listPrice: number;
     currency: string; brandId: string; companyId: string; validFrom: string;
   };
+  // Scope-check target brand/company unless user is tenantWide.
+  if (!scope.tenantWide) {
+    const brandAllowed = (await allowedBrandIds(req)).includes(b.brandId);
+    const companyAllowed = scope.companyIds.includes(b.companyId);
+    if (!brandAllowed && !companyAllowed) { res.status(403).json({ error: 'forbidden' }); return; }
+  } else {
+    // tenantWide must still be bound to own tenant: verify company belongs to tenant.
+    const [co] = await db.select().from(companiesTable).where(eq(companiesTable.id, b.companyId));
+    if (!co || co.tenantId !== scope.tenantId) { res.status(403).json({ error: 'forbidden' }); return; }
+  }
   const id = `pp_${randomUUID().slice(0, 8)}`;
   await db.insert(pricePositionsTable).values({
     id, sku: b.sku, name: b.name, category: b.category, listPrice: String(b.listPrice),
@@ -526,18 +539,36 @@ router.post('/price-positions', async (req, res) => {
   res.status(201).json(mapPricePosition(p!, brands.get(p!.brandId)?.name ?? '', companies.get(p!.companyId)?.name ?? ''));
 });
 
-router.get('/price-rules', async (_req, res) => {
-  res.json(await db.select().from(priceRulesTable));
+router.get('/price-rules', async (req, res) => {
+  const scope = getScope(req);
+  const rows = await db.select().from(priceRulesTable);
+  if (scope.tenantWide) { res.json(rows); return; }
+  const allowedBrands = await allowedBrandIds(req);
+  const allowedScopes = new Set<string>(['global', ...scope.companyIds, ...allowedBrands]);
+  res.json(rows.filter(r => allowedScopes.has(r.scope)));
 });
 
-router.get('/pricing/summary', async (_req, res) => {
-  const positions = await db.select().from(pricePositionsTable);
-  const pendingApprovals = await db.select({ c: sql<number>`count(*)::int` }).from(approvalsTable)
-    .where(and(eq(approvalsTable.status, 'pending'), eq(approvalsTable.type, 'discount')));
+router.get('/pricing/summary', async (req, res) => {
+  const scope = getScope(req);
+  const allPositions = await db.select().from(pricePositionsTable);
+  const allowedBrands = new Set(await allowedBrandIds(req));
+  const allowedCompanies = new Set(scope.companyIds);
+  const positions = scope.tenantWide
+    ? allPositions
+    : allPositions.filter(p => allowedBrands.has(p.brandId) || allowedCompanies.has(p.companyId));
+  const dealIds = await scopedDealIds(req);
+  const pendingApprovalCount = dealIds.length === 0 ? 0 : (await db
+    .select({ c: sql<number>`count(*)::int` })
+    .from(approvalsTable)
+    .where(and(
+      eq(approvalsTable.status, 'pending'),
+      eq(approvalsTable.type, 'discount'),
+      inArray(approvalsTable.dealId, dealIds),
+    )))[0]?.c ?? 0;
   res.json({
     totalPositions: positions.length,
     activePositions: positions.filter(p => p.status === 'active').length,
-    pendingApprovalCount: pendingApprovals[0]?.c ?? 0,
+    pendingApprovalCount,
     standardCoveragePct: Math.round(positions.filter(p => p.isStandard).length / Math.max(1, positions.length) * 1000) / 10,
     recentChanges: [
       { id: 'rc_1', sku: 'HX-CORE-LIC', change: 'List price uplift to EUR 240,000', at: iso(new Date(Date.now() - 2 * 86400000))! },
@@ -953,8 +984,9 @@ router.get('/copilot/threads', async (req, res) => {
 
 async function gateThread(req: Request, res: Response, threadId: string) {
   const [t] = await db.select().from(copilotThreadsTable).where(eq(copilotThreadsTable.id, threadId));
-  if (!t || !(await copilotThreadVisible(req, t.scope ?? ''))) {
-    res.status(404).json({ error: 'not found' });
+  if (!t) { res.status(404).json({ error: 'not found' }); return null; }
+  if (!(await copilotThreadVisible(req, t.scope ?? ''))) {
+    res.status(403).json({ error: 'forbidden' });
     return null;
   }
   return t;
@@ -1014,9 +1046,8 @@ router.get('/audit', async (req, res) => {
 
 // ── ENTITY VERSIONS ──
 router.get('/versions/:entityType/:entityId', async (req, res) => {
-  if (!(await entityInScope(req, req.params.entityType, req.params.entityId))) {
-    res.status(404).json({ error: 'not found' }); return;
-  }
+  const st = await entityScopeStatus(req, req.params.entityType, req.params.entityId);
+  if (st !== 'ok') { res.status(st === 'missing' ? 404 : 403).json({ error: st === 'missing' ? 'not found' : 'forbidden' }); return; }
   const rows = await db.select().from(entityVersionsTable)
     .where(and(
       eq(entityVersionsTable.entityType, req.params.entityType),
@@ -1038,9 +1069,8 @@ async function snapshotContract(contractId: string): Promise<string> {
 
 router.post('/contracts/:id/versions', async (req, res) => {
   const b = req.body as { label: string; comment?: string; snapshot?: string };
-  if (!(await entityInScope(req, 'contract', req.params.id))) {
-    res.status(404).json({ error: 'not found' }); return;
-  }
+  const stC = await entityScopeStatus(req, 'contract', req.params.id);
+  if (stC !== 'ok') { res.status(stC === 'missing' ? 404 : 403).json({ error: stC === 'missing' ? 'not found' : 'forbidden' }); return; }
   const [c] = await db.select().from(contractsTable).where(eq(contractsTable.id, req.params.id));
   if (!c) { res.status(404).json({ error: 'not found' }); return; }
   const existing = await db.select().from(entityVersionsTable)
@@ -1067,9 +1097,8 @@ router.post('/contracts/:id/versions', async (req, res) => {
 
 router.post('/price-positions/:id/versions', async (req, res) => {
   const b = req.body as { label: string; comment?: string; snapshot?: string };
-  if (!(await entityInScope(req, 'price_position', req.params.id))) {
-    res.status(404).json({ error: 'not found' }); return;
-  }
+  const stP = await entityScopeStatus(req, 'price_position', req.params.id);
+  if (stP !== 'ok') { res.status(stP === 'missing' ? 404 : 403).json({ error: stP === 'missing' ? 'not found' : 'forbidden' }); return; }
   const [p] = await db.select().from(pricePositionsTable).where(eq(pricePositionsTable.id, req.params.id));
   if (!p) { res.status(404).json({ error: 'not found' }); return; }
   const existing = await db.select().from(entityVersionsTable)
@@ -1101,8 +1130,12 @@ router.get('/pricing/resolve', async (req, res) => {
   const companyId = req.query.companyId ? String(req.query.companyId) : null;
   if (!sku) { res.status(400).json({ error: 'sku required' }); return; }
 
+  const scope = getScope(req);
+  const allowedBrands = new Set(await allowedBrandIds(req));
+  const allowedCompanies = new Set(scope.companyIds);
   const positions = (await db.select().from(pricePositionsTable))
-    .filter(p => p.sku === sku && p.status === 'active');
+    .filter(p => p.sku === sku && p.status === 'active')
+    .filter(p => scope.tenantWide || allowedBrands.has(p.brandId) || allowedCompanies.has(p.companyId));
   const brands = await getBrandMap();
   const companies = await getCompanyMap();
 

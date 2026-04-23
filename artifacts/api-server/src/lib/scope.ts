@@ -2,6 +2,8 @@ import { and, eq, inArray, or, type SQL } from "drizzle-orm";
 import {
   db,
   dealsTable,
+  accountsTable,
+  companiesTable,
   brandsTable,
   quotesTable,
   contractsTable,
@@ -77,7 +79,12 @@ export async function allowedDealIds(req: Request): Promise<Set<string>> {
   if (r._allowedDealIds) return r._allowedDealIds;
   const scope = getScope(req);
   if (scope.tenantWide) {
-    const rows = await db.select({ id: dealsTable.id }).from(dealsTable);
+    // Tenant-bound: restrict to deals whose company belongs to the user's tenant.
+    const rows = await db
+      .select({ id: dealsTable.id })
+      .from(dealsTable)
+      .innerJoin(companiesTable, eq(companiesTable.id, dealsTable.companyId))
+      .where(eq(companiesTable.tenantId, scope.tenantId));
     const set = new Set(rows.map((r2) => r2.id));
     r._allowedDealIds = set;
     return set;
@@ -152,67 +159,99 @@ export function filterByDealId<T extends { dealId: string | null | undefined }>(
  * Returns true if the user may access (read) the given entity.
  * For unrecognised types we deny by default (safe).
  */
+export type ScopeStatus = "missing" | "forbidden" | "ok";
+
+/**
+ * Tri-state scope check that distinguishes truly-missing entities from
+ * out-of-scope access. Callers should map:
+ *   missing   -> 404
+ *   forbidden -> 403
+ *   ok        -> proceed
+ */
+export async function entityScopeStatus(
+  req: Request,
+  entityType: string,
+  entityId: string,
+): Promise<ScopeStatus> {
+  const scope = getScope(req);
+  const dealIds = await allowedDealIds(req);
+  const accIds = await allowedAccountIds(req);
+  const accOk = (id: string) => scope.tenantWide || isAccountAllowed(accIds, id);
+  const dealOk = (id: string) => scope.tenantWide ? dealIds.has(id) : dealIds.has(id);
+
+  switch (entityType) {
+    case "deal": {
+      const [d] = await db.select().from(dealsTable).where(eq(dealsTable.id, entityId));
+      if (!d) return "missing";
+      return dealOk(d.id) ? "ok" : "forbidden";
+    }
+    case "account": {
+      const [a] = await db.select().from(accountsTable).where(eq(accountsTable.id, entityId));
+      if (!a) return "missing";
+      return accOk(a.id) ? "ok" : "forbidden";
+    }
+    case "quote": {
+      const [q] = await db.select().from(quotesTable).where(eq(quotesTable.id, entityId));
+      if (!q) return "missing";
+      return dealOk(q.dealId) ? "ok" : "forbidden";
+    }
+    case "contract": {
+      const [c] = await db.select().from(contractsTable).where(eq(contractsTable.id, entityId));
+      if (!c) return "missing";
+      return dealOk(c.dealId) ? "ok" : "forbidden";
+    }
+    case "negotiation": {
+      const [n] = await db.select().from(negotiationsTable).where(eq(negotiationsTable.id, entityId));
+      if (!n) return "missing";
+      return dealOk(n.dealId) ? "ok" : "forbidden";
+    }
+    case "signature":
+    case "signature_package": {
+      const [s] = await db.select().from(signaturePackagesTable).where(eq(signaturePackagesTable.id, entityId));
+      if (!s) return "missing";
+      return dealOk(s.dealId) ? "ok" : "forbidden";
+    }
+    case "approval": {
+      const [a] = await db.select().from(approvalsTable).where(eq(approvalsTable.id, entityId));
+      if (!a) return "missing";
+      return dealOk(a.dealId) ? "ok" : "forbidden";
+    }
+    case "order":
+    case "order_confirmation": {
+      const [o] = await db.select().from(orderConfirmationsTable).where(eq(orderConfirmationsTable.id, entityId));
+      if (!o) return "missing";
+      return dealOk(o.dealId) ? "ok" : "forbidden";
+    }
+    case "price":
+    case "price_position": {
+      const [p] = await db.select().from(pricePositionsTable).where(eq(pricePositionsTable.id, entityId));
+      if (!p) return "missing";
+      if (scope.tenantWide) return "ok";
+      const brands = new Set(scope.brandIds);
+      const companies = new Set(scope.companyIds);
+      if (p.brandId && brands.has(p.brandId)) return "ok";
+      if (p.companyId && companies.has(p.companyId)) return "ok";
+      return "forbidden";
+    }
+    case "letter":
+    case "price_increase_letter": {
+      const [l] = await db.select().from(priceIncreaseLettersTable).where(eq(priceIncreaseLettersTable.id, entityId));
+      if (!l) return "missing";
+      return accOk(l.accountId) ? "ok" : "forbidden";
+    }
+    default:
+      // Unknown entity types: deny everyone.
+      return "forbidden";
+  }
+}
+
+/** Convenience boolean wrapper around entityScopeStatus. */
 export async function entityInScope(
   req: Request,
   entityType: string,
   entityId: string,
 ): Promise<boolean> {
-  const scope = getScope(req);
-  if (scope.tenantWide) return true;
-
-  const dealIds = await allowedDealIds(req);
-  const accIds = await allowedAccountIds(req);
-
-  switch (entityType) {
-    case "deal":
-      return dealIds.has(entityId);
-    case "account":
-      return isAccountAllowed(accIds, entityId);
-    case "quote": {
-      const [q] = await db.select().from(quotesTable).where(eq(quotesTable.id, entityId));
-      return !!q && dealIds.has(q.dealId);
-    }
-    case "contract": {
-      const [c] = await db.select().from(contractsTable).where(eq(contractsTable.id, entityId));
-      return !!c && dealIds.has(c.dealId);
-    }
-    case "negotiation": {
-      const [n] = await db.select().from(negotiationsTable).where(eq(negotiationsTable.id, entityId));
-      return !!n && dealIds.has(n.dealId);
-    }
-    case "signature":
-    case "signature_package": {
-      const [s] = await db.select().from(signaturePackagesTable).where(eq(signaturePackagesTable.id, entityId));
-      return !!s && dealIds.has(s.dealId);
-    }
-    case "approval": {
-      const [a] = await db.select().from(approvalsTable).where(eq(approvalsTable.id, entityId));
-      return !!a && dealIds.has(a.dealId);
-    }
-    case "order":
-    case "order_confirmation": {
-      const [o] = await db.select().from(orderConfirmationsTable).where(eq(orderConfirmationsTable.id, entityId));
-      return !!o && dealIds.has(o.dealId);
-    }
-    case "price":
-    case "price_position": {
-      const [p] = await db.select().from(pricePositionsTable).where(eq(pricePositionsTable.id, entityId));
-      if (!p) return false;
-      const brands = new Set(scope.brandIds);
-      const companies = new Set(scope.companyIds);
-      if (p.brandId && brands.has(p.brandId)) return true;
-      if (p.companyId && companies.has(p.companyId)) return true;
-      return false;
-    }
-    case "letter":
-    case "price_increase_letter": {
-      const [l] = await db.select().from(priceIncreaseLettersTable).where(eq(priceIncreaseLettersTable.id, entityId));
-      return !!l && isAccountAllowed(accIds, l.accountId);
-    }
-    default:
-      // Unknown entity types are visible only to tenantWide users.
-      return false;
-  }
+  return (await entityScopeStatus(req, entityType, entityId)) === "ok";
 }
 
 /**
