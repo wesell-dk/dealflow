@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { Link } from "wouter";
+import { useTranslation } from "react-i18next";
 import { useListDeals, useGetDealPipeline } from "@workspace/api-client-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -9,6 +10,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Search } from "lucide-react";
 
 export default function Deals() {
+  const { t } = useTranslation();
   const [search, setSearch] = useState("");
   const { data: deals, isLoading: isLoadingDeals } = useListDeals({ search });
   const { data: pipeline, isLoading: isLoadingPipeline } = useGetDealPipeline();
@@ -19,8 +21,8 @@ export default function Deals() {
     <div className="flex flex-col gap-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight">Deals</h1>
-          <p className="text-muted-foreground mt-1">Manage your active pipeline.</p>
+          <h1 className="text-3xl font-bold tracking-tight">{t("pages.deals.title")}</h1>
+          <p className="text-muted-foreground mt-1">{t("pages.deals.subtitle")}</p>
         </div>
       </div>
 
@@ -44,7 +46,7 @@ export default function Deals() {
         <div className="relative w-72">
           <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
           <Input
-            placeholder="Search deals..."
+            placeholder={t("pages.deals.searchPlaceholder")}
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             className="pl-8"
@@ -56,12 +58,12 @@ export default function Deals() {
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead>Name</TableHead>
-              <TableHead>Account</TableHead>
-              <TableHead>Stage</TableHead>
-              <TableHead>Value</TableHead>
-              <TableHead>Owner</TableHead>
-              <TableHead>Close Date</TableHead>
+              <TableHead>{t("common.name")}</TableHead>
+              <TableHead>{t("nav.accounts")}</TableHead>
+              <TableHead>{t("common.stage")}</TableHead>
+              <TableHead>{t("common.value")}</TableHead>
+              <TableHead>{t("common.owner")}</TableHead>
+              <TableHead>{t("pages.deals.closeDate")}</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>

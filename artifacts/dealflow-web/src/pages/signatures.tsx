@@ -1,3 +1,4 @@
+import { useTranslation } from "react-i18next";
 import { useState } from "react";
 import { Link } from "wouter";
 import { useListSignaturePackages, useRemindSigner } from "@workspace/api-client-react";
@@ -11,6 +12,7 @@ import { PenTool, Bell } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
 export default function Signatures() {
+  const { t } = useTranslation();
   const [status, setStatus] = useState<string>("in_progress");
   const { data: packages, isLoading } = useListSignaturePackages(
     status === "all" ? {} : { status }
@@ -36,8 +38,8 @@ export default function Signatures() {
     <div className="flex flex-col gap-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight">Signature Center</h1>
-          <p className="text-muted-foreground mt-1">Manage and track contract signatures.</p>
+          <h1 className="text-3xl font-bold tracking-tight">{t("pages.signatures.title")}</h1>
+          <p className="text-muted-foreground mt-1">{t("pages.signatures.subtitle")}</p>
         </div>
       </div>
 
@@ -63,12 +65,12 @@ export default function Signatures() {
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Title</TableHead>
-                <TableHead>Deal</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead className="w-[200px]">Progress</TableHead>
-                <TableHead>Deadline</TableHead>
-                <TableHead className="text-right">Actions</TableHead>
+                <TableHead>{t("common.title")}</TableHead>
+                <TableHead>{t("common.deal")}</TableHead>
+                <TableHead>{t("common.status")}</TableHead>
+                <TableHead className="w-[200px]">{t("common.progress")}</TableHead>
+                <TableHead>{t("common.deadline")}</TableHead>
+                <TableHead className="text-right">{t("common.actions")}</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>

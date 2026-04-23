@@ -20,11 +20,11 @@
     "search": "Search deals, accounts, quotes…",
     "settings": "Settings",
     "support": "Support",
-    "logout": "Logout",
+    "logout": "Log out",
     "myAccount": "My Account",
     "language": "Language",
     "loading": "Loading…",
-    "noData": "No data available",
+    "noData": "No data",
     "save": "Save",
     "cancel": "Cancel",
     "create": "Create",
@@ -47,12 +47,93 @@
     "history": "History",
     "send": "Send",
     "askQuestion": "Ask a question…",
-    "newThread": "New thread",
+    "newThread": "New Thread",
     "askCopilot": "Ask Copilot",
-    "details": "Details"
+    "details": "Details",
+    "active": "Active",
+    "completed": "Completed",
+    "name": "Name",
+    "country": "Country",
+    "currency": "Currency",
+    "value": "Value",
+    "owner": "Owner",
+    "deal": "Deal",
+    "stage": "Stage",
+    "progress": "Progress",
+    "deadline": "Deadline",
+    "title": "Title",
+    "validUntil": "Valid Until",
+    "template": "Template",
+    "risk": "Risk",
+    "discount": "Discount",
+    "total": "Total",
+    "number": "Number",
+    "industry": "Industry"
   },
   "pages": {
-    "home": "Overview",
+    "home": {
+      "title": "Today",
+      "subtitle": "Overview of your pipeline and active tasks.",
+      "openDeals": "Open Deals",
+      "openDealsValue": "Value",
+      "winRate": "Win Rate",
+      "rolling90": "Rolling 90 days",
+      "avgCycle": "Avg Cycle Time",
+      "days": "days",
+      "timeToClose": "Time to close",
+      "atRisk": "At Risk Deals",
+      "requiresAttention": "Requires attention",
+      "queue": "Queue",
+      "approvalsDue": "Approvals Due",
+      "signaturesPending": "Signatures Pending",
+      "quotesAwaiting": "Quotes Awaiting Response",
+      "copilotHighlights": "Copilot Highlights"
+    },
+    "deals": {
+      "title": "Deals",
+      "subtitle": "Manage your active pipeline.",
+      "searchPlaceholder": "Search deals…",
+      "closeDate": "Close Date"
+    },
+    "accounts": {
+      "title": "Accounts",
+      "subtitle": "Manage your customer relationships.",
+      "empty": "Get started by creating your first account.",
+      "healthScore": "Health Score",
+      "totalValue": "Total Value"
+    },
+    "quotes": {
+      "title": "Quotes",
+      "subtitle": "All quotes across your deals."
+    },
+    "approvals": {
+      "title": "Approvals",
+      "subtitle": "Review and manage your pending requests.",
+      "approve": "Approve",
+      "reject": "Reject"
+    },
+    "contracts": {
+      "title": "Contracts",
+      "subtitle": "All contracts across your deals.",
+      "riskScore": "Risk Score",
+      "riskScoreInfo": "Calculated from {{count}} clause severity weights (high·25 / medium·10 / low·3, capped at 100)."
+    },
+    "negotiations": {
+      "title": "Negotiations",
+      "subtitle": "Manage active deal negotiations and customer reactions.",
+      "concluded": "Concluded"
+    },
+    "signatures": {
+      "title": "Signature Center",
+      "subtitle": "Manage and track contract signatures.",
+      "inProgress": "In Progress",
+      "remind": "Remind"
+    },
+    "priceIncreasesList": {
+      "title": "Price Increases",
+      "subtitle": "Manage pricing campaigns across accounts.",
+      "empty": "You don't have any price increase campaigns right now."
+    },
     "audit": {
       "title": "Audit Log",
       "subtitle": "All recorded changes across the system",
@@ -62,7 +143,7 @@
     },
     "orderConfirmations": {
       "title": "Order Confirmations",
-      "subtitle": "Confirmed orders and handover to operations",
+      "subtitle": "Confirmed orders and operations handover",
       "create": "New Order Confirmation",
       "handoverChecklist": "Handover Checklist",
       "checkLabel": "Check",
@@ -74,47 +155,55 @@
     "copilot": {
       "title": "Copilot",
       "threads": "Threads",
-      "insights": "Recent insights",
+      "insights": "Latest Insights",
       "placeholder": "Ask about deals, contracts, pricing…",
-      "newThreadTitle": "New thread",
-      "newThreadTopic": "Topic (e.g. Deal, Quote)"
+      "newThreadTitle": "New Thread",
+      "newThreadTopic": "Topic (e.g. deal, quote)"
     },
     "reports": {
       "title": "Reports",
+      "subtitle": "Analytics and forecasting insights.",
       "filterPeriod": "Period",
       "filterStage": "Stage",
       "filterOwner": "Owner"
     },
     "pricing": {
       "title": "Pricing",
-      "resolveTitle": "Resolve price (hierarchy)",
-      "resolveSubtitle": "Account, Brand and Tenant levels are checked in this order",
+      "resolveTitle": "Resolve Price (Hierarchy)",
+      "resolveSubtitle": "Account, brand and tenant levels are checked in this order",
       "sku": "SKU",
       "accountId": "Account ID",
       "resolve": "Resolve",
       "source": "Source",
       "price": "Price",
-      "noResult": "No price rule found"
+      "noResult": "No price rule matched"
     },
     "priceIncrease": {
       "letterResponse": "Record customer response",
       "responseType": "Response",
       "responseAccept": "Accepted",
-      "responseNegotiate": "Negotiation requested",
+      "responseNegotiate": "Wants to negotiate",
       "responseReject": "Rejected",
       "responseNote": "Note"
     },
     "versions": {
       "title": "Versions",
       "noVersions": "No versions recorded yet",
-      "savedAt": "Saved at",
+      "savedAt": "Saved",
       "savedBy": "By"
+    },
+    "admin": {
+      "title": "Admin Console",
+      "subtitle": "Manage tenant settings, companies and users.",
+      "tenantConfig": "Tenant Configuration",
+      "companies": "Companies",
+      "legalEntity": "Legal Entity"
     }
   },
   "helpBot": {
-    "title": "Help assistant",
+    "title": "Help Assistant",
     "placeholder": "How can I help?",
-    "greeting": "Hi! I'll help you navigate DealFlow One. Ask about contracts, pricing or workflows.",
-    "open": "Open help"
+    "greeting": "Hi! I help you use DealFlow One. Ask me about contracts, pricing or workflows.",
+    "open": "Open Help"
   }
 }

@@ -1,3 +1,4 @@
+import { useTranslation } from "react-i18next";
 import { Link } from "wouter";
 import { useListAccounts } from "@workspace/api-client-react";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -5,6 +6,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Building } from "lucide-react";
 
 export default function Accounts() {
+  const { t } = useTranslation();
   const { data: accounts, isLoading } = useListAccounts();
 
   if (isLoading) {
@@ -15,8 +17,8 @@ export default function Accounts() {
     <div className="flex flex-col gap-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight">Accounts</h1>
-          <p className="text-muted-foreground mt-1">Manage your customer relationships.</p>
+          <h1 className="text-3xl font-bold tracking-tight">{t("pages.accounts.title")}</h1>
+          <p className="text-muted-foreground mt-1">{t("pages.accounts.subtitle")}</p>
         </div>
       </div>
 
@@ -24,19 +26,19 @@ export default function Accounts() {
         <div className="flex flex-col items-center justify-center p-12 text-center border rounded-lg bg-muted/20">
           <Building className="h-10 w-10 text-muted-foreground mb-4" />
           <h2 className="text-xl font-semibold">No accounts found</h2>
-          <p className="text-muted-foreground">Get started by creating your first account.</p>
+          <p className="text-muted-foreground">{t("pages.accounts.empty")}</p>
         </div>
       ) : (
         <div className="border rounded-md">
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Name</TableHead>
-                <TableHead>Industry</TableHead>
-                <TableHead>Country</TableHead>
-                <TableHead>Health Score</TableHead>
-                <TableHead>Open Deals</TableHead>
-                <TableHead>Total Value</TableHead>
+                <TableHead>{t("common.name")}</TableHead>
+                <TableHead>{t("common.industry")}</TableHead>
+                <TableHead>{t("common.country")}</TableHead>
+                <TableHead>{t("pages.accounts.healthScore")}</TableHead>
+                <TableHead>{t("pages.home.openDeals")}</TableHead>
+                <TableHead>{t("pages.accounts.totalValue")}</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>

@@ -1,4 +1,4 @@
-import { Link } from "wouter";
+import { useTranslation } from "react-i18next";
 import { useGetDashboardSummary, useListCopilotInsights } from "@workspace/api-client-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -6,6 +6,7 @@ import { Briefcase, Activity, Target, AlertTriangle } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 
 export default function Home() {
+  const { t } = useTranslation();
   const { data: summary, isLoading: isLoadingSummary } = useGetDashboardSummary();
   const { data: insights, isLoading: isLoadingInsights } = useListCopilotInsights();
 
@@ -18,54 +19,54 @@ export default function Home() {
   return (
     <div className="flex flex-col gap-6">
       <div>
-        <h1 className="text-3xl font-bold tracking-tight">Today</h1>
-        <p className="text-muted-foreground mt-1">Overview of your pipeline and active tasks.</p>
+        <h1 className="text-3xl font-bold tracking-tight">{t("pages.home.title")}</h1>
+        <p className="text-muted-foreground mt-1">{t("pages.home.subtitle")}</p>
       </div>
 
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium">Open Deals</CardTitle>
+            <CardTitle className="text-sm font-medium">{t("pages.home.openDeals")}</CardTitle>
             <Briefcase className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">{summary.openDealsCount}</div>
             <p className="text-xs text-muted-foreground mt-1">
-              Value: {summary.openDealsValue.toLocaleString()} {summary.currency}
+              {t("pages.home.openDealsValue")}: {summary.openDealsValue.toLocaleString()} {summary.currency}
             </p>
           </CardContent>
         </Card>
         
         <Card>
           <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium">Win Rate</CardTitle>
+            <CardTitle className="text-sm font-medium">{t("pages.home.winRate")}</CardTitle>
             <Target className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">{summary.winRatePct}%</div>
-            <p className="text-xs text-muted-foreground mt-1">Rolling 90 days</p>
+            <p className="text-xs text-muted-foreground mt-1">{t("pages.home.rolling90")}</p>
           </CardContent>
         </Card>
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium">Avg Cycle Time</CardTitle>
+            <CardTitle className="text-sm font-medium">{t("pages.home.avgCycle")}</CardTitle>
             <Activity className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{summary.avgCycleDays} days</div>
-            <p className="text-xs text-muted-foreground mt-1">Time to close</p>
+            <div className="text-2xl font-bold">{summary.avgCycleDays} {t("pages.home.days")}</div>
+            <p className="text-xs text-muted-foreground mt-1">{t("pages.home.timeToClose")}</p>
           </CardContent>
         </Card>
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium">At Risk Deals</CardTitle>
+            <CardTitle className="text-sm font-medium">{t("pages.home.atRisk")}</CardTitle>
             <AlertTriangle className="h-4 w-4 text-destructive" />
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold text-destructive">{summary.atRiskDeals}</div>
-            <p className="text-xs text-muted-foreground mt-1">Requires attention</p>
+            <p className="text-xs text-muted-foreground mt-1">{t("pages.home.requiresAttention")}</p>
           </CardContent>
         </Card>
       </div>
@@ -73,20 +74,20 @@ export default function Home() {
       <div className="grid gap-6 md:grid-cols-2">
         <Card>
           <CardHeader>
-            <CardTitle>Queue</CardTitle>
+            <CardTitle>{t("pages.home.queue")}</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="space-y-4">
               <div className="flex justify-between items-center">
-                <span>Approvals Due</span>
+                <span>{t("pages.home.approvalsDue")}</span>
                 <Badge variant="secondary">{summary.openApprovals}</Badge>
               </div>
               <div className="flex justify-between items-center">
-                <span>Signatures Pending</span>
+                <span>{t("pages.home.signaturesPending")}</span>
                 <Badge variant="secondary">{summary.signaturesPending}</Badge>
               </div>
               <div className="flex justify-between items-center">
-                <span>Quotes Awaiting Response</span>
+                <span>{t("pages.home.quotesAwaiting")}</span>
                 <Badge variant="secondary">{summary.quotesAwaitingResponse}</Badge>
               </div>
             </div>
@@ -95,7 +96,7 @@ export default function Home() {
 
         <Card>
           <CardHeader>
-            <CardTitle>Copilot Highlights</CardTitle>
+            <CardTitle>{t("pages.home.copilotHighlights")}</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="space-y-4">

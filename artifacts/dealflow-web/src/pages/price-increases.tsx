@@ -1,3 +1,4 @@
+import { useTranslation } from "react-i18next";
 import { Link } from "wouter";
 import { useListPriceIncreases } from "@workspace/api-client-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -6,6 +7,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { TrendingUp } from "lucide-react";
 
 export default function PriceIncreases() {
+  const { t } = useTranslation();
   // Using the actual hook name from API client
   const { data: campaigns, isLoading } = useListPriceIncreases?.() ?? { data: [], isLoading: false };
 
@@ -17,8 +19,8 @@ export default function PriceIncreases() {
     <div className="flex flex-col gap-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight">Price Increases</h1>
-          <p className="text-muted-foreground mt-1">Manage pricing campaigns across accounts.</p>
+          <h1 className="text-3xl font-bold tracking-tight">{t("pages.priceIncreasesList.title")}</h1>
+          <p className="text-muted-foreground mt-1">{t("pages.priceIncreasesList.subtitle")}</p>
         </div>
       </div>
 
@@ -26,7 +28,7 @@ export default function PriceIncreases() {
         <div className="flex flex-col items-center justify-center p-12 text-center border rounded-lg bg-muted/20">
           <TrendingUp className="h-10 w-10 text-muted-foreground mb-4" />
           <h2 className="text-xl font-semibold">No active campaigns</h2>
-          <p className="text-muted-foreground">You don't have any price increase campaigns right now.</p>
+          <p className="text-muted-foreground">{t("pages.priceIncreasesList.empty")}</p>
         </div>
       ) : (
         <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">

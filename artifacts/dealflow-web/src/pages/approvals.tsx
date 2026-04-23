@@ -1,3 +1,4 @@
+import { useTranslation } from "react-i18next";
 import { useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Link } from "wouter";
@@ -14,6 +15,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Clock, CheckCircle2, XCircle, AlertCircle } from "lucide-react";
 
 export default function Approvals() {
+  const { t } = useTranslation();
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const { data: approvals, isLoading } = useListApprovals(
     statusFilter === "all" ? {} : { status: statusFilter }
@@ -58,8 +60,8 @@ export default function Approvals() {
   return (
     <div className="flex flex-col gap-6">
       <div>
-        <h1 className="text-3xl font-bold tracking-tight">Approvals</h1>
-        <p className="text-muted-foreground mt-1">Review and manage your pending requests.</p>
+        <h1 className="text-3xl font-bold tracking-tight">{t("pages.approvals.title")}</h1>
+        <p className="text-muted-foreground mt-1">{t("pages.approvals.subtitle")}</p>
       </div>
 
       <div className="flex gap-2">

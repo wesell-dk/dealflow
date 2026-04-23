@@ -1,3 +1,4 @@
+import { useTranslation } from "react-i18next";
 import { useGetTenant, useListCompanies, useListBrands, useListUsers } from "@workspace/api-client-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -7,6 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Settings, Shield, Building2, Users } from "lucide-react";
 
 export default function Admin() {
+  const { t } = useTranslation();
   const { data: tenant, isLoading: isLoadingTenant } = useGetTenant();
   const { data: companies, isLoading: isLoadingCompanies } = useListCompanies();
   const { data: brands, isLoading: isLoadingBrands } = useListBrands();
@@ -25,8 +27,8 @@ export default function Admin() {
           <Settings className="h-6 w-6 text-foreground" />
         </div>
         <div>
-          <h1 className="text-3xl font-bold tracking-tight">Admin Console</h1>
-          <p className="text-muted-foreground mt-1">Manage tenant settings, companies, and users.</p>
+          <h1 className="text-3xl font-bold tracking-tight">{t("pages.admin.title")}</h1>
+          <p className="text-muted-foreground mt-1">{t("pages.admin.subtitle")}</p>
         </div>
       </div>
 
@@ -34,7 +36,7 @@ export default function Admin() {
         <Card>
           <CardHeader className="flex flex-row items-center gap-2 pb-2">
             <Shield className="h-5 w-5 text-primary" />
-            <CardTitle>Tenant Configuration</CardTitle>
+            <CardTitle>{t("pages.admin.tenantConfig")}</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-2">
@@ -63,17 +65,17 @@ export default function Admin() {
         <Card>
           <CardHeader className="flex flex-row items-center gap-2">
             <Building2 className="h-5 w-5 text-primary" />
-            <CardTitle>Companies</CardTitle>
+            <CardTitle>{t("pages.admin.companies")}</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="border rounded-md">
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Name</TableHead>
-                    <TableHead>Legal Entity</TableHead>
-                    <TableHead>Country</TableHead>
-                    <TableHead>Currency</TableHead>
+                    <TableHead>{t("common.name")}</TableHead>
+                    <TableHead>{t("pages.admin.legalEntity")}</TableHead>
+                    <TableHead>{t("common.country")}</TableHead>
+                    <TableHead>{t("common.currency")}</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>

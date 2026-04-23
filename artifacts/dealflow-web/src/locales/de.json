@@ -49,10 +49,91 @@
     "askQuestion": "Frage stellen…",
     "newThread": "Neuer Thread",
     "askCopilot": "Copilot fragen",
-    "details": "Details"
+    "details": "Details",
+    "active": "Aktiv",
+    "completed": "Abgeschlossen",
+    "name": "Name",
+    "country": "Land",
+    "currency": "Währung",
+    "value": "Wert",
+    "owner": "Verantwortlich",
+    "deal": "Deal",
+    "stage": "Phase",
+    "progress": "Fortschritt",
+    "deadline": "Frist",
+    "title": "Titel",
+    "validUntil": "Gültig bis",
+    "template": "Vorlage",
+    "risk": "Risiko",
+    "discount": "Rabatt",
+    "total": "Summe",
+    "number": "Nummer",
+    "industry": "Branche"
   },
   "pages": {
-    "home": "Übersicht",
+    "home": {
+      "title": "Heute",
+      "subtitle": "Überblick über deine Pipeline und aktuellen Aufgaben.",
+      "openDeals": "Offene Deals",
+      "openDealsValue": "Wert",
+      "winRate": "Gewinnrate",
+      "rolling90": "Rollierende 90 Tage",
+      "avgCycle": "Ø Zykluszeit",
+      "days": "Tage",
+      "timeToClose": "Zeit bis Abschluss",
+      "atRisk": "Deals mit Risiko",
+      "requiresAttention": "Benötigt Aufmerksamkeit",
+      "queue": "Aufgaben",
+      "approvalsDue": "Offene Freigaben",
+      "signaturesPending": "Offene Unterschriften",
+      "quotesAwaiting": "Angebote in Warteschleife",
+      "copilotHighlights": "Copilot-Hinweise"
+    },
+    "deals": {
+      "title": "Deals",
+      "subtitle": "Verwalte deine aktive Pipeline.",
+      "searchPlaceholder": "Deals suchen…",
+      "closeDate": "Abschlussdatum"
+    },
+    "accounts": {
+      "title": "Kunden",
+      "subtitle": "Verwalte deine Kundenbeziehungen.",
+      "empty": "Lege deinen ersten Kunden an, um zu starten.",
+      "healthScore": "Health-Score",
+      "totalValue": "Gesamtwert"
+    },
+    "quotes": {
+      "title": "Angebote",
+      "subtitle": "Alle Angebote über deine Deals hinweg."
+    },
+    "approvals": {
+      "title": "Freigaben",
+      "subtitle": "Prüfe und verwalte offene Anfragen.",
+      "approve": "Freigeben",
+      "reject": "Ablehnen"
+    },
+    "contracts": {
+      "title": "Verträge",
+      "subtitle": "Alle Verträge über deine Deals hinweg.",
+      "riskScore": "Risiko-Score",
+      "riskScoreInfo": "Berechnet aus {{count}} Klausel-Severities (high·25 / medium·10 / low·3, max. 100)."
+    },
+    "negotiations": {
+      "title": "Verhandlungen",
+      "subtitle": "Aktive Verhandlungen und Kundenreaktionen verwalten.",
+      "concluded": "Abgeschlossen"
+    },
+    "signatures": {
+      "title": "Unterschriften",
+      "subtitle": "Vertragsunterschriften verwalten und nachverfolgen.",
+      "inProgress": "Läuft",
+      "remind": "Erinnern"
+    },
+    "priceIncreasesList": {
+      "title": "Preiserhöhungen",
+      "subtitle": "Preiserhöhungs-Kampagnen über Kunden hinweg verwalten.",
+      "empty": "Aktuell sind keine Preiserhöhungs-Kampagnen aktiv."
+    },
     "audit": {
       "title": "Audit-Log",
       "subtitle": "Alle protokollierten Änderungen über das System hinweg",
@@ -81,6 +162,7 @@
     },
     "reports": {
       "title": "Berichte",
+      "subtitle": "Analysen und Forecast-Insights.",
       "filterPeriod": "Zeitraum",
       "filterStage": "Phase",
       "filterOwner": "Verantwortlich"
@@ -109,6 +191,13 @@
       "noVersions": "Noch keine Versionen erfasst",
       "savedAt": "Gespeichert",
       "savedBy": "Von"
+    },
+    "admin": {
+      "title": "Verwaltung",
+      "subtitle": "Tenant-Einstellungen, Gesellschaften und Benutzer verwalten.",
+      "tenantConfig": "Tenant-Konfiguration",
+      "companies": "Gesellschaften",
+      "legalEntity": "Rechtsträger"
     }
   },
   "helpBot": {
