@@ -395,47 +395,6 @@ export interface CustomerReaction {
   linkedApprovalId?: string | null;
 }
 
-export type NegotiationDetail = Negotiation & {
-  reactions: CustomerReaction[];
-  timeline: TimelineEvent[];
-};
-
-export interface ReactionInput {
-  type: string;
-  topic: string;
-  summary: string;
-  source: string;
-  priority: string;
-  impactPct?: number;
-  priceDeltaPct?: number;
-  termMonthsDelta?: number;
-  paymentTermsDeltaDays?: number;
-  requestedClauseVariantId?: string;
-}
-
-export interface ApprovalFromReactionInput {
-  type?: string;
-  reason?: string;
-  priority?: string;
-}
-
-export interface CounterproposalInput {
-  topic: string;
-  summary: string;
-  source: string;
-  priority?: string;
-  priceDeltaPct?: number;
-  termMonthsDelta?: number;
-  paymentTermsDeltaDays?: number;
-  requestedClauseVariantId?: string;
-  createNewVersion?: boolean;
-}
-
-export type NegotiationImpactApprovalsTriggeredItem = {
-  type: string;
-  reason: string;
-};
-
 export type NegotiationImpactRiskTrend =
   (typeof NegotiationImpactRiskTrend)[keyof typeof NegotiationImpactRiskTrend];
 
@@ -444,6 +403,11 @@ export const NegotiationImpactRiskTrend = {
   down: "down",
   flat: "flat",
 } as const;
+
+export type NegotiationImpactApprovalsTriggeredItem = {
+  type: string;
+  reason: string;
+};
 
 export interface NegotiationImpact {
   reactionId: string;
@@ -476,6 +440,44 @@ export interface NegotiationBaseline {
   totalAmount: number;
   discountPct: number;
   marginPct: number;
+}
+
+export type NegotiationDetail = Negotiation & {
+  reactions: CustomerReaction[];
+  timeline: TimelineEvent[];
+  impacts: NegotiationImpact[];
+  baseline?: NegotiationBaseline | null;
+};
+
+export interface ReactionInput {
+  type: string;
+  topic: string;
+  summary: string;
+  source: string;
+  priority: string;
+  impactPct?: number;
+  priceDeltaPct?: number;
+  termMonthsDelta?: number;
+  paymentTermsDeltaDays?: number;
+  requestedClauseVariantId?: string;
+}
+
+export interface ApprovalFromReactionInput {
+  type?: string;
+  reason?: string;
+  priority?: string;
+}
+
+export interface CounterproposalInput {
+  topic: string;
+  summary: string;
+  source: string;
+  priority?: string;
+  priceDeltaPct?: number;
+  termMonthsDelta?: number;
+  paymentTermsDeltaDays?: number;
+  requestedClauseVariantId?: string;
+  createNewVersion?: boolean;
 }
 
 export interface NegotiationImpactResponse {

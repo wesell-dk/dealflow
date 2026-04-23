@@ -9,9 +9,13 @@ Multi-tenant, multi-company, multi-brand. Deal-centric.
  */
 import type { CustomerReaction } from "./customerReaction";
 import type { Negotiation } from "./negotiation";
+import type { NegotiationBaseline } from "./negotiationBaseline";
+import type { NegotiationImpact } from "./negotiationImpact";
 import type { TimelineEvent } from "./timelineEvent";
 
 export type NegotiationDetail = Negotiation & {
   reactions: CustomerReaction[];
   timeline: TimelineEvent[];
+  impacts: NegotiationImpact[];
+  baseline?: NegotiationBaseline | null;
 };

@@ -1615,7 +1615,7 @@ components:
       allOf:
         - $ref: "#/components/schemas/Negotiation"
         - type: object
-          required: [reactions, timeline]
+          required: [reactions, timeline, impacts]
           properties:
             reactions:
               type: array
@@ -1623,6 +1623,13 @@ components:
             timeline:
               type: array
               items: { $ref: "#/components/schemas/TimelineEvent" }
+            impacts:
+              type: array
+              items: { $ref: "#/components/schemas/NegotiationImpact" }
+            baseline:
+              oneOf:
+                - $ref: "#/components/schemas/NegotiationBaseline"
+                - type: "null"
 
     CustomerReaction:
       type: object

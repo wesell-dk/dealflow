@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useRoute } from "wouter";
+import { useRoute, useLocation } from "wouter";
 import {
   useGetNegotiation,
   getGetNegotiationQueryKey,
@@ -7,6 +7,7 @@ import {
   useAddCustomerReaction,
   useCreateVersionFromReaction,
   useRequestApprovalFromReaction,
+  type CustomerReaction,
 } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -24,7 +25,7 @@ import {
 import { formatDistanceToNow, format } from "date-fns";
 import { useToast } from "@/hooks/use-toast";
 
-type ReactionTypeKey = "question" | "objection" | "counterproposal" | "acceptance" | "partial" | "clause_rejected" | "term_change" | "deferred";
+type ReactionTypeKey = "question" | "objection" | "counterproposal" | "acceptance" | "partial" | "price_rejected" | "clause_rejected" | "term_change" | "deferred";
 
 const reactionBadgeVariant: Record<string, { label: string; className: string }> = {
   question:         { label: "Frage",             className: "bg-blue-100 text-blue-700 border-blue-200" },
@@ -32,6 +33,7 @@ const reactionBadgeVariant: Record<string, { label: string; className: string }>
   counterproposal:  { label: "Gegenvorschlag",    className: "bg-purple-100 text-purple-700 border-purple-200" },
   acceptance:       { label: "Akzeptiert",        className: "bg-green-100 text-green-700 border-green-200" },
   partial:          { label: "Teilweise",         className: "bg-yellow-100 text-yellow-700 border-yellow-200" },
+  price_rejected:   { label: "Preis abgelehnt",   className: "bg-rose-100 text-rose-700 border-rose-200" },
   clause_rejected:  { label: "Klausel abgelehnt", className: "bg-red-100 text-red-700 border-red-200" },
   term_change:      { label: "Laufzeit-Änderung", className: "bg-indigo-100 text-indigo-700 border-indigo-200" },
   deferred:         { label: "Vertagt",           className: "bg-gray-100 text-gray-700 border-gray-200" },
@@ -58,6 +60,7 @@ function signed(n: number | null | undefined, suffix = "") {
 export default function NegotiationWorkspace() {
   const [, params] = useRoute("/negotiations/:id");
   const id = params?.id as string;
+  const [, setLocation] = useLocation();
   const qc = useQueryClient();
   const { toast } = useToast();
 
@@ -87,26 +90,8 @@ export default function NegotiationWorkspace() {
   if (isLoading) return <div className="p-8"><Skeleton className="h-64 w-full" /></div>;
   if (!neg) return <div className="p-8">Verhandlung nicht gefunden</div>;
 
-  const negAny = neg as typeof neg & {
-    baseline?: { totalAmount: number; discountPct: number; marginPct: number } | null;
-    impacts?: Array<{
-      reactionId: string;
-      priceDeltaPct: number | null;
-      newTotalAmount: number | null;
-      newDiscountPct: number | null;
-      newMarginPct: number | null;
-      marginDeltaPct: number | null;
-      termMonthsDelta: number | null;
-      paymentTermsDeltaDays: number | null;
-      requestedClauseVariantId: string | null;
-      linkedQuoteVersionId: string | null;
-      linkedApprovalId: string | null;
-      followUps: string[];
-      approvalsTriggered: Array<{ type: string; reason: string }>;
-      riskTrend: "up" | "down" | "flat";
-    }>;
-  };
-  const impactsByReaction = new Map((negAny.impacts ?? []).map(i => [i.reactionId, i]));
+  const impactsByReaction = new Map(neg.impacts.map(i => [i.reactionId, i]));
+  const baseline = neg.baseline ?? null;
 
   const resetForm = () => {
     setTopic(""); setSummary(""); setSource("");
@@ -144,8 +129,8 @@ export default function NegotiationWorkspace() {
         createNewVersion,
       } },
       {
-        onSuccess: (r: any) => {
-          toast({ title: r?.linkedQuoteVersionId ? "Gegenvorschlag + neue Version erstellt" : "Gegenvorschlag erfasst" });
+        onSuccess: (r: CustomerReaction) => {
+          toast({ title: r.linkedQuoteVersionId ? "Gegenvorschlag + neue Version erstellt" : "Gegenvorschlag erfasst" });
           invalidate(); resetForm();
           qc.invalidateQueries({ predicate: q => String(q.queryKey[0] ?? "").includes("Quote") });
         },
@@ -167,10 +152,11 @@ export default function NegotiationWorkspace() {
 
   const handleRequestApproval = (reactionId: string) => {
     requestApproval.mutate({ id, reactionId, data: {} }, {
-      onSuccess: () => {
-        toast({ title: "Approval angefordert" });
+      onSuccess: (result) => {
+        toast({ title: "Approval angefordert", description: "Weiterleitung zur Approval-Hub..." });
         invalidate();
         qc.invalidateQueries({ predicate: q => String(q.queryKey[0] ?? "").includes("Approval") });
+        setLocation(`/approvals?highlight=${encodeURIComponent(result.approvalId)}`);
       },
       onError: () => toast({ title: "Approval konnte nicht angefordert werden", variant: "destructive" }),
     });
@@ -185,9 +171,9 @@ export default function NegotiationWorkspace() {
             <Badge variant={neg.status === "active" ? "default" : "secondary"}>{neg.status === "active" ? "Aktiv" : neg.status}</Badge>
             <Badge variant="outline">Runde {neg.round}</Badge>
             <Badge variant={neg.riskLevel === "high" ? "destructive" : "outline"}>Risiko: {neg.riskLevel}</Badge>
-            {negAny.baseline && (
+            {baseline && (
               <span className="text-xs">
-                Basis: {formatCurrency(negAny.baseline.totalAmount)} · Rabatt {negAny.baseline.discountPct}% · Marge {negAny.baseline.marginPct}%
+                Basis: {formatCurrency(baseline.totalAmount)} · Rabatt {baseline.discountPct}% · Marge {baseline.marginPct}%
               </span>
             )}
           </div>

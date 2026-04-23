@@ -764,6 +764,39 @@ export const GetNegotiationResponse = zod
           dealName: zod.string().nullish(),
         }),
       ),
+      impacts: zod.array(
+        zod.object({
+          reactionId: zod.string(),
+          priceDeltaPct: zod.number().nullish(),
+          newTotalAmount: zod.number().nullish(),
+          newDiscountPct: zod.number().nullish(),
+          newMarginPct: zod.number().nullish(),
+          marginDeltaPct: zod.number().nullish(),
+          termMonthsDelta: zod.number().nullish(),
+          paymentTermsDeltaDays: zod.number().nullish(),
+          requestedClauseVariantId: zod.string().nullish(),
+          linkedQuoteVersionId: zod.string().nullish(),
+          linkedApprovalId: zod.string().nullish(),
+          followUps: zod.array(zod.string()),
+          approvalsTriggered: zod.array(
+            zod.object({
+              type: zod.string(),
+              reason: zod.string(),
+            }),
+          ),
+          riskTrend: zod.enum(["up", "down", "flat"]),
+        }),
+      ),
+      baseline: zod
+        .union([
+          zod.object({
+            totalAmount: zod.number(),
+            discountPct: zod.number(),
+            marginPct: zod.number(),
+          }),
+          zod.null(),
+        ])
+        .optional(),
     }),
   );
 
