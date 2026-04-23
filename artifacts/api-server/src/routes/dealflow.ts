@@ -1050,16 +1050,114 @@ router.post('/negotiations/:id/reactions/:reactionId/request-approval', async (r
 });
 
 // ── SIGNATURES ──
+type SignerRow = typeof signersTable.$inferSelect;
+type PackageRow = typeof signaturePackagesTable.$inferSelect;
+
 function mapSignaturePackageSummary(
-  s: typeof signaturePackagesTable.$inferSelect, dealName: string,
-  signedCount = 0, totalSigners = 0,
+  s: PackageRow, dealName: string, signedCount = 0, totalSigners = 0,
 ) {
   return {
     id: s.id, dealId: s.dealId, dealName, title: s.title, status: s.status,
-    signedCount, totalSigners,
+    mode: s.mode, signedCount, totalSigners,
     createdAt: iso(s.createdAt)!,
     deadline: iso(s.deadline),
   };
+}
+
+function pickWaitingSigner(pkg: PackageRow, signers: SignerRow[]): SignerRow | null {
+  const active = signers
+    .filter(x => x.status !== 'signed' && x.status !== 'declined')
+    .sort((a, b) => a.order - b.order);
+  if (active.length === 0) return null;
+  if (pkg.mode === 'parallel') return active[0] ?? null;
+  return active[0] ?? null;
+}
+
+function hoursSince(d: Date | null | undefined): number | null {
+  if (!d) return null;
+  const ms = Date.now() - new Date(d).getTime();
+  return Math.max(0, ms / 36e5);
+}
+
+function mapSigner(sg: SignerRow) {
+  return {
+    id: sg.id, packageId: sg.packageId, name: sg.name, email: sg.email,
+    role: sg.role, order: sg.order, status: sg.status,
+    sentAt: iso(sg.sentAt), viewedAt: iso(sg.viewedAt),
+    signedAt: iso(sg.signedAt), declinedAt: iso(sg.declinedAt),
+    declineReason: sg.declineReason, lastReminderAt: iso(sg.lastReminderAt),
+    isFallback: sg.isFallback,
+  };
+}
+
+async function buildSignatureDetail(s: PackageRow) {
+  const dealMap = await getDealMap();
+  const signers = await db.select().from(signersTable).where(eq(signersTable.packageId, s.id));
+  const sorted = signers.sort((a, b) => a.order - b.order);
+  const waiting = pickWaitingSigner(s, sorted);
+  const waitingSince = waiting?.sentAt ?? s.createdAt;
+  const waitingSinceHours = hoursSince(waitingSince);
+  const lastReminder = waiting?.lastReminderAt ?? s.lastReminderAt;
+  const nextReminderAt = lastReminder
+    ? new Date(new Date(lastReminder).getTime() + s.reminderIntervalHours * 36e5).toISOString()
+    : null;
+  const escalationAt = waitingSince
+    ? new Date(new Date(waitingSince).getTime() + s.escalationAfterHours * 36e5).toISOString()
+    : null;
+  return {
+    ...mapSignaturePackageSummary(s, dealMap.get(s.dealId)?.name ?? 'Unknown',
+      sorted.filter(x => x.status === 'signed').length, sorted.length),
+    mode: s.mode,
+    reminderIntervalHours: s.reminderIntervalHours,
+    escalationAfterHours: s.escalationAfterHours,
+    lastReminderAt: iso(s.lastReminderAt),
+    orderConfirmationId: s.orderConfirmationId,
+    waitingOnSignerId: waiting?.id ?? null,
+    waitingOnSignerName: waiting?.name ?? null,
+    waitingSinceHours: waitingSinceHours == null ? null : Math.round(waitingSinceHours),
+    nextReminderAt,
+    escalationAt,
+    signers: sorted.map(mapSigner),
+  };
+}
+
+async function maybeCompletePackageAndCreateOC(pkg: PackageRow, signers: SignerRow[]) {
+  const allSigned = signers.every(sg => sg.status === 'signed');
+  if (!allSigned || signers.length === 0) return;
+  if (pkg.status === 'completed' && pkg.orderConfirmationId) return;
+  const dealMap = await getDealMap();
+  const deal = dealMap.get(pkg.dealId);
+  const year = new Date().getFullYear();
+  const ocId = `oc_${randomUUID().slice(0, 8)}`;
+  const existingCount = await db.select({ c: sql<number>`count(*)::int` }).from(orderConfirmationsTable);
+  const seq = String((existingCount[0]?.c ?? 0) + 1).padStart(3, '0');
+  await db.insert(orderConfirmationsTable).values({
+    id: ocId, dealId: pkg.dealId, contractId: null,
+    number: `OC-${year}-${seq}`, status: 'in_review', readinessScore: 20,
+    totalAmount: String(num(deal?.value ?? 0)), currency: deal?.currency ?? 'EUR',
+    expectedDelivery: null, handoverAt: null,
+  });
+  await db.insert(orderConfirmationChecksTable).values({
+    id: `ocx_${randomUUID().slice(0, 8)}`,
+    orderConfirmationId: ocId,
+    label: 'Erstprüfung aus Signatur-Abschluss',
+    status: 'pending',
+    detail: `Automatisch aus Signature-Package ${pkg.id} erzeugt.`,
+  });
+  await db.update(signaturePackagesTable).set({
+    status: 'completed', orderConfirmationId: ocId,
+  }).where(eq(signaturePackagesTable.id, pkg.id));
+  await db.insert(timelineEventsTable).values({
+    id: `tl_${randomUUID().slice(0, 8)}`, type: 'signature',
+    title: 'Alle Unterschriften vollständig',
+    description: `${pkg.title} abgeschlossen; Auftragsbestätigung ${ocId} erstellt.`,
+    actor: 'System', dealId: pkg.dealId,
+  });
+  await writeAudit({
+    entityType: 'signature_package', entityId: pkg.id,
+    action: 'completed',
+    summary: `Signature-Package ${pkg.title} vollständig; OC ${ocId} erzeugt.`,
+  });
 }
 
 router.get('/signatures', async (req, res) => {
@@ -1081,31 +1179,146 @@ router.get('/signatures/:id', async (req, res) => {
   const [s] = await db.select().from(signaturePackagesTable).where(eq(signaturePackagesTable.id, req.params.id));
   if (!s) { res.status(404).json({ error: 'not found' }); return; }
   if (!(await gateDeal(req, res, s.dealId))) return;
-  const dealMap = await getDealMap();
-  const signers = await db.select().from(signersTable).where(eq(signersTable.packageId, s.id));
-  res.json({
-    ...mapSignaturePackageSummary(s, dealMap.get(s.dealId)?.name ?? 'Unknown',
-      signers.filter(x => x.status === 'signed').length, signers.length),
-    signers: signers.sort((a, b) => a.order - b.order).map(sg => ({
-      id: sg.id, packageId: sg.packageId, name: sg.name, email: sg.email,
-      role: sg.role, order: sg.order, status: sg.status, signedAt: iso(sg.signedAt),
-    })),
-  });
+  res.json(await buildSignatureDetail(s));
 });
 
-router.post('/signatures/:id/remind', async (req, res) => {
+router.post('/signatures/:id/send-reminder', async (req, res) => {
   const [s] = await db.select().from(signaturePackagesTable).where(eq(signaturePackagesTable.id, req.params.id));
   if (!s) { res.status(404).json({ error: 'not found' }); return; }
   if (!(await gateDeal(req, res, s.dealId))) return;
-  const dealMap = await getDealMap();
+  if (s.status === 'completed' || s.status === 'blocked') {
+    res.status(409).json({ error: `cannot remind in status ${s.status}` }); return;
+  }
   const signers = await db.select().from(signersTable).where(eq(signersTable.packageId, s.id));
+  const waiting = pickWaitingSigner(s, signers);
+  if (!waiting) { res.status(409).json({ error: 'no active signer' }); return; }
+  const now = new Date();
+  await db.update(signaturePackagesTable).set({ lastReminderAt: now })
+    .where(eq(signaturePackagesTable.id, s.id));
+  await db.update(signersTable).set({ lastReminderAt: now })
+    .where(eq(signersTable.id, waiting.id));
   await db.insert(timelineEventsTable).values({
     id: `tl_${randomUUID().slice(0, 8)}`, type: 'signature',
-    title: 'Reminder sent', description: `Reminder sent for ${s.title}.`,
+    title: 'Reminder gesendet',
+    description: `Reminder an ${waiting.name} für ${s.title}.`,
     actor: 'Priya Raman', dealId: s.dealId,
   });
-  res.json(mapSignaturePackageSummary(s, dealMap.get(s.dealId)?.name ?? 'Unknown',
-    signers.filter(x => x.status === 'signed').length, signers.length));
+  await writeAudit({
+    entityType: 'signature_package', entityId: s.id, action: 'reminder_sent',
+    summary: `Reminder an ${waiting.name} (${waiting.email}) gesendet.`,
+  });
+  const [fresh] = await db.select().from(signaturePackagesTable).where(eq(signaturePackagesTable.id, s.id));
+  res.json(await buildSignatureDetail(fresh!));
+});
+
+router.patch('/signers/:id/decline', async (req, res) => {
+  const [sg] = await db.select().from(signersTable).where(eq(signersTable.id, req.params.id));
+  if (!sg) { res.status(404).json({ error: 'not found' }); return; }
+  const [pkg] = await db.select().from(signaturePackagesTable).where(eq(signaturePackagesTable.id, sg.packageId));
+  if (!pkg) { res.status(404).json({ error: 'package not found' }); return; }
+  if (!(await gateDeal(req, res, pkg.dealId))) return;
+  if (sg.status === 'signed' || sg.status === 'declined') {
+    res.status(409).json({ error: `signer already ${sg.status}` }); return;
+  }
+  const reason = typeof req.body?.reason === 'string' && req.body.reason.trim()
+    ? String(req.body.reason).slice(0, 500) : 'Kein Grund angegeben';
+  const now = new Date();
+  await db.update(signersTable).set({
+    status: 'declined', declinedAt: now, declineReason: reason,
+  }).where(eq(signersTable.id, sg.id));
+  await db.update(signaturePackagesTable).set({ status: 'blocked' })
+    .where(eq(signaturePackagesTable.id, pkg.id));
+  await db.insert(timelineEventsTable).values({
+    id: `tl_${randomUUID().slice(0, 8)}`, type: 'signature',
+    title: 'Signatur abgelehnt',
+    description: `${sg.name} hat abgelehnt: ${reason}`,
+    actor: 'System', dealId: pkg.dealId,
+  });
+  await writeAudit({
+    entityType: 'signature_package', entityId: pkg.id, action: 'declined',
+    summary: `${sg.name} hat ${pkg.title} abgelehnt (${reason}).`,
+    before: { signerStatus: sg.status }, after: { signerStatus: 'declined' },
+  });
+  const [fresh] = await db.select().from(signaturePackagesTable).where(eq(signaturePackagesTable.id, pkg.id));
+  res.json(await buildSignatureDetail(fresh!));
+});
+
+router.post('/signatures/:id/escalate', async (req, res) => {
+  const [s] = await db.select().from(signaturePackagesTable).where(eq(signaturePackagesTable.id, req.params.id));
+  if (!s) { res.status(404).json({ error: 'not found' }); return; }
+  if (!(await gateDeal(req, res, s.dealId))) return;
+  const body = (req.body ?? {}) as {
+    fallbackName?: unknown; fallbackEmail?: unknown; fallbackRole?: unknown;
+    replacesSignerId?: unknown;
+  };
+  const name = typeof body.fallbackName === 'string' ? body.fallbackName.trim() : '';
+  const email = typeof body.fallbackEmail === 'string' ? body.fallbackEmail.trim() : '';
+  const role = typeof body.fallbackRole === 'string' ? body.fallbackRole.trim() : 'Fallback Signer';
+  if (!name || !email) {
+    res.status(400).json({ error: 'fallbackName and fallbackEmail required' }); return;
+  }
+  const signers = await db.select().from(signersTable).where(eq(signersTable.packageId, s.id));
+  const replaced = typeof body.replacesSignerId === 'string'
+    ? signers.find(sg => sg.id === body.replacesSignerId && sg.status === 'declined')
+    : signers.find(sg => sg.status === 'declined');
+  if (!replaced) { res.status(409).json({ error: 'no declined signer to escalate' }); return; }
+  const alreadyEscalated = signers.some(sg => sg.isFallback && sg.order === replaced.order);
+  if (alreadyEscalated) {
+    res.status(409).json({ error: 'fallback already active for this signer' }); return;
+  }
+  const newId = `sn_${randomUUID().slice(0, 8)}`;
+  await db.insert(signersTable).values({
+    id: newId, packageId: s.id, name, email, role,
+    order: replaced.order, status: 'pending', isFallback: true, sentAt: new Date(),
+  });
+  await db.update(signaturePackagesTable).set({ status: 'in_progress' })
+    .where(eq(signaturePackagesTable.id, s.id));
+  await db.insert(timelineEventsTable).values({
+    id: `tl_${randomUUID().slice(0, 8)}`, type: 'signature',
+    title: 'Eskalation: Fallback-Signer aktiviert',
+    description: `${name} übernimmt für ${replaced.name} bei ${s.title}.`,
+    actor: 'Priya Raman', dealId: s.dealId,
+  });
+  await writeAudit({
+    entityType: 'signature_package', entityId: s.id, action: 'escalated',
+    summary: `Fallback ${name} aktiviert statt ${replaced.name}.`,
+    after: { fallbackSignerId: newId, replacesSignerId: replaced.id },
+  });
+  const [fresh] = await db.select().from(signaturePackagesTable).where(eq(signaturePackagesTable.id, s.id));
+  res.json(await buildSignatureDetail(fresh!));
+});
+
+router.post('/signers/:id/sign', async (req, res) => {
+  const [sg] = await db.select().from(signersTable).where(eq(signersTable.id, req.params.id));
+  if (!sg) { res.status(404).json({ error: 'not found' }); return; }
+  const [pkg] = await db.select().from(signaturePackagesTable).where(eq(signaturePackagesTable.id, sg.packageId));
+  if (!pkg) { res.status(404).json({ error: 'package not found' }); return; }
+  if (!(await gateDeal(req, res, pkg.dealId))) return;
+  if (pkg.status !== 'in_progress' && pkg.status !== 'draft') {
+    res.status(409).json({ error: `package is ${pkg.status}; escalation required to unblock` }); return;
+  }
+  if (sg.status === 'signed' || sg.status === 'declined') {
+    res.status(409).json({ error: `signer already ${sg.status}` }); return;
+  }
+  if (pkg.mode === 'sequential') {
+    const others = await db.select().from(signersTable).where(eq(signersTable.packageId, pkg.id));
+    const earlier = others.filter(o => o.order < sg.order && o.status !== 'signed' && o.status !== 'declined');
+    if (earlier.length > 0) {
+      res.status(409).json({ error: 'earlier signers still pending (sequential mode)' }); return;
+    }
+  }
+  const now = new Date();
+  await db.update(signersTable).set({ status: 'signed', signedAt: now })
+    .where(eq(signersTable.id, sg.id));
+  if (pkg.status === 'draft') {
+    await db.update(signaturePackagesTable).set({ status: 'in_progress' })
+      .where(eq(signaturePackagesTable.id, pkg.id));
+  }
+  const all = await db.select().from(signersTable).where(eq(signersTable.packageId, pkg.id));
+  const [fresh] = await db.select().from(signaturePackagesTable).where(eq(signaturePackagesTable.id, pkg.id));
+  await maybeCompletePackageAndCreateOC(fresh!, all);
+  const [after] = await db.select().from(signaturePackagesTable).where(eq(signaturePackagesTable.id, pkg.id));
+  res.json(await buildSignatureDetail(after!));
 });
 
 // ── PRICE INCREASES ──

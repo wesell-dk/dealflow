@@ -361,22 +361,25 @@ export async function seedIfEmpty(): Promise<void> {
 
   // Signatures
   const sigs = [
-    { id: "sg_001", dealId: "dl_009", title: "Fjord – Vessel Telemetry MSA + Order Form", status: "in_progress", deadline: daysFromNow(3) },
-    { id: "sg_002", dealId: "dl_008", title: "Northwind – DC Rollout Order Form",          status: "in_progress", deadline: daysFromNow(6) },
-    { id: "sg_003", dealId: "dl_003", title: "Nordstern – Capacity Expansion MSA",         status: "draft",       deadline: daysFromNow(14) },
-    { id: "sg_004", dealId: "dl_012",title: "BlueRiver Maintenance Contract",              status: "completed",   deadline: daysFromNow(-7) },
+    // Sequential, warten auf CFO nach Solberg-Signatur
+    { id: "sg_001", dealId: "dl_009", title: "Fjord – Vessel Telemetry MSA + Order Form", status: "in_progress", mode: "sequential", reminderIntervalHours: 48, escalationAfterHours: 120, lastReminderAt: daysFromNow(-1), deadline: daysFromNow(3) },
+    // Parallel, ein Signer durch, einer steht aus
+    { id: "sg_002", dealId: "dl_008", title: "Northwind – DC Rollout Order Form",          status: "in_progress", mode: "parallel",   reminderIntervalHours: 24, escalationAfterHours: 96,  lastReminderAt: null,            deadline: daysFromNow(6) },
+    // Blocked durch Decline
+    { id: "sg_003", dealId: "dl_003", title: "Nordstern – Capacity Expansion MSA",         status: "blocked",     mode: "sequential", reminderIntervalHours: 48, escalationAfterHours: 120, lastReminderAt: null,            deadline: daysFromNow(14) },
+    { id: "sg_004", dealId: "dl_012", title: "BlueRiver Maintenance Contract",             status: "completed",   mode: "sequential", reminderIntervalHours: 48, escalationAfterHours: 120, lastReminderAt: null,            deadline: daysFromNow(-7) },
   ];
   await db.insert(signaturePackagesTable).values(sigs);
 
   await db.insert(signersTable).values([
-    { id: "sn_001", packageId: "sg_001", name: "Ingrid Solberg", email: "i.solberg@fjord.no", role: "Procurement Manager", order: 1, status: "signed",  signedAt: daysFromNow(-1) },
-    { id: "sn_002", packageId: "sg_001", name: "Erik Lindahl",   email: "e.lindahl@fjord.no", role: "CFO",                 order: 2, status: "pending", signedAt: null },
-    { id: "sn_003", packageId: "sg_002", name: "Oliver Hayes",   email: "o.hayes@northwind.co.uk", role: "Head of Supply",  order: 1, status: "signed",  signedAt: daysFromNow(-2) },
-    { id: "sn_004", packageId: "sg_002", name: "Priya Raman",    email: "priya@helix.com",   role: "VP Commercial",        order: 2, status: "pending", signedAt: null },
-    { id: "sn_005", packageId: "sg_003", name: "Dr. Stefan Reuter", email: "s.reuter@nordstern.de", role: "CFO",            order: 1, status: "pending", signedAt: null },
-    { id: "sn_006", packageId: "sg_003", name: "Marcel Voss",    email: "marcel@helix.com",  role: "Senior AE",            order: 2, status: "pending", signedAt: null },
-    { id: "sn_007", packageId: "sg_004", name: "Eleanor Whitcombe", email: "e.whitcombe@blueriver.co.uk", role: "Director", order: 1, status: "signed", signedAt: daysFromNow(-8) },
-    { id: "sn_008", packageId: "sg_004", name: "James Whitfield",  email: "james@helix.com", role: "Regional Director",    order: 2, status: "signed", signedAt: daysFromNow(-7) },
+    { id: "sn_001", packageId: "sg_001", name: "Ingrid Solberg", email: "i.solberg@fjord.no", role: "Procurement Manager", order: 1, status: "signed",  sentAt: daysFromNow(-4), viewedAt: daysFromNow(-3), signedAt: daysFromNow(-1), isFallback: false },
+    { id: "sn_002", packageId: "sg_001", name: "Erik Lindahl",   email: "e.lindahl@fjord.no", role: "CFO",                 order: 2, status: "sent",    sentAt: daysFromNow(-1), viewedAt: null,            lastReminderAt: daysFromNow(-1), isFallback: false },
+    { id: "sn_003", packageId: "sg_002", name: "Oliver Hayes",   email: "o.hayes@northwind.co.uk", role: "Head of Supply",  order: 1, status: "signed",  sentAt: daysFromNow(-3), viewedAt: daysFromNow(-3), signedAt: daysFromNow(-2), isFallback: false },
+    { id: "sn_004", packageId: "sg_002", name: "Priya Raman",    email: "priya@helix.com",   role: "VP Commercial",        order: 2, status: "viewed",  sentAt: daysFromNow(-3), viewedAt: daysFromNow(-1), isFallback: false },
+    { id: "sn_005", packageId: "sg_003", name: "Dr. Stefan Reuter", email: "s.reuter@nordstern.de", role: "CFO",            order: 1, status: "declined", sentAt: daysFromNow(-5), viewedAt: daysFromNow(-4), declinedAt: daysFromNow(-2), declineReason: "Haftungs-Cap nicht akzeptiert, Legal-Review gefordert.", isFallback: false },
+    { id: "sn_006", packageId: "sg_003", name: "Marcel Voss",    email: "marcel@helix.com",  role: "Senior AE",            order: 2, status: "pending", sentAt: null, isFallback: false },
+    { id: "sn_007", packageId: "sg_004", name: "Eleanor Whitcombe", email: "e.whitcombe@blueriver.co.uk", role: "Director", order: 1, status: "signed", sentAt: daysFromNow(-10), viewedAt: daysFromNow(-9), signedAt: daysFromNow(-8), isFallback: false },
+    { id: "sn_008", packageId: "sg_004", name: "James Whitfield",  email: "james@helix.com", role: "Regional Director",    order: 2, status: "signed", sentAt: daysFromNow(-10), viewedAt: daysFromNow(-8), signedAt: daysFromNow(-7), isFallback: false },
   ]);
 
   // Price increases

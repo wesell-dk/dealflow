@@ -7,13 +7,16 @@ Multi-tenant, multi-company, multi-brand. Deal-centric.
 
  * OpenAPI spec version: 0.1.0
  */
+import type { SignaturePackageMode } from "./signaturePackageMode";
+import type { SignaturePackageStatus } from "./signaturePackageStatus";
 
 export interface SignaturePackage {
   id: string;
   dealId: string;
   dealName: string;
   title: string;
-  status: string;
+  status: SignaturePackageStatus;
+  mode: SignaturePackageMode;
   signedCount: number;
   totalSigners: number;
   createdAt: Date;

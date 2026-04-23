@@ -7,6 +7,7 @@ Multi-tenant, multi-company, multi-brand. Deal-centric.
 
  * OpenAPI spec version: 0.1.0
  */
+import type { SignerStatus } from "./signerStatus";
 
 export interface Signer {
   id: string;
@@ -15,7 +16,18 @@ export interface Signer {
   email: string;
   role: string;
   order: number;
-  status: string;
+  status: SignerStatus;
+  isFallback: boolean;
+  /** @nullable */
+  sentAt?: Date | null;
+  /** @nullable */
+  viewedAt?: Date | null;
   /** @nullable */
   signedAt?: Date | null;
+  /** @nullable */
+  declinedAt?: Date | null;
+  /** @nullable */
+  declineReason?: string | null;
+  /** @nullable */
+  lastReminderAt?: Date | null;
 }

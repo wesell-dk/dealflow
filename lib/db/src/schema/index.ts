@@ -255,6 +255,11 @@ export const signaturePackagesTable = pgTable("signature_packages", {
   dealId: text("deal_id").notNull(),
   title: text("title").notNull(),
   status: text("status").notNull(),
+  mode: text("mode").notNull().default("sequential"),
+  reminderIntervalHours: integer("reminder_interval_hours").notNull().default(48),
+  escalationAfterHours: integer("escalation_after_hours").notNull().default(120),
+  lastReminderAt: timestamp("last_reminder_at", { withTimezone: true }),
+  orderConfirmationId: text("order_confirmation_id"),
   deadline: timestamp("deadline", { withTimezone: true }),
   createdAt: ts("created_at"),
 });
@@ -267,7 +272,13 @@ export const signersTable = pgTable("signers", {
   role: text("role").notNull(),
   order: integer("order_index").notNull(),
   status: text("status").notNull(),
+  sentAt: timestamp("sent_at", { withTimezone: true }),
+  viewedAt: timestamp("viewed_at", { withTimezone: true }),
   signedAt: timestamp("signed_at", { withTimezone: true }),
+  declinedAt: timestamp("declined_at", { withTimezone: true }),
+  declineReason: text("decline_reason"),
+  lastReminderAt: timestamp("last_reminder_at", { withTimezone: true }),
+  isFallback: boolean("is_fallback").notNull().default(false),
 });
 
 // Price increases

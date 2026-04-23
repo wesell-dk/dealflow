@@ -48,8 +48,10 @@ import type {
   DealInput,
   DealPatch,
   DealPipeline,
+  DeclineSignerInput,
   EntityVersion,
   EntityVersionInput,
+  EscalateSignatureInput,
   ForecastReport,
   HealthStatus,
   HelpBotInput,
@@ -3241,38 +3243,38 @@ export function useGetSignaturePackage<
   return { ...query, queryKey: queryOptions.queryKey };
 }
 
-export const getRemindSignerUrl = (id: string) => {
-  return `/api/signatures/${id}/remind`;
+export const getSendSignatureReminderUrl = (id: string) => {
+  return `/api/signatures/${id}/send-reminder`;
 };
 
-export const remindSigner = async (
+export const sendSignatureReminder = async (
   id: string,
   options?: RequestInit,
-): Promise<SignaturePackage> => {
-  return customFetch<SignaturePackage>(getRemindSignerUrl(id), {
+): Promise<SignaturePackageDetail> => {
+  return customFetch<SignaturePackageDetail>(getSendSignatureReminderUrl(id), {
     ...options,
     method: "POST",
   });
 };
 
-export const getRemindSignerMutationOptions = <
-  TError = ErrorType<unknown>,
+export const getSendSignatureReminderMutationOptions = <
+  TError = ErrorType<void>,
   TContext = unknown,
 >(options?: {
   mutation?: UseMutationOptions<
-    Awaited<ReturnType<typeof remindSigner>>,
+    Awaited<ReturnType<typeof sendSignatureReminder>>,
     TError,
     { id: string },
     TContext
   >;
   request?: SecondParameter<typeof customFetch>;
 }): UseMutationOptions<
-  Awaited<ReturnType<typeof remindSigner>>,
+  Awaited<ReturnType<typeof sendSignatureReminder>>,
   TError,
   { id: string },
   TContext
 > => {
-  const mutationKey = ["remindSigner"];
+  const mutationKey = ["sendSignatureReminder"];
   const { mutation: mutationOptions, request: requestOptions } = options
     ? options.mutation &&
       "mutationKey" in options.mutation &&
@@ -3282,41 +3284,285 @@ export const getRemindSignerMutationOptions = <
     : { mutation: { mutationKey }, request: undefined };
 
   const mutationFn: MutationFunction<
-    Awaited<ReturnType<typeof remindSigner>>,
+    Awaited<ReturnType<typeof sendSignatureReminder>>,
     { id: string }
   > = (props) => {
     const { id } = props ?? {};
 
-    return remindSigner(id, requestOptions);
+    return sendSignatureReminder(id, requestOptions);
   };
 
   return { mutationFn, ...mutationOptions };
 };
 
-export type RemindSignerMutationResult = NonNullable<
-  Awaited<ReturnType<typeof remindSigner>>
+export type SendSignatureReminderMutationResult = NonNullable<
+  Awaited<ReturnType<typeof sendSignatureReminder>>
 >;
 
-export type RemindSignerMutationError = ErrorType<unknown>;
+export type SendSignatureReminderMutationError = ErrorType<void>;
 
-export const useRemindSigner = <
-  TError = ErrorType<unknown>,
+export const useSendSignatureReminder = <
+  TError = ErrorType<void>,
   TContext = unknown,
 >(options?: {
   mutation?: UseMutationOptions<
-    Awaited<ReturnType<typeof remindSigner>>,
+    Awaited<ReturnType<typeof sendSignatureReminder>>,
     TError,
     { id: string },
     TContext
   >;
   request?: SecondParameter<typeof customFetch>;
 }): UseMutationResult<
-  Awaited<ReturnType<typeof remindSigner>>,
+  Awaited<ReturnType<typeof sendSignatureReminder>>,
   TError,
   { id: string },
   TContext
 > => {
-  return useMutation(getRemindSignerMutationOptions(options));
+  return useMutation(getSendSignatureReminderMutationOptions(options));
+};
+
+export const getEscalateSignaturePackageUrl = (id: string) => {
+  return `/api/signatures/${id}/escalate`;
+};
+
+export const escalateSignaturePackage = async (
+  id: string,
+  escalateSignatureInput: EscalateSignatureInput,
+  options?: RequestInit,
+): Promise<SignaturePackageDetail> => {
+  return customFetch<SignaturePackageDetail>(
+    getEscalateSignaturePackageUrl(id),
+    {
+      ...options,
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...options?.headers },
+      body: JSON.stringify(escalateSignatureInput),
+    },
+  );
+};
+
+export const getEscalateSignaturePackageMutationOptions = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof escalateSignaturePackage>>,
+    TError,
+    { id: string; data: BodyType<EscalateSignatureInput> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof escalateSignaturePackage>>,
+  TError,
+  { id: string; data: BodyType<EscalateSignatureInput> },
+  TContext
+> => {
+  const mutationKey = ["escalateSignaturePackage"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof escalateSignaturePackage>>,
+    { id: string; data: BodyType<EscalateSignatureInput> }
+  > = (props) => {
+    const { id, data } = props ?? {};
+
+    return escalateSignaturePackage(id, data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type EscalateSignaturePackageMutationResult = NonNullable<
+  Awaited<ReturnType<typeof escalateSignaturePackage>>
+>;
+export type EscalateSignaturePackageMutationBody =
+  BodyType<EscalateSignatureInput>;
+export type EscalateSignaturePackageMutationError = ErrorType<void>;
+
+export const useEscalateSignaturePackage = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof escalateSignaturePackage>>,
+    TError,
+    { id: string; data: BodyType<EscalateSignatureInput> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof escalateSignaturePackage>>,
+  TError,
+  { id: string; data: BodyType<EscalateSignatureInput> },
+  TContext
+> => {
+  return useMutation(getEscalateSignaturePackageMutationOptions(options));
+};
+
+export const getDeclineSignerUrl = (id: string) => {
+  return `/api/signers/${id}/decline`;
+};
+
+export const declineSigner = async (
+  id: string,
+  declineSignerInput?: DeclineSignerInput,
+  options?: RequestInit,
+): Promise<SignaturePackageDetail> => {
+  return customFetch<SignaturePackageDetail>(getDeclineSignerUrl(id), {
+    ...options,
+    method: "PATCH",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(declineSignerInput),
+  });
+};
+
+export const getDeclineSignerMutationOptions = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof declineSigner>>,
+    TError,
+    { id: string; data: BodyType<DeclineSignerInput> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof declineSigner>>,
+  TError,
+  { id: string; data: BodyType<DeclineSignerInput> },
+  TContext
+> => {
+  const mutationKey = ["declineSigner"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof declineSigner>>,
+    { id: string; data: BodyType<DeclineSignerInput> }
+  > = (props) => {
+    const { id, data } = props ?? {};
+
+    return declineSigner(id, data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type DeclineSignerMutationResult = NonNullable<
+  Awaited<ReturnType<typeof declineSigner>>
+>;
+export type DeclineSignerMutationBody = BodyType<DeclineSignerInput>;
+export type DeclineSignerMutationError = ErrorType<void>;
+
+export const useDeclineSigner = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof declineSigner>>,
+    TError,
+    { id: string; data: BodyType<DeclineSignerInput> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof declineSigner>>,
+  TError,
+  { id: string; data: BodyType<DeclineSignerInput> },
+  TContext
+> => {
+  return useMutation(getDeclineSignerMutationOptions(options));
+};
+
+export const getSignSignerUrl = (id: string) => {
+  return `/api/signers/${id}/sign`;
+};
+
+export const signSigner = async (
+  id: string,
+  options?: RequestInit,
+): Promise<SignaturePackageDetail> => {
+  return customFetch<SignaturePackageDetail>(getSignSignerUrl(id), {
+    ...options,
+    method: "POST",
+  });
+};
+
+export const getSignSignerMutationOptions = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof signSigner>>,
+    TError,
+    { id: string },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof signSigner>>,
+  TError,
+  { id: string },
+  TContext
+> => {
+  const mutationKey = ["signSigner"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof signSigner>>,
+    { id: string }
+  > = (props) => {
+    const { id } = props ?? {};
+
+    return signSigner(id, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type SignSignerMutationResult = NonNullable<
+  Awaited<ReturnType<typeof signSigner>>
+>;
+
+export type SignSignerMutationError = ErrorType<void>;
+
+export const useSignSigner = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof signSigner>>,
+    TError,
+    { id: string },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof signSigner>>,
+  TError,
+  { id: string },
+  TContext
+> => {
+  return useMutation(getSignSignerMutationOptions(options));
 };
 
 export const getListPriceIncreasesUrl = () => {

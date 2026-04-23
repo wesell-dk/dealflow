@@ -317,7 +317,8 @@ export const GetDealResponse = zod
           dealId: zod.string(),
           dealName: zod.string(),
           title: zod.string(),
-          status: zod.string(),
+          status: zod.enum(["draft", "in_progress", "completed", "blocked"]),
+          mode: zod.enum(["sequential", "parallel"]),
           signedCount: zod.number(),
           totalSigners: zod.number(),
           createdAt: zod.coerce.date(),
@@ -900,7 +901,8 @@ export const ListSignaturePackagesResponseItem = zod.object({
   dealId: zod.string(),
   dealName: zod.string(),
   title: zod.string(),
-  status: zod.string(),
+  status: zod.enum(["draft", "in_progress", "completed", "blocked"]),
+  mode: zod.enum(["sequential", "parallel"]),
   signedCount: zod.number(),
   totalSigners: zod.number(),
   createdAt: zod.coerce.date(),
@@ -920,7 +922,8 @@ export const GetSignaturePackageResponse = zod
     dealId: zod.string(),
     dealName: zod.string(),
     title: zod.string(),
-    status: zod.string(),
+    status: zod.enum(["draft", "in_progress", "completed", "blocked"]),
+    mode: zod.enum(["sequential", "parallel"]),
     signedCount: zod.number(),
     totalSigners: zod.number(),
     createdAt: zod.coerce.date(),
@@ -936,28 +939,234 @@ export const GetSignaturePackageResponse = zod
           email: zod.string(),
           role: zod.string(),
           order: zod.number(),
-          status: zod.string(),
+          status: zod.enum(["pending", "sent", "viewed", "signed", "declined"]),
+          isFallback: zod.boolean(),
+          sentAt: zod.coerce.date().nullish(),
+          viewedAt: zod.coerce.date().nullish(),
           signedAt: zod.coerce.date().nullish(),
+          declinedAt: zod.coerce.date().nullish(),
+          declineReason: zod.string().nullish(),
+          lastReminderAt: zod.coerce.date().nullish(),
         }),
       ),
+      reminderIntervalHours: zod.number(),
+      escalationAfterHours: zod.number(),
+      lastReminderAt: zod.coerce.date().nullish(),
+      orderConfirmationId: zod.string().nullish(),
+      waitingOnSignerId: zod.string().nullish(),
+      waitingOnSignerName: zod.string().nullish(),
+      waitingSinceHours: zod.number().nullish(),
+      nextReminderAt: zod.coerce.date().nullish(),
+      escalationAt: zod.coerce.date().nullish(),
     }),
   );
 
-export const RemindSignerParams = zod.object({
+export const SendSignatureReminderParams = zod.object({
   id: zod.coerce.string(),
 });
 
-export const RemindSignerResponse = zod.object({
-  id: zod.string(),
-  dealId: zod.string(),
-  dealName: zod.string(),
-  title: zod.string(),
-  status: zod.string(),
-  signedCount: zod.number(),
-  totalSigners: zod.number(),
-  createdAt: zod.coerce.date(),
-  deadline: zod.coerce.date().nullish(),
+export const SendSignatureReminderResponse = zod
+  .object({
+    id: zod.string(),
+    dealId: zod.string(),
+    dealName: zod.string(),
+    title: zod.string(),
+    status: zod.enum(["draft", "in_progress", "completed", "blocked"]),
+    mode: zod.enum(["sequential", "parallel"]),
+    signedCount: zod.number(),
+    totalSigners: zod.number(),
+    createdAt: zod.coerce.date(),
+    deadline: zod.coerce.date().nullish(),
+  })
+  .and(
+    zod.object({
+      signers: zod.array(
+        zod.object({
+          id: zod.string(),
+          packageId: zod.string(),
+          name: zod.string(),
+          email: zod.string(),
+          role: zod.string(),
+          order: zod.number(),
+          status: zod.enum(["pending", "sent", "viewed", "signed", "declined"]),
+          isFallback: zod.boolean(),
+          sentAt: zod.coerce.date().nullish(),
+          viewedAt: zod.coerce.date().nullish(),
+          signedAt: zod.coerce.date().nullish(),
+          declinedAt: zod.coerce.date().nullish(),
+          declineReason: zod.string().nullish(),
+          lastReminderAt: zod.coerce.date().nullish(),
+        }),
+      ),
+      reminderIntervalHours: zod.number(),
+      escalationAfterHours: zod.number(),
+      lastReminderAt: zod.coerce.date().nullish(),
+      orderConfirmationId: zod.string().nullish(),
+      waitingOnSignerId: zod.string().nullish(),
+      waitingOnSignerName: zod.string().nullish(),
+      waitingSinceHours: zod.number().nullish(),
+      nextReminderAt: zod.coerce.date().nullish(),
+      escalationAt: zod.coerce.date().nullish(),
+    }),
+  );
+
+export const EscalateSignaturePackageParams = zod.object({
+  id: zod.coerce.string(),
 });
+
+export const EscalateSignaturePackageBody = zod.object({
+  fallbackName: zod.string(),
+  fallbackEmail: zod.string(),
+  fallbackRole: zod.string().optional(),
+  replacesSignerId: zod.string().optional(),
+});
+
+export const EscalateSignaturePackageResponse = zod
+  .object({
+    id: zod.string(),
+    dealId: zod.string(),
+    dealName: zod.string(),
+    title: zod.string(),
+    status: zod.enum(["draft", "in_progress", "completed", "blocked"]),
+    mode: zod.enum(["sequential", "parallel"]),
+    signedCount: zod.number(),
+    totalSigners: zod.number(),
+    createdAt: zod.coerce.date(),
+    deadline: zod.coerce.date().nullish(),
+  })
+  .and(
+    zod.object({
+      signers: zod.array(
+        zod.object({
+          id: zod.string(),
+          packageId: zod.string(),
+          name: zod.string(),
+          email: zod.string(),
+          role: zod.string(),
+          order: zod.number(),
+          status: zod.enum(["pending", "sent", "viewed", "signed", "declined"]),
+          isFallback: zod.boolean(),
+          sentAt: zod.coerce.date().nullish(),
+          viewedAt: zod.coerce.date().nullish(),
+          signedAt: zod.coerce.date().nullish(),
+          declinedAt: zod.coerce.date().nullish(),
+          declineReason: zod.string().nullish(),
+          lastReminderAt: zod.coerce.date().nullish(),
+        }),
+      ),
+      reminderIntervalHours: zod.number(),
+      escalationAfterHours: zod.number(),
+      lastReminderAt: zod.coerce.date().nullish(),
+      orderConfirmationId: zod.string().nullish(),
+      waitingOnSignerId: zod.string().nullish(),
+      waitingOnSignerName: zod.string().nullish(),
+      waitingSinceHours: zod.number().nullish(),
+      nextReminderAt: zod.coerce.date().nullish(),
+      escalationAt: zod.coerce.date().nullish(),
+    }),
+  );
+
+export const DeclineSignerParams = zod.object({
+  id: zod.coerce.string(),
+});
+
+export const DeclineSignerBody = zod.object({
+  reason: zod.string().optional(),
+});
+
+export const DeclineSignerResponse = zod
+  .object({
+    id: zod.string(),
+    dealId: zod.string(),
+    dealName: zod.string(),
+    title: zod.string(),
+    status: zod.enum(["draft", "in_progress", "completed", "blocked"]),
+    mode: zod.enum(["sequential", "parallel"]),
+    signedCount: zod.number(),
+    totalSigners: zod.number(),
+    createdAt: zod.coerce.date(),
+    deadline: zod.coerce.date().nullish(),
+  })
+  .and(
+    zod.object({
+      signers: zod.array(
+        zod.object({
+          id: zod.string(),
+          packageId: zod.string(),
+          name: zod.string(),
+          email: zod.string(),
+          role: zod.string(),
+          order: zod.number(),
+          status: zod.enum(["pending", "sent", "viewed", "signed", "declined"]),
+          isFallback: zod.boolean(),
+          sentAt: zod.coerce.date().nullish(),
+          viewedAt: zod.coerce.date().nullish(),
+          signedAt: zod.coerce.date().nullish(),
+          declinedAt: zod.coerce.date().nullish(),
+          declineReason: zod.string().nullish(),
+          lastReminderAt: zod.coerce.date().nullish(),
+        }),
+      ),
+      reminderIntervalHours: zod.number(),
+      escalationAfterHours: zod.number(),
+      lastReminderAt: zod.coerce.date().nullish(),
+      orderConfirmationId: zod.string().nullish(),
+      waitingOnSignerId: zod.string().nullish(),
+      waitingOnSignerName: zod.string().nullish(),
+      waitingSinceHours: zod.number().nullish(),
+      nextReminderAt: zod.coerce.date().nullish(),
+      escalationAt: zod.coerce.date().nullish(),
+    }),
+  );
+
+export const SignSignerParams = zod.object({
+  id: zod.coerce.string(),
+});
+
+export const SignSignerResponse = zod
+  .object({
+    id: zod.string(),
+    dealId: zod.string(),
+    dealName: zod.string(),
+    title: zod.string(),
+    status: zod.enum(["draft", "in_progress", "completed", "blocked"]),
+    mode: zod.enum(["sequential", "parallel"]),
+    signedCount: zod.number(),
+    totalSigners: zod.number(),
+    createdAt: zod.coerce.date(),
+    deadline: zod.coerce.date().nullish(),
+  })
+  .and(
+    zod.object({
+      signers: zod.array(
+        zod.object({
+          id: zod.string(),
+          packageId: zod.string(),
+          name: zod.string(),
+          email: zod.string(),
+          role: zod.string(),
+          order: zod.number(),
+          status: zod.enum(["pending", "sent", "viewed", "signed", "declined"]),
+          isFallback: zod.boolean(),
+          sentAt: zod.coerce.date().nullish(),
+          viewedAt: zod.coerce.date().nullish(),
+          signedAt: zod.coerce.date().nullish(),
+          declinedAt: zod.coerce.date().nullish(),
+          declineReason: zod.string().nullish(),
+          lastReminderAt: zod.coerce.date().nullish(),
+        }),
+      ),
+      reminderIntervalHours: zod.number(),
+      escalationAfterHours: zod.number(),
+      lastReminderAt: zod.coerce.date().nullish(),
+      orderConfirmationId: zod.string().nullish(),
+      waitingOnSignerId: zod.string().nullish(),
+      waitingOnSignerName: zod.string().nullish(),
+      waitingSinceHours: zod.number().nullish(),
+      nextReminderAt: zod.coerce.date().nullish(),
+      escalationAt: zod.coerce.date().nullish(),
+    }),
+  );
 
 export const ListPriceIncreasesResponseItem = zod.object({
   id: zod.string(),

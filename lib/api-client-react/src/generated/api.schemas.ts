@@ -178,12 +178,31 @@ export interface ApprovalCase {
   decisionComment?: string | null;
 }
 
+export type SignaturePackageStatus =
+  (typeof SignaturePackageStatus)[keyof typeof SignaturePackageStatus];
+
+export const SignaturePackageStatus = {
+  draft: "draft",
+  in_progress: "in_progress",
+  completed: "completed",
+  blocked: "blocked",
+} as const;
+
+export type SignaturePackageMode =
+  (typeof SignaturePackageMode)[keyof typeof SignaturePackageMode];
+
+export const SignaturePackageMode = {
+  sequential: "sequential",
+  parallel: "parallel",
+} as const;
+
 export interface SignaturePackage {
   id: string;
   dealId: string;
   dealName: string;
   title: string;
-  status: string;
+  status: SignaturePackageStatus;
+  mode: SignaturePackageMode;
   signedCount: number;
   totalSigners: number;
   createdAt: string;
@@ -487,6 +506,16 @@ export interface NegotiationImpactResponse {
   impacts: NegotiationImpact[];
 }
 
+export type SignerStatus = (typeof SignerStatus)[keyof typeof SignerStatus];
+
+export const SignerStatus = {
+  pending: "pending",
+  sent: "sent",
+  viewed: "viewed",
+  signed: "signed",
+  declined: "declined",
+} as const;
+
 export interface Signer {
   id: string;
   packageId: string;
@@ -494,14 +523,52 @@ export interface Signer {
   email: string;
   role: string;
   order: number;
-  status: string;
+  status: SignerStatus;
+  isFallback: boolean;
+  /** @nullable */
+  sentAt?: string | null;
+  /** @nullable */
+  viewedAt?: string | null;
   /** @nullable */
   signedAt?: string | null;
+  /** @nullable */
+  declinedAt?: string | null;
+  /** @nullable */
+  declineReason?: string | null;
+  /** @nullable */
+  lastReminderAt?: string | null;
 }
 
 export type SignaturePackageDetail = SignaturePackage & {
   signers: Signer[];
+  reminderIntervalHours: number;
+  escalationAfterHours: number;
+  /** @nullable */
+  lastReminderAt?: string | null;
+  /** @nullable */
+  orderConfirmationId?: string | null;
+  /** @nullable */
+  waitingOnSignerId?: string | null;
+  /** @nullable */
+  waitingOnSignerName?: string | null;
+  /** @nullable */
+  waitingSinceHours?: number | null;
+  /** @nullable */
+  nextReminderAt?: string | null;
+  /** @nullable */
+  escalationAt?: string | null;
 };
+
+export interface EscalateSignatureInput {
+  fallbackName: string;
+  fallbackEmail: string;
+  fallbackRole?: string;
+  replacesSignerId?: string;
+}
+
+export interface DeclineSignerInput {
+  reason?: string;
+}
 
 export interface PriceIncreaseCampaign {
   id: string;

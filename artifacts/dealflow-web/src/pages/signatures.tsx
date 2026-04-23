@@ -1,7 +1,7 @@
 import { useTranslation } from "react-i18next";
 import { useState } from "react";
 import { Link } from "wouter";
-import { useListSignaturePackages, useRemindSigner } from "@workspace/api-client-react";
+import { useListSignaturePackages, useSendSignatureReminder } from "@workspace/api-client-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -18,7 +18,7 @@ export default function Signatures() {
     status === "all" ? {} : { status }
   );
   
-  const remind = useRemindSigner();
+  const remind = useSendSignatureReminder();
   const { toast } = useToast();
 
   if (isLoading) return <div className="p-8"><Skeleton className="h-64 w-full" /></div>;

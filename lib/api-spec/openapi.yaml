@@ -723,9 +723,9 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/SignaturePackageDetail" }
 
-  /signatures/{id}/remind:
+  /signatures/{id}/send-reminder:
     post:
-      operationId: remindSigner
+      operationId: sendSignatureReminder
       tags: [signatures]
       parameters:
         - in: path
@@ -737,7 +737,70 @@ paths:
           description: ok
           content:
             application/json:
-              schema: { $ref: "#/components/schemas/SignaturePackage" }
+              schema: { $ref: "#/components/schemas/SignaturePackageDetail" }
+        "409": { description: invalid state }
+
+  /signatures/{id}/escalate:
+    post:
+      operationId: escalateSignaturePackage
+      tags: [signatures]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/EscalateSignatureInput" }
+      responses:
+        "200":
+          description: ok
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SignaturePackageDetail" }
+        "400": { description: invalid input }
+        "409": { description: no declined signer }
+
+  /signers/{id}/decline:
+    patch:
+      operationId: declineSigner
+      tags: [signatures]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/DeclineSignerInput" }
+      responses:
+        "200":
+          description: ok
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SignaturePackageDetail" }
+        "409": { description: invalid state }
+
+  /signers/{id}/sign:
+    post:
+      operationId: signSigner
+      tags: [signatures]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: ok
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SignaturePackageDetail" }
+        "409": { description: invalid state or sequence violation }
 
   # ───────────── PRICE INCREASES ─────────────
 
@@ -1744,7 +1807,7 @@ components:
       type: object
       required:
         [
-          id, dealId, dealName, title, status, signedCount, totalSigners,
+          id, dealId, dealName, title, status, mode, signedCount, totalSigners,
           createdAt
         ]
       properties:
@@ -1752,7 +1815,8 @@ components:
         dealId: { type: string }
         dealName: { type: string }
         title: { type: string }
-        status: { type: string }
+        status: { type: string, enum: [draft, in_progress, completed, blocked] }
+        mode: { type: string, enum: [sequential, parallel] }
         signedCount: { type: integer }
         totalSigners: { type: integer }
         createdAt: { type: string, format: date-time }
@@ -1762,7 +1826,7 @@ components:
 
     Signer:
       type: object
-      required: [id, packageId, name, email, role, order, status]
+      required: [id, packageId, name, email, role, order, status, isFallback]
       properties:
         id: { type: string }
         packageId: { type: string }
@@ -1770,20 +1834,52 @@ components:
         email: { type: string }
         role: { type: string }
         order: { type: integer }
-        status: { type: string }
-        signedAt:
-          type: ["string", "null"]
-          format: date-time
+        status:
+          type: string
+          enum: [pending, sent, viewed, signed, declined]
+        isFallback: { type: boolean }
+        sentAt: { type: ["string", "null"], format: date-time }
+        viewedAt: { type: ["string", "null"], format: date-time }
+        signedAt: { type: ["string", "null"], format: date-time }
+        declinedAt: { type: ["string", "null"], format: date-time }
+        declineReason: { type: ["string", "null"] }
+        lastReminderAt: { type: ["string", "null"], format: date-time }
 
     SignaturePackageDetail:
       allOf:
         - $ref: "#/components/schemas/SignaturePackage"
         - type: object
-          required: [signers]
+          required:
+            [
+              signers, mode, reminderIntervalHours, escalationAfterHours
+            ]
           properties:
             signers:
               type: array
               items: { $ref: "#/components/schemas/Signer" }
+            reminderIntervalHours: { type: integer }
+            escalationAfterHours: { type: integer }
+            lastReminderAt: { type: ["string", "null"], format: date-time }
+            orderConfirmationId: { type: ["string", "null"] }
+            waitingOnSignerId: { type: ["string", "null"] }
+            waitingOnSignerName: { type: ["string", "null"] }
+            waitingSinceHours: { type: ["integer", "null"] }
+            nextReminderAt: { type: ["string", "null"], format: date-time }
+            escalationAt: { type: ["string", "null"], format: date-time }
+
+    EscalateSignatureInput:
+      type: object
+      required: [fallbackName, fallbackEmail]
+      properties:
+        fallbackName: { type: string }
+        fallbackEmail: { type: string }
+        fallbackRole: { type: string }
+        replacesSignerId: { type: string }
+
+    DeclineSignerInput:
+      type: object
+      properties:
+        reason: { type: string }
 
     # ── Price Increases ──
     PriceIncreaseCampaign:

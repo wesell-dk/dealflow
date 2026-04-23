@@ -12,4 +12,20 @@ import type { Signer } from "./signer";
 
 export type SignaturePackageDetail = SignaturePackage & {
   signers: Signer[];
+  reminderIntervalHours: number;
+  escalationAfterHours: number;
+  /** @nullable */
+  lastReminderAt?: Date | null;
+  /** @nullable */
+  orderConfirmationId?: string | null;
+  /** @nullable */
+  waitingOnSignerId?: string | null;
+  /** @nullable */
+  waitingOnSignerName?: string | null;
+  /** @nullable */
+  waitingSinceHours?: number | null;
+  /** @nullable */
+  nextReminderAt?: Date | null;
+  /** @nullable */
+  escalationAt?: Date | null;
 };
