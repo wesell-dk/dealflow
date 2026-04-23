@@ -545,6 +545,13 @@ router.get('/quotes/:id', async (req, res) => {
       unitPrice: num(l.unitPrice), listPrice: num(l.listPrice),
       discountPct: num(l.discountPct), total: num(l.total),
     })),
+    _meta: {
+      source: 'live',
+      validFrom: iso(q.createdAt),
+      validTo: null,
+      generatedAt: new Date().toISOString(),
+      version: q.currentVersion,
+    },
   });
 });
 
@@ -1042,6 +1049,13 @@ router.get('/contracts/:id', async (req, res) => {
   res.json({
     ...mapContract(c, dealMap.get(c.dealId)?.name ?? 'Unknown', rawClauses),
     clauses,
+    _meta: {
+      source: 'live',
+      validFrom: iso(c.createdAt),
+      validTo: null,
+      generatedAt: new Date().toISOString(),
+      version: c.version,
+    },
   });
 });
 
@@ -2607,6 +2621,8 @@ router.post('/price-positions/:id/versions', async (req, res) => {
 
 // ── PRICING RESOLVE (hierarchical) ──
 router.get('/pricing/resolve', async (req, res) => {
+  // Capture asOf before validation strips unknown query params.
+  const asOf = parseAsOf(req.query.asOf);
   if (!validateInline(req, res, { query: Z.ResolvePriceQueryParams })) return;
   const sku = String(req.query.sku ?? '');
   const brandId = req.query.brandId ? String(req.query.brandId) : null;
@@ -2664,18 +2680,50 @@ router.get('/pricing/resolve', async (req, res) => {
 
   const vf = typeof winner.validFrom === 'string' ? winner.validFrom : (winner.validFrom ? new Date(winner.validFrom).toISOString() : null);
   const vt = winner.validUntil ? (typeof winner.validUntil === 'string' ? winner.validUntil : new Date(winner.validUntil).toISOString()) : null;
-  res.setHeader('X-Meta-Source', 'live');
-  if (vf) res.setHeader('X-Meta-Valid-From', vf);
-  if (vt) res.setHeader('X-Meta-Valid-To', vt);
-  if (winner.version != null) res.setHeader('X-Meta-Version', String(winner.version));
+
+  // If asOf requested, resolve historical price_position snapshot for the winning position.
+  let metaSource: 'live' | 'version' = 'live';
+  let metaValidFrom: string | null = vf;
+  let metaValidTo: string | null = vt;
+  let metaVersion: number | null = winner.version ?? null;
+  let listPriceOut = num(winner.listPrice);
+  let currencyOut = winner.currency;
+
+  if (asOf) {
+    const snap = await resolveSnapshot<{ listPrice: string | number; currency: string; version?: number }>(
+      'price_position', winner.id, asOf,
+    );
+    if (!snap) { res.status(404).json({ error: 'no snapshot for asOf' }); return; }
+    metaSource = 'version';
+    metaValidFrom = snap.validFrom;
+    metaValidTo = snap.validTo;
+    metaVersion = snap.version ?? null;
+    listPriceOut = num(snap.data.listPrice);
+    currencyOut = snap.data.currency ?? currencyOut;
+  }
+
+  // Legacy header exposure (backward compatibility).
+  res.setHeader('X-Meta-Source', metaSource);
+  if (metaValidFrom) res.setHeader('X-Meta-Valid-From', metaValidFrom);
+  if (metaValidTo) res.setHeader('X-Meta-Valid-To', metaValidTo);
+  if (metaVersion != null) res.setHeader('X-Meta-Version', String(metaVersion));
   res.setHeader('X-Meta-Generated-At', new Date().toISOString());
+
   res.json({
     sku,
-    listPrice: num(winner.listPrice),
-    currency: winner.currency,
+    listPrice: listPriceOut,
+    currency: currencyOut,
     source: brandHit ? 'brand' : companyHit ? 'company' : 'tenant',
     positionId: winner.id,
     chain,
+    _meta: {
+      source: metaSource,
+      validFrom: metaValidFrom,
+      validTo: metaValidTo,
+      generatedAt: new Date().toISOString(),
+      version: metaVersion,
+      ...(asOf ? { asOf: asOf.toISOString() } : {}),
+    },
   });
 });
 
@@ -3435,7 +3483,7 @@ router.get('/admin/scope-tree', async (req, res) => {
 // ── Admin: Webhook Subscriptions ──
 const WebhookCreateBody = z.object({
   url: z.string().url(),
-  events: z.array(z.string().min(1)).min(1),
+  events: z.array(z.enum(WEBHOOK_EVENTS as [string, ...string[]])).min(1),
   description: z.string().optional(),
   active: z.boolean().optional(),
 });

@@ -7,6 +7,7 @@ info:
     DealFlow One — Commercial Execution Platform API.
     Multi-tenant, multi-company, multi-brand. Deal-centric.
 servers:
+  - url: /api/v1
   - url: /api
     description: Base API path
 
