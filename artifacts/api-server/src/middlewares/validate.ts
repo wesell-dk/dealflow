@@ -34,7 +34,13 @@ function runChecks(req: Request, opts: ValidateOptions): ValidationErrorIssue[] 
   if (opts.query) {
     const r = opts.query.safeParse(req.query);
     if (!r.success) issues.push(...toIssues("query", r.error.issues));
-    else (req as unknown as { query: unknown }).query = r.data;
+    else {
+      try {
+        Object.defineProperty(req, "query", { value: r.data, writable: true, configurable: true });
+      } catch {
+        // req.query is getter-only in Express 5; leave original query intact.
+      }
+    }
   }
   if (opts.body) {
     const r = opts.body.safeParse(req.body);

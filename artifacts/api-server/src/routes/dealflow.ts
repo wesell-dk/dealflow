@@ -3469,7 +3469,7 @@ router.post('/gdpr/forget', async (req, res) => {
 });
 
 router.get('/gdpr/access-log', async (req, res) => {
-  if (!validateInline(req, res, { query: z.object({ subjectId: z.string().optional(), limit: z.coerce.number().int().min(1).max(500).optional() }) })) return;
+  if (!validateInline(req, res, { query: Z.ListGdprAccessLogQueryParams })) return;
   if (!requireAdmin(req, res)) return;
   const scope = getScope(req);
   const entityType = req.query.entityType ? String(req.query.entityType) : null;
