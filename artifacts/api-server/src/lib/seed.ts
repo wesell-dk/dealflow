@@ -33,6 +33,7 @@ import {
   orderConfirmationChecksTable,
   entityVersionsTable,
 } from "@workspace/db";
+import { hashPassword } from "./auth";
 import { logger } from "./logger";
 
 const id = (prefix: string, n: number) => `${prefix}_${String(n).padStart(3, "0")}`;
@@ -70,13 +71,21 @@ export async function seedIfEmpty(): Promise<void> {
   ];
   await db.insert(brandsTable).values(brands);
 
+  // Default password for all demo users: "dealflow"
+  const demoPwHash = hashPassword("dealflow");
   const users = [
-    { id: "u_anna", name: "Anna Brandt", email: "anna@helix.com", role: "Account Executive", scope: "co_helix", initials: "AB", avatarColor: "#2D6CDF" },
-    { id: "u_marcel", name: "Marcel Voss", email: "marcel@helix.com", role: "Senior AE", scope: "co_helix", initials: "MV", avatarColor: "#0F766E" },
-    { id: "u_sara", name: "Sara Lindqvist", email: "sara@helix.com", role: "Deal Desk", scope: "tn_root", initials: "SL", avatarColor: "#9333EA" },
-    { id: "u_james", name: "James Whitfield", email: "james@helix.com", role: "Regional Director", scope: "co_helix_uk", initials: "JW", avatarColor: "#DC2626" },
-    { id: "u_priya", name: "Priya Raman", email: "priya@helix.com", role: "VP Commercial", scope: "tn_root", initials: "PR", avatarColor: "#EA580C" },
-    { id: "u_tom", name: "Tom Becker", email: "tom@helix.com", role: "Account Executive", scope: "co_helix_us", initials: "TB", avatarColor: "#0EA5E9" },
+    { id: "u_anna",   name: "Anna Brandt",      email: "anna@helix.com",   role: "Account Executive",  scope: "co_helix",     initials: "AB", avatarColor: "#2D6CDF",
+      passwordHash: demoPwHash, isActive: true, tenantId: "tn_root", tenantWide: false, scopeCompanyIds: JSON.stringify(["co_helix"]),                       scopeBrandIds: JSON.stringify([]) },
+    { id: "u_marcel", name: "Marcel Voss",      email: "marcel@helix.com", role: "Senior AE",          scope: "co_helix",     initials: "MV", avatarColor: "#0F766E",
+      passwordHash: demoPwHash, isActive: true, tenantId: "tn_root", tenantWide: false, scopeCompanyIds: JSON.stringify(["co_helix"]),                       scopeBrandIds: JSON.stringify([]) },
+    { id: "u_sara",   name: "Sara Lindqvist",   email: "sara@helix.com",   role: "Deal Desk",          scope: "tn_root",      initials: "SL", avatarColor: "#9333EA",
+      passwordHash: demoPwHash, isActive: true, tenantId: "tn_root", tenantWide: true,  scopeCompanyIds: JSON.stringify([]),                                  scopeBrandIds: JSON.stringify([]) },
+    { id: "u_james",  name: "James Whitfield",  email: "james@helix.com",  role: "Regional Director",  scope: "co_helix_uk",  initials: "JW", avatarColor: "#DC2626",
+      passwordHash: demoPwHash, isActive: true, tenantId: "tn_root", tenantWide: false, scopeCompanyIds: JSON.stringify(["co_helix_uk"]),                    scopeBrandIds: JSON.stringify([]) },
+    { id: "u_priya",  name: "Priya Raman",      email: "priya@helix.com",  role: "VP Commercial",      scope: "tn_root",      initials: "PR", avatarColor: "#EA580C",
+      passwordHash: demoPwHash, isActive: true, tenantId: "tn_root", tenantWide: true,  scopeCompanyIds: JSON.stringify([]),                                  scopeBrandIds: JSON.stringify([]) },
+    { id: "u_tom",    name: "Tom Becker",       email: "tom@helix.com",    role: "Account Executive",  scope: "co_helix_us",  initials: "TB", avatarColor: "#0EA5E9",
+      passwordHash: demoPwHash, isActive: true, tenantId: "tn_root", tenantWide: false, scopeCompanyIds: JSON.stringify(["co_helix_us"]),                    scopeBrandIds: JSON.stringify([]) },
   ];
   await db.insert(usersTable).values(users);
 
@@ -438,18 +447,18 @@ export async function seedIfEmpty(): Promise<void> {
   // Audit log
   await db.insert(auditLogTable).values([
     { id: "au_001", entityType: "deal",     entityId: "dl_001", action: "discount_changed",  actor: "Anna Brandt",      summary: "Rabatt auf Vorwerk-Renewal von 8% auf 12% angehoben.",          beforeJson: '{"discount":8}',  afterJson: '{"discount":12}', at: daysFromNow(-2) },
-    { id: "au_002", entityType: "contract", entityId: "co_001", action: "clause_swapped",    actor: "Sara Lindqvist",   summary: "Haftungs-Cap-Klausel auf Standard-Variante umgestellt.",          beforeJson: null, afterJson: null, at: daysFromNow(-3) },
+    { id: "au_002", entityType: "contract", entityId: "ctr_001", action: "clause_swapped",    actor: "Sara Lindqvist",   summary: "Haftungs-Cap-Klausel auf Standard-Variante umgestellt.",          beforeJson: null, afterJson: null, at: daysFromNow(-3) },
     { id: "au_003", entityType: "price",    entityId: "pr_001", action: "price_overridden",  actor: "Priya Raman",      summary: "Override auf PRO-200 (-4,5%) für Atlas-Account.",                 beforeJson: '{"price":1280}', afterJson: '{"price":1222}', at: daysFromNow(-5) },
     { id: "au_004", entityType: "deal",     entityId: "dl_007", action: "stage_changed",     actor: "Marcel Voss",      summary: "Atlas Energy von Verhandlung → Closing verschoben.",              beforeJson: null, afterJson: null, at: daysFromNow(-1) },
     { id: "au_005", entityType: "letter",   entityId: "pl_001", action: "letter_sent",       actor: "Priya Raman",      summary: "Hardware-Uplift-Schreiben an 14 Kunden versendet.",               beforeJson: null, afterJson: null, at: daysFromNow(-6) },
     { id: "au_006", entityType: "deal",     entityId: "dl_003", action: "comment_added",     actor: "James Whitfield",  summary: "Champion bestätigte erhaltene Budget-Freigabe.",                  beforeJson: null, afterJson: null, at: daysFromNow(-4) },
-    { id: "au_007", entityType: "contract", entityId: "co_002", action: "version_published", actor: "Sara Lindqvist",   summary: "Northwind v2 mit Stufen-Rollout-Option veröffentlicht.",          beforeJson: null, afterJson: null, at: daysFromNow(-2) },
+    { id: "au_007", entityType: "contract", entityId: "ctr_005", action: "version_published", actor: "Sara Lindqvist",   summary: "Northwind v2 mit Stufen-Rollout-Option veröffentlicht.",          beforeJson: null, afterJson: null, at: daysFromNow(-2) },
     { id: "au_008", entityType: "order",    entityId: "oc_001", action: "handover_started",  actor: "Anna Brandt",      summary: "Handover-Prüfungen für OC-2026-001 gestartet.",                   beforeJson: null, afterJson: null, at: daysFromNow(-1) },
   ]);
 
   // Order confirmations
   await db.insert(orderConfirmationsTable).values([
-    { id: "oc_001", dealId: "dl_001", contractId: "co_001", number: "OC-2026-001", status: "ready",      readinessScore: 92, totalAmount: "184500.00", currency: "EUR", expectedDelivery: isoDate(daysFromNow(21)), handoverAt: null,                createdAt: daysFromNow(-3) },
+    { id: "oc_001", dealId: "dl_001", contractId: "ctr_002", number: "OC-2026-001", status: "ready",      readinessScore: 100, totalAmount: "184500.00", currency: "EUR", expectedDelivery: isoDate(daysFromNow(21)), handoverAt: null,                createdAt: daysFromNow(-3) },
     { id: "oc_002", dealId: "dl_005", contractId: null,    number: "OC-2026-002", status: "in_review",  readinessScore: 64, totalAmount: "92800.00",  currency: "EUR", expectedDelivery: isoDate(daysFromNow(35)), handoverAt: null,                createdAt: daysFromNow(-2) },
     { id: "oc_003", dealId: "dl_013", contractId: null,    number: "OC-2026-003", status: "handed_over",readinessScore: 100,totalAmount: "340000.00", currency: "EUR", expectedDelivery: isoDate(daysFromNow(-5)),  handoverAt: daysFromNow(-7),     createdAt: daysFromNow(-25) },
     { id: "oc_004", dealId: "dl_007", contractId: null,    number: "OC-2026-004", status: "blocked",    readinessScore: 38, totalAmount: "1240000.00",currency: "EUR", expectedDelivery: isoDate(daysFromNow(60)), handoverAt: null,                createdAt: daysFromNow(-1) },
@@ -459,7 +468,7 @@ export async function seedIfEmpty(): Promise<void> {
     { id: "ocx_001", orderConfirmationId: "oc_001", label: "Credit limit verified",    status: "ok",      detail: "EUR 250k available." },
     { id: "ocx_002", orderConfirmationId: "oc_001", label: "Tax & VAT data complete",  status: "ok",      detail: "DE VAT validated." },
     { id: "ocx_003", orderConfirmationId: "oc_001", label: "Delivery address confirmed",status: "ok",     detail: "Site Wuppertal." },
-    { id: "ocx_004", orderConfirmationId: "oc_001", label: "Payment terms aligned",    status: "warning", detail: "Customer asked Net60, contract is Net45." },
+    { id: "ocx_004", orderConfirmationId: "oc_001", label: "Payment terms aligned",    status: "ok",      detail: "Net45 reconfirmed by customer." },
     { id: "ocx_005", orderConfirmationId: "oc_002", label: "Credit limit verified",    status: "ok",      detail: "EUR 100k available." },
     { id: "ocx_006", orderConfirmationId: "oc_002", label: "ERP article mapping",      status: "warning", detail: "2 of 14 SKUs pending mapping." },
     { id: "ocx_007", orderConfirmationId: "oc_002", label: "Logistics slot reserved",  status: "pending", detail: "Awaiting carrier confirmation." },
@@ -470,13 +479,15 @@ export async function seedIfEmpty(): Promise<void> {
 
   // Entity versions
   await db.insert(entityVersionsTable).values([
-    { id: "ev_001", entityType: "contract", entityId: "co_001", version: 1, label: "Draft v1",     snapshot: '{"clauses":12}', actor: "Anna Brandt",    comment: "Initial draft from template.",                  createdAt: daysFromNow(-14) },
-    { id: "ev_002", entityType: "contract", entityId: "co_001", version: 2, label: "Legal v2",     snapshot: '{"clauses":13}', actor: "Sara Lindqvist", comment: "Liability cap aligned to standard.",            createdAt: daysFromNow(-8) },
-    { id: "ev_003", entityType: "contract", entityId: "co_001", version: 3, label: "Customer v3",  snapshot: '{"clauses":13}', actor: "Anna Brandt",    comment: "Customer redlines accepted on payment terms.", createdAt: daysFromNow(-3) },
-    { id: "ev_004", entityType: "contract", entityId: "co_002", version: 1, label: "Draft v1",     snapshot: '{"clauses":10}', actor: "James Whitfield",comment: "Northwind initial.",                            createdAt: daysFromNow(-10) },
-    { id: "ev_005", entityType: "contract", entityId: "co_002", version: 2, label: "Phased v2",    snapshot: '{"clauses":11}', actor: "James Whitfield",comment: "Phased rollout option added.",                  createdAt: daysFromNow(-2) },
-    { id: "ev_006", entityType: "price",    entityId: "pr_001", version: 1, label: "Base list",    snapshot: '{"price":1280}', actor: "Priya Raman",    comment: "List price baseline.",                          createdAt: daysFromNow(-30) },
-    { id: "ev_007", entityType: "price",    entityId: "pr_001", version: 2, label: "Atlas override",snapshot:'{"price":1222}', actor: "Priya Raman",    comment: "-4.5% override for Atlas Energy.",              createdAt: daysFromNow(-5) },
+    { id: "ev_001", entityType: "contract",       entityId: "ctr_001", version: 1, label: "Draft v1",     snapshot: '{"clauses":12}', actor: "Anna Brandt",    comment: "Initial draft from template.",                  createdAt: daysFromNow(-14) },
+    { id: "ev_002", entityType: "contract",       entityId: "ctr_001", version: 2, label: "Legal v2",     snapshot: '{"clauses":13}', actor: "Sara Lindqvist", comment: "Liability cap aligned to standard.",            createdAt: daysFromNow(-8) },
+    { id: "ev_003", entityType: "contract",       entityId: "ctr_001", version: 3, label: "Customer v3",  snapshot: '{"clauses":13}', actor: "Anna Brandt",    comment: "Customer redlines accepted on payment terms.", createdAt: daysFromNow(-3) },
+    { id: "ev_004", entityType: "contract",       entityId: "ctr_005", version: 1, label: "Draft v1",     snapshot: '{"clauses":10}', actor: "James Whitfield",comment: "Northwind initial.",                            createdAt: daysFromNow(-10) },
+    { id: "ev_005", entityType: "contract",       entityId: "ctr_005", version: 2, label: "Phased v2",    snapshot: '{"clauses":11}', actor: "James Whitfield",comment: "Phased rollout option added.",                  createdAt: daysFromNow(-2) },
+    { id: "ev_006", entityType: "price_position", entityId: "pp_001",  version: 1, label: "Base list",    snapshot: '{"price":1280}', actor: "Priya Raman",    comment: "List price baseline.",                          createdAt: daysFromNow(-30) },
+    { id: "ev_007", entityType: "price_position", entityId: "pp_001",  version: 2, label: "Atlas override",snapshot:'{"price":1222}', actor: "Priya Raman",    comment: "-4.5% override for Atlas Energy.",              createdAt: daysFromNow(-5) },
+    { id: "ev_008", entityType: "quote",          entityId: "qt_001",  version: 1, label: "Initial offer", snapshot: '{"discount":5}', actor: "Anna Brandt",    comment: "First version sent to customer.",               createdAt: daysFromNow(-12) },
+    { id: "ev_009", entityType: "quote",          entityId: "qt_001",  version: 2, label: "Discounted",    snapshot: '{"discount":8}', actor: "Anna Brandt",    comment: "Increased discount after negotiation.",         createdAt: daysFromNow(-4) },
   ]);
 
   logger.info("Seed complete.");

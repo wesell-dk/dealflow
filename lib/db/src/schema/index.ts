@@ -46,6 +46,23 @@ export const usersTable = pgTable("users", {
   scope: text("scope").notNull(),
   initials: text("initials").notNull(),
   avatarColor: text("avatar_color"),
+  // Auth
+  passwordHash: text("password_hash").notNull().default(""),
+  isActive: boolean("is_active").notNull().default(true),
+  tenantId: text("tenant_id").notNull().default("tn_root"),
+  // Scope-RBAC: tenantWide=true → sieht alles im Tenant.
+  // Sonst: scopeCompanyIds (JSON text[]) + scopeBrandIds (JSON text[]).
+  // brandIds werden additiv gewertet (siehe scope.ts).
+  tenantWide: boolean("tenant_wide").notNull().default(false),
+  scopeCompanyIds: text("scope_company_ids").notNull().default("[]"),
+  scopeBrandIds: text("scope_brand_ids").notNull().default("[]"),
+});
+
+export const sessionsTable = pgTable("sessions", {
+  id: id(),
+  userId: text("user_id").notNull(),
+  expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+  createdAt: ts("created_at"),
 });
 
 // Accounts / contacts

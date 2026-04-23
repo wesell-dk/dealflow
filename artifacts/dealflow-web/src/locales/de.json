@@ -148,11 +148,22 @@
       "title": "Auftragsbestätigungen",
       "subtitle": "Bestätigte Aufträge und Übergabe an Operations",
       "create": "Neue Auftragsbestätigung",
+      "handover": "Handover",
+      "handoverBlocked": "Handover ist erst möglich, wenn alle Prüfungen den Status OK haben.",
       "handoverChecklist": "Handover-Checkliste",
+      "readiness": "Readiness",
+      "total": "Gesamtbetrag",
+      "delivery": "Lieferung",
       "checkLabel": "Prüfung",
       "passed": "Bestanden",
       "failed": "Fehlgeschlagen",
       "pending": "Offen",
+      "status": {
+        "ok": "OK",
+        "warning": "Warnung",
+        "blocked": "Blockiert",
+        "pending": "Offen"
+      },
       "noConfirmations": "Noch keine Auftragsbestätigungen vorhanden"
     },
     "copilot": {

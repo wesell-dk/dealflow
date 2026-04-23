@@ -148,11 +148,22 @@
       "title": "Order Confirmations",
       "subtitle": "Confirmed orders and operations handover",
       "create": "New Order Confirmation",
+      "handover": "Handover",
+      "handoverBlocked": "Handover requires every check to be OK.",
       "handoverChecklist": "Handover Checklist",
+      "readiness": "Readiness",
+      "total": "Total amount",
+      "delivery": "Delivery",
       "checkLabel": "Check",
       "passed": "Passed",
       "failed": "Failed",
       "pending": "Pending",
+      "status": {
+        "ok": "OK",
+        "warning": "Warning",
+        "blocked": "Blocked",
+        "pending": "Pending"
+      },
       "noConfirmations": "No order confirmations yet"
     },
     "copilot": {

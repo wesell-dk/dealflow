@@ -22,7 +22,9 @@ import {
   History,
   User as UserIcon,
 } from "lucide-react";
-import { useGetTenant, useGetCurrentUser } from "@workspace/api-client-react";
+import { useGetTenant } from "@workspace/api-client-react";
+import { useAuth } from "@/contexts/auth-context";
+import { LogOut } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -95,7 +97,7 @@ function Sidebar({ currentPath }: { currentPath: string }) {
 export function AppShell({ children }: { children: React.ReactNode }) {
   const [location] = useLocation();
   const { data: tenant } = useGetTenant();
-  const { data: user } = useGetCurrentUser();
+  const { user, logout } = useAuth();
   const { t, i18n } = useTranslation();
 
   return (
@@ -163,12 +165,21 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end">
-                <DropdownMenuLabel>{t("common.myAccount")}</DropdownMenuLabel>
+                <DropdownMenuLabel>
+                  <div className="flex flex-col">
+                    <span>{user?.name ?? t("common.myAccount")}</span>
+                    {user?.email && <span className="text-xs text-muted-foreground font-normal">{user.email}</span>}
+                    {user?.role && <span className="text-xs text-muted-foreground font-normal">{user.role}</span>}
+                  </div>
+                </DropdownMenuLabel>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem>{t("common.settings")}</DropdownMenuItem>
                 <DropdownMenuItem>{t("common.support")}</DropdownMenuItem>
                 <DropdownMenuSeparator />
-                <DropdownMenuItem>{t("common.logout")}</DropdownMenuItem>
+                <DropdownMenuItem onClick={() => void logout()} data-testid="button-logout">
+                  <LogOut className="h-4 w-4 mr-2" />
+                  {t("common.logout")}
+                </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
           </div>

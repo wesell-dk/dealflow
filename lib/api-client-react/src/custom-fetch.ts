@@ -360,7 +360,21 @@ export async function customFetch<T = unknown>(
 
   const requestInfo = { method, url: resolveUrl(input) };
 
-  const response = await fetch(input, { ...init, method, headers });
+  const response = await fetch(input, {
+    ...init,
+    method,
+    headers,
+    credentials: init.credentials ?? "include",
+  });
+
+  if (response.status === 401 && typeof window !== "undefined") {
+    const path = window.location.pathname;
+    const base = (import.meta as unknown as { env?: { BASE_URL?: string } }).env?.BASE_URL ?? "/";
+    const loginPath = `${base.replace(/\/$/, "")}/login`;
+    if (!path.endsWith("/login") && !path.includes("/auth/")) {
+      window.location.assign(loginPath);
+    }
+  }
 
   if (!response.ok) {
     const errorData = await parseErrorBody(response, method);

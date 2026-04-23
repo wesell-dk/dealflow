@@ -1,10 +1,18 @@
 import app from "./app";
 import { logger } from "./lib/logger";
 import { seedIfEmpty } from "./lib/seed";
+import { pruneExpiredSessions } from "./lib/auth";
 
 await seedIfEmpty().catch((err) => {
   logger.error({ err }, "Seed failed");
 });
+
+// Periodically clean up expired sessions (every hour).
+setInterval(() => {
+  pruneExpiredSessions().catch((err) =>
+    logger.warn({ err }, "pruneExpiredSessions failed"),
+  );
+}, 60 * 60 * 1000).unref();
 
 const rawPort = process.env["PORT"];
 

@@ -1,6 +1,15 @@
 import { Router, type IRouter, type Request, type Response } from 'express';
-import { and, desc, eq, sql } from 'drizzle-orm';
+import { and, desc, eq, inArray, sql } from 'drizzle-orm';
 import { randomUUID } from 'node:crypto';
+import {
+  allowedAccountIds,
+  allowedDealIds,
+  dealScopeSql,
+  getScope,
+  isAccountAllowed,
+  entityInScope,
+  copilotThreadVisible,
+} from '../lib/scope';
 import {
   db,
   tenantsTable,
@@ -110,33 +119,77 @@ async function dealCtx() {
   return { accs, users, brands, companies };
 }
 
+// ── Scope helpers (per request) ──
+async function gateDeal(req: Request, res: Response, dealId: string): Promise<boolean> {
+  const ids = await allowedDealIds(req);
+  if (ids.has(dealId)) return true;
+  // Non-enumerable: mask out-of-scope as 404 to prevent existence probing.
+  res.status(404).json({ error: 'not found' });
+  return false;
+}
+async function gateAccount(req: Request, res: Response, accountId: string): Promise<boolean> {
+  const ids = await allowedAccountIds(req);
+  if (isAccountAllowed(ids, accountId)) return true;
+  res.status(404).json({ error: 'not found' });
+  return false;
+}
+async function scopedDealIds(req: Request): Promise<string[]> {
+  return [...(await allowedDealIds(req))];
+}
+
 // ── ORG ──
-router.get('/orgs/tenant', async (_req, res) => {
-  const [t] = await db.select().from(tenantsTable).limit(1);
+router.get('/orgs/tenant', async (req, res) => {
+  const scope = getScope(req);
+  const [t] = await db.select().from(tenantsTable).where(eq(tenantsTable.id, scope.tenantId));
   if (!t) { res.status(404).json({ error: 'no tenant' }); return; }
   res.json({ ...t, createdAt: iso(t.createdAt) });
 });
 
-router.get('/orgs/companies', async (_req, res) => {
-  res.json(await db.select().from(companiesTable));
+router.get('/orgs/companies', async (req, res) => {
+  const scope = getScope(req);
+  const rows = await db.select().from(companiesTable).where(eq(companiesTable.tenantId, scope.tenantId));
+  if (scope.tenantWide) { res.json(rows); return; }
+  // Restrict: only companies in scope OR companies of explicit brand scope
+  const allowedCompanyIds = new Set<string>(scope.companyIds);
+  if (scope.brandIds.length) {
+    const bs = await db.select().from(brandsTable).where(inArray(brandsTable.id, scope.brandIds));
+    for (const b of bs) allowedCompanyIds.add(b.companyId);
+  }
+  res.json(rows.filter(c => allowedCompanyIds.has(c.id)));
 });
-router.get('/orgs/brands', async (_req, res) => {
-  res.json(await db.select().from(brandsTable));
+router.get('/orgs/brands', async (req, res) => {
+  const scope = getScope(req);
+  const rows = await db.select().from(brandsTable);
+  if (scope.tenantWide) { res.json(rows); return; }
+  const visibleCompany = new Set<string>(scope.companyIds);
+  res.json(rows.filter(b => visibleCompany.has(b.companyId) || scope.brandIds.includes(b.id)));
 });
-router.get('/orgs/users', async (_req, res) => {
-  res.json(await db.select().from(usersTable));
+router.get('/orgs/users', async (req, res) => {
+  const scope = getScope(req);
+  const rows = await db.select().from(usersTable).where(eq(usersTable.tenantId, scope.tenantId));
+  res.json(rows.map(u => ({
+    id: u.id, name: u.name, email: u.email, role: u.role, scope: u.scope,
+    initials: u.initials, avatarColor: u.avatarColor,
+  })));
 });
-router.get('/orgs/me', async (_req, res) => {
-  const [u] = await db.select().from(usersTable).where(eq(usersTable.id, 'u_priya'));
-  if (!u) { res.status(404).json({ error: 'no user' }); return; }
-  res.json(u);
+router.get('/orgs/me', async (req, res) => {
+  const scope = getScope(req);
+  const u = scope.user;
+  res.json({
+    id: u.id, name: u.name, email: u.email, role: u.role, scope: u.scope,
+    initials: u.initials, avatarColor: u.avatarColor,
+    tenantId: u.tenantId, tenantWide: scope.tenantWide,
+    companyIds: scope.companyIds, brandIds: scope.brandIds,
+  });
 });
 
 // ── ACCOUNTS ──
-router.get('/accounts', async (_req, res) => {
+router.get('/accounts', async (req, res) => {
   const accs = await db.select().from(accountsTable);
   const allDeals = await db.select().from(dealsTable);
-  res.json(accs.map(a => {
+  const accIds = await allowedAccountIds(req);
+  const visible = accs.filter(a => isAccountAllowed(accIds, a.id));
+  res.json(visible.map(a => {
     const ds = allDeals.filter(d => d.accountId === a.id && d.stage !== 'won' && d.stage !== 'lost');
     return {
       ...a,
@@ -151,13 +204,14 @@ router.post('/accounts', async (req, res) => {
   const id = `acc_${randomUUID().slice(0, 8)}`;
   await db.insert(accountsTable).values({
     id, name: body.name, industry: body.industry, country: body.country,
-    healthScore: 70, ownerId: 'u_priya',
+    healthScore: 70, ownerId: getScope(req).user.id,
   });
   const [a] = await db.select().from(accountsTable).where(eq(accountsTable.id, id));
   res.status(201).json({ ...a, openDeals: 0, totalValue: 0 });
 });
 
 router.get('/accounts/:id', async (req, res) => {
+  if (!(await gateAccount(req, res, req.params.id))) return;
   const [a] = await db.select().from(accountsTable).where(eq(accountsTable.id, req.params.id));
   if (!a) { res.status(404).json({ error: 'not found' }); return; }
   const contacts = await db.select().from(contactsTable).where(eq(contactsTable.accountId, a.id));
@@ -175,19 +229,23 @@ router.get('/accounts/:id', async (req, res) => {
 
 router.get('/contacts', async (req, res) => {
   const accountId = (req.query.accountId as string | undefined) ?? null;
+  const accIds = await allowedAccountIds(req);
   const list = accountId
     ? await db.select().from(contactsTable).where(eq(contactsTable.accountId, accountId))
     : await db.select().from(contactsTable);
-  res.json(list);
+  res.json(list.filter(c => isAccountAllowed(accIds, c.accountId)));
 });
 
 // ── DEALS ──
 router.get('/deals', async (req, res) => {
+  const scope = getScope(req);
   const filters = [];
   if (req.query.stage)     filters.push(eq(dealsTable.stage, String(req.query.stage)));
   if (req.query.ownerId)   filters.push(eq(dealsTable.ownerId, String(req.query.ownerId)));
   if (req.query.companyId) filters.push(eq(dealsTable.companyId, String(req.query.companyId)));
   if (req.query.brandId)   filters.push(eq(dealsTable.brandId, String(req.query.brandId)));
+  const sf = dealScopeSql(scope);
+  if (sf) filters.push(sf);
   const rows = await db.select().from(dealsTable)
     .where(filters.length ? and(...filters) : undefined)
     .orderBy(desc(dealsTable.updatedAt));
@@ -207,6 +265,14 @@ router.post('/deals', async (req, res) => {
     name: string; accountId: string; value: number; stage: string;
     brandId: string; companyId: string; ownerId: string; expectedCloseDate: string;
   };
+  const scope = getScope(req);
+  if (!scope.tenantWide) {
+    const okCompany = scope.companyIds.includes(b.companyId);
+    const okBrand = scope.brandIds.includes(b.brandId);
+    if (!okCompany && !okBrand) {
+      res.status(403).json({ error: 'forbidden (out of scope)' }); return;
+    }
+  }
   const id = `dl_${randomUUID().slice(0, 8)}`;
   const company = (await db.select().from(companiesTable).where(eq(companiesTable.id, b.companyId)))[0];
   await db.insert(dealsTable).values({
@@ -220,8 +286,9 @@ router.post('/deals', async (req, res) => {
   res.status(201).json(await buildDeal(d!, ctx));
 });
 
-router.get('/deals/pipeline', async (_req, res) => {
-  const rows = await db.select().from(dealsTable);
+router.get('/deals/pipeline', async (req, res) => {
+  const sf = dealScopeSql(getScope(req));
+  const rows = await db.select().from(dealsTable).where(sf);
   const ctx = await dealCtx();
   const stages = ['qualified', 'discovery', 'proposal', 'negotiation', 'closing', 'won', 'lost'];
   const out = await Promise.all(stages.map(async stage => {
@@ -238,6 +305,7 @@ router.get('/deals/pipeline', async (_req, res) => {
 });
 
 router.get('/deals/:id', async (req, res) => {
+  if (!(await gateDeal(req, res, req.params.id))) return;
   const [d] = await db.select().from(dealsTable).where(eq(dealsTable.id, req.params.id));
   if (!d) { res.status(404).json({ error: 'not found' }); return; }
   const ctx = await dealCtx();
@@ -262,6 +330,7 @@ router.get('/deals/:id', async (req, res) => {
 });
 
 router.patch('/deals/:id', async (req, res) => {
+  if (!(await gateDeal(req, res, req.params.id))) return;
   const b = req.body as Record<string, unknown>;
   const update: Record<string, unknown> = { updatedAt: new Date() };
   for (const k of ['name', 'stage', 'probability', 'riskLevel', 'nextStep', 'expectedCloseDate']) {
@@ -276,6 +345,7 @@ router.patch('/deals/:id', async (req, res) => {
 });
 
 router.get('/deals/:id/timeline', async (req, res) => {
+  if (!(await gateDeal(req, res, req.params.id))) return;
   const rows = await db.select().from(timelineEventsTable)
     .where(eq(timelineEventsTable.dealId, req.params.id))
     .orderBy(desc(timelineEventsTable.at));
@@ -316,8 +386,11 @@ router.get('/quotes', async (req, res) => {
   const filters = [];
   if (req.query.dealId) filters.push(eq(quotesTable.dealId, String(req.query.dealId)));
   if (req.query.status) filters.push(eq(quotesTable.status, String(req.query.status)));
+  const dealIds = await scopedDealIds(req);
+  if (dealIds.length === 0) { res.json([]); return; }
+  filters.push(inArray(quotesTable.dealId, dealIds));
   const rows = await db.select().from(quotesTable)
-    .where(filters.length ? and(...filters) : undefined)
+    .where(and(...filters))
     .orderBy(desc(quotesTable.createdAt));
   const dealMap = await getDealMap();
   const out = await Promise.all(rows.map(q => enrichQuote(q, dealMap.get(q.dealId)?.name ?? 'Unknown')));
@@ -326,6 +399,7 @@ router.get('/quotes', async (req, res) => {
 
 router.post('/quotes', async (req, res) => {
   const b = req.body as { dealId: string; validUntil?: string };
+  if (!(await gateDeal(req, res, b.dealId))) return;
   const [d] = await db.select().from(dealsTable).where(eq(dealsTable.id, b.dealId));
   if (!d) { res.status(404).json({ error: 'deal not found' }); return; }
   const id = `qt_${randomUUID().slice(0, 8)}`;
@@ -347,6 +421,7 @@ router.post('/quotes', async (req, res) => {
 router.get('/quotes/:id', async (req, res) => {
   const [q] = await db.select().from(quotesTable).where(eq(quotesTable.id, req.params.id));
   if (!q) { res.status(404).json({ error: 'not found' }); return; }
+  if (!(await gateDeal(req, res, q.dealId))) return;
   const [d] = await db.select().from(dealsTable).where(eq(dealsTable.id, q.dealId));
   const versions = await db.select().from(quoteVersionsTable)
     .where(eq(quoteVersionsTable.quoteId, q.id))
@@ -377,6 +452,7 @@ router.post('/quotes/:id/versions', async (req, res) => {
   const b = req.body as { discountPct: number; notes?: string };
   const [q] = await db.select().from(quotesTable).where(eq(quotesTable.id, req.params.id));
   if (!q) { res.status(404).json({ error: 'not found' }); return; }
+  if (!(await gateDeal(req, res, q.dealId))) return;
   const versions = await db.select().from(quoteVersionsTable).where(eq(quoteVersionsTable.quoteId, q.id));
   const current = versions.find(v => v.version === q.currentVersion);
   const baseTotal = num(current?.totalAmount) || 100000;
@@ -401,6 +477,9 @@ router.post('/quotes/:id/versions', async (req, res) => {
 });
 
 router.post('/quotes/:id/accept', async (req, res) => {
+  const [q0] = await db.select().from(quotesTable).where(eq(quotesTable.id, req.params.id));
+  if (!q0) { res.status(404).json({ error: 'not found' }); return; }
+  if (!(await gateDeal(req, res, q0.dealId))) return;
   await db.update(quotesTable).set({ status: 'accepted' }).where(eq(quotesTable.id, req.params.id));
   const [q] = await db.select().from(quotesTable).where(eq(quotesTable.id, req.params.id));
   if (!q) { res.status(404).json({ error: 'not found' }); return; }
@@ -420,11 +499,14 @@ function mapPricePosition(p: typeof pricePositionsTable.$inferSelect, brandName:
   };
 }
 
-router.get('/price-positions', async (_req, res) => {
+router.get('/price-positions', async (req, res) => {
+  const scope = getScope(req);
   const rows = await db.select().from(pricePositionsTable);
   const brands = await getBrandMap();
   const companies = await getCompanyMap();
-  res.json(rows.map(p => mapPricePosition(p, brands.get(p.brandId)?.name ?? '', companies.get(p.companyId)?.name ?? '')));
+  const filtered = scope.tenantWide ? rows : rows.filter(p =>
+    scope.companyIds.includes(p.companyId) || scope.brandIds.includes(p.brandId));
+  res.json(filtered.map(p => mapPricePosition(p, brands.get(p.brandId)?.name ?? '', companies.get(p.companyId)?.name ?? '')));
 });
 
 router.post('/price-positions', async (req, res) => {
@@ -480,8 +562,12 @@ function mapApproval(
 }
 
 router.get('/approvals', async (req, res) => {
-  const filter = req.query.status ? eq(approvalsTable.status, String(req.query.status)) : undefined;
-  const rows = await db.select().from(approvalsTable).where(filter).orderBy(desc(approvalsTable.createdAt));
+  const filters = [];
+  if (req.query.status) filters.push(eq(approvalsTable.status, String(req.query.status)));
+  const dealIds = await scopedDealIds(req);
+  if (dealIds.length === 0) { res.json([]); return; }
+  filters.push(inArray(approvalsTable.dealId, dealIds));
+  const rows = await db.select().from(approvalsTable).where(and(...filters)).orderBy(desc(approvalsTable.createdAt));
   const dealMap = await getDealMap();
   const users = await getUserMap();
   res.json(rows.map(a => mapApproval(a, dealMap.get(a.dealId)?.name ?? 'Unknown', users)));
@@ -489,9 +575,12 @@ router.get('/approvals', async (req, res) => {
 
 router.post('/approvals/:id/decide', async (req, res) => {
   const b = req.body as { decision: string; comment?: string };
+  const [pre] = await db.select().from(approvalsTable).where(eq(approvalsTable.id, req.params.id));
+  if (!pre) { res.status(404).json({ error: 'not found' }); return; }
+  if (!(await gateDeal(req, res, pre.dealId))) return;
   await db.update(approvalsTable).set({
     status: b.decision === 'approve' ? 'approved' : b.decision === 'reject' ? 'rejected' : b.decision,
-    decisionComment: b.comment ?? null, decidedAt: new Date(), decidedBy: 'u_priya',
+    decisionComment: b.comment ?? null, decidedAt: new Date(), decidedBy: getScope(req).user.id,
   }).where(eq(approvalsTable.id, req.params.id));
   const [a] = await db.select().from(approvalsTable).where(eq(approvalsTable.id, req.params.id));
   if (!a) { res.status(404).json({ error: 'not found' }); return; }
@@ -514,8 +603,11 @@ function mapContract(c: typeof contractsTable.$inferSelect, dealName: string, cl
 }
 
 router.get('/contracts', async (req, res) => {
-  const filter = req.query.dealId ? eq(contractsTable.dealId, String(req.query.dealId)) : undefined;
-  const rows = await db.select().from(contractsTable).where(filter).orderBy(desc(contractsTable.createdAt));
+  const dealIds = await scopedDealIds(req);
+  if (dealIds.length === 0) { res.json([]); return; }
+  const filters = [inArray(contractsTable.dealId, dealIds)];
+  if (req.query.dealId) filters.push(eq(contractsTable.dealId, String(req.query.dealId)));
+  const rows = await db.select().from(contractsTable).where(and(...filters)).orderBy(desc(contractsTable.createdAt));
   const dealMap = await getDealMap();
   const allClauses = await db.select().from(contractClausesTable);
   const clausesByContract = new Map<string, typeof allClauses>();
@@ -529,6 +621,7 @@ router.get('/contracts', async (req, res) => {
 
 router.post('/contracts', async (req, res) => {
   const b = req.body as { dealId: string; title: string; template: string };
+  if (!(await gateDeal(req, res, b.dealId))) return;
   const id = `ctr_${randomUUID().slice(0, 8)}`;
   await db.insert(contractsTable).values({
     id, dealId: b.dealId, title: b.title, status: 'drafting',
@@ -543,6 +636,7 @@ router.post('/contracts', async (req, res) => {
 router.get('/contracts/:id', async (req, res) => {
   const [c] = await db.select().from(contractsTable).where(eq(contractsTable.id, req.params.id));
   if (!c) { res.status(404).json({ error: 'not found' }); return; }
+  if (!(await gateDeal(req, res, c.dealId))) return;
   const dealMap = await getDealMap();
   const clauses = await db.select().from(contractClausesTable).where(eq(contractClausesTable.contractId, c.id));
   res.json({
@@ -572,11 +666,13 @@ function mapNegotiation(n: typeof negotiationsTable.$inferSelect, dealName: stri
 }
 
 router.get('/negotiations', async (req, res) => {
-  const filters = [];
+  const dealIds = await scopedDealIds(req);
+  if (dealIds.length === 0) { res.json([]); return; }
+  const filters = [inArray(negotiationsTable.dealId, dealIds)];
   if (req.query.dealId) filters.push(eq(negotiationsTable.dealId, String(req.query.dealId)));
   if (req.query.status) filters.push(eq(negotiationsTable.status, String(req.query.status)));
   const rows = await db.select().from(negotiationsTable)
-    .where(filters.length ? and(...filters) : undefined)
+    .where(and(...filters))
     .orderBy(desc(negotiationsTable.updatedAt));
   const dealMap = await getDealMap();
   res.json(rows.map(n => mapNegotiation(n, dealMap.get(n.dealId)?.name ?? 'Unknown')));
@@ -585,6 +681,7 @@ router.get('/negotiations', async (req, res) => {
 router.get('/negotiations/:id', async (req, res) => {
   const [n] = await db.select().from(negotiationsTable).where(eq(negotiationsTable.id, req.params.id));
   if (!n) { res.status(404).json({ error: 'not found' }); return; }
+  if (!(await gateDeal(req, res, n.dealId))) return;
   const dealMap = await getDealMap();
   const reactions = await db.select().from(customerReactionsTable)
     .where(eq(customerReactionsTable.negotiationId, n.id))
@@ -609,6 +706,9 @@ router.get('/negotiations/:id', async (req, res) => {
 });
 
 router.post('/negotiations/:id/reactions', async (req, res) => {
+  const [n0] = await db.select().from(negotiationsTable).where(eq(negotiationsTable.id, req.params.id));
+  if (!n0) { res.status(404).json({ error: 'not found' }); return; }
+  if (!(await gateDeal(req, res, n0.dealId))) return;
   const b = req.body as {
     type: string; topic: string; summary: string; source: string; priority: string; impactPct?: number;
   };
@@ -644,8 +744,11 @@ function mapSignaturePackageSummary(
 }
 
 router.get('/signatures', async (req, res) => {
-  const filter = req.query.status ? eq(signaturePackagesTable.status, String(req.query.status)) : undefined;
-  const rows = await db.select().from(signaturePackagesTable).where(filter).orderBy(desc(signaturePackagesTable.createdAt));
+  const dealIds = await scopedDealIds(req);
+  if (dealIds.length === 0) { res.json([]); return; }
+  const filters = [inArray(signaturePackagesTable.dealId, dealIds)];
+  if (req.query.status) filters.push(eq(signaturePackagesTable.status, String(req.query.status)));
+  const rows = await db.select().from(signaturePackagesTable).where(and(...filters)).orderBy(desc(signaturePackagesTable.createdAt));
   const dealMap = await getDealMap();
   const allSigners = await db.select().from(signersTable);
   res.json(rows.map(s => {
@@ -658,6 +761,7 @@ router.get('/signatures', async (req, res) => {
 router.get('/signatures/:id', async (req, res) => {
   const [s] = await db.select().from(signaturePackagesTable).where(eq(signaturePackagesTable.id, req.params.id));
   if (!s) { res.status(404).json({ error: 'not found' }); return; }
+  if (!(await gateDeal(req, res, s.dealId))) return;
   const dealMap = await getDealMap();
   const signers = await db.select().from(signersTable).where(eq(signersTable.packageId, s.id));
   res.json({
@@ -673,6 +777,7 @@ router.get('/signatures/:id', async (req, res) => {
 router.post('/signatures/:id/remind', async (req, res) => {
   const [s] = await db.select().from(signaturePackagesTable).where(eq(signaturePackagesTable.id, req.params.id));
   if (!s) { res.status(404).json({ error: 'not found' }); return; }
+  if (!(await gateDeal(req, res, s.dealId))) return;
   const dealMap = await getDealMap();
   const signers = await db.select().from(signersTable).where(eq(signersTable.packageId, s.id));
   await db.insert(timelineEventsTable).values({
@@ -700,16 +805,24 @@ function mapCampaign(c: typeof priceIncreaseCampaignsTable.$inferSelect, letters
   };
 }
 
-router.get('/price-increases', async (_req, res) => {
+router.get('/price-increases', async (req, res) => {
+  const accIds = await allowedAccountIds(req);
   const rows = await db.select().from(priceIncreaseCampaignsTable);
   const letters = await db.select().from(priceIncreaseLettersTable);
-  res.json(rows.map(c => mapCampaign(c, letters.filter(l => l.campaignId === c.id))));
+  const visibleLetter = (l: typeof letters[number]) => isAccountAllowed(accIds, l.accountId);
+  // Hide campaigns where the user has zero visible letters to prevent metadata leak.
+  const visible = rows.filter(c => letters.some(l => l.campaignId === c.id && visibleLetter(l)));
+  res.json(visible.map(c => mapCampaign(c, letters.filter(l => l.campaignId === c.id && visibleLetter(l)))));
 });
 
 router.get('/price-increases/:id', async (req, res) => {
   const [c] = await db.select().from(priceIncreaseCampaignsTable).where(eq(priceIncreaseCampaignsTable.id, req.params.id));
   if (!c) { res.status(404).json({ error: 'not found' }); return; }
-  const letters = await db.select().from(priceIncreaseLettersTable).where(eq(priceIncreaseLettersTable.campaignId, c.id));
+  const accIds = await allowedAccountIds(req);
+  const lettersRaw = await db.select().from(priceIncreaseLettersTable).where(eq(priceIncreaseLettersTable.campaignId, c.id));
+  const letters = lettersRaw.filter(l => isAccountAllowed(accIds, l.accountId));
+  // Mask campaigns with no visible letters as not-found.
+  if (letters.length === 0) { res.status(404).json({ error: 'not found' }); return; }
   const accs = await getAccountMap();
   res.json({
     ...mapCampaign(c, letters),
@@ -723,8 +836,9 @@ router.get('/price-increases/:id', async (req, res) => {
 });
 
 // ── REPORTS ──
-router.get('/reports/dashboard', async (_req, res) => {
-  const deals = await db.select().from(dealsTable);
+router.get('/reports/dashboard', async (req, res) => {
+  const sf = dealScopeSql(getScope(req));
+  const deals = await db.select().from(dealsTable).where(sf);
   const open = deals.filter(d => d.stage !== 'won' && d.stage !== 'lost');
   const won = deals.filter(d => d.stage === 'won').length;
   const lost = deals.filter(d => d.stage === 'lost').length;
@@ -733,10 +847,21 @@ router.get('/reports/dashboard', async (_req, res) => {
     const ds = open.filter(d => d.stage === s);
     return { stage: s, label: stageLabels[s] ?? s, count: ds.length, value: ds.reduce((sum, d) => sum + num(d.value), 0) };
   });
-  const quotesAwait = (await db.select({ c: sql<number>`count(*)::int` }).from(quotesTable).where(eq(quotesTable.status, 'sent')))[0]?.c ?? 0;
-  const openApprovals = (await db.select({ c: sql<number>`count(*)::int` }).from(approvalsTable).where(eq(approvalsTable.status, 'pending')))[0]?.c ?? 0;
-  const sigsPending = (await db.select({ c: sql<number>`count(*)::int` }).from(signaturePackagesTable).where(eq(signaturePackagesTable.status, 'in_progress')))[0]?.c ?? 0;
-  const tl = await db.select().from(timelineEventsTable).orderBy(desc(timelineEventsTable.at)).limit(8);
+  const dealIdSet = await allowedDealIds(req);
+  const dealIds = [...dealIdSet];
+  const inScopeDealFilter = dealIds.length ? inArray : null;
+  const [quotesAwait, openApprovals, sigsPending] = dealIds.length === 0
+    ? [0, 0, 0]
+    : await Promise.all([
+        db.select({ c: sql<number>`count(*)::int` }).from(quotesTable)
+          .where(and(eq(quotesTable.status, 'sent'), inScopeDealFilter!(quotesTable.dealId, dealIds))).then(r => r[0]?.c ?? 0),
+        db.select({ c: sql<number>`count(*)::int` }).from(approvalsTable)
+          .where(and(eq(approvalsTable.status, 'pending'), inScopeDealFilter!(approvalsTable.dealId, dealIds))).then(r => r[0]?.c ?? 0),
+        db.select({ c: sql<number>`count(*)::int` }).from(signaturePackagesTable)
+          .where(and(eq(signaturePackagesTable.status, 'in_progress'), inScopeDealFilter!(signaturePackagesTable.dealId, dealIds))).then(r => r[0]?.c ?? 0),
+      ]);
+  const tlAll = await db.select().from(timelineEventsTable).orderBy(desc(timelineEventsTable.at)).limit(60);
+  const tl = tlAll.filter(t => !t.dealId || dealIdSet.has(t.dealId)).slice(0, 8);
   const dealMap = await getDealMap();
   res.json({
     openDealsCount: open.length,
@@ -758,8 +883,9 @@ router.get('/reports/dashboard', async (_req, res) => {
   });
 });
 
-router.get('/reports/performance', async (_req, res) => {
-  const deals = await db.select().from(dealsTable);
+router.get('/reports/performance', async (req, res) => {
+  const sf = dealScopeSql(getScope(req));
+  const deals = await db.select().from(dealsTable).where(sf);
   const won = deals.filter(d => d.stage === 'won');
   const lost = deals.filter(d => d.stage === 'lost');
   const users = await getUserMap();
@@ -803,28 +929,43 @@ router.get('/reports/forecast', async (_req, res) => {
 });
 
 // ── COPILOT / ACTIVITY ──
-router.get('/copilot/insights', async (_req, res) => {
+router.get('/copilot/insights', async (req, res) => {
+  const dealIds = await allowedDealIds(req);
   const rows = await db.select().from(copilotInsightsTable).orderBy(desc(copilotInsightsTable.createdAt));
+  const filtered = rows.filter(c => !c.dealId || dealIds.has(c.dealId));
   const dealMap = await getDealMap();
-  res.json(rows.map(c => ({
+  res.json(filtered.map(c => ({
     id: c.id, kind: c.kind, title: c.title, summary: c.summary, severity: c.severity,
     dealId: c.dealId, dealName: dealMap.get(c.dealId)?.name ?? 'Unknown',
     suggestedAction: c.suggestedAction, createdAt: iso(c.createdAt)!,
   })));
 });
 
-router.get('/copilot/threads', async (_req, res) => {
+router.get('/copilot/threads', async (req, res) => {
   const rows = await db.select().from(copilotThreadsTable).orderBy(desc(copilotThreadsTable.updatedAt));
-  res.json(rows.map(t => ({
+  const visibility = await Promise.all(rows.map(t => copilotThreadVisible(req, t.scope ?? '')));
+  const visible = rows.filter((_, i) => visibility[i]);
+  res.json(visible.map(t => ({
     id: t.id, title: t.title, scope: t.scope, lastMessage: t.lastMessage,
     messageCount: t.messageCount, updatedAt: iso(t.updatedAt)!,
   })));
 });
 
-router.get('/activity', async (_req, res) => {
-  const rows = await db.select().from(timelineEventsTable).orderBy(desc(timelineEventsTable.at)).limit(40);
+async function gateThread(req: Request, res: Response, threadId: string) {
+  const [t] = await db.select().from(copilotThreadsTable).where(eq(copilotThreadsTable.id, threadId));
+  if (!t || !(await copilotThreadVisible(req, t.scope ?? ''))) {
+    res.status(404).json({ error: 'not found' });
+    return null;
+  }
+  return t;
+}
+
+router.get('/activity', async (req, res) => {
+  const dealIds = await allowedDealIds(req);
+  const rows = await db.select().from(timelineEventsTable).orderBy(desc(timelineEventsTable.at)).limit(200);
+  const filtered = rows.filter(t => !t.dealId || dealIds.has(t.dealId)).slice(0, 40);
   const dealMap = await getDealMap();
-  res.json(rows.map(t => ({
+  res.json(filtered.map(t => ({
     id: t.id, type: t.type, title: t.title, description: t.description,
     actor: t.actor, dealId: t.dealId,
     dealName: t.dealId ? (dealMap.get(t.dealId)?.name ?? null) : null,
@@ -854,11 +995,17 @@ router.get('/audit', async (req, res) => {
   if (req.query.entityType) filters.push(eq(auditLogTable.entityType, String(req.query.entityType)));
   if (req.query.entityId)   filters.push(eq(auditLogTable.entityId, String(req.query.entityId)));
   const limit = req.query.limit ? Number(req.query.limit) : 100;
+  // Fetch a generous window from the DB; scope-filter post-fetch.
   const rows = await db.select().from(auditLogTable)
     .where(filters.length ? and(...filters) : undefined)
     .orderBy(desc(auditLogTable.at))
-    .limit(limit);
-  res.json(rows.map(a => ({
+    .limit(Math.max(limit * 4, 200));
+  const scope = getScope(req);
+  const visible = scope.tenantWide
+    ? rows
+    : (await Promise.all(rows.map(async r => ({ r, ok: await entityInScope(req, r.entityType, r.entityId) }))))
+        .filter(x => x.ok).map(x => x.r);
+  res.json(visible.slice(0, limit).map(a => ({
     id: a.id, entityType: a.entityType, entityId: a.entityId,
     action: a.action, actor: a.actor, summary: a.summary,
     beforeJson: a.beforeJson, afterJson: a.afterJson, at: iso(a.at)!,
@@ -867,6 +1014,9 @@ router.get('/audit', async (req, res) => {
 
 // ── ENTITY VERSIONS ──
 router.get('/versions/:entityType/:entityId', async (req, res) => {
+  if (!(await entityInScope(req, req.params.entityType, req.params.entityId))) {
+    res.status(404).json({ error: 'not found' }); return;
+  }
   const rows = await db.select().from(entityVersionsTable)
     .where(and(
       eq(entityVersionsTable.entityType, req.params.entityType),
@@ -888,6 +1038,9 @@ async function snapshotContract(contractId: string): Promise<string> {
 
 router.post('/contracts/:id/versions', async (req, res) => {
   const b = req.body as { label: string; comment?: string; snapshot?: string };
+  if (!(await entityInScope(req, 'contract', req.params.id))) {
+    res.status(404).json({ error: 'not found' }); return;
+  }
   const [c] = await db.select().from(contractsTable).where(eq(contractsTable.id, req.params.id));
   if (!c) { res.status(404).json({ error: 'not found' }); return; }
   const existing = await db.select().from(entityVersionsTable)
@@ -914,6 +1067,9 @@ router.post('/contracts/:id/versions', async (req, res) => {
 
 router.post('/price-positions/:id/versions', async (req, res) => {
   const b = req.body as { label: string; comment?: string; snapshot?: string };
+  if (!(await entityInScope(req, 'price_position', req.params.id))) {
+    res.status(404).json({ error: 'not found' }); return;
+  }
   const [p] = await db.select().from(pricePositionsTable).where(eq(pricePositionsTable.id, req.params.id));
   if (!p) { res.status(404).json({ error: 'not found' }); return; }
   const existing = await db.select().from(entityVersionsTable)
@@ -995,6 +1151,9 @@ router.get('/pricing/resolve', async (req, res) => {
 
 // ── PRICE INCREASE LETTER WORKFLOW ──
 router.post('/price-increases/:id/letters/:letterId/respond', async (req, res) => {
+  const [pre] = await db.select().from(priceIncreaseLettersTable).where(eq(priceIncreaseLettersTable.id, req.params.letterId));
+  if (!pre) { res.status(404).json({ error: 'letter not found' }); return; }
+  if (!(await gateAccount(req, res, pre.accountId))) return;
   const b = req.body as { decision: string; comment?: string };
   const newStatus = b.decision === 'accept' ? 'accepted'
     : b.decision === 'reject' ? 'rejected'
@@ -1048,8 +1207,11 @@ function mapOC(
 }
 
 router.get('/order-confirmations', async (req, res) => {
-  const filter = req.query.status ? eq(orderConfirmationsTable.status, String(req.query.status)) : undefined;
-  const rows = await db.select().from(orderConfirmationsTable).where(filter).orderBy(desc(orderConfirmationsTable.createdAt));
+  const dealIds = await scopedDealIds(req);
+  if (dealIds.length === 0) { res.json([]); return; }
+  const filters = [inArray(orderConfirmationsTable.dealId, dealIds)];
+  if (req.query.status) filters.push(eq(orderConfirmationsTable.status, String(req.query.status)));
+  const rows = await db.select().from(orderConfirmationsTable).where(and(...filters)).orderBy(desc(orderConfirmationsTable.createdAt));
   const dealMap = await getDealMap();
   res.json(rows.map(o => mapOC(o, dealMap.get(o.dealId)?.name ?? 'Unknown')));
 });
@@ -1057,6 +1219,7 @@ router.get('/order-confirmations', async (req, res) => {
 router.get('/order-confirmations/:id', async (req, res) => {
   const [o] = await db.select().from(orderConfirmationsTable).where(eq(orderConfirmationsTable.id, req.params.id));
   if (!o) { res.status(404).json({ error: 'not found' }); return; }
+  if (!(await gateDeal(req, res, o.dealId))) return;
   const dealMap = await getDealMap();
   const checks = await db.select().from(orderConfirmationChecksTable)
     .where(eq(orderConfirmationChecksTable.orderConfirmationId, o.id));
@@ -1069,6 +1232,7 @@ router.get('/order-confirmations/:id', async (req, res) => {
 router.post('/order-confirmations/:id/handover', async (req, res) => {
   const [o] = await db.select().from(orderConfirmationsTable).where(eq(orderConfirmationsTable.id, req.params.id));
   if (!o) { res.status(404).json({ error: 'not found' }); return; }
+  if (!(await gateDeal(req, res, o.dealId))) return;
   const checks = await db.select().from(orderConfirmationChecksTable)
     .where(eq(orderConfirmationChecksTable.orderConfirmationId, o.id));
   const ready = checks.every(c => c.status === 'ok');
@@ -1096,6 +1260,7 @@ router.post('/order-confirmations/:id/handover', async (req, res) => {
 
 // ── COPILOT CHAT ──
 router.get('/copilot/threads/:id/messages', async (req, res) => {
+  if (!(await gateThread(req, res, req.params.id))) return;
   const rows = await db.select().from(copilotMessagesTable)
     .where(eq(copilotMessagesTable.threadId, req.params.id))
     .orderBy(copilotMessagesTable.createdAt);
@@ -1125,6 +1290,7 @@ function craftAssistantReply(userText: string): string {
 }
 
 router.post('/copilot/threads/:id/messages', async (req, res) => {
+  if (!(await gateThread(req, res, req.params.id))) return;
   const b = req.body as { content: string };
   const userId = `cm_${randomUUID().slice(0, 10)}`;
   await db.insert(copilotMessagesTable).values({

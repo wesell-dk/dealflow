@@ -10,12 +10,19 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
-import { ArrowLeft, CheckCircle2, XCircle, Clock, ArrowRightCircle } from "lucide-react";
+import { ArrowLeft, CheckCircle2, AlertTriangle, XCircle, Clock, ArrowRightCircle } from "lucide-react";
 
 const checkIcon = (status: string) => {
-  if (status === "passed") return <CheckCircle2 className="h-4 w-4 text-emerald-600" />;
-  if (status === "failed") return <XCircle className="h-4 w-4 text-rose-600" />;
-  return <Clock className="h-4 w-4 text-amber-600" />;
+  if (status === "ok") return <CheckCircle2 className="h-4 w-4 text-emerald-600" />;
+  if (status === "warning") return <AlertTriangle className="h-4 w-4 text-amber-600" />;
+  if (status === "blocked") return <XCircle className="h-4 w-4 text-rose-600" />;
+  return <Clock className="h-4 w-4 text-muted-foreground" />;
+};
+
+const checkBadgeVariant = (status: string): "secondary" | "destructive" | "outline" => {
+  if (status === "ok") return "secondary";
+  if (status === "blocked") return "destructive";
+  return "outline";
 };
 
 export default function OrderConfirmationDetail() {
@@ -28,6 +35,9 @@ export default function OrderConfirmationDetail() {
 
   if (isLoading) return <p className="text-sm text-muted-foreground">{t("common.loading")}</p>;
   if (!data) return <p className="text-sm text-muted-foreground">{t("common.noData")}</p>;
+
+  const allOk = data.checks.every(c => c.status === "ok");
+  const handoverEnabled = data.status !== "handed_over" && allOk;
 
   const handleHandover = async () => {
     await handover.mutateAsync({ id });
@@ -50,9 +60,9 @@ export default function OrderConfirmationDetail() {
           <p className="text-sm text-muted-foreground">{data.dealName}</p>
         </div>
         {data.status !== "handed_over" && (
-          <Button onClick={handleHandover} disabled={handover.isPending}>
+          <Button onClick={handleHandover} disabled={handover.isPending || !handoverEnabled} title={!allOk ? t("pages.orderConfirmations.handoverBlocked") : undefined}>
             <ArrowRightCircle className="h-4 w-4 mr-2" />
-            Handover
+            {t("pages.orderConfirmations.handover")}
           </Button>
         )}
       </div>
@@ -60,7 +70,7 @@ export default function OrderConfirmationDetail() {
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <Card>
           <CardHeader>
-            <CardTitle className="text-sm font-medium text-muted-foreground">Readiness</CardTitle>
+            <CardTitle className="text-sm font-medium text-muted-foreground">{t("pages.orderConfirmations.readiness")}</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="flex items-center gap-3">
@@ -71,7 +81,7 @@ export default function OrderConfirmationDetail() {
         </Card>
         <Card>
           <CardHeader>
-            <CardTitle className="text-sm font-medium text-muted-foreground">Total</CardTitle>
+            <CardTitle className="text-sm font-medium text-muted-foreground">{t("pages.orderConfirmations.total")}</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="text-3xl font-bold tabular-nums">
@@ -84,7 +94,7 @@ export default function OrderConfirmationDetail() {
         </Card>
         <Card>
           <CardHeader>
-            <CardTitle className="text-sm font-medium text-muted-foreground">Delivery</CardTitle>
+            <CardTitle className="text-sm font-medium text-muted-foreground">{t("pages.orderConfirmations.delivery")}</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="text-lg">
@@ -94,7 +104,7 @@ export default function OrderConfirmationDetail() {
             </div>
             {data.handoverAt && (
               <div className="text-xs text-muted-foreground mt-1">
-                Handover: {new Date(data.handoverAt).toLocaleString(i18n.resolvedLanguage)}
+                {t("pages.orderConfirmations.handover")}: {new Date(data.handoverAt).toLocaleString(i18n.resolvedLanguage)}
               </div>
             )}
           </CardContent>
@@ -116,8 +126,8 @@ export default function OrderConfirmationDetail() {
                     <div className="text-xs text-muted-foreground mt-0.5">{c.detail}</div>
                   )}
                 </div>
-                <Badge variant={c.status === "passed" ? "secondary" : c.status === "failed" ? "destructive" : "outline"}>
-                  {t(`pages.orderConfirmations.${c.status === "passed" ? "passed" : c.status === "failed" ? "failed" : "pending"}`)}
+                <Badge variant={checkBadgeVariant(c.status)}>
+                  {t(`pages.orderConfirmations.status.${c.status}`, c.status)}
                 </Badge>
               </li>
             ))}
