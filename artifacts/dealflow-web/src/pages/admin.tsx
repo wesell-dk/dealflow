@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useCallback } from "react";
 import { useTranslation } from "react-i18next";
 import {
   useGetTenant,
@@ -33,7 +33,8 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Settings, Shield, Building2, Users, Download, Trash2, Eye, Play, ShieldAlert } from "lucide-react";
+import { Settings, Shield, Building2, Users, Download, Trash2, Eye, Play, ShieldAlert, Webhook, Plus, RefreshCw } from "lucide-react";
+import { useEffect } from "react";
 
 function fmtDate(v: string | null | undefined): string {
   if (!v) return "—";
@@ -231,6 +232,8 @@ export default function Admin() {
       <UserRolesCard />
 
       <RolesCard />
+
+      <WebhooksSection />
 
       {/* GDPR Section */}
       <Card>
@@ -989,6 +992,271 @@ function RolesCard() {
               {!roles.data?.length && (
                 <TableRow><TableCell colSpan={4} className="text-center h-16">Keine Rollen</TableCell></TableRow>
               )}
+            </TableBody>
+          </Table>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+// ───────────────── Webhooks ─────────────────
+
+type WebhookRow = {
+  id: string;
+  url: string;
+  events: string[];
+  active: boolean;
+  description: string | null;
+  createdAt: string;
+};
+
+type DeliveryRow = {
+  id: string;
+  webhookId: string;
+  event: string;
+  status: string;
+  attempt: number;
+  statusCode: number | null;
+  error: string | null;
+  nextAttemptAt: string | null;
+  deliveredAt: string | null;
+  createdAt: string;
+};
+
+const ALLOWED_EVENTS = [
+  "quote.accepted",
+  "contract.signed",
+  "approval.decided",
+  "price_increase.responded",
+  "order.completed",
+] as const;
+
+async function apiFetch<T = unknown>(path: string, init?: RequestInit): Promise<T> {
+  const resp = await fetch(`${import.meta.env.BASE_URL}api${path}`, {
+    credentials: "include",
+    headers: { "content-type": "application/json", ...(init?.headers ?? {}) },
+    ...init,
+  });
+  if (!resp.ok) throw new Error(`${resp.status} ${await resp.text().catch(() => "")}`);
+  if (resp.status === 204) return undefined as T;
+  return resp.json() as Promise<T>;
+}
+
+function WebhooksSection() {
+  const [hooks, setHooks] = useState<WebhookRow[] | null>(null);
+  const [deliveries, setDeliveries] = useState<DeliveryRow[] | null>(null);
+  const [url, setUrl] = useState("");
+  const [selectedEvents, setSelectedEvents] = useState<Set<string>>(new Set());
+  const [desc, setDesc] = useState("");
+  const [err, setErr] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [lastSecret, setLastSecret] = useState<string | null>(null);
+
+  const reloadHooks = useCallback(async () => {
+    try {
+      const data = await apiFetch<WebhookRow[]>("/admin/webhooks");
+      setHooks(data);
+    } catch (e) {
+      setErr(String(e));
+    }
+  }, []);
+  const reloadDeliveries = useCallback(async () => {
+    try {
+      const data = await apiFetch<DeliveryRow[]>("/admin/webhook-deliveries?limit=50");
+      setDeliveries(data);
+    } catch (e) {
+      setErr(String(e));
+    }
+  }, []);
+
+  useEffect(() => {
+    void reloadHooks();
+    void reloadDeliveries();
+  }, [reloadHooks, reloadDeliveries]);
+
+  const create = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!url || selectedEvents.size === 0) return;
+    setBusy(true);
+    setErr(null);
+    try {
+      const created = await apiFetch<WebhookRow & { secret: string }>("/admin/webhooks", {
+        method: "POST",
+        body: JSON.stringify({
+          url,
+          events: Array.from(selectedEvents),
+          description: desc || undefined,
+          active: true,
+        }),
+      });
+      setLastSecret(created.secret);
+      setUrl("");
+      setDesc("");
+      setSelectedEvents(new Set());
+      await reloadHooks();
+    } catch (e) {
+      setErr(String(e));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const toggleActive = async (row: WebhookRow) => {
+    await apiFetch(`/admin/webhooks/${row.id}`, {
+      method: "PATCH",
+      body: JSON.stringify({ active: !row.active }),
+    });
+    await reloadHooks();
+  };
+
+  const remove = async (id: string) => {
+    await apiFetch(`/admin/webhooks/${id}`, { method: "DELETE" });
+    await reloadHooks();
+  };
+
+  return (
+    <Card>
+      <CardHeader className="flex flex-row items-center gap-2">
+        <Webhook className="h-5 w-5 text-primary" />
+        <div>
+          <CardTitle>Webhooks</CardTitle>
+          <p className="text-sm text-muted-foreground">Abonnements und Zustellungs-Historie</p>
+        </div>
+      </CardHeader>
+      <CardContent className="space-y-6">
+        {err && (
+          <div className="text-sm text-destructive border border-destructive/30 bg-destructive/5 px-3 py-2 rounded">
+            {err}
+          </div>
+        )}
+        {lastSecret && (
+          <div className="text-sm border border-amber-400 bg-amber-50 text-amber-900 px-3 py-2 rounded">
+            <div className="font-medium">Neues Secret — jetzt kopieren (wird nur einmal angezeigt):</div>
+            <code className="block mt-1 font-mono text-xs break-all">{lastSecret}</code>
+            <Button size="sm" variant="outline" className="mt-2" onClick={() => setLastSecret(null)}>Schließen</Button>
+          </div>
+        )}
+
+        <form onSubmit={create} className="grid gap-3 md:grid-cols-[2fr_1fr_auto] items-end border-b pb-4">
+          <div>
+            <Label>URL</Label>
+            <Input type="url" value={url} onChange={(e) => setUrl(e.target.value)} placeholder="https://example.com/webhooks/dealflow" required />
+          </div>
+          <div>
+            <Label>Beschreibung</Label>
+            <Input value={desc} onChange={(e) => setDesc(e.target.value)} placeholder="optional" />
+          </div>
+          <Button type="submit" disabled={busy || !url || selectedEvents.size === 0}>
+            <Plus className="h-4 w-4 mr-1" />Anlegen
+          </Button>
+          <div className="md:col-span-3 flex flex-wrap gap-2">
+            {ALLOWED_EVENTS.map((ev) => {
+              const checked = selectedEvents.has(ev);
+              return (
+                <label key={ev} className={`text-xs px-2 py-1 rounded border cursor-pointer ${checked ? "bg-primary text-primary-foreground border-primary" : "bg-background"}`}>
+                  <input
+                    type="checkbox"
+                    className="sr-only"
+                    checked={checked}
+                    onChange={() => {
+                      const next = new Set(selectedEvents);
+                      if (next.has(ev)) next.delete(ev); else next.add(ev);
+                      setSelectedEvents(next);
+                    }}
+                  />
+                  {ev}
+                </label>
+              );
+            })}
+          </div>
+        </form>
+
+        <div>
+          <div className="flex items-center justify-between mb-2">
+            <h3 className="font-medium">Abonnements</h3>
+            <Button size="sm" variant="outline" onClick={() => void reloadHooks()}>
+              <RefreshCw className="h-3 w-3 mr-1" />Aktualisieren
+            </Button>
+          </div>
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>URL</TableHead>
+                <TableHead>Events</TableHead>
+                <TableHead>Status</TableHead>
+                <TableHead>Beschreibung</TableHead>
+                <TableHead className="text-right">Aktionen</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {hooks === null ? (
+                <TableRow><TableCell colSpan={5}><Skeleton className="h-6 w-full" /></TableCell></TableRow>
+              ) : hooks.length === 0 ? (
+                <TableRow><TableCell colSpan={5} className="text-center h-16 text-muted-foreground">Noch keine Webhooks konfiguriert.</TableCell></TableRow>
+              ) : hooks.map((h) => (
+                <TableRow key={h.id}>
+                  <TableCell className="font-mono text-xs break-all">{h.url}</TableCell>
+                  <TableCell className="text-xs">{h.events.join(", ")}</TableCell>
+                  <TableCell>
+                    {h.active
+                      ? <Badge variant="outline" className="bg-green-50 text-green-700 border-green-300">aktiv</Badge>
+                      : <Badge variant="outline" className="bg-muted">pausiert</Badge>}
+                  </TableCell>
+                  <TableCell className="text-sm text-muted-foreground">{h.description ?? "—"}</TableCell>
+                  <TableCell className="text-right">
+                    <div className="flex justify-end gap-2">
+                      <Button size="sm" variant="outline" onClick={() => void toggleActive(h)}>
+                        {h.active ? "Pausieren" : "Aktivieren"}
+                      </Button>
+                      <Button size="sm" variant="outline" onClick={() => void remove(h.id)}>
+                        <Trash2 className="h-3 w-3" />
+                      </Button>
+                    </div>
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </div>
+
+        <div>
+          <div className="flex items-center justify-between mb-2">
+            <h3 className="font-medium">Delivery-Log (letzte 50)</h3>
+            <Button size="sm" variant="outline" onClick={() => void reloadDeliveries()}>
+              <RefreshCw className="h-3 w-3 mr-1" />Aktualisieren
+            </Button>
+          </div>
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Zeit</TableHead>
+                <TableHead>Event</TableHead>
+                <TableHead>Status</TableHead>
+                <TableHead>Versuche</TableHead>
+                <TableHead>HTTP</TableHead>
+                <TableHead>Fehler</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {deliveries === null ? (
+                <TableRow><TableCell colSpan={6}><Skeleton className="h-6 w-full" /></TableCell></TableRow>
+              ) : deliveries.length === 0 ? (
+                <TableRow><TableCell colSpan={6} className="text-center h-16 text-muted-foreground">Keine Zustellungen.</TableCell></TableRow>
+              ) : deliveries.map((d) => (
+                <TableRow key={d.id}>
+                  <TableCell className="text-xs">{fmtDate(d.createdAt)}</TableCell>
+                  <TableCell className="text-xs font-mono">{d.event}</TableCell>
+                  <TableCell>
+                    {d.status === "success" || d.status === "delivered" ? <Badge variant="outline" className="bg-green-50 text-green-700">{d.status}</Badge>
+                      : d.status === "failed" ? <Badge variant="outline" className="bg-red-50 text-red-700">failed</Badge>
+                      : <Badge variant="outline">{d.status}</Badge>}
+                  </TableCell>
+                  <TableCell className="text-xs">{d.attempt}</TableCell>
+                  <TableCell className="text-xs">{d.statusCode ?? "—"}</TableCell>
+                  <TableCell className="text-xs text-muted-foreground max-w-[320px] truncate" title={d.error ?? ""}>{d.error ?? "—"}</TableCell>
+                </TableRow>
+              ))}
             </TableBody>
           </Table>
         </div>

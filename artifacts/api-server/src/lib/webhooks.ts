@@ -10,6 +10,45 @@ export type WebhookEvent =
   | "price_increase.responded"
   | "order.completed";
 
+/**
+ * Reject webhook URLs that point at localhost, link-local, or RFC1918 ranges
+ * to mitigate SSRF from tenant-admin-configured URLs. Only http(s) allowed.
+ * Note: DNS-rebinding remains a residual risk — resolve-and-compare can be
+ * added later; the dispatcher also enforces a 10s timeout.
+ */
+export function assertSafeWebhookUrl(raw: string): void {
+  let u: URL;
+  try { u = new URL(raw); } catch { throw new Error("invalid URL"); }
+  if (u.protocol !== "http:" && u.protocol !== "https:") {
+    throw new Error("only http(s) URLs are allowed");
+  }
+  const host = u.hostname.toLowerCase();
+  if (
+    host === "localhost" ||
+    host === "0.0.0.0" ||
+    host.endsWith(".localhost") ||
+    host.endsWith(".local") ||
+    host.endsWith(".internal")
+  ) throw new Error("host not allowed");
+  // IPv4 literal checks
+  const m = host.match(/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/);
+  if (m) {
+    const [a, b, c] = [Number(m[1]), Number(m[2]), Number(m[3])];
+    if (a === 10) throw new Error("private IP not allowed");
+    if (a === 127) throw new Error("loopback IP not allowed");
+    if (a === 169 && b === 254) throw new Error("link-local IP not allowed");
+    if (a === 172 && b >= 16 && b <= 31) throw new Error("private IP not allowed");
+    if (a === 192 && b === 168) throw new Error("private IP not allowed");
+    if (a === 0) throw new Error("reserved IP not allowed");
+    if (a === 100 && b >= 64 && b <= 127) throw new Error("CGNAT IP not allowed");
+    void c;
+  }
+  // IPv6 loopback/link-local literals
+  if (host === "::1" || host.startsWith("[::1]") || host.startsWith("fe80:") || host.startsWith("fc") || host.startsWith("fd")) {
+    throw new Error("IPv6 private/loopback not allowed");
+  }
+}
+
 const MAX_ATTEMPTS = 5;
 const BACKOFF_MS = [0, 30_000, 2 * 60_000, 10 * 60_000, 30 * 60_000];
 

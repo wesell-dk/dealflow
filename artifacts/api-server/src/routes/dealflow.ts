@@ -1,5 +1,5 @@
 import { Router, type IRouter, type Request, type Response } from 'express';
-import { and, desc, eq, inArray, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, inArray, sql } from 'drizzle-orm';
 import { randomUUID } from 'node:crypto';
 import { ObjectStorageService } from '../lib/objectStorage';
 import { validateInline } from '../middlewares/validate';
@@ -89,9 +89,8 @@ import {
   webhooksTable,
   webhookDeliveriesTable,
 } from '@workspace/db';
-import { emitEvent, WEBHOOK_EVENTS } from '../lib/webhooks';
+import { emitEvent, WEBHOOK_EVENTS, assertSafeWebhookUrl } from '../lib/webhooks';
 import { parseAsOf, resolveSnapshot } from '../lib/asOf';
-import { withMeta } from '../lib/meta';
 
 const router: IRouter = Router();
 
@@ -514,12 +513,49 @@ router.get('/quotes/:id', async (req, res) => {
   if (!(await gateDeal(req, res, q.dealId))) return;
   const asOf = parseAsOf(req.query.asOf);
   if (asOf) {
-    const snap = await resolveSnapshot<unknown>('quote', q.id, asOf);
-    if (!snap) { res.status(404).json({ error: 'no snapshot for asOf' }); return; }
-    res.json(withMeta(snap.data, {
-      source: 'version', validFrom: snap.validFrom, validTo: snap.validTo,
-      asOf: asOf.toISOString(), version: snap.version,
-    }));
+    // Quote history lives in quote_versions (not entity_versions). Pick the
+    // latest version whose createdAt <= asOf; validTo = createdAt of the
+    // immediate successor (if any).
+    const allVersions = await db.select().from(quoteVersionsTable)
+      .where(eq(quoteVersionsTable.quoteId, q.id))
+      .orderBy(asc(quoteVersionsTable.createdAt));
+    const idx = (() => {
+      let last = -1;
+      for (let i = 0; i < allVersions.length; i++) {
+        if (allVersions[i]!.createdAt.getTime() <= asOf.getTime()) last = i;
+      }
+      return last;
+    })();
+    if (idx < 0) { res.status(404).json({ error: 'no snapshot for asOf' }); return; }
+    const chosen = allVersions[idx]!;
+    const next = allVersions[idx + 1];
+    const lines = await db.select().from(lineItemsTable)
+      .where(eq(lineItemsTable.quoteVersionId, chosen.id));
+    const [d] = await db.select().from(dealsTable).where(eq(dealsTable.id, q.dealId));
+    const base = await enrichQuote(q, d?.name ?? 'Unknown');
+    res.json({
+      ...base,
+      versions: allVersions.map(v => ({
+        id: v.id, quoteId: v.quoteId, version: v.version,
+        totalAmount: num(v.totalAmount), discountPct: num(v.discountPct),
+        marginPct: num(v.marginPct), status: v.status, notes: v.notes,
+        createdAt: iso(v.createdAt)!,
+      })),
+      lineItems: lines.map(l => ({
+        id: l.id, quoteVersionId: l.quoteVersionId, name: l.name,
+        description: l.description, quantity: num(l.quantity),
+        unitPrice: num(l.unitPrice), listPrice: num(l.listPrice),
+        discountPct: num(l.discountPct), total: num(l.total),
+      })),
+      meta: {
+        source: 'version',
+        validFrom: iso(chosen.createdAt),
+        validTo: next ? iso(next.createdAt) : null,
+        generatedAt: new Date().toISOString(),
+        asOf: asOf.toISOString(),
+        version: chosen.version,
+      },
+    });
     return;
   }
   const [d] = await db.select().from(dealsTable).where(eq(dealsTable.id, q.dealId));
@@ -545,7 +581,7 @@ router.get('/quotes/:id', async (req, res) => {
       unitPrice: num(l.unitPrice), listPrice: num(l.listPrice),
       discountPct: num(l.discountPct), total: num(l.total),
     })),
-    _meta: {
+    meta: {
       source: 'live',
       validFrom: iso(q.createdAt),
       validTo: null,
@@ -1023,12 +1059,19 @@ router.get('/contracts/:id', async (req, res) => {
   if (!(await gateDeal(req, res, c.dealId))) return;
   const asOf = parseAsOf(req.query.asOf);
   if (asOf) {
-    const snap = await resolveSnapshot<unknown>('contract', c.id, asOf);
+    const snap = await resolveSnapshot<Record<string, unknown>>('contract', c.id, asOf);
     if (!snap) { res.status(404).json({ error: 'no snapshot for asOf' }); return; }
-    res.json(withMeta(snap.data, {
-      source: 'version', validFrom: snap.validFrom, validTo: snap.validTo,
-      asOf: asOf.toISOString(), version: snap.version,
-    }));
+    res.json({
+      ...snap.data,
+      meta: {
+        source: 'version',
+        validFrom: snap.validFrom,
+        validTo: snap.validTo,
+        generatedAt: new Date().toISOString(),
+        asOf: asOf.toISOString(),
+        version: snap.version,
+      },
+    });
     return;
   }
   const dealMap = await getDealMap();
@@ -1049,7 +1092,7 @@ router.get('/contracts/:id', async (req, res) => {
   res.json({
     ...mapContract(c, dealMap.get(c.dealId)?.name ?? 'Unknown', rawClauses),
     clauses,
-    _meta: {
+    meta: {
       source: 'live',
       validFrom: iso(c.createdAt),
       validTo: null,
@@ -2716,7 +2759,7 @@ router.get('/pricing/resolve', async (req, res) => {
     source: brandHit ? 'brand' : companyHit ? 'company' : 'tenant',
     positionId: winner.id,
     chain,
-    _meta: {
+    meta: {
       source: metaSource,
       validFrom: metaValidFrom,
       validTo: metaValidTo,
@@ -3518,6 +3561,9 @@ router.post('/admin/webhooks', async (req, res) => {
   if (!requireAdmin(req, res)) return;
   const scope = getScope(req);
   const b = req.body as z.infer<typeof WebhookCreateBody>;
+  try { assertSafeWebhookUrl(b.url); } catch (e) {
+    res.status(422).json({ error: (e as Error).message }); return;
+  }
   const secret = `whs_${randomUUID().replace(/-/g, '')}`;
   const id = `wh_${randomUUID().slice(0, 8)}`;
   await db.insert(webhooksTable).values({
@@ -3543,6 +3589,11 @@ router.patch('/admin/webhooks/:id', async (req, res) => {
     res.status(404).json({ error: 'not found' }); return;
   }
   const b = req.body as z.infer<typeof WebhookPatchBody>;
+  if (b.url !== undefined) {
+    try { assertSafeWebhookUrl(b.url); } catch (e) {
+      res.status(422).json({ error: (e as Error).message }); return;
+    }
+  }
   const patch: Partial<typeof webhooksTable.$inferInsert> = {};
   if (b.url !== undefined) patch.url = b.url;
   if (b.events !== undefined) patch.events = b.events;
