@@ -743,6 +743,20 @@ paths:
               schema:
                 type: array
                 items: { $ref: "#/components/schemas/CopilotThread" }
+    post:
+      operationId: createCopilotThread
+      tags: [copilot]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CopilotThreadInput" }
+      responses:
+        "201":
+          description: created
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CopilotThread" }
 
   /activity:
     get:
@@ -757,6 +771,256 @@ paths:
               schema:
                 type: array
                 items: { $ref: "#/components/schemas/TimelineEvent" }
+
+  # ───────────── COPILOT CHAT ─────────────
+
+  /copilot/threads/{id}/messages:
+    get:
+      operationId: listCopilotMessages
+      tags: [copilot]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: ok
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/CopilotMessage" }
+    post:
+      operationId: postCopilotMessage
+      tags: [copilot]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CopilotMessageInput" }
+      responses:
+        "201":
+          description: created
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CopilotChatReply" }
+
+  /copilot/help:
+    post:
+      operationId: askHelpBot
+      tags: [copilot]
+      summary: Floating help-bot — stateless guidance reply based on app context
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/HelpBotInput" }
+      responses:
+        "200":
+          description: ok
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/HelpBotReply" }
+
+  # ───────────── AUDIT LOG ─────────────
+
+  /audit:
+    get:
+      operationId: listAuditEntries
+      tags: [audit]
+      parameters:
+        - in: query
+          name: entityType
+          schema: { type: string }
+        - in: query
+          name: entityId
+          schema: { type: string }
+        - in: query
+          name: limit
+          schema: { type: integer }
+      responses:
+        "200":
+          description: ok
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/AuditEntry" }
+
+  # ───────────── ENTITY VERSIONS ─────────────
+
+  /versions/{entityType}/{entityId}:
+    get:
+      operationId: listEntityVersions
+      tags: [versions]
+      parameters:
+        - in: path
+          name: entityType
+          required: true
+          schema: { type: string }
+        - in: path
+          name: entityId
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: ok
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/EntityVersion" }
+
+  /contracts/{id}/versions:
+    post:
+      operationId: createContractVersion
+      tags: [contracts]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/EntityVersionInput" }
+      responses:
+        "201":
+          description: created
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/EntityVersion" }
+
+  /price-positions/{id}/versions:
+    post:
+      operationId: createPricePositionVersion
+      tags: [pricing]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/EntityVersionInput" }
+      responses:
+        "201":
+          description: created
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/EntityVersion" }
+
+  # ───────────── PRICING RESOLVE ─────────────
+
+  /pricing/resolve:
+    get:
+      operationId: resolvePrice
+      tags: [pricing]
+      summary: Hierarchical price resolution (brand > company > tenant default)
+      parameters:
+        - in: query
+          name: sku
+          required: true
+          schema: { type: string }
+        - in: query
+          name: brandId
+          schema: { type: string }
+        - in: query
+          name: companyId
+          schema: { type: string }
+      responses:
+        "200":
+          description: ok
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ResolvedPrice" }
+
+  # ───────────── PRICE INCREASE LETTER WORKFLOW ─────────────
+
+  /price-increases/{id}/letters/{letterId}/respond:
+    post:
+      operationId: respondToPriceIncreaseLetter
+      tags: [priceIncreases]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+        - in: path
+          name: letterId
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/PriceIncreaseResponseInput" }
+      responses:
+        "200":
+          description: ok
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PriceIncreaseLetter" }
+
+  # ───────────── ORDER CONFIRMATION & HANDOVER ─────────────
+
+  /order-confirmations:
+    get:
+      operationId: listOrderConfirmations
+      tags: [orderConfirmations]
+      parameters:
+        - in: query
+          name: status
+          schema: { type: string }
+      responses:
+        "200":
+          description: ok
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/OrderConfirmation" }
+
+  /order-confirmations/{id}:
+    get:
+      operationId: getOrderConfirmation
+      tags: [orderConfirmations]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: ok
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/OrderConfirmationDetail" }
+
+  /order-confirmations/{id}/handover:
+    post:
+      operationId: handoverOrderConfirmation
+      tags: [orderConfirmations]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: ok
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/OrderConfirmationDetail" }
 
 components:
   schemas:
@@ -1182,6 +1446,7 @@ components:
         status: { type: string }
         version: { type: integer }
         riskLevel: { type: string }
+        riskScore: { type: integer, description: "0-100 calculated from clause severities" }
         createdAt: { type: string, format: date-time }
         template: { type: string }
         validUntil:
@@ -1492,3 +1757,171 @@ components:
         lastMessage: { type: string }
         updatedAt: { type: string, format: date-time }
         messageCount: { type: integer }
+
+    CopilotMessage:
+      type: object
+      required: [id, threadId, role, content, createdAt]
+      properties:
+        id: { type: string }
+        threadId: { type: string }
+        role: { type: string }
+        content: { type: string }
+        createdAt: { type: string, format: date-time }
+
+    CopilotMessageInput:
+      type: object
+      required: [content]
+      properties:
+        content: { type: string }
+
+    CopilotChatReply:
+      type: object
+      required: [userMessage, assistantMessage]
+      properties:
+        userMessage: { $ref: "#/components/schemas/CopilotMessage" }
+        assistantMessage: { $ref: "#/components/schemas/CopilotMessage" }
+
+    CopilotThreadInput:
+      type: object
+      required: [title]
+      properties:
+        title: { type: string }
+        scope: { type: string }
+
+    HelpBotInput:
+      type: object
+      required: [question]
+      properties:
+        question: { type: string }
+        currentPath:
+          type: ["string", "null"]
+        history:
+          type: array
+          items:
+            type: object
+            required: [role, content]
+            properties:
+              role: { type: string }
+              content: { type: string }
+
+    HelpBotReply:
+      type: object
+      required: [reply, suggestions]
+      properties:
+        reply: { type: string }
+        suggestions:
+          type: array
+          items:
+            type: object
+            required: [label, path]
+            properties:
+              label: { type: string }
+              path: { type: string }
+
+    AuditEntry:
+      type: object
+      required: [id, entityType, entityId, action, actor, summary, at]
+      properties:
+        id: { type: string }
+        entityType: { type: string }
+        entityId: { type: string }
+        action: { type: string }
+        actor: { type: string }
+        summary: { type: string }
+        beforeJson:
+          type: ["string", "null"]
+        afterJson:
+          type: ["string", "null"]
+        at: { type: string, format: date-time }
+
+    EntityVersion:
+      type: object
+      required: [id, entityType, entityId, version, label, actor, createdAt]
+      properties:
+        id: { type: string }
+        entityType: { type: string }
+        entityId: { type: string }
+        version: { type: integer }
+        label: { type: string }
+        actor: { type: string }
+        comment:
+          type: ["string", "null"]
+        snapshot: { type: string }
+        createdAt: { type: string, format: date-time }
+
+    EntityVersionInput:
+      type: object
+      required: [label]
+      properties:
+        label: { type: string }
+        comment: { type: string }
+        snapshot: { type: string }
+
+    ResolvedPrice:
+      type: object
+      required: [sku, listPrice, currency, source, chain]
+      properties:
+        sku: { type: string }
+        listPrice: { type: number }
+        currency: { type: string }
+        source: { type: string }
+        positionId: { type: string }
+        chain:
+          type: array
+          items:
+            type: object
+            required: [level, label, applied]
+            properties:
+              level: { type: string }
+              label: { type: string }
+              listPrice:
+                type: ["number", "null"]
+              applied: { type: boolean }
+              positionId:
+                type: ["string", "null"]
+
+    PriceIncreaseResponseInput:
+      type: object
+      required: [decision]
+      properties:
+        decision: { type: string }
+        comment:
+          type: ["string", "null"]
+
+    OrderConfirmation:
+      type: object
+      required: [id, dealId, dealName, number, status, readinessScore, totalAmount, currency, createdAt]
+      properties:
+        id: { type: string }
+        dealId: { type: string }
+        dealName: { type: string }
+        contractId:
+          type: ["string", "null"]
+        number: { type: string }
+        status: { type: string }
+        readinessScore: { type: integer }
+        totalAmount: { type: number }
+        currency: { type: string }
+        expectedDelivery:
+          type: ["string", "null"]
+        handoverAt:
+          type: ["string", "null"]
+        createdAt: { type: string, format: date-time }
+
+    OrderConfirmationDetail:
+      allOf:
+        - $ref: "#/components/schemas/OrderConfirmation"
+        - type: object
+          required: [checks]
+          properties:
+            checks:
+              type: array
+              items:
+                type: object
+                required: [id, label, status]
+                properties:
+                  id: { type: string }
+                  label: { type: string }
+                  status: { type: string }
+                  detail:
+                    type: ["string", "null"]

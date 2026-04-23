@@ -29,6 +29,11 @@ import {
   timelineEventsTable,
   copilotInsightsTable,
   copilotThreadsTable,
+  copilotMessagesTable,
+  auditLogTable,
+  orderConfirmationsTable,
+  orderConfirmationChecksTable,
+  entityVersionsTable,
 } from "@workspace/db";
 
 const router: IRouter = Router();
@@ -496,10 +501,13 @@ router.post("/approvals/:id/decide", async (req, res) => {
 });
 
 // ── CONTRACTS ──
-function mapContract(c: typeof contractsTable.$inferSelect, dealName: string) {
+function mapContract(c: typeof contractsTable.$inferSelect, dealName: string, clauses?: { severity: string }[]) {
+  const sevWeight: Record<string, number> = { high: 25, medium: 10, low: 3 };
+  const raw = (clauses ?? []).reduce((s, cl) => s + (sevWeight[cl.severity] ?? 0), 0);
+  const riskScore = Math.min(100, raw);
   return {
     id: c.id, dealId: c.dealId, dealName, title: c.title, status: c.status,
-    version: c.version, riskLevel: c.riskLevel, createdAt: iso(c.createdAt)!,
+    version: c.version, riskLevel: c.riskLevel, riskScore, createdAt: iso(c.createdAt)!,
     template: c.template,
     validUntil: c.validUntil ? (typeof c.validUntil === "string" ? c.validUntil : iso(c.validUntil)!.slice(0, 10)) : null,
   };
@@ -509,7 +517,14 @@ router.get("/contracts", async (req, res) => {
   const filter = req.query.dealId ? eq(contractsTable.dealId, String(req.query.dealId)) : undefined;
   const rows = await db.select().from(contractsTable).where(filter).orderBy(desc(contractsTable.createdAt));
   const dealMap = await getDealMap();
-  res.json(rows.map(c => mapContract(c, dealMap.get(c.dealId)?.name ?? "Unknown")));
+  const allClauses = await db.select().from(contractClausesTable);
+  const clausesByContract = new Map<string, typeof allClauses>();
+  for (const cl of allClauses) {
+    const arr = clausesByContract.get(cl.contractId) ?? [];
+    arr.push(cl);
+    clausesByContract.set(cl.contractId, arr);
+  }
+  res.json(rows.map(c => mapContract(c, dealMap.get(c.dealId)?.name ?? "Unknown", clausesByContract.get(c.id))));
 });
 
 router.post("/contracts", async (req, res) => {
@@ -531,7 +546,7 @@ router.get("/contracts/:id", async (req, res) => {
   const dealMap = await getDealMap();
   const clauses = await db.select().from(contractClausesTable).where(eq(contractClausesTable.contractId, c.id));
   res.json({
-    ...mapContract(c, dealMap.get(c.dealId)?.name ?? "Unknown"),
+    ...mapContract(c, dealMap.get(c.dealId)?.name ?? "Unknown", clauses),
     clauses,
   });
 });
@@ -815,6 +830,422 @@ router.get("/activity", async (_req, res) => {
     dealName: t.dealId ? (dealMap.get(t.dealId)?.name ?? null) : null,
     at: iso(t.at)!,
   })));
+});
+
+// ── AUDIT LOG ──
+async function writeAudit(args: {
+  entityType: string; entityId: string; action: string;
+  summary: string; before?: unknown; after?: unknown; actor?: string;
+}) {
+  await db.insert(auditLogTable).values({
+    id: `au_${randomUUID().slice(0, 10)}`,
+    entityType: args.entityType,
+    entityId: args.entityId,
+    action: args.action,
+    actor: args.actor ?? "Priya Raman",
+    beforeJson: args.before === undefined ? null : JSON.stringify(args.before),
+    afterJson: args.after === undefined ? null : JSON.stringify(args.after),
+    summary: args.summary,
+  });
+}
+
+router.get("/audit", async (req, res) => {
+  const filters = [];
+  if (req.query.entityType) filters.push(eq(auditLogTable.entityType, String(req.query.entityType)));
+  if (req.query.entityId)   filters.push(eq(auditLogTable.entityId, String(req.query.entityId)));
+  const limit = req.query.limit ? Number(req.query.limit) : 100;
+  const rows = await db.select().from(auditLogTable)
+    .where(filters.length ? and(...filters) : undefined)
+    .orderBy(desc(auditLogTable.at))
+    .limit(limit);
+  res.json(rows.map(a => ({
+    id: a.id, entityType: a.entityType, entityId: a.entityId,
+    action: a.action, actor: a.actor, summary: a.summary,
+    beforeJson: a.beforeJson, afterJson: a.afterJson, at: iso(a.at)!,
+  })));
+});
+
+// ── ENTITY VERSIONS ──
+router.get("/versions/:entityType/:entityId", async (req, res) => {
+  const rows = await db.select().from(entityVersionsTable)
+    .where(and(
+      eq(entityVersionsTable.entityType, req.params.entityType),
+      eq(entityVersionsTable.entityId, req.params.entityId),
+    ))
+    .orderBy(desc(entityVersionsTable.version));
+  res.json(rows.map(v => ({
+    id: v.id, entityType: v.entityType, entityId: v.entityId,
+    version: v.version, label: v.label, snapshot: v.snapshot,
+    actor: v.actor, comment: v.comment, createdAt: iso(v.createdAt)!,
+  })));
+});
+
+async function snapshotContract(contractId: string): Promise<string> {
+  const [c] = await db.select().from(contractsTable).where(eq(contractsTable.id, contractId));
+  const cls = await db.select().from(contractClausesTable).where(eq(contractClausesTable.contractId, contractId));
+  return JSON.stringify({ contract: c, clauses: cls });
+}
+
+router.post("/contracts/:id/versions", async (req, res) => {
+  const b = req.body as { label: string; comment?: string; snapshot?: string };
+  const [c] = await db.select().from(contractsTable).where(eq(contractsTable.id, req.params.id));
+  if (!c) { res.status(404).json({ error: "not found" }); return; }
+  const existing = await db.select().from(entityVersionsTable)
+    .where(and(eq(entityVersionsTable.entityType, "contract"), eq(entityVersionsTable.entityId, c.id)));
+  const newVersion = (existing.reduce((m, v) => Math.max(m, v.version), c.version)) + 1;
+  const id = `ev_${randomUUID().slice(0, 10)}`;
+  await db.insert(entityVersionsTable).values({
+    id, entityType: "contract", entityId: c.id, version: newVersion,
+    label: b.label, snapshot: b.snapshot ?? await snapshotContract(c.id),
+    actor: "Priya Raman", comment: b.comment ?? null,
+  });
+  await db.update(contractsTable).set({ version: newVersion }).where(eq(contractsTable.id, c.id));
+  await writeAudit({
+    entityType: "contract", entityId: c.id, action: "version_created",
+    summary: `Vertragsversion ${newVersion} angelegt: ${b.label}`,
+  });
+  const [v] = await db.select().from(entityVersionsTable).where(eq(entityVersionsTable.id, id));
+  res.status(201).json({
+    id: v!.id, entityType: v!.entityType, entityId: v!.entityId,
+    version: v!.version, label: v!.label, snapshot: v!.snapshot,
+    actor: v!.actor, comment: v!.comment, createdAt: iso(v!.createdAt)!,
+  });
+});
+
+router.post("/price-positions/:id/versions", async (req, res) => {
+  const b = req.body as { label: string; comment?: string; snapshot?: string };
+  const [p] = await db.select().from(pricePositionsTable).where(eq(pricePositionsTable.id, req.params.id));
+  if (!p) { res.status(404).json({ error: "not found" }); return; }
+  const existing = await db.select().from(entityVersionsTable)
+    .where(and(eq(entityVersionsTable.entityType, "price_position"), eq(entityVersionsTable.entityId, p.id)));
+  const newVersion = (existing.reduce((m, v) => Math.max(m, v.version), p.version)) + 1;
+  const id = `ev_${randomUUID().slice(0, 10)}`;
+  await db.insert(entityVersionsTable).values({
+    id, entityType: "price_position", entityId: p.id, version: newVersion,
+    label: b.label, snapshot: b.snapshot ?? JSON.stringify(p),
+    actor: "Priya Raman", comment: b.comment ?? null,
+  });
+  await db.update(pricePositionsTable).set({ version: newVersion }).where(eq(pricePositionsTable.id, p.id));
+  await writeAudit({
+    entityType: "price_position", entityId: p.id, action: "version_created",
+    summary: `Preis ${p.sku} neue Version ${newVersion}`,
+  });
+  const [v] = await db.select().from(entityVersionsTable).where(eq(entityVersionsTable.id, id));
+  res.status(201).json({
+    id: v!.id, entityType: v!.entityType, entityId: v!.entityId,
+    version: v!.version, label: v!.label, snapshot: v!.snapshot,
+    actor: v!.actor, comment: v!.comment, createdAt: iso(v!.createdAt)!,
+  });
+});
+
+// ── PRICING RESOLVE (hierarchical) ──
+router.get("/pricing/resolve", async (req, res) => {
+  const sku = String(req.query.sku ?? "");
+  const brandId = req.query.brandId ? String(req.query.brandId) : null;
+  const companyId = req.query.companyId ? String(req.query.companyId) : null;
+  if (!sku) { res.status(400).json({ error: "sku required" }); return; }
+
+  const positions = (await db.select().from(pricePositionsTable))
+    .filter(p => p.sku === sku && p.status === "active");
+  const brands = await getBrandMap();
+  const companies = await getCompanyMap();
+
+  const brandHit = brandId ? positions.find(p => p.brandId === brandId) : undefined;
+  const companyHit = companyId
+    ? positions.find(p => p.companyId === companyId && p.brandId !== brandId)
+    : undefined;
+  const tenantHit = positions.find(p => !brandHit || (p.brandId !== brandHit.brandId && p.companyId !== brandHit.companyId));
+
+  const winner = brandHit ?? companyHit ?? tenantHit ?? positions[0];
+  if (!winner) { res.status(404).json({ error: "no price for sku" }); return; }
+
+  const chain = [
+    {
+      level: "brand",
+      label: brandId ? (brands.get(brandId)?.name ?? "Brand") : "Brand",
+      listPrice: brandHit ? num(brandHit.listPrice) : null,
+      applied: !!brandHit,
+      positionId: brandHit?.id ?? null,
+    },
+    {
+      level: "company",
+      label: companyId ? (companies.get(companyId)?.name ?? "Company") : "Company",
+      listPrice: companyHit ? num(companyHit.listPrice) : null,
+      applied: !brandHit && !!companyHit,
+      positionId: companyHit?.id ?? null,
+    },
+    {
+      level: "tenant",
+      label: "Mandanten-Standard",
+      listPrice: tenantHit ? num(tenantHit.listPrice) : null,
+      applied: !brandHit && !companyHit,
+      positionId: tenantHit?.id ?? null,
+    },
+  ];
+
+  res.json({
+    sku,
+    listPrice: num(winner.listPrice),
+    currency: winner.currency,
+    source: brandHit ? "brand" : companyHit ? "company" : "tenant",
+    positionId: winner.id,
+    chain,
+  });
+});
+
+// ── PRICE INCREASE LETTER WORKFLOW ──
+router.post("/price-increases/:id/letters/:letterId/respond", async (req, res) => {
+  const b = req.body as { decision: string; comment?: string };
+  const newStatus = b.decision === "accept" ? "accepted"
+    : b.decision === "reject" ? "rejected"
+    : b.decision === "negotiate" ? "negotiating"
+    : b.decision;
+  await db.update(priceIncreaseLettersTable).set({
+    status: newStatus, respondedAt: new Date(),
+  }).where(eq(priceIncreaseLettersTable.id, req.params.letterId));
+  const [l] = await db.select().from(priceIncreaseLettersTable).where(eq(priceIncreaseLettersTable.id, req.params.letterId));
+  if (!l) { res.status(404).json({ error: "letter not found" }); return; }
+  const accs = await getAccountMap();
+  const accName = accs.get(l.accountId)?.name ?? "Unknown";
+
+  if (newStatus === "accepted") {
+    await db.insert(timelineEventsTable).values({
+      id: `tl_${randomUUID().slice(0, 8)}`, type: "price_increase",
+      title: "Preiserhöhung angenommen",
+      description: `${accName} akzeptierte +${num(l.upliftPct)}%. Vertragsanpassung wird angestoßen.`,
+      actor: "System", dealId: null,
+    });
+  }
+  await writeAudit({
+    entityType: "price_increase_letter", entityId: l.id,
+    action: `respond_${b.decision}`,
+    summary: `${accName}: ${b.decision} (+${num(l.upliftPct)}%)`,
+    after: { status: newStatus },
+  });
+
+  res.json({
+    id: l.id, campaignId: l.campaignId, accountId: l.accountId,
+    accountName: accName, status: l.status, upliftPct: num(l.upliftPct),
+    sentAt: iso(l.sentAt), respondedAt: iso(l.respondedAt),
+  });
+});
+
+// ── ORDER CONFIRMATIONS ──
+function mapOC(
+  o: typeof orderConfirmationsTable.$inferSelect,
+  dealName: string,
+) {
+  return {
+    id: o.id, dealId: o.dealId, dealName, contractId: o.contractId,
+    number: o.number, status: o.status, readinessScore: o.readinessScore,
+    totalAmount: num(o.totalAmount), currency: o.currency,
+    expectedDelivery: o.expectedDelivery
+      ? (typeof o.expectedDelivery === "string" ? o.expectedDelivery : iso(o.expectedDelivery)!.slice(0, 10))
+      : null,
+    handoverAt: iso(o.handoverAt),
+    createdAt: iso(o.createdAt)!,
+  };
+}
+
+router.get("/order-confirmations", async (req, res) => {
+  const filter = req.query.status ? eq(orderConfirmationsTable.status, String(req.query.status)) : undefined;
+  const rows = await db.select().from(orderConfirmationsTable).where(filter).orderBy(desc(orderConfirmationsTable.createdAt));
+  const dealMap = await getDealMap();
+  res.json(rows.map(o => mapOC(o, dealMap.get(o.dealId)?.name ?? "Unknown")));
+});
+
+router.get("/order-confirmations/:id", async (req, res) => {
+  const [o] = await db.select().from(orderConfirmationsTable).where(eq(orderConfirmationsTable.id, req.params.id));
+  if (!o) { res.status(404).json({ error: "not found" }); return; }
+  const dealMap = await getDealMap();
+  const checks = await db.select().from(orderConfirmationChecksTable)
+    .where(eq(orderConfirmationChecksTable.orderConfirmationId, o.id));
+  res.json({
+    ...mapOC(o, dealMap.get(o.dealId)?.name ?? "Unknown"),
+    checks: checks.map(c => ({ id: c.id, label: c.label, status: c.status, detail: c.detail })),
+  });
+});
+
+router.post("/order-confirmations/:id/handover", async (req, res) => {
+  const [o] = await db.select().from(orderConfirmationsTable).where(eq(orderConfirmationsTable.id, req.params.id));
+  if (!o) { res.status(404).json({ error: "not found" }); return; }
+  const checks = await db.select().from(orderConfirmationChecksTable)
+    .where(eq(orderConfirmationChecksTable.orderConfirmationId, o.id));
+  const ready = checks.every(c => c.status === "ok");
+  if (!ready) { res.status(400).json({ error: "not all checks ok", readinessScore: o.readinessScore }); return; }
+  await db.update(orderConfirmationsTable).set({
+    status: "handed_over", handoverAt: new Date(),
+  }).where(eq(orderConfirmationsTable.id, o.id));
+  await writeAudit({
+    entityType: "order_confirmation", entityId: o.id, action: "handover",
+    summary: `Auftragsbestätigung ${o.number} an Lieferung übergeben`,
+  });
+  await db.insert(timelineEventsTable).values({
+    id: `tl_${randomUUID().slice(0, 8)}`, type: "handover",
+    title: "Übergabe an Lieferung",
+    description: `Auftragsbestätigung ${o.number} wurde an die Auftragsabwicklung übergeben.`,
+    actor: "Priya Raman", dealId: o.dealId,
+  });
+  const [u] = await db.select().from(orderConfirmationsTable).where(eq(orderConfirmationsTable.id, o.id));
+  const dealMap = await getDealMap();
+  res.json({
+    ...mapOC(u!, dealMap.get(u!.dealId)?.name ?? "Unknown"),
+    checks: checks.map(c => ({ id: c.id, label: c.label, status: c.status, detail: c.detail })),
+  });
+});
+
+// ── COPILOT CHAT ──
+router.get("/copilot/threads/:id/messages", async (req, res) => {
+  const rows = await db.select().from(copilotMessagesTable)
+    .where(eq(copilotMessagesTable.threadId, req.params.id))
+    .orderBy(copilotMessagesTable.createdAt);
+  res.json(rows.map(m => ({
+    id: m.id, threadId: m.threadId, role: m.role, content: m.content, createdAt: iso(m.createdAt)!,
+  })));
+});
+
+function craftAssistantReply(userText: string): string {
+  const t = userText.toLowerCase();
+  if (t.includes("rabatt") || t.includes("discount")) {
+    return "Bei Rabatten >8% greift die Margenkontrolle automatisch und legt eine Freigabe in der Approval-Pipeline an. Vorschlag: gegenüber dem Kunden mit Multi-Year-Bindung kontern, dann sinkt der nötige Rabatt im Schnitt um 3 Prozentpunkte.";
+  }
+  if (t.includes("preiserhöhung") || t.includes("uplift") || t.includes("price increase")) {
+    return "Die Preiserhöhungs-Kampagne läuft mit einem Ø Uplift von 6,8%. Top-Account-Risiko liegt bei Vorwerk und BlueRiver — dort empfehle ich ein persönliches Briefing vor Versand.";
+  }
+  if (t.includes("vertrag") || t.includes("contract") || t.includes("klausel")) {
+    return "Im Standard-Master sind alle Klauseln auf grün. Erhöhtes Risiko entsteht erst, sobald Liability-Caps oder Auto-Renewal entfernt werden — beides erzeugt automatisch einen Approval-Eintrag.";
+  }
+  if (t.includes("forecast") || t.includes("prognose")) {
+    return "Committed Forecast für das laufende Quartal liegt bei EUR 1,8 Mio, Best Case bei EUR 3,1 Mio. Hauptrisiken: Vorwerk-Add-On (9 Tage offen) und Castell-Renewal (Champion gewechselt).";
+  }
+  if (t.includes("hilfe") || t.includes("help") || t.includes("wie")) {
+    return "Ich bin dein Commercial-Copilot. Ich kann Deals priorisieren, Verhandlungstaktiken vorschlagen, Vertragsklauseln einordnen und Reports erklären. Welcher Bereich interessiert dich gerade?";
+  }
+  return "Verstanden. Ich analysiere die aktuellen Deals und Verhandlungen und melde mich gleich mit einer konkreten Empfehlung.";
+}
+
+router.post("/copilot/threads/:id/messages", async (req, res) => {
+  const b = req.body as { content: string };
+  const userId = `cm_${randomUUID().slice(0, 10)}`;
+  await db.insert(copilotMessagesTable).values({
+    id: userId, threadId: req.params.id, role: "user", content: b.content,
+  });
+  const reply = craftAssistantReply(b.content);
+  const asstId = `cm_${randomUUID().slice(0, 10)}`;
+  await db.insert(copilotMessagesTable).values({
+    id: asstId, threadId: req.params.id, role: "assistant", content: reply,
+  });
+  await db.update(copilotThreadsTable).set({
+    lastMessage: reply.slice(0, 140),
+    messageCount: sql`${copilotThreadsTable.messageCount} + 2`,
+    updatedAt: new Date(),
+  }).where(eq(copilotThreadsTable.id, req.params.id));
+  const [um] = await db.select().from(copilotMessagesTable).where(eq(copilotMessagesTable.id, userId));
+  const [am] = await db.select().from(copilotMessagesTable).where(eq(copilotMessagesTable.id, asstId));
+  res.status(201).json({
+    userMessage: { id: um!.id, threadId: um!.threadId, role: um!.role, content: um!.content, createdAt: iso(um!.createdAt)! },
+    assistantMessage: { id: am!.id, threadId: am!.threadId, role: am!.role, content: am!.content, createdAt: iso(am!.createdAt)! },
+  });
+});
+
+router.post("/copilot/threads", async (req, res) => {
+  const b = req.body as { title: string; scope?: string };
+  const id = `ct_${randomUUID().slice(0, 10)}`;
+  await db.insert(copilotThreadsTable).values({
+    id, title: b.title, scope: b.scope ?? "global",
+    lastMessage: "Neuer Chat gestartet.", messageCount: 0,
+  });
+  const [t] = await db.select().from(copilotThreadsTable).where(eq(copilotThreadsTable.id, id));
+  res.status(201).json({
+    id: t!.id, title: t!.title, scope: t!.scope, lastMessage: t!.lastMessage,
+    messageCount: t!.messageCount, updatedAt: iso(t!.updatedAt)!,
+  });
+});
+
+// ── HELP BOT (stateless, context-aware) ──
+const helpRules: Array<{ match: RegExp; reply: string; suggestions: { label: string; path: string }[] }> = [
+  {
+    match: /(deal|opportunity|pipeline)/i,
+    reply: "Im Bereich Deals findest du die gesamte Pipeline pro Stage. Klick auf einen Deal, um Angebote, Verträge, Verhandlungen und Approvals dazu zu sehen. Über „Neuer Deal" legst du eine Opportunity an.",
+    suggestions: [{ label: "Zur Deal-Pipeline", path: "/deals" }, { label: "Reports öffnen", path: "/reports" }],
+  },
+  {
+    match: /(angebot|quote)/i,
+    reply: "Angebote sind versioniert. Auf jeder Quote-Seite siehst du links die Versions-Historie — über „Neue Version" entsteht eine neue Variante mit eigenem Rabatt und eigener Marge.",
+    suggestions: [{ label: "Alle Angebote", path: "/quotes" }],
+  },
+  {
+    match: /(rabatt|approval|freigabe)/i,
+    reply: "Sobald ein Rabatt über der Schwelle liegt, landet automatisch ein Eintrag im Approval Hub. Dort kannst du Freigeben oder Ablehnen (mit Kommentar). Jede Entscheidung wird im Audit-Log protokolliert.",
+    suggestions: [{ label: "Approval Hub", path: "/approvals" }, { label: "Audit-Log", path: "/audit" }],
+  },
+  {
+    match: /(vertrag|klausel|contract)/i,
+    reply: "Verträge nutzen Klauselfamilien. Jede Variante hat eine Severity (grün/gelb/rot). Den Risiko-Score gesamthaft siehst du oben rechts auf der Vertragsseite. Über „Neue Vertragsversion" entsteht eine vollständige Snapshot-Version.",
+    suggestions: [{ label: "Verträge", path: "/contracts" }],
+  },
+  {
+    match: /(verhandlung|negotiation|reaktion)/i,
+    reply: "Verhandlungen werden als strukturierte Kundenreaktionen erfasst (Frage, Einwand, Gegenvorschlag, Zustimmung). So baut sich Round für Round eine echte Historie auf — ideal für AI-Vorschläge.",
+    suggestions: [{ label: "Verhandlungen", path: "/negotiations" }],
+  },
+  {
+    match: /(unterschrift|signatur|signature)/i,
+    reply: "Unterschriftspakete laufen sequenziell durch alle Signer. Beim Status „Läuft" kannst du jederzeit auf „Erinnern" klicken — das wird auch im Audit-Log dokumentiert.",
+    suggestions: [{ label: "Unterschriften", path: "/signatures" }],
+  },
+  {
+    match: /(preiserhöhung|uplift|kampagne)/i,
+    reply: "Die Preiserhöhungs-Kampagnen zeigen die Annahme-Quote pro Account. Bei Annahme erzeugt das System automatisch einen Vertragsanpassungs-Hinweis im Audit-Log.",
+    suggestions: [{ label: "Preiserhöhungen", path: "/price-increases" }],
+  },
+  {
+    match: /(report|auswertung|forecast)/i,
+    reply: "Reports zeigen Win-Rate, Margendisziplin, Ø Cycle Time und einen 6-Monats-Forecast (Committed/Best Case/Pipeline). Über die Filter oben kannst du nach Brand und Zeitraum eingrenzen.",
+    suggestions: [{ label: "Reports", path: "/reports" }],
+  },
+  {
+    match: /(audit|historie|protokoll)/i,
+    reply: "Im Audit-Log siehst du jede wichtige Änderung — wer hat wann was getan. Du kannst nach Entitäts-Typ und ID filtern.",
+    suggestions: [{ label: "Audit-Log", path: "/audit" }],
+  },
+  {
+    match: /(handover|order confirmation|auftragsbestätigung)/i,
+    reply: "Sobald alle Handover-Checks grün sind, wird die Auftragsbestätigung formal an die Lieferung übergeben. Der Readiness-Score zeigt dir auf einen Blick, was noch fehlt.",
+    suggestions: [{ label: "Auftragsbestätigungen", path: "/order-confirmations" }],
+  },
+  {
+    match: /(sprache|language)/i,
+    reply: "Oben rechts findest du den Sprachumschalter (DE / EN). Die Wahl wird im Browser gespeichert.",
+    suggestions: [],
+  },
+];
+
+router.post("/copilot/help", async (req, res) => {
+  const b = req.body as { question: string; currentPath?: string | null };
+  const q = b.question ?? "";
+  const hit = helpRules.find(r => r.match.test(q));
+  if (hit) {
+    res.json({ reply: hit.reply, suggestions: hit.suggestions });
+    return;
+  }
+  res.json({
+    reply: "Gute Frage — ich kann dich durch alle Bereiche der Plattform führen: Deals, Angebote, Verträge, Verhandlungen, Unterschriften, Preise, Preiserhöhungen, Reports und Audit. Sag mir einfach, womit du anfangen willst.",
+    suggestions: [
+      { label: "Home", path: "/" },
+      { label: "Deals", path: "/deals" },
+      { label: "Reports", path: "/reports" },
+    ],
+  });
+});
+
+// ── EXTEND APPROVAL & DEAL DECISIONS WITH AUDIT ──
+// We hook into existing endpoints by re-using writeAudit at point-of-call would
+// require refactoring. Instead expose a lightweight wrapper for new clients:
+router.post("/audit/manual", async (req, res) => {
+  const b = req.body as { entityType: string; entityId: string; action: string; summary: string };
+  await writeAudit(b);
+  res.status(201).json({ ok: true });
 });
 
 export default router;

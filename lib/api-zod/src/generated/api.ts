@@ -991,6 +991,11 @@ export const ListCopilotThreadsResponse = zod.array(
   ListCopilotThreadsResponseItem,
 );
 
+export const CreateCopilotThreadBody = zod.object({
+  title: zod.string(),
+  scope: zod.string().optional(),
+});
+
 /**
  * @summary Cross-domain recent activity feed
  */
@@ -1007,3 +1012,244 @@ export const ListRecentActivityResponseItem = zod.object({
 export const ListRecentActivityResponse = zod.array(
   ListRecentActivityResponseItem,
 );
+
+export const ListCopilotMessagesParams = zod.object({
+  id: zod.coerce.string(),
+});
+
+export const ListCopilotMessagesResponseItem = zod.object({
+  id: zod.string(),
+  threadId: zod.string(),
+  role: zod.string(),
+  content: zod.string(),
+  createdAt: zod.coerce.date(),
+});
+export const ListCopilotMessagesResponse = zod.array(
+  ListCopilotMessagesResponseItem,
+);
+
+export const PostCopilotMessageParams = zod.object({
+  id: zod.coerce.string(),
+});
+
+export const PostCopilotMessageBody = zod.object({
+  content: zod.string(),
+});
+
+/**
+ * @summary Floating help-bot — stateless guidance reply based on app context
+ */
+export const AskHelpBotBody = zod.object({
+  question: zod.string(),
+  currentPath: zod.string().nullish(),
+  history: zod
+    .array(
+      zod.object({
+        role: zod.string(),
+        content: zod.string(),
+      }),
+    )
+    .optional(),
+});
+
+export const AskHelpBotResponse = zod.object({
+  reply: zod.string(),
+  suggestions: zod.array(
+    zod.object({
+      label: zod.string(),
+      path: zod.string(),
+    }),
+  ),
+});
+
+export const ListAuditEntriesQueryParams = zod.object({
+  entityType: zod.coerce.string().optional(),
+  entityId: zod.coerce.string().optional(),
+  limit: zod.coerce.number().optional(),
+});
+
+export const ListAuditEntriesResponseItem = zod.object({
+  id: zod.string(),
+  entityType: zod.string(),
+  entityId: zod.string(),
+  action: zod.string(),
+  actor: zod.string(),
+  summary: zod.string(),
+  beforeJson: zod.string().nullish(),
+  afterJson: zod.string().nullish(),
+  at: zod.coerce.date(),
+});
+export const ListAuditEntriesResponse = zod.array(ListAuditEntriesResponseItem);
+
+export const ListEntityVersionsParams = zod.object({
+  entityType: zod.coerce.string(),
+  entityId: zod.coerce.string(),
+});
+
+export const ListEntityVersionsResponseItem = zod.object({
+  id: zod.string(),
+  entityType: zod.string(),
+  entityId: zod.string(),
+  version: zod.number(),
+  label: zod.string(),
+  actor: zod.string(),
+  comment: zod.string().nullish(),
+  snapshot: zod.string().optional(),
+  createdAt: zod.coerce.date(),
+});
+export const ListEntityVersionsResponse = zod.array(
+  ListEntityVersionsResponseItem,
+);
+
+export const CreateContractVersionParams = zod.object({
+  id: zod.coerce.string(),
+});
+
+export const CreateContractVersionBody = zod.object({
+  label: zod.string(),
+  comment: zod.string().optional(),
+  snapshot: zod.string().optional(),
+});
+
+export const CreatePricePositionVersionParams = zod.object({
+  id: zod.coerce.string(),
+});
+
+export const CreatePricePositionVersionBody = zod.object({
+  label: zod.string(),
+  comment: zod.string().optional(),
+  snapshot: zod.string().optional(),
+});
+
+/**
+ * @summary Hierarchical price resolution (brand > company > tenant default)
+ */
+export const ResolvePriceQueryParams = zod.object({
+  sku: zod.coerce.string(),
+  brandId: zod.coerce.string().optional(),
+  companyId: zod.coerce.string().optional(),
+});
+
+export const ResolvePriceResponse = zod.object({
+  sku: zod.string(),
+  listPrice: zod.number(),
+  currency: zod.string(),
+  source: zod.string(),
+  positionId: zod.string().optional(),
+  chain: zod.array(
+    zod.object({
+      level: zod.string(),
+      label: zod.string(),
+      listPrice: zod.number().nullish(),
+      applied: zod.boolean(),
+      positionId: zod.string().nullish(),
+    }),
+  ),
+});
+
+export const RespondToPriceIncreaseLetterParams = zod.object({
+  id: zod.coerce.string(),
+  letterId: zod.coerce.string(),
+});
+
+export const RespondToPriceIncreaseLetterBody = zod.object({
+  decision: zod.string(),
+  comment: zod.string().nullish(),
+});
+
+export const RespondToPriceIncreaseLetterResponse = zod.object({
+  id: zod.string(),
+  campaignId: zod.string(),
+  accountId: zod.string(),
+  accountName: zod.string(),
+  status: zod.string(),
+  upliftPct: zod.number(),
+  sentAt: zod.coerce.date().nullable(),
+  respondedAt: zod.coerce.date().nullish(),
+});
+
+export const ListOrderConfirmationsQueryParams = zod.object({
+  status: zod.coerce.string().optional(),
+});
+
+export const ListOrderConfirmationsResponseItem = zod.object({
+  id: zod.string(),
+  dealId: zod.string(),
+  dealName: zod.string(),
+  contractId: zod.string().nullish(),
+  number: zod.string(),
+  status: zod.string(),
+  readinessScore: zod.number(),
+  totalAmount: zod.number(),
+  currency: zod.string(),
+  expectedDelivery: zod.string().nullish(),
+  handoverAt: zod.string().nullish(),
+  createdAt: zod.coerce.date(),
+});
+export const ListOrderConfirmationsResponse = zod.array(
+  ListOrderConfirmationsResponseItem,
+);
+
+export const GetOrderConfirmationParams = zod.object({
+  id: zod.coerce.string(),
+});
+
+export const GetOrderConfirmationResponse = zod
+  .object({
+    id: zod.string(),
+    dealId: zod.string(),
+    dealName: zod.string(),
+    contractId: zod.string().nullish(),
+    number: zod.string(),
+    status: zod.string(),
+    readinessScore: zod.number(),
+    totalAmount: zod.number(),
+    currency: zod.string(),
+    expectedDelivery: zod.string().nullish(),
+    handoverAt: zod.string().nullish(),
+    createdAt: zod.coerce.date(),
+  })
+  .and(
+    zod.object({
+      checks: zod.array(
+        zod.object({
+          id: zod.string(),
+          label: zod.string(),
+          status: zod.string(),
+          detail: zod.string().nullish(),
+        }),
+      ),
+    }),
+  );
+
+export const HandoverOrderConfirmationParams = zod.object({
+  id: zod.coerce.string(),
+});
+
+export const HandoverOrderConfirmationResponse = zod
+  .object({
+    id: zod.string(),
+    dealId: zod.string(),
+    dealName: zod.string(),
+    contractId: zod.string().nullish(),
+    number: zod.string(),
+    status: zod.string(),
+    readinessScore: zod.number(),
+    totalAmount: zod.number(),
+    currency: zod.string(),
+    expectedDelivery: zod.string().nullish(),
+    handoverAt: zod.string().nullish(),
+    createdAt: zod.coerce.date(),
+  })
+  .and(
+    zod.object({
+      checks: zod.array(
+        zod.object({
+          id: zod.string(),
+          label: zod.string(),
+          status: zod.string(),
+          detail: zod.string().nullish(),
+        }),
+      ),
+    }),
+  );

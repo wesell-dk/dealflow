@@ -299,3 +299,60 @@ export const copilotThreadsTable = pgTable("copilot_threads", {
   messageCount: integer("message_count").notNull().default(1),
   updatedAt: ts("updated_at"),
 });
+
+export const copilotMessagesTable = pgTable("copilot_messages", {
+  id: id(),
+  threadId: text("thread_id").notNull(),
+  role: text("role").notNull(),
+  content: text("content").notNull(),
+  createdAt: ts("created_at"),
+});
+
+// Audit log
+export const auditLogTable = pgTable("audit_log", {
+  id: id(),
+  entityType: text("entity_type").notNull(),
+  entityId: text("entity_id").notNull(),
+  action: text("action").notNull(),
+  actor: text("actor").notNull(),
+  beforeJson: text("before_json"),
+  afterJson: text("after_json"),
+  summary: text("summary").notNull(),
+  at: ts("at"),
+});
+
+// Order confirmation & handover
+export const orderConfirmationsTable = pgTable("order_confirmations", {
+  id: id(),
+  dealId: text("deal_id").notNull(),
+  contractId: text("contract_id"),
+  number: text("number").notNull(),
+  status: text("status").notNull(),
+  readinessScore: integer("readiness_score").notNull().default(0),
+  totalAmount: numeric("total_amount").notNull(),
+  currency: text("currency").notNull(),
+  expectedDelivery: date("expected_delivery"),
+  handoverAt: timestamp("handover_at", { withTimezone: true }),
+  createdAt: ts("created_at"),
+});
+
+export const orderConfirmationChecksTable = pgTable("order_confirmation_checks", {
+  id: id(),
+  orderConfirmationId: text("order_confirmation_id").notNull(),
+  label: text("label").notNull(),
+  status: text("status").notNull(),
+  detail: text("detail"),
+});
+
+// Generic entity versions (for contracts, price positions, etc.)
+export const entityVersionsTable = pgTable("entity_versions", {
+  id: id(),
+  entityType: text("entity_type").notNull(),
+  entityId: text("entity_id").notNull(),
+  version: integer("version").notNull(),
+  label: text("label").notNull(),
+  snapshot: text("snapshot").notNull(),
+  actor: text("actor").notNull(),
+  comment: text("comment"),
+  createdAt: ts("created_at"),
+});

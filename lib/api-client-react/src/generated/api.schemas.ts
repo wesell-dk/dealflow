@@ -522,6 +522,138 @@ export interface CopilotThread {
   messageCount: number;
 }
 
+export interface CopilotMessage {
+  id: string;
+  threadId: string;
+  role: string;
+  content: string;
+  createdAt: string;
+}
+
+export interface CopilotMessageInput {
+  content: string;
+}
+
+export interface CopilotChatReply {
+  userMessage: CopilotMessage;
+  assistantMessage: CopilotMessage;
+}
+
+export interface CopilotThreadInput {
+  title: string;
+  scope?: string;
+}
+
+export type HelpBotInputHistoryItem = {
+  role: string;
+  content: string;
+};
+
+export interface HelpBotInput {
+  question: string;
+  /** @nullable */
+  currentPath?: string | null;
+  history?: HelpBotInputHistoryItem[];
+}
+
+export type HelpBotReplySuggestionsItem = {
+  label: string;
+  path: string;
+};
+
+export interface HelpBotReply {
+  reply: string;
+  suggestions: HelpBotReplySuggestionsItem[];
+}
+
+export interface AuditEntry {
+  id: string;
+  entityType: string;
+  entityId: string;
+  action: string;
+  actor: string;
+  summary: string;
+  /** @nullable */
+  beforeJson?: string | null;
+  /** @nullable */
+  afterJson?: string | null;
+  at: string;
+}
+
+export interface EntityVersion {
+  id: string;
+  entityType: string;
+  entityId: string;
+  version: number;
+  label: string;
+  actor: string;
+  /** @nullable */
+  comment?: string | null;
+  snapshot?: string;
+  createdAt: string;
+}
+
+export interface EntityVersionInput {
+  label: string;
+  comment?: string;
+  snapshot?: string;
+}
+
+export type ResolvedPriceChainItem = {
+  level: string;
+  label: string;
+  /** @nullable */
+  listPrice?: number | null;
+  applied: boolean;
+  /** @nullable */
+  positionId?: string | null;
+};
+
+export interface ResolvedPrice {
+  sku: string;
+  listPrice: number;
+  currency: string;
+  source: string;
+  positionId?: string;
+  chain: ResolvedPriceChainItem[];
+}
+
+export interface PriceIncreaseResponseInput {
+  decision: string;
+  /** @nullable */
+  comment?: string | null;
+}
+
+export interface OrderConfirmation {
+  id: string;
+  dealId: string;
+  dealName: string;
+  /** @nullable */
+  contractId?: string | null;
+  number: string;
+  status: string;
+  readinessScore: number;
+  totalAmount: number;
+  currency: string;
+  /** @nullable */
+  expectedDelivery?: string | null;
+  /** @nullable */
+  handoverAt?: string | null;
+  createdAt: string;
+}
+
+export type OrderConfirmationDetailChecksItem = {
+  id: string;
+  label: string;
+  status: string;
+  /** @nullable */
+  detail?: string | null;
+};
+
+export type OrderConfirmationDetail = OrderConfirmation & {
+  checks: OrderConfirmationDetailChecksItem[];
+};
+
 export type ListContactsParams = {
   accountId?: string;
 };
@@ -553,5 +685,21 @@ export type ListNegotiationsParams = {
 };
 
 export type ListSignaturePackagesParams = {
+  status?: string;
+};
+
+export type ListAuditEntriesParams = {
+  entityType?: string;
+  entityId?: string;
+  limit?: number;
+};
+
+export type ResolvePriceParams = {
+  sku: string;
+  brandId?: string;
+  companyId?: string;
+};
+
+export type ListOrderConfirmationsParams = {
   status?: string;
 };
