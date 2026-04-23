@@ -281,7 +281,7 @@ router.get('/accounts/:id', async (req, res) => {
 
 router.get('/contacts', async (req, res) => {
   if (!validateInline(req, res, { query: Z.ListContactsQueryParams })) return;
-  const accountId = (req.query.accountId as string | undefined) ?? null;
+  const accountId = typeof req.query.accountId === 'string' ? req.query.accountId : null;
   const accIds = await allowedAccountIds(req);
   const list = accountId
     ? await db.select().from(contactsTable).where(eq(contactsTable.accountId, accountId))
@@ -918,7 +918,7 @@ router.patch('/brands/:id', async (req, res) => {
   if (!(await brandVisible(req, existing))) {
     res.status(403).json({ error: 'forbidden' }); return;
   }
-  const body = (req.body ?? {}) as Record<string, unknown>;
+  const body: Record<string, unknown> = req.body ?? {};
   const patch: Partial<typeof brandsTable.$inferInsert> = {};
   const strFields = ['name', 'color', 'voice', 'logoUrl', 'primaryColor', 'secondaryColor', 'tone', 'legalEntityName', 'addressLine'] as const;
   const hexRe = /^#[0-9a-fA-F]{6}$/;
@@ -961,7 +961,8 @@ router.patch('/brands/:id', async (req, res) => {
 
 router.patch('/brands/:id/default-clauses', async (req, res) => {
   if (!validateInline(req, res, { params: Z.UpdateBrandDefaultClausesParams, body: Z.UpdateBrandDefaultClausesBody })) return;
-  const { defaults } = (req.body ?? {}) as { defaults?: Record<string, string> };
+  const body: { defaults?: Record<string, string> } = req.body ?? {};
+  const { defaults } = body;
   if (!defaults || typeof defaults !== 'object') {
     res.status(400).json({ error: 'defaults required' }); return;
   }
@@ -1400,7 +1401,8 @@ router.get('/contracts/:id/clauses', async (req, res) => {
 
 router.patch('/contract-clauses/:id', async (req, res) => {
   if (!validateInline(req, res, { params: Z.PatchContractClauseParams, body: Z.PatchContractClauseBody })) return;
-  const { variantId } = (req.body ?? {}) as { variantId?: string };
+  const body: { variantId?: string } = req.body ?? {};
+  const { variantId } = body;
   if (!variantId) { res.status(400).json({ error: 'variantId required' }); return; }
   const actor = getScope(req).user;
   const [cl] = await db.select().from(contractClausesTable).where(eq(contractClausesTable.id, req.params.id));
@@ -2043,10 +2045,10 @@ router.post('/signatures/:id/escalate', async (req, res) => {
   const [s] = await db.select().from(signaturePackagesTable).where(eq(signaturePackagesTable.id, req.params.id));
   if (!s) { res.status(404).json({ error: 'not found' }); return; }
   if (!(await gateDeal(req, res, s.dealId))) return;
-  const body = (req.body ?? {}) as {
+  const body: {
     fallbackName?: unknown; fallbackEmail?: unknown; fallbackRole?: unknown;
     replacesSignerId?: unknown;
-  };
+  } = req.body ?? {};
   const name = typeof body.fallbackName === 'string' ? body.fallbackName.trim() : '';
   const email = typeof body.fallbackEmail === 'string' ? body.fallbackEmail.trim() : '';
   const role = typeof body.fallbackRole === 'string' ? body.fallbackRole.trim() : 'Fallback Signer';
@@ -3257,10 +3259,12 @@ router.patch('/admin/users/:id', async (req, res) => {
       : [];
     const tenantBrandIds = new Set(tenantBrands.map(x => x.id));
     if (Array.isArray(b.scopeCompanyIds)) {
-      patch.scopeCompanyIds = JSON.stringify((b.scopeCompanyIds as string[]).filter((id: string) => tenantCompanyIds.has(id)));
+      const arr: unknown[] = b.scopeCompanyIds;
+      patch.scopeCompanyIds = JSON.stringify(arr.filter((id): id is string => typeof id === 'string' && tenantCompanyIds.has(id)));
     }
     if (Array.isArray(b.scopeBrandIds)) {
-      patch.scopeBrandIds = JSON.stringify((b.scopeBrandIds as string[]).filter((id: string) => tenantBrandIds.has(id)));
+      const arr: unknown[] = b.scopeBrandIds;
+      patch.scopeBrandIds = JSON.stringify(arr.filter((id): id is string => typeof id === 'string' && tenantBrandIds.has(id)));
     }
   }
   if (typeof b.password === 'string' && b.password.length > 0) {
@@ -3450,9 +3454,8 @@ router.post('/gdpr/forget', async (req, res) => {
   if (!validateInline(req, res, { body: Z.ForgetGdprSubjectBody })) return;
   if (!requireAdmin(req, res)) return;
   const scope = getScope(req);
-  const { subjectType, subjectId, reason } = (req.body ?? {}) as {
-    subjectType?: string; subjectId?: string; reason?: string;
-  };
+  const body: { subjectType?: string; subjectId?: string; reason?: string } = req.body ?? {};
+  const { subjectType, subjectId, reason } = body;
   if (subjectType !== 'contact' || !subjectId) {
     res.status(400).json({ error: 'subjectType=contact and subjectId are required' });
     return;
@@ -3466,6 +3469,7 @@ router.post('/gdpr/forget', async (req, res) => {
 });
 
 router.get('/gdpr/access-log', async (req, res) => {
+  if (!validateInline(req, res, { query: z.object({ subjectId: z.string().optional(), limit: z.coerce.number().int().min(1).max(500).optional() }) })) return;
   if (!requireAdmin(req, res)) return;
   const scope = getScope(req);
   const entityType = req.query.entityType ? String(req.query.entityType) : null;
@@ -3510,6 +3514,7 @@ router.get('/gdpr/deletion-log', async (req, res) => {
 });
 
 router.post('/gdpr/retention/run', async (req, res) => {
+  if (!validateInline(req, res, { body: z.object({}).passthrough() })) return;
   if (!requireAdmin(req, res)) return;
   const scope = getScope(req);
   const result = await runRetentionSweepForTenant(scope.tenantId);
@@ -3535,7 +3540,7 @@ router.patch('/gdpr/retention-policy', async (req, res) => {
   if (!validateInline(req, res, { body: Z.UpdateGdprRetentionPolicyBody })) return;
   if (!requireAdmin(req, res)) return;
   const scope = getScope(req);
-  const body = (req.body ?? {}) as Record<string, unknown>;
+  const body: Record<string, unknown> = req.body ?? {};
   const [tRow] = await db.select().from(tenantsTable).where(eq(tenantsTable.id, scope.tenantId));
   const current: Record<string, number> = { ...(tRow?.retentionPolicy ?? {}) };
   const allowed = ['contactInactiveDays', 'letterRespondedDays', 'auditLogDays', 'accessLogDays'] as const;
