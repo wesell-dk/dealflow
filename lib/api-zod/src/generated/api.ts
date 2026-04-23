@@ -1921,3 +1921,103 @@ export const CompleteOrderConfirmationResponse = zod
       ),
     }),
   );
+
+export const SearchGdprSubjectsQueryParams = zod.object({
+  subjectType: zod.enum(["contact"]).optional(),
+  query: zod.coerce.string().optional(),
+});
+
+export const SearchGdprSubjectsResponse = zod.object({
+  tenantId: zod.string(),
+  subjectType: zod.string(),
+  results: zod.array(
+    zod.object({
+      id: zod.string(),
+      accountId: zod.string(),
+      name: zod.string(),
+      email: zod.string(),
+      deletedAt: zod.coerce.date().nullish(),
+      pseudonymizedAt: zod.coerce.date().nullish(),
+    }),
+  ),
+});
+
+export const ExportGdprSubjectQueryParams = zod.object({
+  subjectType: zod.enum(["contact"]),
+  subjectId: zod.coerce.string(),
+});
+
+export const ForgetGdprSubjectBody = zod.object({
+  subjectType: zod.enum(["contact"]),
+  subjectId: zod.string(),
+  reason: zod.string().nullish(),
+});
+
+export const ForgetGdprSubjectResponse = zod.object({
+  ok: zod.boolean(),
+  alreadyDeleted: zod.boolean().optional(),
+});
+
+export const ListGdprAccessLogQueryParams = zod.object({
+  entityType: zod.coerce.string().optional(),
+  entityId: zod.coerce.string().optional(),
+});
+
+export const ListGdprAccessLogResponseItem = zod.object({
+  id: zod.string(),
+  at: zod.coerce.date(),
+  actorUserId: zod.string(),
+  actorName: zod.string(),
+  entityType: zod.string(),
+  entityId: zod.string(),
+  field: zod.string(),
+  action: zod.string(),
+});
+export const ListGdprAccessLogResponse = zod.array(
+  ListGdprAccessLogResponseItem,
+);
+
+export const ListGdprDeletionLogResponseItem = zod.object({
+  id: zod.string(),
+  subjectType: zod.string(),
+  subjectId: zod.string(),
+  requestedBy: zod.string(),
+  reason: zod.string().nullish(),
+  status: zod.string(),
+  requestedAt: zod.coerce.date(),
+  completedAt: zod.coerce.date().nullish(),
+});
+export const ListGdprDeletionLogResponse = zod.array(
+  ListGdprDeletionLogResponseItem,
+);
+
+export const RunGdprRetentionResponse = zod.object({
+  applied: zod.record(zod.string(), zod.number()),
+});
+
+export const GetGdprRetentionPolicyResponse = zod.object({
+  tenantId: zod.string(),
+  policy: zod.object({
+    contactInactiveDays: zod.number().optional(),
+    letterRespondedDays: zod.number().optional(),
+    auditLogDays: zod.number().optional(),
+    accessLogDays: zod.number().optional(),
+  }),
+});
+
+export const UpdateGdprRetentionPolicyBody = zod.object({
+  contactInactiveDays: zod.number().optional(),
+  letterRespondedDays: zod.number().optional(),
+  auditLogDays: zod.number().optional(),
+  accessLogDays: zod.number().optional(),
+});
+
+export const UpdateGdprRetentionPolicyResponse = zod.object({
+  tenantId: zod.string(),
+  policy: zod.object({
+    contactInactiveDays: zod.number().optional(),
+    letterRespondedDays: zod.number().optional(),
+    auditLogDays: zod.number().optional(),
+    accessLogDays: zod.number().optional(),
+  }),
+});

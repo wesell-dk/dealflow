@@ -20,6 +20,15 @@ export const tenantsTable = pgTable("tenants", {
   name: text("name").notNull(),
   plan: text("plan").notNull(),
   region: text("region").notNull(),
+  retentionPolicy: jsonb("retention_policy")
+    .$type<{
+      contactInactiveDays?: number;
+      letterRespondedDays?: number;
+      auditLogDays?: number;
+      accessLogDays?: number;
+    }>()
+    .default({})
+    .notNull(),
   createdAt: ts("created_at"),
 });
 
@@ -86,6 +95,34 @@ export const contactsTable = pgTable("contacts", {
   role: text("role").notNull(),
   isDecisionMaker: boolean("is_decision_maker").notNull().default(false),
   phone: text("phone"),
+  deletedAt: timestamp("deleted_at", { withTimezone: true }),
+  pseudonymizedAt: timestamp("pseudonymized_at", { withTimezone: true }),
+});
+
+// GDPR: deletion log (soft-delete + pseudonymization audit)
+export const subjectsDeletionLogTable = pgTable("subjects_deletion_log", {
+  id: id(),
+  tenantId: text("tenant_id").notNull(),
+  subjectType: text("subject_type").notNull(),
+  subjectId: text("subject_id").notNull(),
+  requestedBy: text("requested_by").notNull(),
+  reason: text("reason"),
+  status: text("status").notNull().default("completed"),
+  pseudonymBefore: jsonb("pseudonym_before").$type<Record<string, unknown>>(),
+  requestedAt: ts("requested_at"),
+  completedAt: timestamp("completed_at", { withTimezone: true }),
+});
+
+// GDPR: access log — protokolliert lesende Zugriffe auf PII-Felder
+export const accessLogTable = pgTable("access_log", {
+  id: id(),
+  tenantId: text("tenant_id").notNull(),
+  actorUserId: text("actor_user_id").notNull(),
+  entityType: text("entity_type").notNull(),
+  entityId: text("entity_id").notNull(),
+  field: text("field").notNull(),
+  action: text("action").notNull().default("read"),
+  at: ts("at"),
 });
 
 // Deals

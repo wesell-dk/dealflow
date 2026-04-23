@@ -1,11 +1,32 @@
+import { useState } from "react";
 import { useTranslation } from "react-i18next";
-import { useGetTenant, useListCompanies, useListBrands, useListUsers } from "@workspace/api-client-react";
+import {
+  useGetTenant,
+  useListCompanies,
+  useListBrands,
+  useListUsers,
+  useSearchGdprSubjects,
+  useForgetGdprSubject,
+  useListGdprAccessLog,
+  useListGdprDeletionLog,
+  useGetGdprRetentionPolicy,
+  useUpdateGdprRetentionPolicy,
+  useRunGdprRetention,
+} from "@workspace/api-client-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
-import { Settings, Shield, Building2, Users } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Settings, Shield, Building2, Users, Download, Trash2, Eye, Play, ShieldAlert } from "lucide-react";
+
+function fmtDate(v: string | null | undefined): string {
+  if (!v) return "—";
+  try { return new Date(v).toLocaleString(); } catch { return v; }
+}
 
 export default function Admin() {
   const { t } = useTranslation();
@@ -14,11 +35,78 @@ export default function Admin() {
   const { data: brands, isLoading: isLoadingBrands } = useListBrands();
   const { data: users, isLoading: isLoadingUsers } = useListUsers();
 
+  const [query, setQuery] = useState("");
+  const [selectedSubjectId, setSelectedSubjectId] = useState<string | null>(null);
+  const [status, setStatus] = useState<string | null>(null);
+  const subjectSearch = useSearchGdprSubjects(
+    { subjectType: "contact", query },
+    { query: { queryKey: ["gdprSubjects", query] } },
+  );
+  const accessLog = useListGdprAccessLog(
+    selectedSubjectId ? { entityType: "contact", entityId: selectedSubjectId } : {},
+    { query: { enabled: !!selectedSubjectId, queryKey: ["gdprAccessLog", selectedSubjectId] } },
+  );
+  const deletionLog = useListGdprDeletionLog();
+  const policy = useGetGdprRetentionPolicy();
+  const forget = useForgetGdprSubject();
+  const updatePolicy = useUpdateGdprRetentionPolicy();
+  const runSweep = useRunGdprRetention();
+
+  const [policyDraft, setPolicyDraft] = useState<Record<string, string>>({});
+
   const isLoading = isLoadingTenant || isLoadingCompanies || isLoadingBrands || isLoadingUsers;
 
   if (isLoading) {
     return <div className="p-8"><Skeleton className="h-[800px] w-full" /></div>;
   }
+
+  const onExport = async (id: string) => {
+    const resp = await fetch(
+      `${import.meta.env.BASE_URL}api/gdpr/export?subjectType=contact&subjectId=${encodeURIComponent(id)}`,
+      { credentials: "include" },
+    );
+    if (!resp.ok) {
+      setStatus(`Export failed (${resp.status})`);
+      return;
+    }
+    const blob = await resp.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `gdpr-export-contact-${id}.zip`;
+    a.click();
+    URL.revokeObjectURL(url);
+    setStatus(t("pages.admin.gdpr.exportDone"));
+  };
+
+  const onForget = async (id: string) => {
+    if (!window.confirm(t("pages.admin.gdpr.forgetConfirm"))) return;
+    await forget.mutateAsync({ data: { subjectType: "contact", subjectId: id } });
+    setStatus(t("pages.admin.gdpr.forgetDone"));
+    subjectSearch.refetch();
+    deletionLog.refetch();
+  };
+
+  const currentPolicy = policy.data?.policy ?? {};
+  const getPolicyVal = (k: string) =>
+    policyDraft[k] ?? String((currentPolicy as Record<string, unknown>)[k] ?? "");
+
+  const onSavePolicy = async () => {
+    const body: Record<string, number> = {};
+    for (const [k, v] of Object.entries(policyDraft)) {
+      const n = Number(v);
+      if (!Number.isNaN(n) && n > 0) body[k] = n;
+    }
+    await updatePolicy.mutateAsync({ data: body });
+    setStatus(t("pages.admin.gdpr.retentionSaved"));
+    setPolicyDraft({});
+    policy.refetch();
+  };
+
+  const onRunSweep = async () => {
+    await runSweep.mutateAsync();
+    setStatus(t("pages.admin.gdpr.retentionRunDone"));
+  };
 
   return (
     <div className="flex flex-col gap-6 pb-10">
@@ -177,6 +265,188 @@ export default function Admin() {
                 )}
               </TableBody>
             </Table>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* GDPR Section */}
+      <Card>
+        <CardHeader className="flex flex-row items-center gap-2">
+          <ShieldAlert className="h-5 w-5 text-primary" />
+          <div>
+            <CardTitle>{t("pages.admin.gdpr.title")}</CardTitle>
+            <p className="text-sm text-muted-foreground mt-1">{t("pages.admin.gdpr.subtitle")}</p>
+          </div>
+        </CardHeader>
+        <CardContent className="flex flex-col gap-6">
+          {status && (
+            <div className="rounded-md bg-muted px-3 py-2 text-sm">{status}</div>
+          )}
+
+          {/* Subject search */}
+          <div className="flex flex-col gap-3">
+            <div className="flex gap-2">
+              <Input
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                placeholder={t("pages.admin.gdpr.searchPlaceholder")}
+                className="max-w-md"
+              />
+              <Button variant="secondary" onClick={() => subjectSearch.refetch()}>
+                {t("pages.admin.gdpr.search")}
+              </Button>
+            </div>
+            <div className="border rounded-md">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>{t("common.name")}</TableHead>
+                    <TableHead>E-Mail</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead className="text-right">Aktionen</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {subjectSearch.data?.results?.map((s) => (
+                    <TableRow key={s.id}>
+                      <TableCell className="font-medium">{s.name}</TableCell>
+                      <TableCell className="text-muted-foreground">{s.email}</TableCell>
+                      <TableCell>
+                        {s.deletedAt ? (
+                          <Badge variant="destructive">{t("pages.admin.gdpr.deletedBadge")}</Badge>
+                        ) : (
+                          <Badge variant="outline">Aktiv</Badge>
+                        )}
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <div className="flex justify-end gap-2">
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => onExport(s.id)}
+                          >
+                            <Download className="h-4 w-4 mr-1" />
+                            {t("pages.admin.gdpr.export")}
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => setSelectedSubjectId(s.id)}
+                          >
+                            <Eye className="h-4 w-4 mr-1" />
+                            {t("pages.admin.gdpr.viewAccessLog")}
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="destructive"
+                            disabled={!!s.deletedAt}
+                            onClick={() => onForget(s.id)}
+                          >
+                            <Trash2 className="h-4 w-4 mr-1" />
+                            {t("pages.admin.gdpr.forget")}
+                          </Button>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                  {(!subjectSearch.data?.results || subjectSearch.data.results.length === 0) && (
+                    <TableRow><TableCell colSpan={4} className="text-center h-16 text-muted-foreground">{t("pages.admin.gdpr.noResults")}</TableCell></TableRow>
+                  )}
+                </TableBody>
+              </Table>
+            </div>
+          </div>
+
+          {/* Access log for selected subject */}
+          {selectedSubjectId && (
+            <div className="flex flex-col gap-2">
+              <div className="font-medium">{t("pages.admin.gdpr.accessLog")} — {selectedSubjectId}</div>
+              <div className="border rounded-md max-h-72 overflow-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>{t("pages.admin.gdpr.colAt")}</TableHead>
+                      <TableHead>{t("pages.admin.gdpr.colActor")}</TableHead>
+                      <TableHead>{t("pages.admin.gdpr.colField")}</TableHead>
+                      <TableHead>Action</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {accessLog.data?.map((r) => (
+                      <TableRow key={r.id}>
+                        <TableCell className="text-xs">{fmtDate(r.at)}</TableCell>
+                        <TableCell>{r.actorName}</TableCell>
+                        <TableCell><Badge variant="secondary">{r.field}</Badge></TableCell>
+                        <TableCell>{r.action}</TableCell>
+                      </TableRow>
+                    ))}
+                    {(!accessLog.data || accessLog.data.length === 0) && (
+                      <TableRow><TableCell colSpan={4} className="text-center h-16 text-muted-foreground">{t("pages.admin.gdpr.accessLogEmpty")}</TableCell></TableRow>
+                    )}
+                  </TableBody>
+                </Table>
+              </div>
+            </div>
+          )}
+
+          {/* Retention policy */}
+          <div className="flex flex-col gap-3">
+            <div className="font-medium">{t("pages.admin.gdpr.retention")}</div>
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
+              {(["contactInactiveDays", "letterRespondedDays", "auditLogDays", "accessLogDays"] as const).map((k) => (
+                <div key={k} className="flex flex-col gap-1">
+                  <Label className="text-xs text-muted-foreground">{t(`pages.admin.gdpr.fields.${k}`)}</Label>
+                  <Input
+                    type="number"
+                    inputMode="numeric"
+                    value={getPolicyVal(k)}
+                    onChange={(e) => setPolicyDraft((d) => ({ ...d, [k]: e.target.value }))}
+                    placeholder="—"
+                  />
+                </div>
+              ))}
+            </div>
+            <div className="flex gap-2">
+              <Button onClick={onSavePolicy} disabled={Object.keys(policyDraft).length === 0}>
+                {t("common.save", "Speichern")}
+              </Button>
+              <Button variant="outline" onClick={onRunSweep}>
+                <Play className="h-4 w-4 mr-1" />
+                {t("pages.admin.gdpr.retentionRun")}
+              </Button>
+            </div>
+          </div>
+
+          {/* Deletion log */}
+          <div className="flex flex-col gap-2">
+            <div className="font-medium">{t("pages.admin.gdpr.deletionLog")}</div>
+            <div className="border rounded-md max-h-72 overflow-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>{t("pages.admin.gdpr.colAt")}</TableHead>
+                    <TableHead>{t("pages.admin.gdpr.colSubject")}</TableHead>
+                    <TableHead>{t("pages.admin.gdpr.colRequestedBy")}</TableHead>
+                    <TableHead>{t("pages.admin.gdpr.colReason")}</TableHead>
+                    <TableHead>{t("pages.admin.gdpr.colStatus")}</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {deletionLog.data?.map((d) => (
+                    <TableRow key={d.id}>
+                      <TableCell className="text-xs">{fmtDate(d.requestedAt)}</TableCell>
+                      <TableCell><code className="text-xs">{d.subjectType}/{d.subjectId}</code></TableCell>
+                      <TableCell>{d.requestedBy}</TableCell>
+                      <TableCell className="text-muted-foreground">{d.reason ?? "—"}</TableCell>
+                      <TableCell><Badge variant="outline">{d.status}</Badge></TableCell>
+                    </TableRow>
+                  ))}
+                  {(!deletionLog.data || deletionLog.data.length === 0) && (
+                    <TableRow><TableCell colSpan={5} className="text-center h-16 text-muted-foreground">—</TableCell></TableRow>
+                  )}
+                </TableBody>
+              </Table>
+            </div>
           </div>
         </CardContent>
       </Card>

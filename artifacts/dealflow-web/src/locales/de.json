@@ -280,7 +280,42 @@
       "subtitle": "Tenant-Einstellungen, Gesellschaften und Benutzer verwalten.",
       "tenantConfig": "Tenant-Konfiguration",
       "companies": "Gesellschaften",
-      "legalEntity": "Rechtsträger"
+      "legalEntity": "Rechtsträger",
+      "gdpr": {
+        "title": "DSGVO — Betroffenenrechte",
+        "subtitle": "Datenexport, Löschanforderungen, Zugriffslog und Aufbewahrungsregeln.",
+        "searchPlaceholder": "Name oder E-Mail suchen…",
+        "search": "Suchen",
+        "noResults": "Keine Treffer.",
+        "export": "Export",
+        "forget": "Löschen anfordern",
+        "viewAccessLog": "Zugriffslog",
+        "forgetConfirm": "Diesen Kontakt pseudonymisieren? Diese Aktion ist nicht rückgängig zu machen.",
+        "forgetDone": "Kontakt pseudonymisiert.",
+        "exportDone": "Export heruntergeladen.",
+        "deletedBadge": "Gelöscht",
+        "deletionLog": "Löschprotokoll",
+        "accessLog": "Zugriffslog",
+        "accessLogEmpty": "Noch keine protokollierten Zugriffe.",
+        "retention": "Aufbewahrungsregeln (Tage)",
+        "retentionSaved": "Aufbewahrungsregeln gespeichert.",
+        "retentionRun": "Sweep starten",
+        "retentionRunDone": "Aufbewahrungs-Sweep ausgeführt.",
+        "fields": {
+          "contactInactiveDays": "Inaktive Kontakte",
+          "letterRespondedDays": "Beantwortete Preisbriefe",
+          "auditLogDays": "Audit-Log",
+          "accessLogDays": "Zugriffslog"
+        },
+        "colAt": "Zeitpunkt",
+        "colActor": "Nutzer",
+        "colField": "Feld",
+        "colEntity": "Entität",
+        "colSubject": "Betroffener",
+        "colRequestedBy": "Angefordert von",
+        "colReason": "Grund",
+        "colStatus": "Status"
+      }
     }
   },
   "helpBot": {

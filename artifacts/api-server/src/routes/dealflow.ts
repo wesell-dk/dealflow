@@ -53,6 +53,16 @@ import {
   generateLowMarginForQuoteVersion,
   resolveInsightsFor,
 } from '../insights/generators';
+import {
+  exportSubjectZip,
+  forgetSubject,
+  logPiiAccess,
+  runRetentionSweep,
+} from '../gdpr/service';
+import {
+  subjectsDeletionLogTable,
+  accessLogTable,
+} from '@workspace/db';
 
 const router: IRouter = Router();
 
@@ -250,7 +260,20 @@ router.get('/contacts', async (req, res) => {
   const list = accountId
     ? await db.select().from(contactsTable).where(eq(contactsTable.accountId, accountId))
     : await db.select().from(contactsTable);
-  res.json(list.filter(c => isAccountAllowed(accIds, c.accountId)));
+  const visible = list.filter(c => isAccountAllowed(accIds, c.accountId));
+  // PII access log
+  const scope = getScope(req);
+  const piiContacts = visible.filter(c => !c.deletedAt);
+  for (const c of piiContacts) {
+    await logPiiAccess({
+      tenantId: scope.tenantId,
+      actorUserId: scope.user.id,
+      entityType: 'contact',
+      entityId: c.id,
+      fields: ['name', 'email', 'phone'],
+    }).catch(() => undefined);
+  }
+  res.json(visible);
 });
 
 // ── DEALS ──
@@ -2494,6 +2517,190 @@ router.post('/audit/manual', async (req, res) => {
   const b = req.body as { entityType: string; entityId: string; action: string; summary: string };
   await writeAudit(b);
   res.status(201).json({ ok: true });
+});
+
+// ── DSGVO / GDPR ──
+function requireAdmin(req: Request, res: Response): boolean {
+  const scope = getScope(req);
+  if (!scope.tenantWide) {
+    res.status(403).json({ error: 'admin rights required' });
+    return false;
+  }
+  return true;
+}
+
+// Search subjects (contacts) within tenant — name/email prefix search.
+router.get('/gdpr/subjects', async (req, res) => {
+  if (!requireAdmin(req, res)) return;
+  const scope = getScope(req);
+  const q = String(req.query.query ?? '').toLowerCase().trim();
+  const type = String(req.query.subjectType ?? 'contact');
+  if (type !== 'contact') {
+    res.status(400).json({ error: 'unsupported subjectType' });
+    return;
+  }
+  const accIds = await allowedAccountIds(req);
+  const list = await db.select().from(contactsTable);
+  const filtered = list.filter(c =>
+    accIds.has(c.accountId) &&
+    (q.length === 0 || c.name.toLowerCase().includes(q) || c.email.toLowerCase().includes(q))
+  ).slice(0, 50);
+  res.json({
+    tenantId: scope.tenantId,
+    subjectType: type,
+    results: filtered.map(c => ({
+      id: c.id,
+      accountId: c.accountId,
+      name: c.name,
+      email: c.email,
+      deletedAt: iso(c.deletedAt),
+      pseudonymizedAt: iso(c.pseudonymizedAt),
+    })),
+  });
+});
+
+router.get('/gdpr/export', async (req, res) => {
+  if (!requireAdmin(req, res)) return;
+  const scope = getScope(req);
+  const subjectType = String(req.query.subjectType ?? 'contact');
+  const subjectId = String(req.query.subjectId ?? '');
+  if (subjectType !== 'contact' || !subjectId) {
+    res.status(400).json({ error: 'subjectType=contact and subjectId are required' });
+    return;
+  }
+  // Scope check: contact must belong to an allowed account in tenant.
+  const [c] = await db.select().from(contactsTable).where(eq(contactsTable.id, subjectId));
+  if (!c) { res.status(404).json({ error: 'not found' }); return; }
+  const accIds = await allowedAccountIds(req);
+  if (!accIds.has(c.accountId)) { res.status(403).json({ error: 'forbidden' }); return; }
+  const ok = await exportSubjectZip(res, scope.tenantId, 'contact', subjectId);
+  if (!ok && !res.headersSent) {
+    res.status(404).json({ error: 'not found' });
+    return;
+  }
+  await writeAudit({
+    entityType: 'contact',
+    entityId: subjectId,
+    action: 'gdpr_export',
+    summary: `DSGVO Export erstellt durch ${scope.user.name}`,
+  }).catch(() => undefined);
+});
+
+router.post('/gdpr/forget', async (req, res) => {
+  if (!requireAdmin(req, res)) return;
+  const scope = getScope(req);
+  const { subjectType, subjectId, reason } = (req.body ?? {}) as {
+    subjectType?: string; subjectId?: string; reason?: string;
+  };
+  if (subjectType !== 'contact' || !subjectId) {
+    res.status(400).json({ error: 'subjectType=contact and subjectId are required' });
+    return;
+  }
+  const [c] = await db.select().from(contactsTable).where(eq(contactsTable.id, subjectId));
+  if (!c) { res.status(404).json({ error: 'not found' }); return; }
+  const accIds = await allowedAccountIds(req);
+  if (!accIds.has(c.accountId)) { res.status(403).json({ error: 'forbidden' }); return; }
+  const result = await forgetSubject(scope.tenantId, 'contact', subjectId, scope.user.name, reason);
+  res.json(result);
+});
+
+router.get('/gdpr/access-log', async (req, res) => {
+  if (!requireAdmin(req, res)) return;
+  const scope = getScope(req);
+  const entityType = req.query.entityType ? String(req.query.entityType) : null;
+  const entityId = req.query.entityId ? String(req.query.entityId) : null;
+  const filters = [eq(accessLogTable.tenantId, scope.tenantId)];
+  if (entityType) filters.push(eq(accessLogTable.entityType, entityType));
+  if (entityId) filters.push(sql`${accessLogTable.entityId} ILIKE ${'%' + entityId + '%'}`);
+  const rows = await db.select().from(accessLogTable)
+    .where(filters.length === 1 ? filters[0] : and(...filters))
+    .orderBy(desc(accessLogTable.at))
+    .limit(200);
+  const userMap = await getUserMap();
+  res.json(rows.map(r => ({
+    id: r.id,
+    at: iso(r.at),
+    actorUserId: r.actorUserId,
+    actorName: userMap.get(r.actorUserId)?.name ?? r.actorUserId,
+    entityType: r.entityType,
+    entityId: r.entityId,
+    field: r.field,
+    action: r.action,
+  })));
+});
+
+router.get('/gdpr/deletion-log', async (req, res) => {
+  if (!requireAdmin(req, res)) return;
+  const scope = getScope(req);
+  const rows = await db.select().from(subjectsDeletionLogTable)
+    .where(eq(subjectsDeletionLogTable.tenantId, scope.tenantId))
+    .orderBy(desc(subjectsDeletionLogTable.requestedAt))
+    .limit(200);
+  res.json(rows.map(r => ({
+    id: r.id,
+    subjectType: r.subjectType,
+    subjectId: r.subjectId,
+    requestedBy: r.requestedBy,
+    reason: r.reason,
+    status: r.status,
+    requestedAt: iso(r.requestedAt),
+    completedAt: iso(r.completedAt),
+  })));
+});
+
+router.post('/gdpr/retention/run', async (req, res) => {
+  if (!requireAdmin(req, res)) return;
+  const scope = getScope(req);
+  const result = await runRetentionSweep();
+  await writeAudit({
+    entityType: 'gdpr',
+    entityId: scope.tenantId,
+    action: 'retention.run',
+    actor: scope.user.name,
+    summary: 'GDPR Retention-Lauf manuell ausgeführt',
+    after: result.applied,
+  });
+  res.json(result);
+});
+
+router.get('/gdpr/retention-policy', async (req, res) => {
+  if (!requireAdmin(req, res)) return;
+  const scope = getScope(req);
+  const [t] = await db.select().from(tenantsTable).where(eq(tenantsTable.id, scope.tenantId));
+  res.json({ tenantId: scope.tenantId, policy: t?.retentionPolicy ?? {} });
+});
+
+router.patch('/gdpr/retention-policy', async (req, res) => {
+  if (!requireAdmin(req, res)) return;
+  const scope = getScope(req);
+  const body = (req.body ?? {}) as Record<string, unknown>;
+  const [tRow] = await db.select().from(tenantsTable).where(eq(tenantsTable.id, scope.tenantId));
+  const current: Record<string, number> = { ...(tRow?.retentionPolicy ?? {}) };
+  const allowed = ['contactInactiveDays', 'letterRespondedDays', 'auditLogDays', 'accessLogDays'] as const;
+  // Merge semantics: only update keys that appear in the body.
+  //   - number > 0  => set
+  //   - null / 0    => remove (explicit clear)
+  //   - missing     => keep existing
+  for (const k of allowed) {
+    if (!(k in body)) continue;
+    const v = body[k];
+    if (v === null || v === 0) {
+      delete current[k];
+    } else if (typeof v === 'number' && v > 0) {
+      current[k] = v;
+    }
+  }
+  await db.update(tenantsTable).set({ retentionPolicy: current }).where(eq(tenantsTable.id, scope.tenantId));
+  await writeAudit({
+    entityType: 'gdpr',
+    entityId: scope.tenantId,
+    action: 'retention.policy.update',
+    actor: scope.user.name,
+    summary: 'GDPR Retention-Policy aktualisiert',
+    before: tRow?.retentionPolicy ?? {},
+    after: current,
+  });
+  res.json({ tenantId: scope.tenantId, policy: current });
 });
 
 export default router;

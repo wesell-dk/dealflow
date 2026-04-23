@@ -1345,6 +1345,129 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/OrderConfirmationDetail" }
 
+  /gdpr/subjects:
+    get:
+      operationId: searchGdprSubjects
+      tags: [gdpr]
+      parameters:
+        - in: query
+          name: subjectType
+          schema: { type: string, enum: [contact] }
+        - in: query
+          name: query
+          schema: { type: string }
+      responses:
+        "200":
+          description: ok
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/GdprSubjectSearch" }
+
+  /gdpr/export:
+    get:
+      operationId: exportGdprSubject
+      tags: [gdpr]
+      parameters:
+        - in: query
+          name: subjectType
+          required: true
+          schema: { type: string, enum: [contact] }
+        - in: query
+          name: subjectId
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: ZIP archive with JSON/CSV of all linked data
+          content:
+            application/zip:
+              schema: { type: string, format: binary }
+
+  /gdpr/forget:
+    post:
+      operationId: forgetGdprSubject
+      tags: [gdpr]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/GdprForgetRequest" }
+      responses:
+        "200":
+          description: ok
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/GdprForgetResult" }
+
+  /gdpr/access-log:
+    get:
+      operationId: listGdprAccessLog
+      tags: [gdpr]
+      parameters:
+        - in: query
+          name: entityType
+          schema: { type: string }
+        - in: query
+          name: entityId
+          schema: { type: string }
+      responses:
+        "200":
+          description: ok
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/GdprAccessLogEntry" }
+
+  /gdpr/deletion-log:
+    get:
+      operationId: listGdprDeletionLog
+      tags: [gdpr]
+      responses:
+        "200":
+          description: ok
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/GdprDeletionLogEntry" }
+
+  /gdpr/retention/run:
+    post:
+      operationId: runGdprRetention
+      tags: [gdpr]
+      responses:
+        "200":
+          description: ok
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/GdprRetentionResult" }
+
+  /gdpr/retention-policy:
+    get:
+      operationId: getGdprRetentionPolicy
+      tags: [gdpr]
+      responses:
+        "200":
+          description: ok
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/GdprRetentionPolicyResponse" }
+    patch:
+      operationId: updateGdprRetentionPolicy
+      tags: [gdpr]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/GdprRetentionPolicy" }
+      responses:
+        "200":
+          description: ok
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/GdprRetentionPolicyResponse" }
+
 components:
   schemas:
 
@@ -2508,3 +2631,95 @@ components:
           type: ["string", "null"]
         criticalNotes:
           type: ["string", "null"]
+
+    # ── GDPR / DSGVO ──
+    GdprSubjectSearch:
+      type: object
+      required: [tenantId, subjectType, results]
+      properties:
+        tenantId: { type: string }
+        subjectType: { type: string }
+        results:
+          type: array
+          items:
+            type: object
+            required: [id, accountId, name, email]
+            properties:
+              id: { type: string }
+              accountId: { type: string }
+              name: { type: string }
+              email: { type: string }
+              deletedAt:
+                type: ["string", "null"]
+                format: date-time
+              pseudonymizedAt:
+                type: ["string", "null"]
+                format: date-time
+
+    GdprForgetRequest:
+      type: object
+      required: [subjectType, subjectId]
+      properties:
+        subjectType: { type: string, enum: [contact] }
+        subjectId: { type: string }
+        reason:
+          type: ["string", "null"]
+
+    GdprForgetResult:
+      type: object
+      required: [ok]
+      properties:
+        ok: { type: boolean }
+        alreadyDeleted: { type: boolean }
+
+    GdprAccessLogEntry:
+      type: object
+      required: [id, at, actorUserId, actorName, entityType, entityId, field, action]
+      properties:
+        id: { type: string }
+        at: { type: string, format: date-time }
+        actorUserId: { type: string }
+        actorName: { type: string }
+        entityType: { type: string }
+        entityId: { type: string }
+        field: { type: string }
+        action: { type: string }
+
+    GdprDeletionLogEntry:
+      type: object
+      required: [id, subjectType, subjectId, requestedBy, status, requestedAt]
+      properties:
+        id: { type: string }
+        subjectType: { type: string }
+        subjectId: { type: string }
+        requestedBy: { type: string }
+        reason:
+          type: ["string", "null"]
+        status: { type: string }
+        requestedAt: { type: string, format: date-time }
+        completedAt:
+          type: ["string", "null"]
+          format: date-time
+
+    GdprRetentionPolicy:
+      type: object
+      properties:
+        contactInactiveDays: { type: number }
+        letterRespondedDays: { type: number }
+        auditLogDays: { type: number }
+        accessLogDays: { type: number }
+
+    GdprRetentionPolicyResponse:
+      type: object
+      required: [tenantId, policy]
+      properties:
+        tenantId: { type: string }
+        policy: { $ref: "#/components/schemas/GdprRetentionPolicy" }
+
+    GdprRetentionResult:
+      type: object
+      required: [applied]
+      properties:
+        applied:
+          type: object
+          additionalProperties: { type: number }

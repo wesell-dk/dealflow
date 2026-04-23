@@ -280,7 +280,42 @@
       "subtitle": "Manage tenant settings, companies and users.",
       "tenantConfig": "Tenant Configuration",
       "companies": "Companies",
-      "legalEntity": "Legal Entity"
+      "legalEntity": "Legal Entity",
+      "gdpr": {
+        "title": "GDPR — Data Subject Rights",
+        "subtitle": "Export data, request deletion, review access log and retention rules.",
+        "searchPlaceholder": "Search name or email…",
+        "search": "Search",
+        "noResults": "No matches.",
+        "export": "Export",
+        "forget": "Request deletion",
+        "viewAccessLog": "Access log",
+        "forgetConfirm": "Pseudonymize this contact? This action cannot be undone.",
+        "forgetDone": "Contact pseudonymized.",
+        "exportDone": "Export downloaded.",
+        "deletedBadge": "Deleted",
+        "deletionLog": "Deletion log",
+        "accessLog": "Access log",
+        "accessLogEmpty": "No recorded accesses yet.",
+        "retention": "Retention rules (days)",
+        "retentionSaved": "Retention rules saved.",
+        "retentionRun": "Run sweep now",
+        "retentionRunDone": "Retention sweep executed.",
+        "fields": {
+          "contactInactiveDays": "Inactive contacts",
+          "letterRespondedDays": "Answered price letters",
+          "auditLogDays": "Audit log",
+          "accessLogDays": "Access log"
+        },
+        "colAt": "Timestamp",
+        "colActor": "User",
+        "colField": "Field",
+        "colEntity": "Entity",
+        "colSubject": "Subject",
+        "colRequestedBy": "Requested by",
+        "colReason": "Reason",
+        "colStatus": "Status"
+      }
     }
   },
   "helpBot": {

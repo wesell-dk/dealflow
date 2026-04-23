@@ -973,6 +973,84 @@ export interface OrderConfirmationHandoverInput {
   criticalNotes?: string | null;
 }
 
+export type GdprSubjectSearchResultsItem = {
+  id: string;
+  accountId: string;
+  name: string;
+  email: string;
+  /** @nullable */
+  deletedAt?: string | null;
+  /** @nullable */
+  pseudonymizedAt?: string | null;
+};
+
+export interface GdprSubjectSearch {
+  tenantId: string;
+  subjectType: string;
+  results: GdprSubjectSearchResultsItem[];
+}
+
+export type GdprForgetRequestSubjectType =
+  (typeof GdprForgetRequestSubjectType)[keyof typeof GdprForgetRequestSubjectType];
+
+export const GdprForgetRequestSubjectType = {
+  contact: "contact",
+} as const;
+
+export interface GdprForgetRequest {
+  subjectType: GdprForgetRequestSubjectType;
+  subjectId: string;
+  /** @nullable */
+  reason?: string | null;
+}
+
+export interface GdprForgetResult {
+  ok: boolean;
+  alreadyDeleted?: boolean;
+}
+
+export interface GdprAccessLogEntry {
+  id: string;
+  at: string;
+  actorUserId: string;
+  actorName: string;
+  entityType: string;
+  entityId: string;
+  field: string;
+  action: string;
+}
+
+export interface GdprDeletionLogEntry {
+  id: string;
+  subjectType: string;
+  subjectId: string;
+  requestedBy: string;
+  /** @nullable */
+  reason?: string | null;
+  status: string;
+  requestedAt: string;
+  /** @nullable */
+  completedAt?: string | null;
+}
+
+export interface GdprRetentionPolicy {
+  contactInactiveDays?: number;
+  letterRespondedDays?: number;
+  auditLogDays?: number;
+  accessLogDays?: number;
+}
+
+export interface GdprRetentionPolicyResponse {
+  tenantId: string;
+  policy: GdprRetentionPolicy;
+}
+
+export type GdprRetentionResultApplied = { [key: string]: number };
+
+export interface GdprRetentionResult {
+  applied: GdprRetentionResultApplied;
+}
+
 export type ListContactsParams = {
   accountId?: string;
 };
@@ -1054,4 +1132,33 @@ export type ResolvePriceParams = {
 
 export type ListOrderConfirmationsParams = {
   status?: string;
+};
+
+export type SearchGdprSubjectsParams = {
+  subjectType?: SearchGdprSubjectsSubjectType;
+  query?: string;
+};
+
+export type SearchGdprSubjectsSubjectType =
+  (typeof SearchGdprSubjectsSubjectType)[keyof typeof SearchGdprSubjectsSubjectType];
+
+export const SearchGdprSubjectsSubjectType = {
+  contact: "contact",
+} as const;
+
+export type ExportGdprSubjectParams = {
+  subjectType: ExportGdprSubjectSubjectType;
+  subjectId: string;
+};
+
+export type ExportGdprSubjectSubjectType =
+  (typeof ExportGdprSubjectSubjectType)[keyof typeof ExportGdprSubjectSubjectType];
+
+export const ExportGdprSubjectSubjectType = {
+  contact: "contact",
+} as const;
+
+export type ListGdprAccessLogParams = {
+  entityType?: string;
+  entityId?: string;
 };
