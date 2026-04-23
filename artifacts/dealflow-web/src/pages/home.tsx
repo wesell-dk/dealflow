@@ -103,7 +103,7 @@ export default function Home() {
               {insights?.slice(0, 3).map(insight => (
                 <div key={insight.id} className="p-3 border rounded-md">
                   <div className="flex items-center gap-2 mb-1">
-                    <Badge variant={insight.severity === 'high' ? 'destructive' : 'secondary'}>{insight.severity}</Badge>
+                    <Badge variant={insight.severity === 'high' ? 'destructive' : 'secondary'}>{t(`common.severity${insight.severity.charAt(0).toUpperCase()}${insight.severity.slice(1)}`)}</Badge>
                     <span className="font-medium text-sm">{insight.title}</span>
                   </div>
                   <p className="text-sm text-muted-foreground">{insight.summary}</p>

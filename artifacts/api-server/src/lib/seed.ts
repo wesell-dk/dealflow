@@ -406,45 +406,45 @@ export async function seedIfEmpty(): Promise<void> {
 
   // Copilot
   await db.insert(copilotInsightsTable).values([
-    { id: "ci_001", kind: "risk",        title: "Vorwerk discount risk",      summary: "12% discount exceeds median 7.8% won deals in this segment.", severity: "high",   dealId: "dl_001", suggestedAction: "Counter with 9% + 24-month commit." },
-    { id: "ci_002", kind: "next_action", title: "Schedule technical workshop", summary: "Vorwerk add-on stuck 9 days; champion requested workshop.",   severity: "medium", dealId: "dl_002", suggestedAction: "Send 3 workshop slot options today." },
-    { id: "ci_003", kind: "risk",        title: "Nordstern legal stalled",     summary: "Liability cap waiver pending 3 days; competitor in 2nd round.", severity: "high",   dealId: "dl_003", suggestedAction: "Escalate to Sara Lindqvist." },
-    { id: "ci_004", kind: "opportunity", title: "Castell renewal early window", summary: "Castell health score 88; ideal moment to expand by 22%.",     severity: "low",    dealId: "dl_005", suggestedAction: "Pitch Pro tier upgrade." },
-    { id: "ci_005", kind: "next_action", title: "Atlas CAPEX approval delay",   summary: "Customer CAPEX cycle ends in 14 days.",                       severity: "medium", dealId: "dl_007", suggestedAction: "Provide phased payment proposal." },
-    { id: "ci_006", kind: "risk",        title: "Apex ROI analysis open",       summary: "30% probability deal; ROI deck not yet shared.",              severity: "medium", dealId: "dl_010", suggestedAction: "Share ROI calculator within 48h." },
+    { id: "ci_001", kind: "risk",        title: "Vorwerk Rabattrisiko",                 summary: "12% Rabatt liegen über dem Median von 7,8% gewonnener Deals in diesem Segment.", severity: "high",   dealId: "dl_001", suggestedAction: "Gegenangebot 9% + 24-Monats-Bindung." },
+    { id: "ci_002", kind: "next_action", title: "Technischen Workshop planen",          summary: "Vorwerk-Add-on hängt seit 9 Tagen; Champion hat einen Workshop angefragt.",       severity: "medium", dealId: "dl_002", suggestedAction: "3 Workshop-Slot-Vorschläge heute senden." },
+    { id: "ci_003", kind: "risk",        title: "Nordstern Legal blockiert",            summary: "Haftungs-Cap-Verzicht seit 3 Tagen offen; Wettbewerber in 2. Runde.",              severity: "high",   dealId: "dl_003", suggestedAction: "An Sara Lindqvist eskalieren." },
+    { id: "ci_004", kind: "opportunity", title: "Castell Renewal-Fenster offen",        summary: "Castell Health-Score 88; idealer Moment für 22% Expansion.",                       severity: "low",    dealId: "dl_005", suggestedAction: "Pro-Tier-Upgrade pitchen." },
+    { id: "ci_005", kind: "next_action", title: "Atlas CAPEX-Freigabe verzögert sich",  summary: "Kunden-CAPEX-Zyklus endet in 14 Tagen.",                                          severity: "medium", dealId: "dl_007", suggestedAction: "Gestaffeltes Zahlungsmodell vorschlagen." },
+    { id: "ci_006", kind: "risk",        title: "Apex ROI-Analyse offen",               summary: "30% Abschluss-Wahrscheinlichkeit; ROI-Deck noch nicht geteilt.",                  severity: "medium", dealId: "dl_010", suggestedAction: "ROI-Rechner innerhalb 48h teilen." },
   ]);
 
   await db.insert(copilotThreadsTable).values([
-    { id: "ct_th_001", title: "How should I approach Vorwerk's 12% ask?", scope: "deal:dl_001", lastMessage: "Suggest 9% + multi-year. Margin stays above 30% floor.", messageCount: 6 },
-    { id: "ct_th_002", title: "Draft renewal email for Castell",          scope: "deal:dl_005", lastMessage: "Drafted in your tone. Want me to add a Pro tier upsell paragraph?", messageCount: 4 },
-    { id: "ct_th_003", title: "Compare won vs. lost deals this quarter",  scope: "global",       lastMessage: "Discount discipline is the strongest predictor (R² 0.71).", messageCount: 9 },
-    { id: "ct_th_004", title: "Summarize Nordstern legal redlines",       scope: "deal:dl_003", lastMessage: "4 material changes; 2 require Deal Desk + Legal.", messageCount: 5 },
+    { id: "ct_th_001", title: "Wie gehe ich mit Vorwerks 12%-Forderung um?",    scope: "deal:dl_001", lastMessage: "Vorschlag 9% + Mehrjahres-Bindung. Marge bleibt über 30% Floor.",                messageCount: 6 },
+    { id: "ct_th_002", title: "Renewal-Mail für Castell entwerfen",             scope: "deal:dl_005", lastMessage: "In deinem Stil entworfen. Soll ich einen Pro-Tier-Upsell-Absatz ergänzen?",     messageCount: 4 },
+    { id: "ct_th_003", title: "Gewonnene vs. verlorene Deals dieses Quartal",  scope: "global",       lastMessage: "Rabattdisziplin ist der stärkste Prädiktor (R² 0,71).",                          messageCount: 9 },
+    { id: "ct_th_004", title: "Nordstern Legal-Redlines zusammenfassen",        scope: "deal:dl_003", lastMessage: "4 materielle Änderungen; 2 erfordern Deal Desk + Legal.",                        messageCount: 5 },
   ]);
 
   // Copilot messages for existing threads
   await db.insert(copilotMessagesTable).values([
-    { id: "cm_001", threadId: "ct_th_001", role: "user",      content: "Vorwerk pushes for 12% discount. What is reasonable?" },
-    { id: "cm_002", threadId: "ct_th_001", role: "assistant", content: "Median won deals in DACH segment sit at 7.8%. Counter with 9% paired with a 24-month commitment to keep margin >30%." },
-    { id: "cm_003", threadId: "ct_th_001", role: "user",      content: "What if they reject the term extension?" },
-    { id: "cm_004", threadId: "ct_th_001", role: "assistant", content: "Offer 8% with quarterly volume rebate triggered at 110% of forecast. Net effect equal, optics better." },
-    { id: "cm_005", threadId: "ct_th_002", role: "user",      content: "Draft a renewal email for Castell." },
-    { id: "cm_006", threadId: "ct_th_002", role: "assistant", content: "Drafted in your tone. Want me to add a Pro tier upsell paragraph?" },
-    { id: "cm_007", threadId: "ct_th_003", role: "user",      content: "Compare won vs. lost deals this quarter." },
-    { id: "cm_008", threadId: "ct_th_003", role: "assistant", content: "Discount discipline (R² 0.71) is the strongest predictor. Lost deals averaged 13.4% discount vs 7.8% on won." },
-    { id: "cm_009", threadId: "ct_th_004", role: "user",      content: "Summarize Nordstern legal redlines." },
-    { id: "cm_010", threadId: "ct_th_004", role: "assistant", content: "4 material changes; liability cap waiver and IP indemnity require Deal Desk + Legal sign-off." },
+    { id: "cm_001", threadId: "ct_th_001", role: "user",      content: "Vorwerk fordert 12% Rabatt. Was ist vertretbar?" },
+    { id: "cm_002", threadId: "ct_th_001", role: "assistant", content: "Median gewonnener Deals im DACH-Segment liegt bei 7,8%. Gegenangebot mit 9% bei 24-monatiger Bindung hält die Marge über 30%." },
+    { id: "cm_003", threadId: "ct_th_001", role: "user",      content: "Was, wenn sie die Laufzeitverlängerung ablehnen?" },
+    { id: "cm_004", threadId: "ct_th_001", role: "assistant", content: "Biete 8% mit Quartals-Mengen-Rabatt ab 110% Forecast. Netto-Effekt gleich, Optik besser." },
+    { id: "cm_005", threadId: "ct_th_002", role: "user",      content: "Entwirf eine Renewal-Mail für Castell." },
+    { id: "cm_006", threadId: "ct_th_002", role: "assistant", content: "In deinem Stil entworfen. Soll ich einen Pro-Tier-Upsell-Absatz ergänzen?" },
+    { id: "cm_007", threadId: "ct_th_003", role: "user",      content: "Vergleiche gewonnene vs. verlorene Deals dieses Quartal." },
+    { id: "cm_008", threadId: "ct_th_003", role: "assistant", content: "Rabattdisziplin (R² 0,71) ist der stärkste Prädiktor. Verlorene Deals lagen im Schnitt bei 13,4% Rabatt vs. 7,8% bei gewonnenen." },
+    { id: "cm_009", threadId: "ct_th_004", role: "user",      content: "Fasse die Nordstern Legal-Redlines zusammen." },
+    { id: "cm_010", threadId: "ct_th_004", role: "assistant", content: "4 materielle Änderungen; Haftungs-Cap-Verzicht und IP-Freistellung erfordern Deal Desk + Legal-Freigabe." },
   ]);
 
   // Audit log
   await db.insert(auditLogTable).values([
-    { id: "au_001", entityType: "deal",     entityId: "dl_001", action: "discount_changed",  actor: "Anna Brandt",      summary: "Discount raised from 8% to 12% on Vorwerk renewal.",          beforeJson: '{"discount":8}',  afterJson: '{"discount":12}', at: daysFromNow(-2) },
-    { id: "au_002", entityType: "contract", entityId: "co_001", action: "clause_swapped",    actor: "Sara Lindqvist",   summary: "Liability cap clause swapped to standard variant.",           beforeJson: null, afterJson: null, at: daysFromNow(-3) },
-    { id: "au_003", entityType: "price",    entityId: "pr_001", action: "price_overridden",  actor: "Priya Raman",      summary: "Override on PRO-200 (-4.5%) for Atlas account.",              beforeJson: '{"price":1280}', afterJson: '{"price":1222}', at: daysFromNow(-5) },
-    { id: "au_004", entityType: "deal",     entityId: "dl_007", action: "stage_changed",     actor: "Marcel Voss",      summary: "Atlas Energy moved Negotiation → Closing.",                  beforeJson: null, afterJson: null, at: daysFromNow(-1) },
-    { id: "au_005", entityType: "letter",   entityId: "pl_001", action: "letter_sent",       actor: "Priya Raman",      summary: "Hardware uplift letter sent to 14 accounts.",                 beforeJson: null, afterJson: null, at: daysFromNow(-6) },
-    { id: "au_006", entityType: "deal",     entityId: "dl_003", action: "comment_added",     actor: "James Whitfield",  summary: "Champion confirmed budget approval received.",                beforeJson: null, afterJson: null, at: daysFromNow(-4) },
-    { id: "au_007", entityType: "contract", entityId: "co_002", action: "version_published", actor: "Sara Lindqvist",   summary: "Northwind v2 published with phased rollout option.",          beforeJson: null, afterJson: null, at: daysFromNow(-2) },
-    { id: "au_008", entityType: "order",    entityId: "oc_001", action: "handover_started",  actor: "Anna Brandt",      summary: "Handover checks initiated for OC-2026-001.",                  beforeJson: null, afterJson: null, at: daysFromNow(-1) },
+    { id: "au_001", entityType: "deal",     entityId: "dl_001", action: "discount_changed",  actor: "Anna Brandt",      summary: "Rabatt auf Vorwerk-Renewal von 8% auf 12% angehoben.",          beforeJson: '{"discount":8}',  afterJson: '{"discount":12}', at: daysFromNow(-2) },
+    { id: "au_002", entityType: "contract", entityId: "co_001", action: "clause_swapped",    actor: "Sara Lindqvist",   summary: "Haftungs-Cap-Klausel auf Standard-Variante umgestellt.",          beforeJson: null, afterJson: null, at: daysFromNow(-3) },
+    { id: "au_003", entityType: "price",    entityId: "pr_001", action: "price_overridden",  actor: "Priya Raman",      summary: "Override auf PRO-200 (-4,5%) für Atlas-Account.",                 beforeJson: '{"price":1280}', afterJson: '{"price":1222}', at: daysFromNow(-5) },
+    { id: "au_004", entityType: "deal",     entityId: "dl_007", action: "stage_changed",     actor: "Marcel Voss",      summary: "Atlas Energy von Verhandlung → Closing verschoben.",              beforeJson: null, afterJson: null, at: daysFromNow(-1) },
+    { id: "au_005", entityType: "letter",   entityId: "pl_001", action: "letter_sent",       actor: "Priya Raman",      summary: "Hardware-Uplift-Schreiben an 14 Kunden versendet.",               beforeJson: null, afterJson: null, at: daysFromNow(-6) },
+    { id: "au_006", entityType: "deal",     entityId: "dl_003", action: "comment_added",     actor: "James Whitfield",  summary: "Champion bestätigte erhaltene Budget-Freigabe.",                  beforeJson: null, afterJson: null, at: daysFromNow(-4) },
+    { id: "au_007", entityType: "contract", entityId: "co_002", action: "version_published", actor: "Sara Lindqvist",   summary: "Northwind v2 mit Stufen-Rollout-Option veröffentlicht.",          beforeJson: null, afterJson: null, at: daysFromNow(-2) },
+    { id: "au_008", entityType: "order",    entityId: "oc_001", action: "handover_started",  actor: "Anna Brandt",      summary: "Handover-Prüfungen für OC-2026-001 gestartet.",                   beforeJson: null, afterJson: null, at: daysFromNow(-1) },
   ]);
 
   // Order confirmations
