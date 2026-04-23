@@ -1137,6 +1137,7 @@ async function maybeCompletePackageAndCreateOC(pkg: PackageRow, signers: SignerR
     number: `OC-${year}-${seq}`, status: 'checks_pending', readinessScore: 20,
     totalAmount: String(num(deal?.value ?? 0)), currency: deal?.currency ?? 'EUR',
     expectedDelivery: null, handoverAt: null,
+    salesOwnerId: deal?.ownerId ?? null,
   });
   await db.insert(orderConfirmationChecksTable).values({
     id: `ocx_${randomUUID().slice(0, 8)}`,
