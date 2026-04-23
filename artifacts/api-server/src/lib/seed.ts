@@ -65,23 +65,49 @@ export async function seedIfEmpty(): Promise<void> {
 
   // Brand-specific default clause variants (familyId -> variantId).
   // helix_pro = premium/strict; helix_core = standard; helix_uk = moderate; helix_velocity = bold/softer.
+  // Tiny inline SVG logos (data URIs) so PDF rendering works without external network.
+  const logoDataUri = (label: string, color: string) => {
+    const svg = `<svg xmlns='http://www.w3.org/2000/svg' width='220' height='72' viewBox='0 0 220 72'>`
+      + `<rect x='0' y='0' width='72' height='72' rx='14' fill='${color}'/>`
+      + `<text x='36' y='47' font-family='Helvetica,Arial' font-size='34' font-weight='700' fill='white' text-anchor='middle'>H</text>`
+      + `<text x='88' y='36' font-family='Helvetica,Arial' font-size='20' font-weight='700' fill='${color}'>Helix</text>`
+      + `<text x='88' y='58' font-family='Helvetica,Arial' font-size='14' fill='#6b7280'>${label}</text>`
+      + `</svg>`;
+    return `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`;
+  };
   const brands = [
     { id: "br_helix", companyId: "co_helix", name: "Helix Core", color: "#2D6CDF", voice: "precise",
+      logoUrl: logoDataUri("Core", "#2D6CDF"),
+      primaryColor: "#2D6CDF", secondaryColor: "#1E3A8A", tone: "precise",
+      legalEntityName: "Helix Industrial GmbH",
+      addressLine: "Lyoner Straße 14, 60528 Frankfurt am Main, Deutschland",
       defaultClauseVariants: {
         cf_liab: "cv_liab_3", cf_term: "cv_term_3", cf_data: "cv_data_3",
         cf_pay: "cv_pay_3", cf_sla: "cv_sla_3", cf_ip: "cv_ip_3",
       } },
     { id: "br_helix_pro", companyId: "co_helix", name: "Helix Pro", color: "#0F766E", voice: "premium",
+      logoUrl: logoDataUri("Pro", "#0F766E"),
+      primaryColor: "#0F766E", secondaryColor: "#064E3B", tone: "premium",
+      legalEntityName: "Helix Industrial GmbH · Pro Division",
+      addressLine: "Lyoner Straße 14, 60528 Frankfurt am Main, Deutschland",
       defaultClauseVariants: {
         cf_liab: "cv_liab_4", cf_term: "cv_term_4", cf_data: "cv_data_4",
         cf_pay: "cv_pay_4", cf_sla: "cv_sla_4", cf_ip: "cv_ip_4",
       } },
     { id: "br_helix_uk", companyId: "co_helix_uk", name: "Helix UK", color: "#9333EA", voice: "concise",
+      logoUrl: logoDataUri("UK", "#9333EA"),
+      primaryColor: "#9333EA", secondaryColor: "#4C1D95", tone: "concise",
+      legalEntityName: "Helix Industrial Ltd.",
+      addressLine: "5 Merchant Square, London W2 1AY, United Kingdom",
       defaultClauseVariants: {
         cf_liab: "cv_liab_2", cf_term: "cv_term_2", cf_data: "cv_data_2",
         cf_pay: "cv_pay_2", cf_sla: "cv_sla_2", cf_ip: "cv_ip_2",
       } },
     { id: "br_helix_us", companyId: "co_helix_us", name: "Helix Velocity", color: "#DC2626", voice: "bold",
+      logoUrl: logoDataUri("Velocity", "#DC2626"),
+      primaryColor: "#DC2626", secondaryColor: "#7F1D1D", tone: "bold",
+      legalEntityName: "Helix Industrial Inc.",
+      addressLine: "350 Mission Street, San Francisco, CA 94105, USA",
       defaultClauseVariants: {
         cf_liab: "cv_liab_1", cf_term: "cv_term_1", cf_data: "cv_data_1",
         cf_pay: "cv_pay_1", cf_sla: "cv_sla_1", cf_ip: "cv_ip_1",

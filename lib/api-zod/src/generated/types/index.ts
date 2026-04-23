@@ -19,6 +19,7 @@ export * from "./brand";
 export * from "./brandDefaultClauseVariants";
 export * from "./brandDefaultsInput";
 export * from "./brandDefaultsInputDefaults";
+export * from "./brandUpdate";
 export * from "./clauseChangeResult";
 export * from "./clauseDiff";
 export * from "./clauseFamily";

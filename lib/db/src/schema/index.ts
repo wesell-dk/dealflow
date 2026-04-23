@@ -48,6 +48,12 @@ export const brandsTable = pgTable("brands", {
   color: text("color").notNull(),
   voice: text("voice").notNull(),
   defaultClauseVariants: jsonb("default_clause_variants").$type<Record<string, string>>().default({}).notNull(),
+  logoUrl: text("logo_url"),
+  primaryColor: text("primary_color"),
+  secondaryColor: text("secondary_color"),
+  tone: text("tone"),
+  legalEntityName: text("legal_entity_name"),
+  addressLine: text("address_line"),
 });
 
 export const usersTable = pgTable("users", {

@@ -95,6 +95,27 @@ paths:
                 type: array
                 items: { $ref: "#/components/schemas/Brand" }
 
+  /brands/{id}:
+    patch:
+      operationId: updateBrand
+      tags: [clauses]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/BrandUpdate" }
+      responses:
+        "200":
+          description: ok
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Brand" }
+
   /brands/{id}/default-clauses:
     patch:
       operationId: updateBrandDefaultClauses
@@ -372,6 +393,22 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/QuoteDetail" }
 
+  /quotes/{id}/pdf:
+    get:
+      operationId: getQuotePdf
+      tags: [quotes]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: PDF stream
+          content:
+            application/pdf:
+              schema: { type: string, format: binary }
+
   /quotes/{id}/versions:
     post:
       operationId: createQuoteVersion
@@ -537,6 +574,22 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Contract" }
+
+  /contracts/{id}/pdf:
+    get:
+      operationId: getContractPdf
+      tags: [contracts]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: PDF stream
+          content:
+            application/pdf:
+              schema: { type: string, format: binary }
 
   /contracts/{id}:
     get:
@@ -1512,6 +1565,25 @@ components:
           type: object
           additionalProperties: { type: string }
           description: Map familyId → variantId
+        logoUrl: { type: string, nullable: true }
+        primaryColor: { type: string, nullable: true }
+        secondaryColor: { type: string, nullable: true }
+        tone: { type: string, nullable: true, description: "precise | premium | concise | bold" }
+        legalEntityName: { type: string, nullable: true }
+        addressLine: { type: string, nullable: true }
+
+    BrandUpdate:
+      type: object
+      properties:
+        name: { type: string }
+        color: { type: string }
+        voice: { type: string }
+        logoUrl: { type: string, nullable: true }
+        primaryColor: { type: string, nullable: true }
+        secondaryColor: { type: string, nullable: true }
+        tone: { type: string, nullable: true }
+        legalEntityName: { type: string, nullable: true }
+        addressLine: { type: string, nullable: true }
 
     BrandDefaultsInput:
       type: object

@@ -41,6 +41,25 @@ export interface Brand {
   voice: string;
   /** Map familyId → variantId */
   defaultClauseVariants?: BrandDefaultClauseVariants;
+  logoUrl?: string | null;
+  primaryColor?: string | null;
+  secondaryColor?: string | null;
+  /** precise | premium | concise | bold */
+  tone?: string | null;
+  legalEntityName?: string | null;
+  addressLine?: string | null;
+}
+
+export interface BrandUpdate {
+  name?: string;
+  color?: string;
+  voice?: string;
+  logoUrl?: string | null;
+  primaryColor?: string | null;
+  secondaryColor?: string | null;
+  tone?: string | null;
+  legalEntityName?: string | null;
+  addressLine?: string | null;
 }
 
 export type BrandDefaultsInputDefaults = { [key: string]: string };

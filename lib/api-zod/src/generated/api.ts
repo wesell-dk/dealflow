@@ -47,6 +47,12 @@ export const ListBrandsResponseItem = zod.object({
     .record(zod.string(), zod.string())
     .optional()
     .describe("Map familyId → variantId"),
+  logoUrl: zod.string().nullish(),
+  primaryColor: zod.string().nullish(),
+  secondaryColor: zod.string().nullish(),
+  tone: zod.string().nullish().describe("precise | premium | concise | bold"),
+  legalEntityName: zod.string().nullish(),
+  addressLine: zod.string().nullish(),
 });
 export const ListBrandsResponse = zod.array(ListBrandsResponseItem);
 
@@ -60,10 +66,50 @@ export const ListBrandsWithDefaultsResponseItem = zod.object({
     .record(zod.string(), zod.string())
     .optional()
     .describe("Map familyId → variantId"),
+  logoUrl: zod.string().nullish(),
+  primaryColor: zod.string().nullish(),
+  secondaryColor: zod.string().nullish(),
+  tone: zod.string().nullish().describe("precise | premium | concise | bold"),
+  legalEntityName: zod.string().nullish(),
+  addressLine: zod.string().nullish(),
 });
 export const ListBrandsWithDefaultsResponse = zod.array(
   ListBrandsWithDefaultsResponseItem,
 );
+
+export const UpdateBrandParams = zod.object({
+  id: zod.coerce.string(),
+});
+
+export const UpdateBrandBody = zod.object({
+  name: zod.string().optional(),
+  color: zod.string().optional(),
+  voice: zod.string().optional(),
+  logoUrl: zod.string().nullish(),
+  primaryColor: zod.string().nullish(),
+  secondaryColor: zod.string().nullish(),
+  tone: zod.string().nullish(),
+  legalEntityName: zod.string().nullish(),
+  addressLine: zod.string().nullish(),
+});
+
+export const UpdateBrandResponse = zod.object({
+  id: zod.string(),
+  companyId: zod.string(),
+  name: zod.string(),
+  color: zod.string(),
+  voice: zod.string(),
+  defaultClauseVariants: zod
+    .record(zod.string(), zod.string())
+    .optional()
+    .describe("Map familyId → variantId"),
+  logoUrl: zod.string().nullish(),
+  primaryColor: zod.string().nullish(),
+  secondaryColor: zod.string().nullish(),
+  tone: zod.string().nullish().describe("precise | premium | concise | bold"),
+  legalEntityName: zod.string().nullish(),
+  addressLine: zod.string().nullish(),
+});
 
 export const UpdateBrandDefaultClausesParams = zod.object({
   id: zod.coerce.string(),
@@ -83,6 +129,12 @@ export const UpdateBrandDefaultClausesResponse = zod.object({
     .record(zod.string(), zod.string())
     .optional()
     .describe("Map familyId → variantId"),
+  logoUrl: zod.string().nullish(),
+  primaryColor: zod.string().nullish(),
+  secondaryColor: zod.string().nullish(),
+  tone: zod.string().nullish().describe("precise | premium | concise | bold"),
+  legalEntityName: zod.string().nullish(),
+  addressLine: zod.string().nullish(),
 });
 
 export const ListUsersResponseItem = zod.object({
@@ -517,6 +569,10 @@ export const GetQuoteResponse = zod
     }),
   );
 
+export const GetQuotePdfParams = zod.object({
+  id: zod.coerce.string(),
+});
+
 export const CreateQuoteVersionParams = zod.object({
   id: zod.coerce.string(),
 });
@@ -690,6 +746,10 @@ export const CreateContractBody = zod.object({
     .describe(
       "Optional brand whose default clause variants should be applied on creation.",
     ),
+});
+
+export const GetContractPdfParams = zod.object({
+  id: zod.coerce.string(),
 });
 
 export const GetContractParams = zod.object({

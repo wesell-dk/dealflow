@@ -3,6 +3,8 @@ import { useGetQuote } from "@workspace/api-client-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { FileText } from "lucide-react";
 
 export default function Quote() {
   const params = useParams();
@@ -19,7 +21,12 @@ export default function Quote() {
           <h1 className="text-3xl font-bold tracking-tight">Quote {quote.number}</h1>
           <p className="text-muted-foreground mt-1">{quote.dealName}</p>
         </div>
-        <Badge variant="outline">{quote.status}</Badge>
+        <div className="flex items-center gap-2">
+          <Button variant="outline" size="sm" onClick={() => window.open(`/api/quotes/${id}/pdf`, '_blank')}>
+            <FileText className="h-4 w-4 mr-2" /> PDF anzeigen
+          </Button>
+          <Badge variant="outline">{quote.status}</Badge>
+        </div>
       </div>
 
       <div className="grid md:grid-cols-3 gap-6">

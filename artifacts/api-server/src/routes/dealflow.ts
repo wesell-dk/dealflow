@@ -181,16 +181,15 @@ router.get('/orgs/brands', async (req, res) => {
   const scope = getScope(req);
   // Tenant-bound: only brands whose company belongs to the user's tenant.
   const rows = await db
-    .select({
-      id: brandsTable.id, companyId: brandsTable.companyId,
-      name: brandsTable.name, color: brandsTable.color, voice: brandsTable.voice,
-    })
+    .select({ brand: brandsTable })
     .from(brandsTable)
     .innerJoin(companiesTable, eq(companiesTable.id, brandsTable.companyId))
     .where(eq(companiesTable.tenantId, scope.tenantId));
-  if (scope.tenantWide) { res.json(rows); return; }
-  const visibleCompany = new Set<string>(scope.companyIds);
-  res.json(rows.filter(b => visibleCompany.has(b.companyId) || scope.brandIds.includes(b.id)));
+  const brands = rows.map(r => r.brand);
+  const visible = scope.tenantWide
+    ? brands
+    : brands.filter(b => scope.companyIds.includes(b.companyId) || scope.brandIds.includes(b.id));
+  res.json(visible.map(mapBrand));
 });
 router.get('/orgs/users', async (req, res) => {
   const scope = getScope(req);
@@ -494,6 +493,59 @@ router.get('/quotes/:id', async (req, res) => {
   });
 });
 
+router.get('/quotes/:id/pdf', async (req, res) => {
+  const [q] = await db.select().from(quotesTable).where(eq(quotesTable.id, req.params.id));
+  if (!q) { res.status(404).json({ error: 'not found' }); return; }
+  if (!(await gateDeal(req, res, q.dealId))) return;
+  const [d] = await db.select().from(dealsTable).where(eq(dealsTable.id, q.dealId));
+  const versions = await db.select().from(quoteVersionsTable)
+    .where(eq(quoteVersionsTable.quoteId, q.id))
+    .orderBy(desc(quoteVersionsTable.version));
+  const current = versions.find(v => v.version === q.currentVersion) ?? versions[0];
+  const lines = current
+    ? await db.select().from(lineItemsTable).where(eq(lineItemsTable.quoteVersionId, current.id))
+    : [];
+  let brand: typeof brandsTable.$inferSelect | undefined;
+  if (d?.brandId) {
+    const [b] = await db.select().from(brandsTable).where(eq(brandsTable.id, d.brandId));
+    brand = b;
+  }
+  const { renderQuotePdf } = await import('../pdf/quote');
+  const stream = await renderQuotePdf({
+    number: q.number,
+    currency: q.currency,
+    status: q.status,
+    validUntil: String(q.validUntil),
+    dealName: d?.name ?? 'Unknown',
+    version: current?.version ?? 1,
+    totalAmount: num(current?.totalAmount),
+    discountPct: num(current?.discountPct),
+    marginPct: num(current?.marginPct),
+    notes: current?.notes ?? null,
+    lines: lines.map(l => ({
+      name: l.name,
+      description: l.description ?? null,
+      quantity: num(l.quantity),
+      unitPrice: num(l.unitPrice),
+      listPrice: num(l.listPrice),
+      discountPct: num(l.discountPct),
+      total: num(l.total),
+    })),
+    brand: brand ? {
+      name: brand.name,
+      logoUrl: brand.logoUrl ?? null,
+      primaryColor: brand.primaryColor ?? brand.color,
+      secondaryColor: brand.secondaryColor ?? null,
+      legalEntityName: brand.legalEntityName ?? null,
+      addressLine: brand.addressLine ?? null,
+      tone: brand.tone ?? null,
+    } : null,
+  });
+  res.setHeader('Content-Type', 'application/pdf');
+  res.setHeader('Content-Disposition', `inline; filename="quote-${q.number}.pdf"`);
+  stream.pipe(res);
+});
+
 router.post('/quotes/:id/versions', async (req, res) => {
   const b = req.body as { discountPct: number; notes?: string };
   const [q] = await db.select().from(quotesTable).where(eq(quotesTable.id, req.params.id));
@@ -768,6 +820,12 @@ function mapBrand(b: typeof brandsTable.$inferSelect) {
   return {
     id: b.id, companyId: b.companyId, name: b.name, color: b.color, voice: b.voice,
     defaultClauseVariants: b.defaultClauseVariants ?? {},
+    logoUrl: b.logoUrl ?? null,
+    primaryColor: b.primaryColor ?? null,
+    secondaryColor: b.secondaryColor ?? null,
+    tone: b.tone ?? null,
+    legalEntityName: b.legalEntityName ?? null,
+    addressLine: b.addressLine ?? null,
   };
 }
 
@@ -793,6 +851,44 @@ router.get('/brands', async (req, res) => {
     ? brands
     : brands.filter(b => scope.companyIds.includes(b.companyId) || scope.brandIds.includes(b.id));
   res.json(visible.map(mapBrand));
+});
+
+router.patch('/brands/:id', async (req, res) => {
+  if (!requireAdmin(req, res)) return;
+  const scope = getScope(req);
+  const [existing] = await db.select().from(brandsTable).where(eq(brandsTable.id, req.params.id));
+  if (!existing) { res.status(404).json({ error: 'not found' }); return; }
+  const [company] = await db.select().from(companiesTable).where(eq(companiesTable.id, existing.companyId));
+  if (!company || company.tenantId !== scope.tenantId) {
+    res.status(403).json({ error: 'forbidden' }); return;
+  }
+  if (!(await brandVisible(req, existing))) {
+    res.status(403).json({ error: 'forbidden' }); return;
+  }
+  const body = (req.body ?? {}) as Record<string, unknown>;
+  const patch: Partial<typeof brandsTable.$inferInsert> = {};
+  const strFields = ['name', 'color', 'voice', 'logoUrl', 'primaryColor', 'secondaryColor', 'tone', 'legalEntityName', 'addressLine'] as const;
+  for (const k of strFields) {
+    if (!(k in body)) continue;
+    const v = body[k];
+    if (v === null || typeof v === 'string') {
+      (patch as Record<string, unknown>)[k] = v;
+    }
+  }
+  if (Object.keys(patch).length > 0) {
+    await db.update(brandsTable).set(patch).where(eq(brandsTable.id, existing.id));
+  }
+  const [updated] = await db.select().from(brandsTable).where(eq(brandsTable.id, existing.id));
+  await writeAudit({
+    entityType: 'brand',
+    entityId: existing.id,
+    action: 'update',
+    actor: scope.user.name,
+    summary: `Brand "${existing.name}" aktualisiert`,
+    before: existing,
+    after: updated,
+  });
+  res.json(mapBrand(updated!));
 });
 
 router.patch('/brands/:id/default-clauses', async (req, res) => {
@@ -849,6 +945,52 @@ router.get('/contracts/:id', async (req, res) => {
     ...mapContract(c, dealMap.get(c.dealId)?.name ?? 'Unknown', rawClauses),
     clauses,
   });
+});
+
+router.get('/contracts/:id/pdf', async (req, res) => {
+  const [c] = await db.select().from(contractsTable).where(eq(contractsTable.id, req.params.id));
+  if (!c) { res.status(404).json({ error: 'not found' }); return; }
+  if (!(await gateDeal(req, res, c.dealId))) return;
+  const [d] = await db.select().from(dealsTable).where(eq(dealsTable.id, c.dealId));
+  const rawClauses = await db.select().from(contractClausesTable).where(eq(contractClausesTable.contractId, c.id));
+  const variantsAll = await db.select().from(clauseVariantsTable);
+  const vById = new Map(variantsAll.map(v => [v.id, v]));
+  let brand: typeof brandsTable.$inferSelect | undefined;
+  if (d?.brandId) {
+    const [b] = await db.select().from(brandsTable).where(eq(brandsTable.id, d.brandId));
+    brand = b;
+  }
+  const { renderContractPdf } = await import('../pdf/contract');
+  const stream = await renderContractPdf({
+    number: `${c.title} · v${c.version}`,
+    status: c.status,
+    dealName: d?.name ?? 'Unknown',
+    signedAt: null,
+    effectiveFrom: null,
+    effectiveTo: c.validUntil ? (typeof c.validUntil === 'string' ? c.validUntil : null) : null,
+    clauses: rawClauses.map(cl => {
+      const active = cl.activeVariantId ? vById.get(cl.activeVariantId) : undefined;
+      return {
+        family: cl.family,
+        variant: cl.variant,
+        severity: cl.severity,
+        summary: cl.summary,
+        body: active?.body ?? '',
+      };
+    }),
+    brand: brand ? {
+      name: brand.name,
+      logoUrl: brand.logoUrl ?? null,
+      primaryColor: brand.primaryColor ?? brand.color,
+      secondaryColor: brand.secondaryColor ?? null,
+      legalEntityName: brand.legalEntityName ?? null,
+      addressLine: brand.addressLine ?? null,
+      tone: brand.tone ?? null,
+    } : null,
+  });
+  res.setHeader('Content-Type', 'application/pdf');
+  res.setHeader('Content-Disposition', `inline; filename="contract-${c.id}.pdf"`);
+  stream.pipe(res);
 });
 
 router.get('/clause-families', async (_req, res) => {

@@ -149,7 +149,10 @@ export default function Contract() {
             <FileText className="h-8 w-8 text-muted-foreground" />
             <h1 className="text-3xl font-bold tracking-tight">{contract.title}</h1>
           </div>
-          <div className="flex gap-2">
+          <div className="flex gap-2 items-center">
+            <Button variant="outline" size="sm" onClick={() => window.open(`/api/contracts/${id}/pdf`, '_blank')}>
+              <FileText className="h-4 w-4 mr-2" /> PDF anzeigen
+            </Button>
             <Badge variant="outline" className="text-sm px-3 py-1">{contract.status}</Badge>
             <Badge
               variant={contract.riskLevel === 'high' ? 'destructive' : 'outline'}

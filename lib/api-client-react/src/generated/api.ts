@@ -28,6 +28,7 @@ import type {
   AuditEntry,
   Brand,
   BrandDefaultsInput,
+  BrandUpdate,
   ClauseChangeResult,
   ClauseDiff,
   ClauseFamily,
@@ -466,6 +467,87 @@ export function useListBrandsWithDefaults<
 
   return { ...query, queryKey: queryOptions.queryKey };
 }
+
+export const getUpdateBrandUrl = (id: string) => {
+  return `/api/brands/${id}`;
+};
+
+export const updateBrand = async (
+  id: string,
+  brandUpdate: BrandUpdate,
+  options?: RequestInit,
+): Promise<Brand> => {
+  return customFetch<Brand>(getUpdateBrandUrl(id), {
+    ...options,
+    method: "PATCH",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(brandUpdate),
+  });
+};
+
+export const getUpdateBrandMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof updateBrand>>,
+    TError,
+    { id: string; data: BodyType<BrandUpdate> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof updateBrand>>,
+  TError,
+  { id: string; data: BodyType<BrandUpdate> },
+  TContext
+> => {
+  const mutationKey = ["updateBrand"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof updateBrand>>,
+    { id: string; data: BodyType<BrandUpdate> }
+  > = (props) => {
+    const { id, data } = props ?? {};
+
+    return updateBrand(id, data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type UpdateBrandMutationResult = NonNullable<
+  Awaited<ReturnType<typeof updateBrand>>
+>;
+export type UpdateBrandMutationBody = BodyType<BrandUpdate>;
+export type UpdateBrandMutationError = ErrorType<unknown>;
+
+export const useUpdateBrand = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof updateBrand>>,
+    TError,
+    { id: string; data: BodyType<BrandUpdate> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof updateBrand>>,
+  TError,
+  { id: string; data: BodyType<BrandUpdate> },
+  TContext
+> => {
+  return useMutation(getUpdateBrandMutationOptions(options));
+};
 
 export const getUpdateBrandDefaultClausesUrl = (id: string) => {
   return `/api/brands/${id}/default-clauses`;
@@ -1706,6 +1788,86 @@ export function useGetQuote<
   return { ...query, queryKey: queryOptions.queryKey };
 }
 
+export const getGetQuotePdfUrl = (id: string) => {
+  return `/api/quotes/${id}/pdf`;
+};
+
+export const getQuotePdf = async (
+  id: string,
+  options?: RequestInit,
+): Promise<Blob> => {
+  return customFetch<Blob>(getGetQuotePdfUrl(id), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getGetQuotePdfQueryKey = (id: string) => {
+  return [`/api/quotes/${id}/pdf`] as const;
+};
+
+export const getGetQuotePdfQueryOptions = <
+  TData = Awaited<ReturnType<typeof getQuotePdf>>,
+  TError = ErrorType<unknown>,
+>(
+  id: string,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getQuotePdf>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getGetQuotePdfQueryKey(id);
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof getQuotePdf>>> = ({
+    signal,
+  }) => getQuotePdf(id, { signal, ...requestOptions });
+
+  return {
+    queryKey,
+    queryFn,
+    enabled: !!id,
+    ...queryOptions,
+  } as UseQueryOptions<
+    Awaited<ReturnType<typeof getQuotePdf>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetQuotePdfQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getQuotePdf>>
+>;
+export type GetQuotePdfQueryError = ErrorType<unknown>;
+
+export function useGetQuotePdf<
+  TData = Awaited<ReturnType<typeof getQuotePdf>>,
+  TError = ErrorType<unknown>,
+>(
+  id: string,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getQuotePdf>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetQuotePdfQueryOptions(id, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
 export const getCreateQuoteVersionUrl = (id: string) => {
   return `/api/quotes/${id}/versions`;
 };
@@ -2490,6 +2652,86 @@ export const useCreateContract = <
 > => {
   return useMutation(getCreateContractMutationOptions(options));
 };
+
+export const getGetContractPdfUrl = (id: string) => {
+  return `/api/contracts/${id}/pdf`;
+};
+
+export const getContractPdf = async (
+  id: string,
+  options?: RequestInit,
+): Promise<Blob> => {
+  return customFetch<Blob>(getGetContractPdfUrl(id), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getGetContractPdfQueryKey = (id: string) => {
+  return [`/api/contracts/${id}/pdf`] as const;
+};
+
+export const getGetContractPdfQueryOptions = <
+  TData = Awaited<ReturnType<typeof getContractPdf>>,
+  TError = ErrorType<unknown>,
+>(
+  id: string,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getContractPdf>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getGetContractPdfQueryKey(id);
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof getContractPdf>>> = ({
+    signal,
+  }) => getContractPdf(id, { signal, ...requestOptions });
+
+  return {
+    queryKey,
+    queryFn,
+    enabled: !!id,
+    ...queryOptions,
+  } as UseQueryOptions<
+    Awaited<ReturnType<typeof getContractPdf>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetContractPdfQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getContractPdf>>
+>;
+export type GetContractPdfQueryError = ErrorType<unknown>;
+
+export function useGetContractPdf<
+  TData = Awaited<ReturnType<typeof getContractPdf>>,
+  TError = ErrorType<unknown>,
+>(
+  id: string,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getContractPdf>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetContractPdfQueryOptions(id, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
 
 export const getGetContractUrl = (id: string) => {
   return `/api/contracts/${id}`;

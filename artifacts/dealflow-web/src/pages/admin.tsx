@@ -4,6 +4,7 @@ import {
   useGetTenant,
   useListCompanies,
   useListBrands,
+  useUpdateBrand,
   useListUsers,
   useSearchGdprSubjects,
   useForgetGdprSubject,
@@ -204,16 +205,7 @@ export default function Admin() {
                 </TableHeader>
                 <TableBody>
                   {brands?.map(brand => (
-                    <TableRow key={brand.id}>
-                      <TableCell>
-                        <div className="flex items-center gap-2">
-                          <div className="h-4 w-4 rounded-full" style={{ backgroundColor: brand.color }}></div>
-                          <span className="font-medium">{brand.name}</span>
-                        </div>
-                      </TableCell>
-                      <TableCell className="text-muted-foreground">{brand.companyId}</TableCell>
-                      <TableCell><Badge variant="secondary">{brand.voice}</Badge></TableCell>
-                    </TableRow>
+                    <BrandRow key={brand.id} brand={brand} />
                   ))}
                   {!brands?.length && (
                     <TableRow><TableCell colSpan={3} className="text-center h-16">No brands configured</TableCell></TableRow>
@@ -451,5 +443,78 @@ export default function Admin() {
         </CardContent>
       </Card>
     </div>
+  );
+}
+
+function BrandRow({ brand }: { brand: any }) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState({
+    logoUrl: brand.logoUrl ?? "",
+    primaryColor: brand.primaryColor ?? brand.color ?? "#2D6CDF",
+    secondaryColor: brand.secondaryColor ?? "",
+    tone: brand.tone ?? brand.voice ?? "",
+    legalEntityName: brand.legalEntityName ?? "",
+    addressLine: brand.addressLine ?? "",
+  });
+  const update = useUpdateBrand();
+  const save = async () => {
+    await update.mutateAsync({ id: brand.id, data: draft as any });
+    setEditing(false);
+  };
+  return (
+    <>
+      <TableRow>
+        <TableCell>
+          <div className="flex items-center gap-2">
+            <div className="h-4 w-4 rounded-full border" style={{ backgroundColor: brand.primaryColor ?? brand.color }}></div>
+            <span className="font-medium">{brand.name}</span>
+          </div>
+        </TableCell>
+        <TableCell className="text-muted-foreground">{brand.companyId}</TableCell>
+        <TableCell>
+          <div className="flex items-center gap-2">
+            <Badge variant="secondary">{brand.tone ?? brand.voice}</Badge>
+            <Button size="sm" variant="ghost" onClick={() => setEditing(v => !v)}>
+              {editing ? "Schließen" : "Bearbeiten"}
+            </Button>
+          </div>
+        </TableCell>
+      </TableRow>
+      {editing && (
+        <TableRow>
+          <TableCell colSpan={3} className="bg-muted/30">
+            <div className="grid grid-cols-2 gap-3 py-2">
+              <div>
+                <Label>Logo URL</Label>
+                <Input value={draft.logoUrl} onChange={e => setDraft({ ...draft, logoUrl: e.target.value })} />
+              </div>
+              <div>
+                <Label>Tone / Voice</Label>
+                <Input value={draft.tone} onChange={e => setDraft({ ...draft, tone: e.target.value })} />
+              </div>
+              <div>
+                <Label>Primary Color</Label>
+                <Input type="color" value={draft.primaryColor} onChange={e => setDraft({ ...draft, primaryColor: e.target.value })} />
+              </div>
+              <div>
+                <Label>Secondary Color</Label>
+                <Input type="color" value={draft.secondaryColor} onChange={e => setDraft({ ...draft, secondaryColor: e.target.value })} />
+              </div>
+              <div>
+                <Label>Legal Entity Name</Label>
+                <Input value={draft.legalEntityName} onChange={e => setDraft({ ...draft, legalEntityName: e.target.value })} />
+              </div>
+              <div>
+                <Label>Address Line</Label>
+                <Input value={draft.addressLine} onChange={e => setDraft({ ...draft, addressLine: e.target.value })} />
+              </div>
+              <div className="col-span-2 flex justify-end gap-2">
+                <Button size="sm" onClick={save} disabled={update.isPending}>Speichern</Button>
+              </div>
+            </div>
+          </TableCell>
+        </TableRow>
+      )}
+    </>
   );
 }
