@@ -102,38 +102,43 @@ export async function allowedDealIds(req: Request): Promise<Set<string>> {
 }
 
 /**
- * Returns all accountIds visible to the scope (accounts that have at least one
- * visible deal, plus accounts owned by the user). Cached on req.
+ * Returns all accountIds visible to the scope — derived from visible deals.
+ * tenantWide is still tenant-bound (via allowedDealIds which joins on
+ * companies.tenantId). Cached on req.
  */
 export async function allowedAccountIds(req: Request): Promise<Set<string>> {
   const r = req as Request & { _allowedAccountIds?: Set<string>; scope?: Scope };
   if (r._allowedAccountIds) return r._allowedAccountIds;
-  const scope = getScope(req);
-  if (scope.tenantWide) {
-    // tenantWide → all accounts visible. Caller should not filter; return null-marker via large fallback.
-    const set = new Set<string>(["__tenant_wide__"]);
-    r._allowedAccountIds = set;
-    return set;
-  }
   const dealIds = await allowedDealIds(req);
-  const rows = await db.select().from(dealsTable);
   const accIds = new Set<string>();
-  for (const d of rows) if (dealIds.has(d.id)) accIds.add(d.accountId);
+  if (dealIds.size > 0) {
+    const rows = await db
+      .select({ accountId: dealsTable.accountId })
+      .from(dealsTable)
+      .where(inArray(dealsTable.id, [...dealIds]));
+    for (const d of rows) accIds.add(d.accountId);
+  }
   r._allowedAccountIds = accIds;
   return accIds;
 }
 
 export function isAccountAllowed(accountIds: Set<string>, id: string): boolean {
-  return accountIds.has("__tenant_wide__") || accountIds.has(id);
+  return accountIds.has(id);
 }
 
 /**
- * Returns brandIds visible to the scope. Tenant-wide users see all brands.
+ * Returns brandIds visible to the scope. tenantWide → all brands of the
+ * user's tenant (companies.tenantId = scope.tenantId). Otherwise brands of
+ * scope.companyIds plus explicit scope.brandIds.
  */
 export async function allowedBrandIds(req: Request): Promise<string[]> {
   const scope = getScope(req);
   if (scope.tenantWide) {
-    const rows = await db.select({ id: brandsTable.id }).from(brandsTable);
+    const rows = await db
+      .select({ id: brandsTable.id })
+      .from(brandsTable)
+      .innerJoin(companiesTable, eq(companiesTable.id, brandsTable.companyId))
+      .where(eq(companiesTable.tenantId, scope.tenantId));
     return rows.map((b) => b.id);
   }
   // Brands of allowed companies + explicit brandIds
@@ -145,6 +150,30 @@ export async function allowedBrandIds(req: Request): Promise<string[]> {
     : [];
   const set = new Set<string>([...companyBrands.map((b) => b.id), ...scope.brandIds]);
   return [...set];
+}
+
+/**
+ * Returns all companyIds in the user's tenant that the user may access.
+ * tenantWide → all tenant companies. Otherwise: scope.companyIds ∩ tenant
+ * plus companies that own any scope.brandIds.
+ */
+export async function allowedCompanyIds(req: Request): Promise<string[]> {
+  const scope = getScope(req);
+  const tenantCompanies = await db
+    .select({ id: companiesTable.id })
+    .from(companiesTable)
+    .where(eq(companiesTable.tenantId, scope.tenantId));
+  const tenantSet = new Set(tenantCompanies.map((c) => c.id));
+  if (scope.tenantWide) return [...tenantSet];
+  const result = new Set<string>(scope.companyIds.filter((c) => tenantSet.has(c)));
+  if (scope.brandIds.length > 0) {
+    const brands = await db
+      .select({ companyId: brandsTable.companyId })
+      .from(brandsTable)
+      .where(inArray(brandsTable.id, scope.brandIds));
+    for (const b of brands) if (tenantSet.has(b.companyId)) result.add(b.companyId);
+  }
+  return [...result];
 }
 
 /** Filters in-memory rows by allowed dealIds. */
@@ -174,10 +203,14 @@ export async function entityScopeStatus(
   entityId: string,
 ): Promise<ScopeStatus> {
   const scope = getScope(req);
+  // allowedDealIds/allowedAccountIds are now always tenant-bound (for tenantWide
+  // users they JOIN deals→companies on tenantId). So these sets fully enforce
+  // tenant-isolation on their own — no tenantWide shortcut needed.
   const dealIds = await allowedDealIds(req);
   const accIds = await allowedAccountIds(req);
-  const accOk = (id: string) => scope.tenantWide || isAccountAllowed(accIds, id);
-  const dealOk = (id: string) => scope.tenantWide ? dealIds.has(id) : dealIds.has(id);
+  const accOk = (id: string) => accIds.has(id);
+  const dealOk = (id: string) => dealIds.has(id);
+  void scope;
 
   switch (entityType) {
     case "deal": {
@@ -226,6 +259,9 @@ export async function entityScopeStatus(
     case "price_position": {
       const [p] = await db.select().from(pricePositionsTable).where(eq(pricePositionsTable.id, entityId));
       if (!p) return "missing";
+      // Tenant-bound: verify the position's company belongs to the user's tenant.
+      const [co] = await db.select().from(companiesTable).where(eq(companiesTable.id, p.companyId));
+      if (!co || co.tenantId !== scope.tenantId) return "forbidden";
       if (scope.tenantWide) return "ok";
       const brands = new Set(scope.brandIds);
       const companies = new Set(scope.companyIds);

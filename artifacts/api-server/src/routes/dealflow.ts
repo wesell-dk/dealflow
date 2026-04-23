@@ -161,7 +161,15 @@ router.get('/orgs/companies', async (req, res) => {
 });
 router.get('/orgs/brands', async (req, res) => {
   const scope = getScope(req);
-  const rows = await db.select().from(brandsTable);
+  // Tenant-bound: only brands whose company belongs to the user's tenant.
+  const rows = await db
+    .select({
+      id: brandsTable.id, companyId: brandsTable.companyId,
+      name: brandsTable.name, color: brandsTable.color, voice: brandsTable.voice,
+    })
+    .from(brandsTable)
+    .innerJoin(companiesTable, eq(companiesTable.id, brandsTable.companyId))
+    .where(eq(companiesTable.tenantId, scope.tenantId));
   if (scope.tenantWide) { res.json(rows); return; }
   const visibleCompany = new Set<string>(scope.companyIds);
   res.json(rows.filter(b => visibleCompany.has(b.companyId) || scope.brandIds.includes(b.id)));
@@ -503,10 +511,16 @@ function mapPricePosition(p: typeof pricePositionsTable.$inferSelect, brandName:
 
 router.get('/price-positions', async (req, res) => {
   const scope = getScope(req);
-  const rows = await db.select().from(pricePositionsTable);
+  // Tenant-bound: only positions whose company belongs to the user's tenant.
+  const rows = await db
+    .select({ p: pricePositionsTable })
+    .from(pricePositionsTable)
+    .innerJoin(companiesTable, eq(companiesTable.id, pricePositionsTable.companyId))
+    .where(eq(companiesTable.tenantId, scope.tenantId));
+  const tenantRows = rows.map(r => r.p);
   const brands = await getBrandMap();
   const companies = await getCompanyMap();
-  const filtered = scope.tenantWide ? rows : rows.filter(p =>
+  const filtered = scope.tenantWide ? tenantRows : tenantRows.filter(p =>
     scope.companyIds.includes(p.companyId) || scope.brandIds.includes(p.brandId));
   res.json(filtered.map(p => mapPricePosition(p, brands.get(p.brandId)?.name ?? '', companies.get(p.companyId)?.name ?? '')));
 });
@@ -541,21 +555,40 @@ router.post('/price-positions', async (req, res) => {
 
 router.get('/price-rules', async (req, res) => {
   const scope = getScope(req);
+  // Tenant-bound: rule-scope must be 'global' or a companyId/brandId inside
+  // the user's tenant. Global rules are only shown if the user has a tenant.
+  const [tenantCoRows, tenantBrRows] = await Promise.all([
+    db.select({ id: companiesTable.id }).from(companiesTable).where(eq(companiesTable.tenantId, scope.tenantId)),
+    db.select({ id: brandsTable.id })
+      .from(brandsTable)
+      .innerJoin(companiesTable, eq(companiesTable.id, brandsTable.companyId))
+      .where(eq(companiesTable.tenantId, scope.tenantId)),
+  ]);
+  const tenantCos = new Set(tenantCoRows.map(c => c.id));
+  const tenantBrs = new Set(tenantBrRows.map(b => b.id));
   const rows = await db.select().from(priceRulesTable);
-  if (scope.tenantWide) { res.json(rows); return; }
-  const allowedBrands = await allowedBrandIds(req);
-  const allowedScopes = new Set<string>(['global', ...scope.companyIds, ...allowedBrands]);
-  res.json(rows.filter(r => allowedScopes.has(r.scope)));
+  const tenantRows = rows.filter(r =>
+    r.scope === 'global' || tenantCos.has(r.scope) || tenantBrs.has(r.scope));
+  if (scope.tenantWide) { res.json(tenantRows); return; }
+  const allowedBrandsArr = await allowedBrandIds(req);
+  const allowedScopes = new Set<string>(['global', ...scope.companyIds, ...allowedBrandsArr]);
+  res.json(tenantRows.filter(r => allowedScopes.has(r.scope)));
 });
 
 router.get('/pricing/summary', async (req, res) => {
   const scope = getScope(req);
-  const allPositions = await db.select().from(pricePositionsTable);
+  // Tenant-bound: only positions whose company belongs to the user's tenant.
+  const tenantPositions = (await db
+    .select({ p: pricePositionsTable })
+    .from(pricePositionsTable)
+    .innerJoin(companiesTable, eq(companiesTable.id, pricePositionsTable.companyId))
+    .where(eq(companiesTable.tenantId, scope.tenantId))
+  ).map(r => r.p);
   const allowedBrands = new Set(await allowedBrandIds(req));
   const allowedCompanies = new Set(scope.companyIds);
   const positions = scope.tenantWide
-    ? allPositions
-    : allPositions.filter(p => allowedBrands.has(p.brandId) || allowedCompanies.has(p.companyId));
+    ? tenantPositions
+    : tenantPositions.filter(p => allowedBrands.has(p.brandId) || allowedCompanies.has(p.companyId));
   const dealIds = await scopedDealIds(req);
   const pendingApprovalCount = dealIds.length === 0 ? 0 : (await db
     .select({ c: sql<number>`count(*)::int` })
@@ -1133,7 +1166,14 @@ router.get('/pricing/resolve', async (req, res) => {
   const scope = getScope(req);
   const allowedBrands = new Set(await allowedBrandIds(req));
   const allowedCompanies = new Set(scope.companyIds);
-  const positions = (await db.select().from(pricePositionsTable))
+  // Tenant-bound: join companies and filter by tenantId.
+  const tenantPositions = (await db
+    .select({ p: pricePositionsTable })
+    .from(pricePositionsTable)
+    .innerJoin(companiesTable, eq(companiesTable.id, pricePositionsTable.companyId))
+    .where(eq(companiesTable.tenantId, scope.tenantId))
+  ).map(r => r.p);
+  const positions = tenantPositions
     .filter(p => p.sku === sku && p.status === 'active')
     .filter(p => scope.tenantWide || allowedBrands.has(p.brandId) || allowedCompanies.has(p.companyId));
   const brands = await getBrandMap();
