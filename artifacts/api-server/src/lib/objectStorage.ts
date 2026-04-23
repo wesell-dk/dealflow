@@ -156,20 +156,15 @@ export class ObjectStorageService {
     if (!rawPath.startsWith("https://storage.googleapis.com/")) {
       return rawPath;
     }
-
     const url = new URL(rawPath);
     const rawObjectPath = url.pathname;
 
-    let objectEntityDir = this.getPrivateObjectDir();
-    if (!objectEntityDir.endsWith("/")) {
-      objectEntityDir = `${objectEntityDir}/`;
-    }
+    const dir = this.getPrivateObjectDir();
+    const normDir = `/${dir.replace(/^\/+|\/+$/g, "")}/`;
+    const normRaw = rawObjectPath.startsWith("/") ? rawObjectPath : `/${rawObjectPath}`;
 
-    if (!rawObjectPath.startsWith(objectEntityDir)) {
-      return rawObjectPath;
-    }
-
-    const entityId = rawObjectPath.slice(objectEntityDir.length);
+    if (!normRaw.startsWith(normDir)) return normRaw;
+    const entityId = normRaw.slice(normDir.length);
     return `/objects/${entityId}`;
   }
 
