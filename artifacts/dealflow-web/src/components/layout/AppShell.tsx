@@ -1,4 +1,5 @@
 import { Link, useLocation } from "wouter";
+import { useTranslation } from "react-i18next";
 import {
   LayoutDashboard,
   Briefcase,
@@ -16,6 +17,9 @@ import {
   Search,
   Bell,
   Menu,
+  Languages,
+  ClipboardCheck,
+  History,
   User as UserIcon,
 } from "lucide-react";
 import { useGetTenant, useGetCurrentUser } from "@workspace/api-client-react";
@@ -31,24 +35,32 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { setLanguage } from "@/lib/i18n";
+import { HelpBot } from "@/components/help-bot";
 
-const navigation = [
-  { name: "Home", href: "/", icon: LayoutDashboard },
-  { name: "Accounts", href: "/accounts", icon: Users },
-  { name: "Deals", href: "/deals", icon: Briefcase },
-  { name: "Quotes", href: "/quotes", icon: FileText },
-  { name: "Pricing", href: "/pricing", icon: BadgeDollarSign },
-  { name: "Approvals", href: "/approvals", icon: CheckSquare },
-  { name: "Contracts", href: "/contracts", icon: FileSignature },
-  { name: "Negotiations", href: "/negotiations", icon: Handshake },
-  { name: "Signatures", href: "/signatures", icon: PenTool },
-  { name: "Price Increases", href: "/price-increases", icon: TrendingUp },
-  { name: "Reports", href: "/reports", icon: BarChart3 },
-  { name: "Copilot", href: "/copilot", icon: Bot },
-  { name: "Admin", href: "/admin", icon: Settings },
-];
+function useNavigation() {
+  const { t } = useTranslation();
+  return [
+    { name: t("nav.home"), href: "/", icon: LayoutDashboard },
+    { name: t("nav.accounts"), href: "/accounts", icon: Users },
+    { name: t("nav.deals"), href: "/deals", icon: Briefcase },
+    { name: t("nav.quotes"), href: "/quotes", icon: FileText },
+    { name: t("nav.pricing"), href: "/pricing", icon: BadgeDollarSign },
+    { name: t("nav.approvals"), href: "/approvals", icon: CheckSquare },
+    { name: t("nav.contracts"), href: "/contracts", icon: FileSignature },
+    { name: t("nav.negotiations"), href: "/negotiations", icon: Handshake },
+    { name: t("nav.signatures"), href: "/signatures", icon: PenTool },
+    { name: t("nav.priceIncreases"), href: "/price-increases", icon: TrendingUp },
+    { name: t("nav.orderConfirmations"), href: "/order-confirmations", icon: ClipboardCheck },
+    { name: t("nav.reports"), href: "/reports", icon: BarChart3 },
+    { name: t("nav.audit"), href: "/audit", icon: History },
+    { name: t("nav.copilot"), href: "/copilot", icon: Bot },
+    { name: t("nav.admin"), href: "/admin", icon: Settings },
+  ];
+}
 
 function Sidebar({ currentPath }: { currentPath: string }) {
+  const navigation = useNavigation();
   return (
     <div className="flex h-full flex-col gap-2">
       <div className="flex h-14 items-center border-b px-4 lg:h-[60px] lg:px-6">
@@ -63,7 +75,7 @@ function Sidebar({ currentPath }: { currentPath: string }) {
             const isActive = currentPath === item.href || (item.href !== "/" && currentPath.startsWith(item.href));
             return (
               <Link
-                key={item.name}
+                key={item.href}
                 href={item.href}
                 className={`flex items-center gap-3 rounded-lg px-3 py-2 transition-all hover:text-primary ${
                   isActive ? "bg-muted text-primary" : "text-muted-foreground"
@@ -84,6 +96,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const [location] = useLocation();
   const { data: tenant } = useGetTenant();
   const { data: user } = useGetCurrentUser();
+  const { t, i18n } = useTranslation();
 
   return (
     <div className="grid min-h-screen w-full md:grid-cols-[220px_1fr] lg:grid-cols-[280px_1fr]">
@@ -96,7 +109,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             <SheetTrigger asChild>
               <Button variant="outline" size="icon" className="shrink-0 md:hidden">
                 <Menu className="h-5 w-5" />
-                <span className="sr-only">Toggle navigation menu</span>
+                <span className="sr-only">Menu</span>
               </Button>
             </SheetTrigger>
             <SheetContent side="left" className="flex flex-col">
@@ -109,20 +122,34 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                 <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
                 <Input
                   type="search"
-                  placeholder="Search deals, accounts, quotes..."
+                  placeholder={t("common.search")}
                   className="w-full appearance-none bg-background pl-8 shadow-none md:w-2/3 lg:w-1/3"
                 />
               </div>
             </form>
           </div>
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-3">
             <div className="hidden md:flex items-center gap-2 text-sm text-muted-foreground">
               {tenant?.name && <span className="font-medium text-foreground">{tenant.name}</span>}
               {tenant?.region && <span className="text-xs bg-muted px-2 py-0.5 rounded-full">{tenant.region}</span>}
             </div>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="outline" size="sm" className="h-8 gap-1.5">
+                  <Languages className="h-4 w-4" />
+                  <span className="text-xs font-semibold uppercase">{i18n.resolvedLanguage ?? "de"}</span>
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuLabel>{t("common.language")}</DropdownMenuLabel>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem onClick={() => setLanguage("de")}>Deutsch</DropdownMenuItem>
+                <DropdownMenuItem onClick={() => setLanguage("en")}>English</DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
             <Button variant="outline" size="icon" className="h-8 w-8 rounded-full">
               <Bell className="h-4 w-4" />
-              <span className="sr-only">Toggle notifications</span>
+              <span className="sr-only">Notifications</span>
             </Button>
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
@@ -132,16 +159,16 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                       {user?.initials || <UserIcon className="h-4 w-4" />}
                     </AvatarFallback>
                   </Avatar>
-                  <span className="sr-only">Toggle user menu</span>
+                  <span className="sr-only">User menu</span>
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end">
-                <DropdownMenuLabel>My Account</DropdownMenuLabel>
+                <DropdownMenuLabel>{t("common.myAccount")}</DropdownMenuLabel>
                 <DropdownMenuSeparator />
-                <DropdownMenuItem>Settings</DropdownMenuItem>
-                <DropdownMenuItem>Support</DropdownMenuItem>
+                <DropdownMenuItem>{t("common.settings")}</DropdownMenuItem>
+                <DropdownMenuItem>{t("common.support")}</DropdownMenuItem>
                 <DropdownMenuSeparator />
-                <DropdownMenuItem>Logout</DropdownMenuItem>
+                <DropdownMenuItem>{t("common.logout")}</DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
           </div>
@@ -150,6 +177,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           {children}
         </main>
       </div>
+      <HelpBot />
     </div>
   );
 }

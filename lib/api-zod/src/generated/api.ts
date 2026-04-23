@@ -282,6 +282,10 @@ export const GetDealResponse = zod
           status: zod.string(),
           version: zod.number(),
           riskLevel: zod.string(),
+          riskScore: zod
+            .number()
+            .optional()
+            .describe("0-100 calculated from clause severities"),
           createdAt: zod.coerce.date(),
           template: zod.string(),
           validUntil: zod.coerce.date().nullish(),
@@ -626,6 +630,10 @@ export const ListContractsResponseItem = zod.object({
   status: zod.string(),
   version: zod.number(),
   riskLevel: zod.string(),
+  riskScore: zod
+    .number()
+    .optional()
+    .describe("0-100 calculated from clause severities"),
   createdAt: zod.coerce.date(),
   template: zod.string(),
   validUntil: zod.coerce.date().nullish(),
@@ -651,6 +659,10 @@ export const GetContractResponse = zod
     status: zod.string(),
     version: zod.number(),
     riskLevel: zod.string(),
+    riskScore: zod
+      .number()
+      .optional()
+      .describe("0-100 calculated from clause severities"),
     createdAt: zod.coerce.date(),
     template: zod.string(),
     validUntil: zod.coerce.date().nullish(),

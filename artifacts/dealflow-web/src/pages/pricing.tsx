@@ -1,10 +1,91 @@
-import { useGetPricingSummary, useListPricePositions, useListPriceRules } from "@workspace/api-client-react";
+import { useState } from "react";
+import { useTranslation } from "react-i18next";
+import { useGetPricingSummary, useListPricePositions, useListPriceRules, resolvePrice, type ResolvedPrice } from "@workspace/api-client-react";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { ArrowRight, Tag, Shield, Percent, Clock, AlertTriangle } from "lucide-react";
+import { ArrowRight, Tag, Shield, Percent, Clock, AlertTriangle, Layers, CheckCircle2, Circle } from "lucide-react";
+
+function ResolvePanel() {
+  const { t } = useTranslation();
+  const [sku, setSku] = useState("");
+  const [brandId, setBrandId] = useState("");
+  const [companyId, setCompanyId] = useState("");
+  const [result, setResult] = useState<ResolvedPrice | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+
+  const onResolve = async () => {
+    if (!sku.trim()) return;
+    setLoading(true);
+    setError(null);
+    try {
+      const r = await resolvePrice({ sku: sku.trim(), brandId: brandId.trim() || undefined, companyId: companyId.trim() || undefined });
+      setResult(r);
+    } catch {
+      setResult(null);
+      setError(t("pages.pricing.noResult"));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2 text-base">
+          <Layers className="h-4 w-4" />
+          {t("pages.pricing.resolveTitle")}
+        </CardTitle>
+        <CardDescription>{t("pages.pricing.resolveSubtitle")}</CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
+          <Input placeholder={t("pages.pricing.sku")} value={sku} onChange={(e) => setSku(e.target.value)} />
+          <Input placeholder="Brand ID" value={brandId} onChange={(e) => setBrandId(e.target.value)} />
+          <Input placeholder="Company ID" value={companyId} onChange={(e) => setCompanyId(e.target.value)} />
+          <Button onClick={onResolve} disabled={loading || !sku.trim()}>
+            {t("pages.pricing.resolve")}
+          </Button>
+        </div>
+        {error && <p className="text-sm text-rose-600">{error}</p>}
+        {result && (
+          <div className="space-y-3">
+            <div className="flex items-baseline gap-3 border rounded-lg p-4 bg-muted/30">
+              <div className="text-xs uppercase text-muted-foreground">{t("pages.pricing.price")}</div>
+              <div className="text-2xl font-bold tabular-nums">
+                {result.listPrice.toLocaleString()} {result.currency}
+              </div>
+              <Badge variant="secondary" className="ml-auto">
+                {t("pages.pricing.source")}: {result.source}
+              </Badge>
+            </div>
+            <ol className="space-y-1.5">
+              {result.chain.map((step, i) => (
+                <li key={i} className="flex items-center gap-3 text-sm">
+                  {step.applied ? (
+                    <CheckCircle2 className="h-4 w-4 text-emerald-600" />
+                  ) : (
+                    <Circle className="h-4 w-4 text-muted-foreground" />
+                  )}
+                  <Badge variant={step.applied ? "default" : "outline"} className="w-24 justify-center">{step.level}</Badge>
+                  <span className="flex-1">{step.label}</span>
+                  <span className="tabular-nums text-muted-foreground">
+                    {step.listPrice != null ? `${step.listPrice} ${result.currency}` : "—"}
+                  </span>
+                </li>
+              ))}
+            </ol>
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
 
 export default function Pricing() {
   const { data: summary, isLoading: isLoadingSummary } = useGetPricingSummary();
@@ -67,7 +148,12 @@ export default function Pricing() {
         <TabsList>
           <TabsTrigger value="positions">Price Positions</TabsTrigger>
           <TabsTrigger value="rules">Pricing Rules</TabsTrigger>
+          <TabsTrigger value="resolve">Resolve</TabsTrigger>
         </TabsList>
+
+        <TabsContent value="resolve" className="mt-4">
+          <ResolvePanel />
+        </TabsContent>
         
         <TabsContent value="positions" className="mt-4">
           <div className="border rounded-md bg-card">

@@ -1,135 +1,244 @@
+import { useState, useEffect, useRef } from "react";
 import { Link } from "wouter";
-import { useListCopilotInsights, useListCopilotThreads } from "@workspace/api-client-react";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { useTranslation } from "react-i18next";
+import {
+  useListCopilotInsights,
+  useListCopilotThreads,
+  useListCopilotMessages,
+  usePostCopilotMessage,
+  useCreateCopilotThread,
+  getListCopilotMessagesQueryKey,
+  getListCopilotThreadsQueryKey,
+} from "@workspace/api-client-react";
+import { useQueryClient } from "@tanstack/react-query";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
-import { AlertTriangle, Sparkles, TrendingUp, MessageSquare } from "lucide-react";
+import { Input } from "@/components/ui/input";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
+import { AlertTriangle, Sparkles, TrendingUp, MessageSquare, Send, Plus } from "lucide-react";
 
-export default function Copilot() {
-  const { data: insights, isLoading: isLoadingInsights } = useListCopilotInsights?.() ?? { data: [], isLoading: false };
-  const { data: threads, isLoading: isLoadingThreads } = useListCopilotThreads?.() ?? { data: [], isLoading: false };
+function ChatPanel({ threadId }: { threadId: string }) {
+  const { t } = useTranslation();
+  const qc = useQueryClient();
+  const { data: messages } = useListCopilotMessages(threadId);
+  const post = usePostCopilotMessage();
+  const [input, setInput] = useState("");
+  const scrollRef = useRef<HTMLDivElement>(null);
 
-  if (isLoadingInsights || isLoadingThreads) {
-    return <div className="p-8 grid md:grid-cols-2 gap-6"><Skeleton className="h-[500px]" /><Skeleton className="h-[500px]" /></div>;
-  }
+  useEffect(() => {
+    scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight });
+  }, [messages]);
 
-  const getInsightIcon = (kind: string) => {
-    switch(kind) {
-      case 'Risk': return <AlertTriangle className="h-5 w-5 text-red-500" />;
-      case 'NextAction': return <Sparkles className="h-5 w-5 text-amber-500" />;
-      case 'Opportunity': return <TrendingUp className="h-5 w-5 text-green-500" />;
-      default: return <Sparkles className="h-5 w-5 text-primary" />;
-    }
+  const send = async () => {
+    const content = input.trim();
+    if (!content || post.isPending) return;
+    setInput("");
+    await post.mutateAsync({ id: threadId, data: { content } });
+    qc.invalidateQueries({ queryKey: getListCopilotMessagesQueryKey(threadId) });
+    qc.invalidateQueries({ queryKey: getListCopilotThreadsQueryKey() });
   };
 
   return (
-    <div className="flex flex-col gap-6">
+    <div className="flex flex-col h-[460px]">
+      <ScrollArea className="flex-1 pr-3">
+        <div ref={scrollRef} className="space-y-3">
+          {(messages ?? []).map((m) => (
+            <div key={m.id} className={`flex ${m.role === "user" ? "justify-end" : "justify-start"}`}>
+              <div
+                className={`max-w-[85%] rounded-lg px-3 py-2 text-sm whitespace-pre-wrap ${
+                  m.role === "user" ? "bg-primary text-primary-foreground" : "bg-muted"
+                }`}
+              >
+                {m.content}
+              </div>
+            </div>
+          ))}
+          {(!messages || messages.length === 0) && (
+            <p className="text-sm text-muted-foreground italic">{t("common.noData")}</p>
+          )}
+        </div>
+      </ScrollArea>
+      <form
+        onSubmit={(e) => {
+          e.preventDefault();
+          void send();
+        }}
+        className="flex items-center gap-2 mt-3"
+      >
+        <Input
+          value={input}
+          onChange={(e) => setInput(e.target.value)}
+          placeholder={t("pages.copilot.placeholder")}
+        />
+        <Button type="submit" size="icon" disabled={post.isPending || !input.trim()}>
+          <Send className="h-4 w-4" />
+        </Button>
+      </form>
+    </div>
+  );
+}
+
+function NewThreadDialog({ onCreated }: { onCreated: (id: string) => void }) {
+  const { t } = useTranslation();
+  const qc = useQueryClient();
+  const create = useCreateCopilotThread();
+  const [title, setTitle] = useState("");
+  const [scope, setScope] = useState("");
+  const [open, setOpen] = useState(false);
+
+  const submit = async () => {
+    if (!title.trim()) return;
+    const r = await create.mutateAsync({ data: { title: title.trim(), scope: scope.trim() || undefined } });
+    qc.invalidateQueries({ queryKey: getListCopilotThreadsQueryKey() });
+    setTitle("");
+    setScope("");
+    setOpen(false);
+    onCreated(r.id);
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={setOpen}>
+      <DialogTrigger asChild>
+        <Button variant="outline" size="sm">
+          <Plus className="h-4 w-4 mr-1" />
+          {t("common.newThread")}
+        </Button>
+      </DialogTrigger>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>{t("pages.copilot.newThreadTitle")}</DialogTitle>
+        </DialogHeader>
+        <div className="space-y-3">
+          <Input
+            placeholder={t("pages.copilot.newThreadTitle")}
+            value={title}
+            onChange={(e) => setTitle(e.target.value)}
+          />
+          <Input
+            placeholder={t("pages.copilot.newThreadTopic")}
+            value={scope}
+            onChange={(e) => setScope(e.target.value)}
+          />
+        </div>
+        <DialogFooter>
+          <Button variant="ghost" onClick={() => setOpen(false)}>{t("common.cancel")}</Button>
+          <Button onClick={submit} disabled={!title.trim() || create.isPending}>{t("common.create")}</Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+export default function Copilot() {
+  const { t, i18n } = useTranslation();
+  const { data: insights } = useListCopilotInsights();
+  const { data: threads } = useListCopilotThreads();
+  const [activeThreadId, setActiveThreadId] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!activeThreadId && threads && threads.length > 0) {
+      setActiveThreadId(threads[0].id);
+    }
+  }, [threads, activeThreadId]);
+
+  const insightIcon = (kind: string) => {
+    if (kind === "Risk") return <AlertTriangle className="h-4 w-4 text-rose-500" />;
+    if (kind === "NextAction") return <Sparkles className="h-4 w-4 text-amber-500" />;
+    if (kind === "Opportunity") return <TrendingUp className="h-4 w-4 text-emerald-500" />;
+    return <Sparkles className="h-4 w-4 text-primary" />;
+  };
+
+  return (
+    <>
       <div className="flex items-center gap-3">
         <div className="p-2 bg-primary/10 rounded-lg">
           <Sparkles className="h-6 w-6 text-primary" />
         </div>
         <div>
-          <h1 className="text-3xl font-bold tracking-tight">AI Copilot</h1>
-          <p className="text-muted-foreground mt-1">Your intelligent assistant for commercial execution.</p>
+          <h1 className="text-2xl font-semibold">{t("pages.copilot.title")}</h1>
         </div>
       </div>
 
-      <div className="grid md:grid-cols-2 gap-6 items-start">
-        <div className="space-y-4">
-          <h2 className="text-xl font-semibold px-1">Active Insights</h2>
-          {!insights?.length ? (
-            <Card className="bg-muted/30 border-dashed">
-              <CardContent className="flex flex-col items-center text-center p-8">
-                <Sparkles className="h-8 w-8 text-muted-foreground mb-3 opacity-50" />
-                <p className="text-muted-foreground">No active insights at the moment. You're all caught up!</p>
-              </CardContent>
-            </Card>
-          ) : (
-            insights.map((insight) => (
-              <Card key={insight.id} className="overflow-hidden">
-                <div className="flex flex-col">
-                  <div className="p-4 pb-2 flex gap-3 items-start">
-                    <div className="mt-1">{getInsightIcon(insight.kind)}</div>
-                    <div className="flex-1 space-y-1">
-                      <div className="flex items-center justify-between">
-                        <h3 className="font-semibold leading-none tracking-tight">{insight.title}</h3>
-                        <Badge variant={insight.severity === 'High' ? 'destructive' : insight.severity === 'Medium' ? 'secondary' : 'outline'}>
-                          {insight.severity}
-                        </Badge>
-                      </div>
-                      <p className="text-sm text-muted-foreground mt-2">{insight.summary}</p>
-                    </div>
-                  </div>
-                  
-                  <div className="px-4 py-3 bg-muted/20 border-t flex flex-col gap-3 mt-2">
-                    <div className="flex items-center gap-2 text-sm">
-                      <span className="text-muted-foreground">Related to:</span>
-                      <Link href={`/deals/${insight.dealId}`}>
-                        <Badge variant="outline" className="hover:bg-muted cursor-pointer transition-colors">
-                          {insight.dealName}
-                        </Badge>
-                      </Link>
-                    </div>
-                    
-                    {insight.suggestedAction && (
-                      <div className="p-3 bg-primary/5 rounded-md border border-primary/10">
-                        <div className="text-xs font-medium text-primary mb-1 uppercase tracking-wider">Suggested Action</div>
-                        <div className="text-sm flex justify-between items-center">
-                          <span>{insight.suggestedAction}</span>
-                          <Button size="sm" variant="secondary">Apply</Button>
-                        </div>
-                      </div>
-                    )}
-                  </div>
+      <div className="grid grid-cols-1 lg:grid-cols-[280px_1fr_320px] gap-4">
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0">
+            <CardTitle className="text-base">{t("pages.copilot.threads")}</CardTitle>
+            <NewThreadDialog onCreated={setActiveThreadId} />
+          </CardHeader>
+          <CardContent className="space-y-1.5">
+            {(threads ?? []).map((th) => (
+              <button
+                key={th.id}
+                onClick={() => setActiveThreadId(th.id)}
+                className={`w-full text-left rounded-md p-2 hover:bg-muted text-sm ${
+                  activeThreadId === th.id ? "bg-muted" : ""
+                }`}
+              >
+                <div className="font-medium truncate">{th.title}</div>
+                <div className="text-xs text-muted-foreground flex items-center gap-1.5 mt-0.5">
+                  <MessageSquare className="h-3 w-3" />
+                  {th.messageCount}
+                  <span>·</span>
+                  <span>{new Date(th.updatedAt).toLocaleDateString(i18n.resolvedLanguage)}</span>
                 </div>
-              </Card>
-            ))
-          )}
-        </div>
+              </button>
+            ))}
+            {(!threads || threads.length === 0) && (
+              <p className="text-xs text-muted-foreground italic px-2 py-4">{t("common.noData")}</p>
+            )}
+          </CardContent>
+        </Card>
 
-        <div className="space-y-4">
-          <div className="flex items-center justify-between px-1">
-            <h2 className="text-xl font-semibold">Recent Threads</h2>
-            <Button variant="outline" size="sm">New Chat</Button>
-          </div>
-          
-          {!threads?.length ? (
-            <Card className="bg-muted/30 border-dashed">
-              <CardContent className="flex flex-col items-center text-center p-8">
-                <MessageSquare className="h-8 w-8 text-muted-foreground mb-3 opacity-50" />
-                <p className="text-muted-foreground">Start a conversation to analyze deals or generate content.</p>
-                <Button className="mt-4" variant="secondary">Start New Thread</Button>
-              </CardContent>
-            </Card>
-          ) : (
-            <div className="flex flex-col gap-3">
-              {threads.map((thread) => (
-                <Card key={thread.id} className="hover:border-primary/50 transition-colors cursor-pointer group">
-                  <CardHeader className="p-4 pb-2 flex flex-row items-start justify-between space-y-0">
-                    <div className="space-y-1.5">
-                      <CardTitle className="text-base group-hover:text-primary transition-colors">{thread.title}</CardTitle>
-                      <Badge variant="secondary" className="font-normal">{thread.scope}</Badge>
-                    </div>
-                    <div className="text-xs text-muted-foreground whitespace-nowrap">
-                      {new Date(thread.updatedAt).toLocaleDateString()}
-                    </div>
-                  </CardHeader>
-                  <CardContent className="p-4 pt-0 mt-2">
-                    <CardDescription className="italic truncate border-l-2 pl-3">
-                      "{thread.lastMessage}"
-                    </CardDescription>
-                    <div className="flex items-center gap-1 text-xs text-muted-foreground mt-3">
-                      <MessageSquare className="h-3 w-3" />
-                      <span>{thread.messageCount} messages</span>
-                    </div>
-                  </CardContent>
-                </Card>
-              ))}
-            </div>
-          )}
-        </div>
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">
+              {threads?.find((th) => th.id === activeThreadId)?.title ?? t("pages.copilot.title")}
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            {activeThreadId ? <ChatPanel threadId={activeThreadId} /> : (
+              <p className="text-sm text-muted-foreground">{t("common.noData")}</p>
+            )}
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">{t("pages.copilot.insights")}</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            {(insights ?? []).slice(0, 6).map((ins) => (
+              <div key={ins.id} className="border-l-2 border-primary/40 pl-3 py-1">
+                <div className="flex items-center gap-2 text-sm font-medium">
+                  {insightIcon(ins.kind)}
+                  {ins.title}
+                </div>
+                <p className="text-xs text-muted-foreground mt-1">{ins.summary}</p>
+                <div className="flex items-center gap-2 mt-1.5">
+                  <Badge variant="outline" className="text-[10px]">
+                    {ins.severity}
+                  </Badge>
+                  <Link href={`/deals/${ins.dealId}`} className="text-xs text-primary hover:underline">
+                    {ins.dealName}
+                  </Link>
+                </div>
+              </div>
+            ))}
+            {(!insights || insights.length === 0) && (
+              <p className="text-sm text-muted-foreground italic">{t("common.noData")}</p>
+            )}
+          </CardContent>
+        </Card>
       </div>
-    </div>
+    </>
   );
 }

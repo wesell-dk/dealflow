@@ -1,17 +1,95 @@
+import { useState } from "react";
 import { useRoute } from "wouter";
 import { Link } from "wouter";
-import { useGetPriceIncrease } from "@workspace/api-client-react";
+import { useTranslation } from "react-i18next";
+import {
+  useGetPriceIncrease,
+  useRespondToPriceIncreaseLetter,
+  getGetPriceIncreaseQueryKey,
+} from "@workspace/api-client-react";
+import { useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { CheckCircle2, Clock, XCircle } from "lucide-react";
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Textarea } from "@/components/ui/textarea";
+import { CheckCircle2, Clock, XCircle, MessageSquarePlus } from "lucide-react";
+
+function ResponseDialog({ campaignId, letterId, onDone }: { campaignId: string; letterId: string; onDone: () => void }) {
+  const { t } = useTranslation();
+  const respond = useRespondToPriceIncreaseLetter();
+  const [open, setOpen] = useState(false);
+  const [decision, setDecision] = useState<string>("accept");
+  const [comment, setComment] = useState("");
+
+  const submit = async () => {
+    await respond.mutateAsync({ id: campaignId, letterId, data: { decision, comment: comment || null } });
+    setOpen(false);
+    setComment("");
+    onDone();
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={setOpen}>
+      <DialogTrigger asChild>
+        <Button variant="outline" size="sm">
+          <MessageSquarePlus className="h-3.5 w-3.5 mr-1" />
+          {t("pages.priceIncrease.letterResponse")}
+        </Button>
+      </DialogTrigger>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>{t("pages.priceIncrease.letterResponse")}</DialogTitle>
+        </DialogHeader>
+        <div className="space-y-3">
+          <div>
+            <label className="text-xs uppercase text-muted-foreground">{t("pages.priceIncrease.responseType")}</label>
+            <Select value={decision} onValueChange={setDecision}>
+              <SelectTrigger><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="accept">{t("pages.priceIncrease.responseAccept")}</SelectItem>
+                <SelectItem value="negotiate">{t("pages.priceIncrease.responseNegotiate")}</SelectItem>
+                <SelectItem value="reject">{t("pages.priceIncrease.responseReject")}</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <div>
+            <label className="text-xs uppercase text-muted-foreground">{t("pages.priceIncrease.responseNote")}</label>
+            <Textarea value={comment} onChange={(e) => setComment(e.target.value)} rows={4} />
+          </div>
+        </div>
+        <DialogFooter>
+          <Button variant="ghost" onClick={() => setOpen(false)}>{t("common.cancel")}</Button>
+          <Button onClick={submit} disabled={respond.isPending}>{t("common.save")}</Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
 
 export default function PriceIncrease() {
   const [, params] = useRoute("/price-increases/:id");
   const id = params?.id || "";
-  
-  const { data: campaign, isLoading } = useGetPriceIncrease?.(id) ?? { data: null, isLoading: false };
+  const { t } = useTranslation();
+  const qc = useQueryClient();
+  const { data: campaign, isLoading } = useGetPriceIncrease(id);
+  const refresh = () => qc.invalidateQueries({ queryKey: getGetPriceIncreaseQueryKey(id) });
 
   if (isLoading) {
     return <div className="p-8"><Skeleton className="h-64 w-full" /></div>;
@@ -101,6 +179,7 @@ export default function PriceIncrease() {
               <TableHead>Uplift</TableHead>
               <TableHead>Sent</TableHead>
               <TableHead>Responded</TableHead>
+              <TableHead className="text-right">{t("common.actions")}</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -122,11 +201,16 @@ export default function PriceIncrease() {
                 <TableCell>+{letter.upliftPct}%</TableCell>
                 <TableCell>{letter.sentAt ? new Date(letter.sentAt).toLocaleDateString() : '-'}</TableCell>
                 <TableCell>{letter.respondedAt ? new Date(letter.respondedAt).toLocaleDateString() : '-'}</TableCell>
+                <TableCell className="text-right">
+                  {letter.status === "Sent" || letter.status === "Pending" ? (
+                    <ResponseDialog campaignId={id} letterId={letter.id} onDone={refresh} />
+                  ) : null}
+                </TableCell>
               </TableRow>
             ))}
             {!campaign.letters?.length && (
               <TableRow>
-                <TableCell colSpan={5} className="h-24 text-center">No letters found.</TableCell>
+                <TableCell colSpan={6} className="h-24 text-center">No letters found.</TableCell>
               </TableRow>
             )}
           </TableBody>

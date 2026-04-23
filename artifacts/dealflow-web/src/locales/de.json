@@ -1,0 +1,120 @@
+{
+  "nav": {
+    "home": "Startseite",
+    "accounts": "Kunden",
+    "deals": "Deals",
+    "quotes": "Angebote",
+    "pricing": "Preisgestaltung",
+    "approvals": "Freigaben",
+    "contracts": "Verträge",
+    "negotiations": "Verhandlungen",
+    "signatures": "Unterschriften",
+    "priceIncreases": "Preiserhöhungen",
+    "orderConfirmations": "Auftragsbestätigungen",
+    "reports": "Berichte",
+    "audit": "Audit-Log",
+    "copilot": "Copilot",
+    "admin": "Verwaltung"
+  },
+  "common": {
+    "search": "Deals, Kunden, Angebote suchen…",
+    "settings": "Einstellungen",
+    "support": "Support",
+    "logout": "Abmelden",
+    "myAccount": "Mein Konto",
+    "language": "Sprache",
+    "loading": "Wird geladen…",
+    "noData": "Keine Daten vorhanden",
+    "save": "Speichern",
+    "cancel": "Abbrechen",
+    "create": "Erstellen",
+    "edit": "Bearbeiten",
+    "delete": "Löschen",
+    "view": "Anzeigen",
+    "actions": "Aktionen",
+    "status": "Status",
+    "date": "Datum",
+    "user": "Benutzer",
+    "type": "Typ",
+    "filter": "Filter",
+    "all": "Alle",
+    "from": "Von",
+    "to": "Bis",
+    "apply": "Anwenden",
+    "reset": "Zurücksetzen",
+    "back": "Zurück",
+    "version": "Version",
+    "history": "Verlauf",
+    "send": "Senden",
+    "askQuestion": "Frage stellen…",
+    "newThread": "Neuer Thread",
+    "askCopilot": "Copilot fragen",
+    "details": "Details"
+  },
+  "pages": {
+    "home": "Übersicht",
+    "audit": {
+      "title": "Audit-Log",
+      "subtitle": "Alle protokollierten Änderungen über das System hinweg",
+      "entityType": "Objekttyp",
+      "action": "Aktion",
+      "noEntries": "Keine Einträge gefunden"
+    },
+    "orderConfirmations": {
+      "title": "Auftragsbestätigungen",
+      "subtitle": "Bestätigte Aufträge und Übergabe an Operations",
+      "create": "Neue Auftragsbestätigung",
+      "handoverChecklist": "Handover-Checkliste",
+      "checkLabel": "Prüfung",
+      "passed": "Bestanden",
+      "failed": "Fehlgeschlagen",
+      "pending": "Offen",
+      "noConfirmations": "Noch keine Auftragsbestätigungen vorhanden"
+    },
+    "copilot": {
+      "title": "Copilot",
+      "threads": "Threads",
+      "insights": "Aktuelle Insights",
+      "placeholder": "Frage etwas zu Deals, Verträgen, Preisen…",
+      "newThreadTitle": "Neuer Thread",
+      "newThreadTopic": "Thema (z.B. Deal, Angebot)"
+    },
+    "reports": {
+      "title": "Berichte",
+      "filterPeriod": "Zeitraum",
+      "filterStage": "Phase",
+      "filterOwner": "Verantwortlich"
+    },
+    "pricing": {
+      "title": "Preisgestaltung",
+      "resolveTitle": "Preis auflösen (Hierarchie)",
+      "resolveSubtitle": "Account-, Brand-, Tenant-Ebenen werden in dieser Reihenfolge geprüft",
+      "sku": "SKU",
+      "accountId": "Account ID",
+      "resolve": "Auflösen",
+      "source": "Quelle",
+      "price": "Preis",
+      "noResult": "Keine Preisregel gefunden"
+    },
+    "priceIncrease": {
+      "letterResponse": "Kundenantwort erfassen",
+      "responseType": "Reaktion",
+      "responseAccept": "Akzeptiert",
+      "responseNegotiate": "Verhandlung gewünscht",
+      "responseReject": "Abgelehnt",
+      "responseNote": "Notiz"
+    },
+    "versions": {
+      "title": "Versionen",
+      "noVersions": "Noch keine Versionen erfasst",
+      "savedAt": "Gespeichert",
+      "savedBy": "Von"
+    }
+  },
+  "helpBot": {
+    "title": "Hilfe-Assistent",
+    "placeholder": "Wie kann ich helfen?",
+    "greeting": "Hallo! Ich helfe dir beim Bedienen von DealFlow One. Frag mich z.B. nach Verträgen, Preisen oder Workflows.",
+    "open": "Hilfe öffnen"
+  }
+}

@@ -16,6 +16,8 @@ export interface Contract {
   status: string;
   version: number;
   riskLevel: string;
+  /** 0-100 calculated from clause severities */
+  riskScore?: number;
   createdAt: Date;
   template: string;
   /** @nullable */

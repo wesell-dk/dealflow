@@ -1,27 +1,81 @@
+import { useState, useMemo } from "react";
+import { useTranslation } from "react-i18next";
 import { useGetPerformanceReport, useGetForecast } from "@workspace/api-client-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { ResponsiveContainer, ComposedChart, AreaChart, Area, BarChart, Bar, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend } from "recharts";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { ResponsiveContainer, ComposedChart, AreaChart, Area, Bar, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend } from "recharts";
 
 export default function Reports() {
-  const { data: performance, isLoading: isLoadingPerf } = useGetPerformanceReport?.() ?? { data: null, isLoading: false };
-  const { data: forecast, isLoading: isLoadingForecast } = useGetForecast?.() ?? { data: null, isLoading: false };
+  const { t } = useTranslation();
+  const { data: performance, isLoading: isLoadingPerf } = useGetPerformanceReport();
+  const { data: forecast, isLoading: isLoadingForecast } = useGetForecast();
+  const [period, setPeriod] = useState<string>("12");
+  const [ownerId, setOwnerId] = useState<string>("__all__");
+
+  const ownerOptions = useMemo(() => performance?.byOwner ?? [], [performance]);
+  const monthly = useMemo(() => {
+    if (!performance) return [];
+    const n = period === "all" ? performance.monthly.length : parseInt(period, 10);
+    return performance.monthly.slice(-n);
+  }, [performance, period]);
+  const filteredOwners = useMemo(() => {
+    if (!performance) return [];
+    if (ownerId === "__all__") return performance.byOwner;
+    return performance.byOwner.filter((o) => o.ownerId === ownerId);
+  }, [performance, ownerId]);
 
   if (isLoadingPerf || isLoadingForecast) {
     return <div className="p-8"><Skeleton className="h-64 w-full" /></div>;
   }
 
   if (!performance || !forecast) {
-    return <div className="p-8">Reports data not available</div>;
+    return <div className="p-8">{t("common.noData")}</div>;
   }
 
   return (
     <div className="flex flex-col gap-6">
       <div>
-        <h1 className="text-3xl font-bold tracking-tight">Reports & Performance</h1>
+        <h1 className="text-3xl font-bold tracking-tight">{t("pages.reports.title")}</h1>
         <p className="text-muted-foreground mt-1">Analytics and forecasting insights.</p>
       </div>
+
+      <Card>
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base">{t("common.filter")}</CardTitle>
+        </CardHeader>
+        <CardContent className="grid grid-cols-1 md:grid-cols-3 gap-3">
+          <Select value={period} onValueChange={setPeriod}>
+            <SelectTrigger>
+              <SelectValue placeholder={t("pages.reports.filterPeriod")} />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="3">3 months</SelectItem>
+              <SelectItem value="6">6 months</SelectItem>
+              <SelectItem value="12">12 months</SelectItem>
+              <SelectItem value="all">{t("common.all")}</SelectItem>
+            </SelectContent>
+          </Select>
+          <Select value={ownerId} onValueChange={setOwnerId}>
+            <SelectTrigger>
+              <SelectValue placeholder={t("pages.reports.filterOwner")} />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="__all__">{t("common.all")}</SelectItem>
+              {ownerOptions.map((o) => (
+                <SelectItem key={o.ownerId} value={o.ownerId}>{o.ownerName}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </CardContent>
+      </Card>
 
       <div className="grid gap-4 md:grid-cols-4">
         <Card>
@@ -65,7 +119,7 @@ export default function Reports() {
           </CardHeader>
           <CardContent className="h-80">
             <ResponsiveContainer width="100%" height="100%">
-              <ComposedChart data={performance.monthly}>
+              <ComposedChart data={monthly}>
                 <CartesianGrid strokeDasharray="3 3" vertical={false} opacity={0.3} />
                 <XAxis dataKey="month" axisLine={false} tickLine={false} fontSize={12} />
                 <YAxis yAxisId="left" axisLine={false} tickLine={false} fontSize={12} />
@@ -116,7 +170,7 @@ export default function Reports() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {performance.byOwner.map((owner) => (
+              {filteredOwners.map((owner) => (
                 <TableRow key={owner.ownerId}>
                   <TableCell className="font-medium">{owner.ownerName}</TableCell>
                   <TableCell>{owner.deals}</TableCell>

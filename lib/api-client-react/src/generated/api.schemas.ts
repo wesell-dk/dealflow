@@ -147,6 +147,8 @@ export interface Contract {
   status: string;
   version: number;
   riskLevel: string;
+  /** 0-100 calculated from clause severities */
+  riskScore?: number;
   createdAt: string;
   template: string;
   /** @nullable */

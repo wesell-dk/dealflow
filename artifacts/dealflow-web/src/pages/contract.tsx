@@ -3,7 +3,9 @@ import { useGetContract, useListClauseFamilies } from "@workspace/api-client-rea
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { FileText, ShieldAlert, Library } from "lucide-react";
+import { Progress } from "@/components/ui/progress";
+import { FileText, ShieldAlert, Library, Activity } from "lucide-react";
+import { EntityVersions } from "@/components/ui/entity-versions";
 
 export default function Contract() {
   const [, params] = useRoute("/contracts/:id");
@@ -44,6 +46,23 @@ export default function Contract() {
           )}
         </div>
       </div>
+
+      <Card>
+        <CardHeader className="flex flex-row items-center justify-between pb-2 space-y-0">
+          <CardTitle className="text-sm flex items-center gap-2 font-medium text-muted-foreground">
+            <Activity className="h-4 w-4" /> Risk Score
+          </CardTitle>
+          <span className="text-3xl font-bold tabular-nums">{contract.riskScore ?? 0}</span>
+        </CardHeader>
+        <CardContent>
+          <Progress value={contract.riskScore ?? 0} className="h-2" />
+          <p className="text-xs text-muted-foreground mt-2">
+            Calculated from {contract.clauses?.length ?? 0} clause severity weights (high·25 / medium·10 / low·3, capped at 100).
+          </p>
+        </CardContent>
+      </Card>
+
+      <EntityVersions entityType="contract" entityId={id} />
 
       <div className="grid md:grid-cols-2 gap-6">
         <div className="space-y-4">

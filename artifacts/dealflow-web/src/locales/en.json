@@ -1,0 +1,120 @@
+{
+  "nav": {
+    "home": "Home",
+    "accounts": "Accounts",
+    "deals": "Deals",
+    "quotes": "Quotes",
+    "pricing": "Pricing",
+    "approvals": "Approvals",
+    "contracts": "Contracts",
+    "negotiations": "Negotiations",
+    "signatures": "Signatures",
+    "priceIncreases": "Price Increases",
+    "orderConfirmations": "Order Confirmations",
+    "reports": "Reports",
+    "audit": "Audit Log",
+    "copilot": "Copilot",
+    "admin": "Admin"
+  },
+  "common": {
+    "search": "Search deals, accounts, quotes…",
+    "settings": "Settings",
+    "support": "Support",
+    "logout": "Logout",
+    "myAccount": "My Account",
+    "language": "Language",
+    "loading": "Loading…",
+    "noData": "No data available",
+    "save": "Save",
+    "cancel": "Cancel",
+    "create": "Create",
+    "edit": "Edit",
+    "delete": "Delete",
+    "view": "View",
+    "actions": "Actions",
+    "status": "Status",
+    "date": "Date",
+    "user": "User",
+    "type": "Type",
+    "filter": "Filter",
+    "all": "All",
+    "from": "From",
+    "to": "To",
+    "apply": "Apply",
+    "reset": "Reset",
+    "back": "Back",
+    "version": "Version",
+    "history": "History",
+    "send": "Send",
+    "askQuestion": "Ask a question…",
+    "newThread": "New thread",
+    "askCopilot": "Ask Copilot",
+    "details": "Details"
+  },
+  "pages": {
+    "home": "Overview",
+    "audit": {
+      "title": "Audit Log",
+      "subtitle": "All recorded changes across the system",
+      "entityType": "Entity Type",
+      "action": "Action",
+      "noEntries": "No entries found"
+    },
+    "orderConfirmations": {
+      "title": "Order Confirmations",
+      "subtitle": "Confirmed orders and handover to operations",
+      "create": "New Order Confirmation",
+      "handoverChecklist": "Handover Checklist",
+      "checkLabel": "Check",
+      "passed": "Passed",
+      "failed": "Failed",
+      "pending": "Pending",
+      "noConfirmations": "No order confirmations yet"
+    },
+    "copilot": {
+      "title": "Copilot",
+      "threads": "Threads",
+      "insights": "Recent insights",
+      "placeholder": "Ask about deals, contracts, pricing…",
+      "newThreadTitle": "New thread",
+      "newThreadTopic": "Topic (e.g. Deal, Quote)"
+    },
+    "reports": {
+      "title": "Reports",
+      "filterPeriod": "Period",
+      "filterStage": "Stage",
+      "filterOwner": "Owner"
+    },
+    "pricing": {
+      "title": "Pricing",
+      "resolveTitle": "Resolve price (hierarchy)",
+      "resolveSubtitle": "Account, Brand and Tenant levels are checked in this order",
+      "sku": "SKU",
+      "accountId": "Account ID",
+      "resolve": "Resolve",
+      "source": "Source",
+      "price": "Price",
+      "noResult": "No price rule found"
+    },
+    "priceIncrease": {
+      "letterResponse": "Record customer response",
+      "responseType": "Response",
+      "responseAccept": "Accepted",
+      "responseNegotiate": "Negotiation requested",
+      "responseReject": "Rejected",
+      "responseNote": "Note"
+    },
+    "versions": {
+      "title": "Versions",
+      "noVersions": "No versions recorded yet",
+      "savedAt": "Saved at",
+      "savedBy": "By"
+    }
+  },
+  "helpBot": {
+    "title": "Help assistant",
+    "placeholder": "How can I help?",
+    "greeting": "Hi! I'll help you navigate DealFlow One. Ask about contracts, pricing or workflows.",
+    "open": "Open help"
+  }
+}

@@ -25,6 +25,9 @@ import AccountDetail from "@/pages/account";
 import Reports from "@/pages/reports";
 import Copilot from "@/pages/copilot";
 import Admin from "@/pages/admin";
+import OrderConfirmations from "@/pages/order-confirmations";
+import OrderConfirmationDetail from "@/pages/order-confirmation";
+import Audit from "@/pages/audit";
 
 const queryClient = new QueryClient();
 
@@ -52,6 +55,9 @@ function Router() {
         <Route path="/reports" component={Reports} />
         <Route path="/copilot" component={Copilot} />
         <Route path="/admin" component={Admin} />
+        <Route path="/order-confirmations" component={OrderConfirmations} />
+        <Route path="/order-confirmations/:id" component={OrderConfirmationDetail} />
+        <Route path="/audit" component={Audit} />
         <Route component={NotFound} />
       </Switch>
     </AppShell>

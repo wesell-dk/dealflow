@@ -27,6 +27,11 @@ import {
   timelineEventsTable,
   copilotInsightsTable,
   copilotThreadsTable,
+  copilotMessagesTable,
+  auditLogTable,
+  orderConfirmationsTable,
+  orderConfirmationChecksTable,
+  entityVersionsTable,
 } from "@workspace/db";
 import { logger } from "./logger";
 
@@ -414,6 +419,64 @@ export async function seedIfEmpty(): Promise<void> {
     { id: "ct_th_002", title: "Draft renewal email for Castell",          scope: "deal:dl_005", lastMessage: "Drafted in your tone. Want me to add a Pro tier upsell paragraph?", messageCount: 4 },
     { id: "ct_th_003", title: "Compare won vs. lost deals this quarter",  scope: "global",       lastMessage: "Discount discipline is the strongest predictor (R² 0.71).", messageCount: 9 },
     { id: "ct_th_004", title: "Summarize Nordstern legal redlines",       scope: "deal:dl_003", lastMessage: "4 material changes; 2 require Deal Desk + Legal.", messageCount: 5 },
+  ]);
+
+  // Copilot messages for existing threads
+  await db.insert(copilotMessagesTable).values([
+    { id: "cm_001", threadId: "ct_th_001", role: "user",      content: "Vorwerk pushes for 12% discount. What is reasonable?" },
+    { id: "cm_002", threadId: "ct_th_001", role: "assistant", content: "Median won deals in DACH segment sit at 7.8%. Counter with 9% paired with a 24-month commitment to keep margin >30%." },
+    { id: "cm_003", threadId: "ct_th_001", role: "user",      content: "What if they reject the term extension?" },
+    { id: "cm_004", threadId: "ct_th_001", role: "assistant", content: "Offer 8% with quarterly volume rebate triggered at 110% of forecast. Net effect equal, optics better." },
+    { id: "cm_005", threadId: "ct_th_002", role: "user",      content: "Draft a renewal email for Castell." },
+    { id: "cm_006", threadId: "ct_th_002", role: "assistant", content: "Drafted in your tone. Want me to add a Pro tier upsell paragraph?" },
+    { id: "cm_007", threadId: "ct_th_003", role: "user",      content: "Compare won vs. lost deals this quarter." },
+    { id: "cm_008", threadId: "ct_th_003", role: "assistant", content: "Discount discipline (R² 0.71) is the strongest predictor. Lost deals averaged 13.4% discount vs 7.8% on won." },
+    { id: "cm_009", threadId: "ct_th_004", role: "user",      content: "Summarize Nordstern legal redlines." },
+    { id: "cm_010", threadId: "ct_th_004", role: "assistant", content: "4 material changes; liability cap waiver and IP indemnity require Deal Desk + Legal sign-off." },
+  ]);
+
+  // Audit log
+  await db.insert(auditLogTable).values([
+    { id: "au_001", entityType: "deal",     entityId: "dl_001", action: "discount_changed",  actor: "Anna Brandt",      summary: "Discount raised from 8% to 12% on Vorwerk renewal.",          beforeJson: '{"discount":8}',  afterJson: '{"discount":12}', at: daysFromNow(-2) },
+    { id: "au_002", entityType: "contract", entityId: "co_001", action: "clause_swapped",    actor: "Sara Lindqvist",   summary: "Liability cap clause swapped to standard variant.",           beforeJson: null, afterJson: null, at: daysFromNow(-3) },
+    { id: "au_003", entityType: "price",    entityId: "pr_001", action: "price_overridden",  actor: "Priya Raman",      summary: "Override on PRO-200 (-4.5%) for Atlas account.",              beforeJson: '{"price":1280}', afterJson: '{"price":1222}', at: daysFromNow(-5) },
+    { id: "au_004", entityType: "deal",     entityId: "dl_007", action: "stage_changed",     actor: "Marcel Voss",      summary: "Atlas Energy moved Negotiation → Closing.",                  beforeJson: null, afterJson: null, at: daysFromNow(-1) },
+    { id: "au_005", entityType: "letter",   entityId: "pl_001", action: "letter_sent",       actor: "Priya Raman",      summary: "Hardware uplift letter sent to 14 accounts.",                 beforeJson: null, afterJson: null, at: daysFromNow(-6) },
+    { id: "au_006", entityType: "deal",     entityId: "dl_003", action: "comment_added",     actor: "James Whitfield",  summary: "Champion confirmed budget approval received.",                beforeJson: null, afterJson: null, at: daysFromNow(-4) },
+    { id: "au_007", entityType: "contract", entityId: "co_002", action: "version_published", actor: "Sara Lindqvist",   summary: "Northwind v2 published with phased rollout option.",          beforeJson: null, afterJson: null, at: daysFromNow(-2) },
+    { id: "au_008", entityType: "order",    entityId: "oc_001", action: "handover_started",  actor: "Anna Brandt",      summary: "Handover checks initiated for OC-2026-001.",                  beforeJson: null, afterJson: null, at: daysFromNow(-1) },
+  ]);
+
+  // Order confirmations
+  await db.insert(orderConfirmationsTable).values([
+    { id: "oc_001", dealId: "dl_001", contractId: "co_001", number: "OC-2026-001", status: "ready",      readinessScore: 92, totalAmount: "184500.00", currency: "EUR", expectedDelivery: isoDate(daysFromNow(21)), handoverAt: null,                createdAt: daysFromNow(-3) },
+    { id: "oc_002", dealId: "dl_005", contractId: null,    number: "OC-2026-002", status: "in_review",  readinessScore: 64, totalAmount: "92800.00",  currency: "EUR", expectedDelivery: isoDate(daysFromNow(35)), handoverAt: null,                createdAt: daysFromNow(-2) },
+    { id: "oc_003", dealId: "dl_013", contractId: null,    number: "OC-2026-003", status: "handed_over",readinessScore: 100,totalAmount: "340000.00", currency: "EUR", expectedDelivery: isoDate(daysFromNow(-5)),  handoverAt: daysFromNow(-7),     createdAt: daysFromNow(-25) },
+    { id: "oc_004", dealId: "dl_007", contractId: null,    number: "OC-2026-004", status: "blocked",    readinessScore: 38, totalAmount: "1240000.00",currency: "EUR", expectedDelivery: isoDate(daysFromNow(60)), handoverAt: null,                createdAt: daysFromNow(-1) },
+  ]);
+
+  await db.insert(orderConfirmationChecksTable).values([
+    { id: "ocx_001", orderConfirmationId: "oc_001", label: "Credit limit verified",    status: "ok",      detail: "EUR 250k available." },
+    { id: "ocx_002", orderConfirmationId: "oc_001", label: "Tax & VAT data complete",  status: "ok",      detail: "DE VAT validated." },
+    { id: "ocx_003", orderConfirmationId: "oc_001", label: "Delivery address confirmed",status: "ok",     detail: "Site Wuppertal." },
+    { id: "ocx_004", orderConfirmationId: "oc_001", label: "Payment terms aligned",    status: "warning", detail: "Customer asked Net60, contract is Net45." },
+    { id: "ocx_005", orderConfirmationId: "oc_002", label: "Credit limit verified",    status: "ok",      detail: "EUR 100k available." },
+    { id: "ocx_006", orderConfirmationId: "oc_002", label: "ERP article mapping",      status: "warning", detail: "2 of 14 SKUs pending mapping." },
+    { id: "ocx_007", orderConfirmationId: "oc_002", label: "Logistics slot reserved",  status: "pending", detail: "Awaiting carrier confirmation." },
+    { id: "ocx_008", orderConfirmationId: "oc_003", label: "All checks completed",     status: "ok",      detail: "Handed over to Operations." },
+    { id: "ocx_009", orderConfirmationId: "oc_004", label: "Credit limit verified",    status: "blocked", detail: "Exposure exceeds limit by EUR 240k." },
+    { id: "ocx_010", orderConfirmationId: "oc_004", label: "Export control screening", status: "warning", detail: "Dual-use review required." },
+  ]);
+
+  // Entity versions
+  await db.insert(entityVersionsTable).values([
+    { id: "ev_001", entityType: "contract", entityId: "co_001", version: 1, label: "Draft v1",     snapshot: '{"clauses":12}', actor: "Anna Brandt",    comment: "Initial draft from template.",                  createdAt: daysFromNow(-14) },
+    { id: "ev_002", entityType: "contract", entityId: "co_001", version: 2, label: "Legal v2",     snapshot: '{"clauses":13}', actor: "Sara Lindqvist", comment: "Liability cap aligned to standard.",            createdAt: daysFromNow(-8) },
+    { id: "ev_003", entityType: "contract", entityId: "co_001", version: 3, label: "Customer v3",  snapshot: '{"clauses":13}', actor: "Anna Brandt",    comment: "Customer redlines accepted on payment terms.", createdAt: daysFromNow(-3) },
+    { id: "ev_004", entityType: "contract", entityId: "co_002", version: 1, label: "Draft v1",     snapshot: '{"clauses":10}', actor: "James Whitfield",comment: "Northwind initial.",                            createdAt: daysFromNow(-10) },
+    { id: "ev_005", entityType: "contract", entityId: "co_002", version: 2, label: "Phased v2",    snapshot: '{"clauses":11}', actor: "James Whitfield",comment: "Phased rollout option added.",                  createdAt: daysFromNow(-2) },
+    { id: "ev_006", entityType: "price",    entityId: "pr_001", version: 1, label: "Base list",    snapshot: '{"price":1280}', actor: "Priya Raman",    comment: "List price baseline.",                          createdAt: daysFromNow(-30) },
+    { id: "ev_007", entityType: "price",    entityId: "pr_001", version: 2, label: "Atlas override",snapshot:'{"price":1222}', actor: "Priya Raman",    comment: "-4.5% override for Atlas Energy.",              createdAt: daysFromNow(-5) },
   ]);
 
   logger.info("Seed complete.");
