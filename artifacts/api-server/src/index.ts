@@ -1,5 +1,10 @@
 import app from "./app";
 import { logger } from "./lib/logger";
+import { seedIfEmpty } from "./lib/seed";
+
+await seedIfEmpty().catch((err) => {
+  logger.error({ err }, "Seed failed");
+});
 
 const rawPort = process.env["PORT"];
 

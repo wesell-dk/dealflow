@@ -3,34 +3,1492 @@ info:
   # Do not change the title, if the title changes, the import paths will be broken
   title: Api
   version: 0.1.0
-  description: API specification
+  description: |
+    DealFlow One — Commercial Execution Platform API.
+    Multi-tenant, multi-company, multi-brand. Deal-centric.
 servers:
   - url: /api
     description: Base API path
+
 tags:
   - name: health
-    description: Health operations
+  - name: orgs
+  - name: users
+  - name: accounts
+  - name: contacts
+  - name: deals
+  - name: quotes
+  - name: pricing
+  - name: approvals
+  - name: contracts
+  - name: negotiations
+  - name: signatures
+  - name: priceIncreases
+  - name: reports
+  - name: copilot
+  - name: activity
+
 paths:
+
   /healthz:
     get:
       operationId: healthCheck
       tags: [health]
       summary: Health check
-      description: Returns server health status
       responses:
         "200":
           description: Healthy
           content:
             application/json:
+              schema: { $ref: "#/components/schemas/HealthStatus" }
+
+  # ───────────── ORGANISATION ─────────────
+
+  /orgs/tenant:
+    get:
+      operationId: getTenant
+      tags: [orgs]
+      summary: Get the currently active tenant (single-tenant demo)
+      responses:
+        "200":
+          description: ok
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Tenant" }
+
+  /orgs/companies:
+    get:
+      operationId: listCompanies
+      tags: [orgs]
+      responses:
+        "200":
+          description: ok
+          content:
+            application/json:
               schema:
-                $ref: "#/components/schemas/HealthStatus"
+                type: array
+                items: { $ref: "#/components/schemas/Company" }
+
+  /orgs/brands:
+    get:
+      operationId: listBrands
+      tags: [orgs]
+      responses:
+        "200":
+          description: ok
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/Brand" }
+
+  /orgs/users:
+    get:
+      operationId: listUsers
+      tags: [users]
+      responses:
+        "200":
+          description: ok
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/User" }
+
+  /orgs/me:
+    get:
+      operationId: getCurrentUser
+      tags: [users]
+      responses:
+        "200":
+          description: ok
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/User" }
+
+  # ───────────── ACCOUNTS / CONTACTS ─────────────
+
+  /accounts:
+    get:
+      operationId: listAccounts
+      tags: [accounts]
+      responses:
+        "200":
+          description: ok
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/Account" }
+    post:
+      operationId: createAccount
+      tags: [accounts]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/AccountInput" }
+      responses:
+        "201":
+          description: created
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Account" }
+
+  /accounts/{id}:
+    get:
+      operationId: getAccount
+      tags: [accounts]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: ok
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AccountDetail" }
+
+  /contacts:
+    get:
+      operationId: listContacts
+      tags: [contacts]
+      parameters:
+        - in: query
+          name: accountId
+          required: false
+          schema: { type: string }
+      responses:
+        "200":
+          description: ok
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/Contact" }
+
+  # ───────────── DEALS ─────────────
+
+  /deals:
+    get:
+      operationId: listDeals
+      tags: [deals]
+      parameters:
+        - in: query
+          name: stage
+          required: false
+          schema: { type: string }
+        - in: query
+          name: ownerId
+          required: false
+          schema: { type: string }
+        - in: query
+          name: companyId
+          required: false
+          schema: { type: string }
+        - in: query
+          name: brandId
+          required: false
+          schema: { type: string }
+        - in: query
+          name: search
+          required: false
+          schema: { type: string }
+      responses:
+        "200":
+          description: ok
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/Deal" }
+    post:
+      operationId: createDeal
+      tags: [deals]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/DealInput" }
+      responses:
+        "201":
+          description: created
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Deal" }
+
+  /deals/pipeline:
+    get:
+      operationId: getDealPipeline
+      tags: [deals]
+      summary: Pipeline overview grouped by stage
+      responses:
+        "200":
+          description: ok
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/DealPipeline" }
+
+  /deals/{id}:
+    get:
+      operationId: getDeal
+      tags: [deals]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: ok
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/DealDetail" }
+    patch:
+      operationId: updateDeal
+      tags: [deals]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/DealPatch" }
+      responses:
+        "200":
+          description: ok
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Deal" }
+
+  /deals/{id}/timeline:
+    get:
+      operationId: getDealTimeline
+      tags: [deals, activity]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: ok
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/TimelineEvent" }
+
+  # ───────────── QUOTES ─────────────
+
+  /quotes:
+    get:
+      operationId: listQuotes
+      tags: [quotes]
+      parameters:
+        - in: query
+          name: dealId
+          required: false
+          schema: { type: string }
+        - in: query
+          name: status
+          required: false
+          schema: { type: string }
+      responses:
+        "200":
+          description: ok
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/Quote" }
+    post:
+      operationId: createQuote
+      tags: [quotes]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/QuoteInput" }
+      responses:
+        "201":
+          description: created
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Quote" }
+
+  /quotes/{id}:
+    get:
+      operationId: getQuote
+      tags: [quotes]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: ok
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/QuoteDetail" }
+
+  /quotes/{id}/versions:
+    post:
+      operationId: createQuoteVersion
+      tags: [quotes]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/QuoteVersionInput" }
+      responses:
+        "201":
+          description: created
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/QuoteVersion" }
+
+  /quotes/{id}/accept:
+    post:
+      operationId: acceptQuote
+      tags: [quotes]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: ok
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Quote" }
+
+  # ───────────── PRICING ─────────────
+
+  /price-positions:
+    get:
+      operationId: listPricePositions
+      tags: [pricing]
+      responses:
+        "200":
+          description: ok
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/PricePosition" }
+    post:
+      operationId: createPricePosition
+      tags: [pricing]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/PricePositionInput" }
+      responses:
+        "201":
+          description: created
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PricePosition" }
+
+  /price-rules:
+    get:
+      operationId: listPriceRules
+      tags: [pricing]
+      responses:
+        "200":
+          description: ok
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/PriceRule" }
+
+  /pricing/summary:
+    get:
+      operationId: getPricingSummary
+      tags: [pricing]
+      summary: KPIs for the pricing workspace
+      responses:
+        "200":
+          description: ok
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PricingSummary" }
+
+  # ───────────── APPROVALS ─────────────
+
+  /approvals:
+    get:
+      operationId: listApprovals
+      tags: [approvals]
+      parameters:
+        - in: query
+          name: status
+          required: false
+          schema: { type: string }
+      responses:
+        "200":
+          description: ok
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/ApprovalCase" }
+
+  /approvals/{id}/decide:
+    post:
+      operationId: decideApproval
+      tags: [approvals]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ApprovalDecisionInput" }
+      responses:
+        "200":
+          description: ok
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ApprovalCase" }
+
+  # ───────────── CONTRACTS ─────────────
+
+  /contracts:
+    get:
+      operationId: listContracts
+      tags: [contracts]
+      parameters:
+        - in: query
+          name: dealId
+          required: false
+          schema: { type: string }
+      responses:
+        "200":
+          description: ok
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/Contract" }
+    post:
+      operationId: createContract
+      tags: [contracts]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ContractInput" }
+      responses:
+        "201":
+          description: created
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Contract" }
+
+  /contracts/{id}:
+    get:
+      operationId: getContract
+      tags: [contracts]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: ok
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ContractDetail" }
+
+  /clause-families:
+    get:
+      operationId: listClauseFamilies
+      tags: [contracts]
+      responses:
+        "200":
+          description: ok
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/ClauseFamily" }
+
+  # ───────────── NEGOTIATIONS ─────────────
+
+  /negotiations:
+    get:
+      operationId: listNegotiations
+      tags: [negotiations]
+      parameters:
+        - in: query
+          name: dealId
+          required: false
+          schema: { type: string }
+        - in: query
+          name: status
+          required: false
+          schema: { type: string }
+      responses:
+        "200":
+          description: ok
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/Negotiation" }
+
+  /negotiations/{id}:
+    get:
+      operationId: getNegotiation
+      tags: [negotiations]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: ok
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/NegotiationDetail" }
+
+  /negotiations/{id}/reactions:
+    post:
+      operationId: addCustomerReaction
+      tags: [negotiations]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ReactionInput" }
+      responses:
+        "201":
+          description: created
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CustomerReaction" }
+
+  # ───────────── SIGNATURES ─────────────
+
+  /signatures:
+    get:
+      operationId: listSignaturePackages
+      tags: [signatures]
+      parameters:
+        - in: query
+          name: status
+          required: false
+          schema: { type: string }
+      responses:
+        "200":
+          description: ok
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/SignaturePackage" }
+
+  /signatures/{id}:
+    get:
+      operationId: getSignaturePackage
+      tags: [signatures]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: ok
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SignaturePackageDetail" }
+
+  /signatures/{id}/remind:
+    post:
+      operationId: remindSigner
+      tags: [signatures]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: ok
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SignaturePackage" }
+
+  # ───────────── PRICE INCREASES ─────────────
+
+  /price-increases:
+    get:
+      operationId: listPriceIncreases
+      tags: [priceIncreases]
+      responses:
+        "200":
+          description: ok
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/PriceIncreaseCampaign" }
+
+  /price-increases/{id}:
+    get:
+      operationId: getPriceIncrease
+      tags: [priceIncreases]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: ok
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PriceIncreaseCampaignDetail" }
+
+  # ───────────── REPORTS ─────────────
+
+  /reports/dashboard:
+    get:
+      operationId: getDashboardSummary
+      tags: [reports]
+      summary: Top-level home/today summary
+      responses:
+        "200":
+          description: ok
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/DashboardSummary" }
+
+  /reports/performance:
+    get:
+      operationId: getPerformanceReport
+      tags: [reports]
+      summary: Sales performance KPIs and trends
+      responses:
+        "200":
+          description: ok
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PerformanceReport" }
+
+  /reports/forecast:
+    get:
+      operationId: getForecast
+      tags: [reports]
+      summary: Pipeline forecast by month
+      responses:
+        "200":
+          description: ok
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ForecastReport" }
+
+  # ───────────── COPILOT ─────────────
+
+  /copilot/insights:
+    get:
+      operationId: listCopilotInsights
+      tags: [copilot]
+      summary: AI-orchestrated next-best-actions and risks
+      responses:
+        "200":
+          description: ok
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/CopilotInsight" }
+
+  /copilot/threads:
+    get:
+      operationId: listCopilotThreads
+      tags: [copilot]
+      responses:
+        "200":
+          description: ok
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/CopilotThread" }
+
+  /activity:
+    get:
+      operationId: listRecentActivity
+      tags: [activity]
+      summary: Cross-domain recent activity feed
+      responses:
+        "200":
+          description: ok
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/TimelineEvent" }
+
 components:
   schemas:
+
     HealthStatus:
       type: object
       properties:
-        status:
-          type: string
-      required:
-        - status
+        status: { type: string }
+      required: [status]
 
+    # ── Org ──
+    Tenant:
+      type: object
+      required: [id, name, plan, region, createdAt]
+      properties:
+        id: { type: string }
+        name: { type: string }
+        plan: { type: string }
+        region: { type: string }
+        createdAt: { type: string, format: date-time }
+
+    Company:
+      type: object
+      required: [id, tenantId, name, legalName, country, currency]
+      properties:
+        id: { type: string }
+        tenantId: { type: string }
+        name: { type: string }
+        legalName: { type: string }
+        country: { type: string }
+        currency: { type: string }
+
+    Brand:
+      type: object
+      required: [id, companyId, name, color, voice]
+      properties:
+        id: { type: string }
+        companyId: { type: string }
+        name: { type: string }
+        color: { type: string }
+        voice: { type: string }
+
+    User:
+      type: object
+      required: [id, name, email, role, scope, initials]
+      properties:
+        id: { type: string }
+        name: { type: string }
+        email: { type: string }
+        role: { type: string }
+        scope: { type: string }
+        initials: { type: string }
+        avatarColor:
+          type: ["string", "null"]
+
+    # ── Accounts ──
+    Account:
+      type: object
+      required: [id, name, industry, country, healthScore, openDeals, totalValue]
+      properties:
+        id: { type: string }
+        name: { type: string }
+        industry: { type: string }
+        country: { type: string }
+        healthScore: { type: integer }
+        openDeals: { type: integer }
+        totalValue: { type: number }
+        ownerId:
+          type: ["string", "null"]
+
+    AccountDetail:
+      allOf:
+        - $ref: "#/components/schemas/Account"
+        - type: object
+          required: [contacts, deals]
+          properties:
+            contacts:
+              type: array
+              items: { $ref: "#/components/schemas/Contact" }
+            deals:
+              type: array
+              items: { $ref: "#/components/schemas/Deal" }
+
+    AccountInput:
+      type: object
+      required: [name, industry, country]
+      properties:
+        name: { type: string }
+        industry: { type: string }
+        country: { type: string }
+
+    Contact:
+      type: object
+      required: [id, accountId, name, email, role, isDecisionMaker]
+      properties:
+        id: { type: string }
+        accountId: { type: string }
+        name: { type: string }
+        email: { type: string }
+        role: { type: string }
+        isDecisionMaker: { type: boolean }
+        phone:
+          type: ["string", "null"]
+
+    # ── Deals ──
+    Deal:
+      type: object
+      required:
+        [
+          id, name, accountId, accountName, stage, value, currency, probability,
+          expectedCloseDate, ownerId, ownerName, brandId, brandName, companyId,
+          companyName, riskLevel, updatedAt
+        ]
+      properties:
+        id: { type: string }
+        name: { type: string }
+        accountId: { type: string }
+        accountName: { type: string }
+        stage: { type: string }
+        value: { type: number }
+        currency: { type: string }
+        probability: { type: integer }
+        expectedCloseDate: { type: string, format: date }
+        ownerId: { type: string }
+        ownerName: { type: string }
+        brandId: { type: string }
+        brandName: { type: string }
+        companyId: { type: string }
+        companyName: { type: string }
+        riskLevel: { type: string }
+        updatedAt: { type: string, format: date-time }
+        nextStep:
+          type: ["string", "null"]
+
+    DealInput:
+      type: object
+      required: [name, accountId, value, stage, brandId, companyId, ownerId, expectedCloseDate]
+      properties:
+        name: { type: string }
+        accountId: { type: string }
+        value: { type: number }
+        stage: { type: string }
+        brandId: { type: string }
+        companyId: { type: string }
+        ownerId: { type: string }
+        expectedCloseDate: { type: string, format: date }
+
+    DealPatch:
+      type: object
+      properties:
+        name: { type: string }
+        stage: { type: string }
+        value: { type: number }
+        probability: { type: integer }
+        riskLevel: { type: string }
+        nextStep: { type: string }
+        expectedCloseDate: { type: string, format: date }
+
+    DealDetail:
+      allOf:
+        - $ref: "#/components/schemas/Deal"
+        - type: object
+          required: [quotes, contracts, approvals, signatures, contacts, negotiations]
+          properties:
+            quotes:
+              type: array
+              items: { $ref: "#/components/schemas/Quote" }
+            contracts:
+              type: array
+              items: { $ref: "#/components/schemas/Contract" }
+            approvals:
+              type: array
+              items: { $ref: "#/components/schemas/ApprovalCase" }
+            signatures:
+              type: array
+              items: { $ref: "#/components/schemas/SignaturePackage" }
+            contacts:
+              type: array
+              items: { $ref: "#/components/schemas/Contact" }
+            negotiations:
+              type: array
+              items: { $ref: "#/components/schemas/Negotiation" }
+
+    DealPipeline:
+      type: object
+      required: [stages]
+      properties:
+        stages:
+          type: array
+          items:
+            type: object
+            required: [stage, label, count, value, deals]
+            properties:
+              stage: { type: string }
+              label: { type: string }
+              count: { type: integer }
+              value: { type: number }
+              deals:
+                type: array
+                items: { $ref: "#/components/schemas/Deal" }
+
+    TimelineEvent:
+      type: object
+      required: [id, type, title, description, at, actor]
+      properties:
+        id: { type: string }
+        type: { type: string }
+        title: { type: string }
+        description: { type: string }
+        at: { type: string, format: date-time }
+        actor: { type: string }
+        dealId:
+          type: ["string", "null"]
+        dealName:
+          type: ["string", "null"]
+
+    # ── Quotes ──
+    Quote:
+      type: object
+      required:
+        [
+          id, dealId, dealName, number, status, currentVersion, totalAmount,
+          discountPct, marginPct, currency, createdAt, validUntil
+        ]
+      properties:
+        id: { type: string }
+        dealId: { type: string }
+        dealName: { type: string }
+        number: { type: string }
+        status: { type: string }
+        currentVersion: { type: integer }
+        totalAmount: { type: number }
+        discountPct: { type: number }
+        marginPct: { type: number }
+        currency: { type: string }
+        createdAt: { type: string, format: date-time }
+        validUntil: { type: string, format: date }
+
+    QuoteInput:
+      type: object
+      required: [dealId]
+      properties:
+        dealId: { type: string }
+        validUntil: { type: string, format: date }
+
+    QuoteVersion:
+      type: object
+      required: [id, quoteId, version, totalAmount, discountPct, marginPct, status, createdAt]
+      properties:
+        id: { type: string }
+        quoteId: { type: string }
+        version: { type: integer }
+        totalAmount: { type: number }
+        discountPct: { type: number }
+        marginPct: { type: number }
+        status: { type: string }
+        createdAt: { type: string, format: date-time }
+        notes:
+          type: ["string", "null"]
+
+    LineItem:
+      type: object
+      required: [id, quoteVersionId, name, quantity, unitPrice, listPrice, discountPct, total]
+      properties:
+        id: { type: string }
+        quoteVersionId: { type: string }
+        name: { type: string }
+        description:
+          type: ["string", "null"]
+        quantity: { type: number }
+        unitPrice: { type: number }
+        listPrice: { type: number }
+        discountPct: { type: number }
+        total: { type: number }
+
+    QuoteDetail:
+      allOf:
+        - $ref: "#/components/schemas/Quote"
+        - type: object
+          required: [versions, lineItems]
+          properties:
+            versions:
+              type: array
+              items: { $ref: "#/components/schemas/QuoteVersion" }
+            lineItems:
+              type: array
+              items: { $ref: "#/components/schemas/LineItem" }
+
+    QuoteVersionInput:
+      type: object
+      required: [discountPct]
+      properties:
+        discountPct: { type: number }
+        notes: { type: string }
+
+    # ── Pricing ──
+    PricePosition:
+      type: object
+      required:
+        [
+          id, sku, name, category, listPrice, currency, status, validFrom,
+          brandId, brandName, companyId, companyName, version, isStandard
+        ]
+      properties:
+        id: { type: string }
+        sku: { type: string }
+        name: { type: string }
+        category: { type: string }
+        listPrice: { type: number }
+        currency: { type: string }
+        status: { type: string }
+        validFrom: { type: string, format: date }
+        validUntil:
+          type: ["string", "null"]
+          format: date
+        brandId: { type: string }
+        brandName: { type: string }
+        companyId: { type: string }
+        companyName: { type: string }
+        version: { type: integer }
+        isStandard: { type: boolean }
+
+    PricePositionInput:
+      type: object
+      required: [sku, name, category, listPrice, currency, brandId, companyId, validFrom]
+      properties:
+        sku: { type: string }
+        name: { type: string }
+        category: { type: string }
+        listPrice: { type: number }
+        currency: { type: string }
+        brandId: { type: string }
+        companyId: { type: string }
+        validFrom: { type: string, format: date }
+
+    PriceRule:
+      type: object
+      required: [id, name, scope, condition, effect, priority, status]
+      properties:
+        id: { type: string }
+        name: { type: string }
+        scope: { type: string }
+        condition: { type: string }
+        effect: { type: string }
+        priority: { type: integer }
+        status: { type: string }
+
+    PricingSummary:
+      type: object
+      required:
+        [
+          totalPositions, activePositions, pendingApprovalCount,
+          standardCoveragePct, recentChanges
+        ]
+      properties:
+        totalPositions: { type: integer }
+        activePositions: { type: integer }
+        pendingApprovalCount: { type: integer }
+        standardCoveragePct: { type: number }
+        recentChanges:
+          type: array
+          items:
+            type: object
+            required: [id, sku, change, at]
+            properties:
+              id: { type: string }
+              sku: { type: string }
+              change: { type: string }
+              at: { type: string, format: date-time }
+
+    # ── Approvals ──
+    ApprovalCase:
+      type: object
+      required:
+        [
+          id, dealId, dealName, type, reason, requestedBy, requestedByName,
+          status, priority, createdAt, impactValue, currency
+        ]
+      properties:
+        id: { type: string }
+        dealId: { type: string }
+        dealName: { type: string }
+        type: { type: string }
+        reason: { type: string }
+        requestedBy: { type: string }
+        requestedByName: { type: string }
+        status: { type: string }
+        priority: { type: string }
+        createdAt: { type: string, format: date-time }
+        deadline:
+          type: ["string", "null"]
+          format: date-time
+        impactValue: { type: number }
+        currency: { type: string }
+        decidedAt:
+          type: ["string", "null"]
+          format: date-time
+        decidedBy:
+          type: ["string", "null"]
+        decisionComment:
+          type: ["string", "null"]
+
+    ApprovalDecisionInput:
+      type: object
+      required: [decision]
+      properties:
+        decision: { type: string }
+        comment: { type: string }
+
+    # ── Contracts ──
+    Contract:
+      type: object
+      required:
+        [
+          id, dealId, dealName, title, status, version, riskLevel, createdAt,
+          template
+        ]
+      properties:
+        id: { type: string }
+        dealId: { type: string }
+        dealName: { type: string }
+        title: { type: string }
+        status: { type: string }
+        version: { type: integer }
+        riskLevel: { type: string }
+        createdAt: { type: string, format: date-time }
+        template: { type: string }
+        validUntil:
+          type: ["string", "null"]
+          format: date
+
+    ContractInput:
+      type: object
+      required: [dealId, title, template]
+      properties:
+        dealId: { type: string }
+        title: { type: string }
+        template: { type: string }
+
+    ContractDetail:
+      allOf:
+        - $ref: "#/components/schemas/Contract"
+        - type: object
+          required: [clauses]
+          properties:
+            clauses:
+              type: array
+              items: { $ref: "#/components/schemas/ContractClause" }
+
+    ClauseFamily:
+      type: object
+      required: [id, name, description, variants]
+      properties:
+        id: { type: string }
+        name: { type: string }
+        description: { type: string }
+        variants:
+          type: array
+          items:
+            type: object
+            required: [id, name, severity, summary]
+            properties:
+              id: { type: string }
+              name: { type: string }
+              severity: { type: string }
+              summary: { type: string }
+
+    ContractClause:
+      type: object
+      required: [id, contractId, family, variant, severity, summary]
+      properties:
+        id: { type: string }
+        contractId: { type: string }
+        family: { type: string }
+        variant: { type: string }
+        severity: { type: string }
+        summary: { type: string }
+
+    # ── Negotiations ──
+    Negotiation:
+      type: object
+      required:
+        [
+          id, dealId, dealName, status, round, lastReactionType, updatedAt,
+          riskLevel
+        ]
+      properties:
+        id: { type: string }
+        dealId: { type: string }
+        dealName: { type: string }
+        status: { type: string }
+        round: { type: integer }
+        lastReactionType: { type: string }
+        updatedAt: { type: string, format: date-time }
+        riskLevel: { type: string }
+
+    NegotiationDetail:
+      allOf:
+        - $ref: "#/components/schemas/Negotiation"
+        - type: object
+          required: [reactions, timeline]
+          properties:
+            reactions:
+              type: array
+              items: { $ref: "#/components/schemas/CustomerReaction" }
+            timeline:
+              type: array
+              items: { $ref: "#/components/schemas/TimelineEvent" }
+
+    CustomerReaction:
+      type: object
+      required: [id, negotiationId, type, topic, summary, source, createdAt, priority]
+      properties:
+        id: { type: string }
+        negotiationId: { type: string }
+        type: { type: string }
+        topic: { type: string }
+        summary: { type: string }
+        source: { type: string }
+        createdAt: { type: string, format: date-time }
+        priority: { type: string }
+        impactPct:
+          type: ["number", "null"]
+
+    ReactionInput:
+      type: object
+      required: [type, topic, summary, source, priority]
+      properties:
+        type: { type: string }
+        topic: { type: string }
+        summary: { type: string }
+        source: { type: string }
+        priority: { type: string }
+        impactPct: { type: number }
+
+    # ── Signatures ──
+    SignaturePackage:
+      type: object
+      required:
+        [
+          id, dealId, dealName, title, status, signedCount, totalSigners,
+          createdAt
+        ]
+      properties:
+        id: { type: string }
+        dealId: { type: string }
+        dealName: { type: string }
+        title: { type: string }
+        status: { type: string }
+        signedCount: { type: integer }
+        totalSigners: { type: integer }
+        createdAt: { type: string, format: date-time }
+        deadline:
+          type: ["string", "null"]
+          format: date-time
+
+    Signer:
+      type: object
+      required: [id, packageId, name, email, role, order, status]
+      properties:
+        id: { type: string }
+        packageId: { type: string }
+        name: { type: string }
+        email: { type: string }
+        role: { type: string }
+        order: { type: integer }
+        status: { type: string }
+        signedAt:
+          type: ["string", "null"]
+          format: date-time
+
+    SignaturePackageDetail:
+      allOf:
+        - $ref: "#/components/schemas/SignaturePackage"
+        - type: object
+          required: [signers]
+          properties:
+            signers:
+              type: array
+              items: { $ref: "#/components/schemas/Signer" }
+
+    # ── Price Increases ──
+    PriceIncreaseCampaign:
+      type: object
+      required:
+        [
+          id, name, status, effectiveDate, accountsCount, totalUplift, currency,
+          createdAt, acceptedCount, pendingCount, rejectedCount
+        ]
+      properties:
+        id: { type: string }
+        name: { type: string }
+        status: { type: string }
+        effectiveDate: { type: string, format: date }
+        accountsCount: { type: integer }
+        totalUplift: { type: number }
+        currency: { type: string }
+        createdAt: { type: string, format: date-time }
+        acceptedCount: { type: integer }
+        pendingCount: { type: integer }
+        rejectedCount: { type: integer }
+        averageUpliftPct: { type: number }
+
+    PriceIncreaseLetter:
+      type: object
+      required: [id, campaignId, accountId, accountName, status, upliftPct, sentAt]
+      properties:
+        id: { type: string }
+        campaignId: { type: string }
+        accountId: { type: string }
+        accountName: { type: string }
+        status: { type: string }
+        upliftPct: { type: number }
+        sentAt:
+          type: ["string", "null"]
+          format: date-time
+        respondedAt:
+          type: ["string", "null"]
+          format: date-time
+
+    PriceIncreaseCampaignDetail:
+      allOf:
+        - $ref: "#/components/schemas/PriceIncreaseCampaign"
+        - type: object
+          required: [letters]
+          properties:
+            letters:
+              type: array
+              items: { $ref: "#/components/schemas/PriceIncreaseLetter" }
+
+    # ── Reports ──
+    DashboardSummary:
+      type: object
+      required:
+        [
+          openDealsCount, openDealsValue, currency, winRatePct, avgCycleDays,
+          quotesAwaitingResponse, openApprovals, signaturesPending,
+          atRiskDeals, stageBreakdown, recentEvents
+        ]
+      properties:
+        openDealsCount: { type: integer }
+        openDealsValue: { type: number }
+        currency: { type: string }
+        winRatePct: { type: number }
+        avgCycleDays: { type: number }
+        quotesAwaitingResponse: { type: integer }
+        openApprovals: { type: integer }
+        signaturesPending: { type: integer }
+        atRiskDeals: { type: integer }
+        stageBreakdown:
+          type: array
+          items:
+            type: object
+            required: [stage, label, count, value]
+            properties:
+              stage: { type: string }
+              label: { type: string }
+              count: { type: integer }
+              value: { type: number }
+        recentEvents:
+          type: array
+          items: { $ref: "#/components/schemas/TimelineEvent" }
+
+    PerformanceReport:
+      type: object
+      required: [winRatePct, avgDiscountPct, avgCycleDays, marginDisciplinePct, monthly, byOwner]
+      properties:
+        winRatePct: { type: number }
+        avgDiscountPct: { type: number }
+        avgCycleDays: { type: number }
+        marginDisciplinePct: { type: number }
+        monthly:
+          type: array
+          items:
+            type: object
+            required: [month, won, lost, value]
+            properties:
+              month: { type: string }
+              won: { type: integer }
+              lost: { type: integer }
+              value: { type: number }
+        byOwner:
+          type: array
+          items:
+            type: object
+            required: [ownerId, ownerName, deals, value, winRatePct]
+            properties:
+              ownerId: { type: string }
+              ownerName: { type: string }
+              deals: { type: integer }
+              value: { type: number }
+              winRatePct: { type: number }
+
+    ForecastReport:
+      type: object
+      required: [currency, months]
+      properties:
+        currency: { type: string }
+        months:
+          type: array
+          items:
+            type: object
+            required: [month, committed, bestCase, pipeline]
+            properties:
+              month: { type: string }
+              committed: { type: number }
+              bestCase: { type: number }
+              pipeline: { type: number }
+
+    # ── Copilot ──
+    CopilotInsight:
+      type: object
+      required: [id, kind, title, summary, severity, dealId, dealName, createdAt]
+      properties:
+        id: { type: string }
+        kind: { type: string }
+        title: { type: string }
+        summary: { type: string }
+        severity: { type: string }
+        dealId: { type: string }
+        dealName: { type: string }
+        createdAt: { type: string, format: date-time }
+        suggestedAction:
+          type: ["string", "null"]
+
+    CopilotThread:
+      type: object
+      required: [id, title, scope, lastMessage, updatedAt, messageCount]
+      properties:
+        id: { type: string }
+        title: { type: string }
+        scope: { type: string }
+        lastMessage: { type: string }
+        updatedAt: { type: string, format: date-time }
+        messageCount: { type: integer }
