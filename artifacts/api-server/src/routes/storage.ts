@@ -6,6 +6,8 @@ import {
 } from "@workspace/api-zod";
 import { ObjectStorageService, ObjectNotFoundError } from "../lib/objectStorage";
 import type { AuthedRequest } from "../middlewares/auth";
+import { db, brandsTable } from "@workspace/db";
+import { inArray, or, like } from "drizzle-orm";
 
 const router: IRouter = Router();
 const objectStorageService = new ObjectStorageService();
@@ -125,12 +127,33 @@ router.get("/storage/public-objects/*filePath", async (req: Request, res: Respon
  */
 router.get("/storage/objects/*path", async (req: Request, res: Response) => {
   if (!requireAuthenticated(req, res)) return;
+  const scope = (req as AuthedRequest).scope!;
   try {
     const raw = req.params.path;
     const wildcardPath = Array.isArray(raw) ? raw.join("/") : raw;
     const objectPath = `/objects/${wildcardPath}`;
-    const objectFile = await objectStorageService.getObjectEntityFile(objectPath);
 
+    const suffix = `/storage/objects/${wildcardPath}`;
+    const rows = await db
+      .select({ id: brandsTable.id })
+      .from(brandsTable)
+      .where(
+        or(
+          like(brandsTable.logoUrl, `%${suffix}`),
+          like(brandsTable.logoUrl, `%/objects/${wildcardPath}`),
+        ),
+      );
+    if (rows.length === 0) {
+      res.status(404).json({ error: "object not found" });
+      return;
+    }
+    const allowed = scope.tenantWide || rows.some((r) => scope.brandIds.includes(r.id));
+    if (!allowed) {
+      res.status(403).json({ error: "forbidden" });
+      return;
+    }
+
+    const objectFile = await objectStorageService.getObjectEntityFile(objectPath);
     const response = await objectStorageService.downloadObject(objectFile);
 
     res.status(response.status);
