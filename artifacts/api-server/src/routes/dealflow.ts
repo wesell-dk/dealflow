@@ -905,7 +905,7 @@ router.patch('/contract-clauses/:id', async (req, res) => {
     await db.insert(approvalsTable).values({
       id: approvalId, dealId: ctr.dealId, type: 'clause_change',
       reason: `Non-standard clause: ${cl.family} von ${prevVar?.name ?? '—'} auf ${nextVar.name} (severityScore ${prevScore}→${nextScore})`,
-      requestedBy: actor.name, status: 'pending',
+      requestedBy: actor.id, status: 'pending',
       priority: nextScore <= 1 ? 'high' : 'medium',
       impactValue: '0', currency: 'EUR',
     });

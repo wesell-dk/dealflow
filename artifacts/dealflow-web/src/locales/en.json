@@ -122,7 +122,10 @@
       "variants": "Variants",
       "severityScore": "Severity score",
       "toneLabel": "Tone",
-      "empty": "No clause families defined."
+      "empty": "No clause families defined.",
+      "brandDefaults": "Brand Defaults",
+      "brandDefaultsHint": "Default clause variant per brand and family. Applied automatically when new contracts are created.",
+      "brandSaved": "Brand defaults saved"
     },
     "contracts": {
       "title": "Contracts",
