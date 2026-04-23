@@ -86,7 +86,12 @@ import {
 import {
   subjectsDeletionLogTable,
   accessLogTable,
+  webhooksTable,
+  webhookDeliveriesTable,
 } from '@workspace/db';
+import { emitEvent, WEBHOOK_EVENTS } from '../lib/webhooks';
+import { parseAsOf, resolveSnapshot } from '../lib/asOf';
+import { withMeta } from '../lib/meta';
 
 const router: IRouter = Router();
 
@@ -507,6 +512,16 @@ router.get('/quotes/:id', async (req, res) => {
   const [q] = await db.select().from(quotesTable).where(eq(quotesTable.id, req.params.id));
   if (!q) { res.status(404).json({ error: 'not found' }); return; }
   if (!(await gateDeal(req, res, q.dealId))) return;
+  const asOf = parseAsOf(req.query.asOf);
+  if (asOf) {
+    const snap = await resolveSnapshot<unknown>('quote', q.id, asOf);
+    if (!snap) { res.status(404).json({ error: 'no snapshot for asOf' }); return; }
+    res.json(withMeta(snap.data, {
+      source: 'version', validFrom: snap.validFrom, validTo: snap.validTo,
+      asOf: asOf.toISOString(), version: snap.version,
+    }));
+    return;
+  }
   const [d] = await db.select().from(dealsTable).where(eq(dealsTable.id, q.dealId));
   const versions = await db.select().from(quoteVersionsTable)
     .where(eq(quoteVersionsTable.quoteId, q.id))
@@ -625,6 +640,7 @@ router.post('/quotes/:id/accept', async (req, res) => {
   const [q] = await db.select().from(quotesTable).where(eq(quotesTable.id, req.params.id));
   if (!q) { res.status(404).json({ error: 'not found' }); return; }
   const [d] = await db.select().from(dealsTable).where(eq(dealsTable.id, q.dealId));
+  void emitEvent(getScope(req).tenantId, 'quote.accepted', { quoteId: q.id, dealId: q.dealId });
   res.json(await enrichQuote(q, d?.name ?? 'Unknown'));
 });
 
@@ -783,6 +799,7 @@ router.post('/approvals/:id/decide', async (req, res) => {
   if (!a) { res.status(404).json({ error: 'not found' }); return; }
   const dealMap = await getDealMap();
   const users = await getUserMap();
+  void emitEvent(getScope(req).tenantId, 'approval.decided', { approvalId: a.id, dealId: a.dealId, decision: a.status });
   res.json(mapApproval(a, dealMap.get(a.dealId)?.name ?? 'Unknown', users));
 });
 
@@ -997,6 +1014,16 @@ router.get('/contracts/:id', async (req, res) => {
   const [c] = await db.select().from(contractsTable).where(eq(contractsTable.id, req.params.id));
   if (!c) { res.status(404).json({ error: 'not found' }); return; }
   if (!(await gateDeal(req, res, c.dealId))) return;
+  const asOf = parseAsOf(req.query.asOf);
+  if (asOf) {
+    const snap = await resolveSnapshot<unknown>('contract', c.id, asOf);
+    if (!snap) { res.status(404).json({ error: 'no snapshot for asOf' }); return; }
+    res.json(withMeta(snap.data, {
+      source: 'version', validFrom: snap.validFrom, validTo: snap.validTo,
+      asOf: asOf.toISOString(), version: snap.version,
+    }));
+    return;
+  }
   const dealMap = await getDealMap();
   const rawClauses = await db.select().from(contractClausesTable).where(eq(contractClausesTable.contractId, c.id));
   const variantsAll = await db.select().from(clauseVariantsTable);
@@ -1950,6 +1977,12 @@ async function maybeCompletePackageAndCreateOC(pkg: PackageRow, signers: SignerR
     action: 'completed',
     summary: `Signature-Package ${pkg.title} vollständig; OC ${ocId} erzeugt.`,
   });
+  // Fire webhook — contract.signed (tenant-scoped via deal→company).
+  const [deal2] = await db.select().from(dealsTable).where(eq(dealsTable.id, pkg.dealId));
+  if (deal2) {
+    const [co] = await db.select().from(companiesTable).where(eq(companiesTable.id, deal2.companyId));
+    if (co) void emitEvent(co.tenantId, 'contract.signed', { signaturePackageId: pkg.id, dealId: pkg.dealId, orderConfirmationId: ocId });
+  }
 }
 
 router.get('/signatures', async (req, res) => {
@@ -2629,6 +2662,13 @@ router.get('/pricing/resolve', async (req, res) => {
     },
   ];
 
+  const vf = typeof winner.validFrom === 'string' ? winner.validFrom : (winner.validFrom ? new Date(winner.validFrom).toISOString() : null);
+  const vt = winner.validUntil ? (typeof winner.validUntil === 'string' ? winner.validUntil : new Date(winner.validUntil).toISOString()) : null;
+  res.setHeader('X-Meta-Source', 'live');
+  if (vf) res.setHeader('X-Meta-Valid-From', vf);
+  if (vt) res.setHeader('X-Meta-Valid-To', vt);
+  if (winner.version != null) res.setHeader('X-Meta-Version', String(winner.version));
+  res.setHeader('X-Meta-Generated-At', new Date().toISOString());
   res.json({
     sku,
     listPrice: num(winner.listPrice),
@@ -2703,6 +2743,9 @@ router.post('/price-increases/:id/letters/:letterId/respond', async (req, res) =
   });
   await resolveInsightsFor('stale_letter', l.id);
 
+  void emitEvent(getScope(req).tenantId, 'price_increase.responded', {
+    letterId: l.id, campaignId: l.campaignId, accountId: l.accountId, decision: newStatus,
+  });
   res.json({
     id: l.id, campaignId: l.campaignId, accountId: l.accountId,
     accountName: accName, status: l.status, upliftPct: num(l.upliftPct),
@@ -3387,6 +3430,119 @@ router.get('/admin/scope-tree', async (req, res) => {
       brands: brandRows.filter(b => b.companyId === c.id).map(b => ({ id: b.id, name: b.name })),
     })),
   });
+});
+
+// ── Admin: Webhook Subscriptions ──
+const WebhookCreateBody = z.object({
+  url: z.string().url(),
+  events: z.array(z.string().min(1)).min(1),
+  description: z.string().optional(),
+  active: z.boolean().optional(),
+});
+const WebhookPatchBody = z.object({
+  url: z.string().url().optional(),
+  events: z.array(z.string().min(1)).optional(),
+  description: z.string().nullable().optional(),
+  active: z.boolean().optional(),
+});
+
+function mapWebhook(w: typeof webhooksTable.$inferSelect) {
+  return {
+    id: w.id,
+    url: w.url,
+    events: w.events,
+    active: w.active,
+    description: w.description,
+    createdAt: w.createdAt.toISOString(),
+    // Secret returned only on create (see POST handler).
+  };
+}
+
+router.get('/admin/webhooks', async (req, res) => {
+  if (!requireAdmin(req, res)) return;
+  const scope = getScope(req);
+  const rows = await db.select().from(webhooksTable).where(eq(webhooksTable.tenantId, scope.tenantId));
+  res.json(rows.map(mapWebhook));
+});
+
+router.post('/admin/webhooks', async (req, res) => {
+  if (!validateInline(req, res, { body: WebhookCreateBody })) return;
+  if (!requireAdmin(req, res)) return;
+  const scope = getScope(req);
+  const b = req.body as z.infer<typeof WebhookCreateBody>;
+  const secret = `whs_${randomUUID().replace(/-/g, '')}`;
+  const id = `wh_${randomUUID().slice(0, 8)}`;
+  await db.insert(webhooksTable).values({
+    id,
+    tenantId: scope.tenantId,
+    url: b.url,
+    events: b.events,
+    secret,
+    active: b.active ?? true,
+    description: b.description ?? null,
+  });
+  const [row] = await db.select().from(webhooksTable).where(eq(webhooksTable.id, id));
+  // Secret is only ever revealed here — clients must persist it.
+  res.status(201).json({ ...mapWebhook(row!), secret });
+});
+
+router.patch('/admin/webhooks/:id', async (req, res) => {
+  if (!validateInline(req, res, { body: WebhookPatchBody, params: z.object({ id: z.string() }) })) return;
+  if (!requireAdmin(req, res)) return;
+  const scope = getScope(req);
+  const [existing] = await db.select().from(webhooksTable).where(eq(webhooksTable.id, req.params.id));
+  if (!existing || existing.tenantId !== scope.tenantId) {
+    res.status(404).json({ error: 'not found' }); return;
+  }
+  const b = req.body as z.infer<typeof WebhookPatchBody>;
+  const patch: Partial<typeof webhooksTable.$inferInsert> = {};
+  if (b.url !== undefined) patch.url = b.url;
+  if (b.events !== undefined) patch.events = b.events;
+  if (b.active !== undefined) patch.active = b.active;
+  if (b.description !== undefined) patch.description = b.description;
+  await db.update(webhooksTable).set(patch).where(eq(webhooksTable.id, existing.id));
+  const [row] = await db.select().from(webhooksTable).where(eq(webhooksTable.id, existing.id));
+  res.json(mapWebhook(row!));
+});
+
+router.delete('/admin/webhooks/:id', async (req, res) => {
+  if (!validateInline(req, res, { params: z.object({ id: z.string() }) })) return;
+  if (!requireAdmin(req, res)) return;
+  const scope = getScope(req);
+  const [existing] = await db.select().from(webhooksTable).where(eq(webhooksTable.id, req.params.id));
+  if (!existing || existing.tenantId !== scope.tenantId) {
+    res.status(404).json({ error: 'not found' }); return;
+  }
+  await db.delete(webhooksTable).where(eq(webhooksTable.id, existing.id));
+  res.status(204).end();
+});
+
+router.get('/admin/webhook-deliveries', async (req, res) => {
+  if (!validateInline(req, res, { query: z.object({ webhookId: z.string().optional(), limit: z.coerce.number().int().min(1).max(500).optional() }) })) return;
+  if (!requireAdmin(req, res)) return;
+  const scope = getScope(req);
+  const limit = req.query.limit ? Number(req.query.limit) : 100;
+  const webhookId = typeof req.query.webhookId === 'string' ? req.query.webhookId : null;
+  const conds = [eq(webhookDeliveriesTable.tenantId, scope.tenantId)];
+  if (webhookId) conds.push(eq(webhookDeliveriesTable.webhookId, webhookId));
+  const rows = await db
+    .select()
+    .from(webhookDeliveriesTable)
+    .where(conds.length === 1 ? conds[0] : and(...conds))
+    .orderBy(desc(webhookDeliveriesTable.createdAt))
+    .limit(limit);
+  res.json(rows.map(d => ({
+    id: d.id,
+    webhookId: d.webhookId,
+    event: d.event,
+    status: d.status,
+    attempt: d.attempt,
+    statusCode: d.statusCode,
+    error: d.error,
+    createdAt: d.createdAt.toISOString(),
+    deliveredAt: d.deliveredAt?.toISOString() ?? null,
+    nextAttemptAt: d.nextAttemptAt?.toISOString() ?? null,
+  })));
 });
 
 // ── DSGVO / GDPR ──

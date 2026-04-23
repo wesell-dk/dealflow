@@ -52,3 +52,6 @@ app.listen(port, (err) => {
 
   logger.info({ port }, "Server listening");
 });
+
+import { startWebhookWorker } from "./lib/webhooks";
+startWebhookWorker();

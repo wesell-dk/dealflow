@@ -499,3 +499,48 @@ export const entityVersionsTable = pgTable("entity_versions", {
   comment: text("comment"),
   createdAt: ts("created_at"),
 });
+
+// Idempotency cache for POST/PATCH/PUT/DELETE with Idempotency-Key header.
+export const idempotencyKeysTable = pgTable("idempotency_keys", {
+  id: id(),
+  tenantId: text("tenant_id").notNull(),
+  userId: text("user_id").notNull(),
+  key: text("key").notNull(),
+  route: text("route").notNull(),
+  method: text("method").notNull(),
+  requestHash: text("request_hash").notNull(),
+  statusCode: integer("status_code").notNull(),
+  responseBody: jsonb("response_body").notNull(),
+  createdAt: ts("created_at"),
+}, (t) => ({
+  unq: uniqueIndex("idempotency_keys_tenant_user_key_route_idx").on(t.tenantId, t.userId, t.key, t.route, t.method),
+}));
+
+// Webhook subscriptions per tenant.
+export const webhooksTable = pgTable("webhooks", {
+  id: id(),
+  tenantId: text("tenant_id").notNull(),
+  url: text("url").notNull(),
+  events: jsonb("events").$type<string[]>().notNull(),
+  secret: text("secret").notNull(),
+  active: boolean("active").notNull().default(true),
+  description: text("description"),
+  createdAt: ts("created_at"),
+});
+
+// Log of outbound webhook delivery attempts.
+export const webhookDeliveriesTable = pgTable("webhook_deliveries", {
+  id: id(),
+  webhookId: text("webhook_id").notNull(),
+  tenantId: text("tenant_id").notNull(),
+  event: text("event").notNull(),
+  payload: jsonb("payload").notNull(),
+  status: text("status").notNull(), // queued | success | failed
+  attempt: integer("attempt").notNull().default(0),
+  statusCode: integer("status_code"),
+  responseBody: text("response_body"),
+  error: text("error"),
+  nextAttemptAt: timestamp("next_attempt_at", { withTimezone: true }),
+  deliveredAt: timestamp("delivered_at", { withTimezone: true }),
+  createdAt: ts("created_at"),
+});
