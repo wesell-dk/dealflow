@@ -76,6 +76,14 @@ export const usersTable = pgTable("users", {
   scopeBrandIds: text("scope_brand_ids").notNull().default("[]"),
 });
 
+export const rolesTable = pgTable("roles", {
+  id: id(),
+  name: text("name").notNull(),
+  description: text("description").notNull().default(""),
+  isSystem: boolean("is_system").notNull().default(false),
+  tenantId: text("tenant_id").notNull().default("tn_root"),
+});
+
 export const sessionsTable = pgTable("sessions", {
   id: id(),
   userId: text("user_id").notNull(),

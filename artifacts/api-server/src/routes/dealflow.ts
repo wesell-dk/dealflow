@@ -64,6 +64,7 @@ import {
   entityVersionsTable,
   contractAmendmentsTable,
   amendmentClausesTable,
+  rolesTable,
 } from '@workspace/db';
 import {
   generatePriceRejectionForReaction,
@@ -3047,7 +3048,7 @@ router.post('/audit/manual', async (req, res) => {
   res.status(201).json({ ok: true });
 });
 
-// ── DSGVO / GDPR ──
+// ── Admin helpers ──
 function requireAdmin(req: Request, res: Response): boolean {
   const scope = getScope(req);
   if (!scope.tenantWide) {
@@ -3056,6 +3057,214 @@ function requireAdmin(req: Request, res: Response): boolean {
   }
   return true;
 }
+
+// Stricter gate for user/role management: explicit Tenant Admin role.
+function requireTenantAdmin(req: Request, res: Response): boolean {
+  const scope = getScope(req);
+  if (!scope.tenantWide || scope.user.role !== 'Tenant Admin') {
+    res.status(403).json({ error: 'tenant admin role required' });
+    return false;
+  }
+  return true;
+}
+
+async function validateTenantRole(tenantId: string, roleName: string): Promise<boolean> {
+  const [row] = await db.select().from(rolesTable)
+    .where(and(eq(rolesTable.tenantId, tenantId), eq(rolesTable.name, roleName)));
+  return !!row;
+}
+
+function initials(name: string): string {
+  return name.trim().split(/\s+/).slice(0, 2).map(w => w[0]?.toUpperCase() ?? '').join('');
+}
+
+function parseJsonList(s: string | null | undefined): string[] {
+  if (!s) return [];
+  try { const v = JSON.parse(s); return Array.isArray(v) ? v.filter(x => typeof x === 'string') : []; }
+  catch { return []; }
+}
+
+function scopeSummary(u: typeof usersTable.$inferSelect, companiesById: Map<string, string>, brandsById: Map<string, string>): string {
+  if (u.tenantWide) return 'Tenant-weit';
+  const companies = parseJsonList(u.scopeCompanyIds).map(id => companiesById.get(id) ?? id);
+  const brands = parseJsonList(u.scopeBrandIds).map(id => brandsById.get(id) ?? id);
+  const parts: string[] = [];
+  if (companies.length) parts.push(`${companies.length} Company${companies.length === 1 ? '' : 's'}: ${companies.join(', ')}`);
+  if (brands.length) parts.push(`${brands.length} Brand${brands.length === 1 ? '' : 's'}: ${brands.join(', ')}`);
+  if (!parts.length) return 'Kein Scope';
+  return parts.join(' · ');
+}
+
+async function mapAdminUser(u: typeof usersTable.$inferSelect) {
+  const companies = await db.select().from(companiesTable).where(eq(companiesTable.tenantId, u.tenantId));
+  const brandRows = companies.length
+    ? await db.select().from(brandsTable).where(inArray(brandsTable.companyId, companies.map(c => c.id)))
+    : [];
+  const cMap = new Map(companies.map(c => [c.id, c.name] as const));
+  const bMap = new Map(brandRows.map(b => [b.id, b.name] as const));
+  return {
+    id: u.id, name: u.name, email: u.email, role: u.role, initials: u.initials,
+    avatarColor: u.avatarColor, isActive: u.isActive, tenantWide: u.tenantWide,
+    scopeCompanyIds: parseJsonList(u.scopeCompanyIds),
+    scopeBrandIds: parseJsonList(u.scopeBrandIds),
+    scopeSummary: scopeSummary(u, cMap, bMap),
+  };
+}
+
+// ── Admin: Users ──
+router.get('/admin/users', async (req, res) => {
+  if (!requireTenantAdmin(req, res)) return;
+  const scope = getScope(req);
+  const rows = await db.select().from(usersTable).where(eq(usersTable.tenantId, scope.tenantId));
+  const mapped = await Promise.all(rows.map(mapAdminUser));
+  res.json(mapped);
+});
+
+router.post('/admin/users', async (req, res) => {
+  if (!requireTenantAdmin(req, res)) return;
+  const scope = getScope(req);
+  const b = req.body as {
+    name?: string; email?: string; role?: string; password?: string;
+    tenantWide?: boolean; scopeCompanyIds?: string[]; scopeBrandIds?: string[];
+  };
+  if (!b.name || !b.email || !b.role || !b.password) {
+    res.status(400).json({ error: 'name, email, role, password required' });
+    return;
+  }
+  if (b.password.length < 8) {
+    res.status(400).json({ error: 'password must be at least 8 characters' });
+    return;
+  }
+  if (!(await validateTenantRole(scope.tenantId, b.role))) {
+    res.status(400).json({ error: 'unknown role for this tenant' });
+    return;
+  }
+  const [existing] = await db.select().from(usersTable).where(eq(usersTable.email, b.email));
+  if (existing) { res.status(409).json({ error: 'email already registered' }); return; }
+  const tenantCompanies = await db.select({ id: companiesTable.id }).from(companiesTable).where(eq(companiesTable.tenantId, scope.tenantId));
+  const tenantCompanyIds = new Set(tenantCompanies.map(c => c.id));
+  const tenantBrands = tenantCompanies.length
+    ? await db.select({ id: brandsTable.id }).from(brandsTable).where(inArray(brandsTable.companyId, [...tenantCompanyIds]))
+    : [];
+  const tenantBrandIds = new Set(tenantBrands.map(x => x.id));
+  const validCompanies = (b.scopeCompanyIds ?? []).filter(id => tenantCompanyIds.has(id));
+  const validBrands = (b.scopeBrandIds ?? []).filter(id => tenantBrandIds.has(id));
+  const { hashPassword } = await import('../lib/auth');
+  const id = `u_${randomUUID().slice(0, 8)}`;
+  const [ins] = await db.insert(usersTable).values({
+    id,
+    name: b.name.trim(),
+    email: b.email.trim().toLowerCase(),
+    role: b.role,
+    scope: b.tenantWide ? 'Tenant-weit' : (validCompanies.length || validBrands.length ? 'Scoped' : 'Kein Scope'),
+    initials: initials(b.name),
+    avatarColor: null,
+    passwordHash: hashPassword(b.password),
+    isActive: true,
+    tenantId: scope.tenantId,
+    tenantWide: !!b.tenantWide,
+    scopeCompanyIds: JSON.stringify(validCompanies),
+    scopeBrandIds: JSON.stringify(validBrands),
+  }).returning();
+  await writeAudit({
+    entityType: 'user', entityId: id, action: 'create',
+    summary: `Benutzer angelegt: ${b.name} (${b.role})`,
+    after: { email: b.email, role: b.role, tenantWide: !!b.tenantWide },
+    actor: scope.user.name,
+  });
+  res.status(201).json(await mapAdminUser(ins!));
+});
+
+router.patch('/admin/users/:id', async (req, res) => {
+  if (!requireTenantAdmin(req, res)) return;
+  const scope = getScope(req);
+  const [u] = await db.select().from(usersTable).where(eq(usersTable.id, req.params.id));
+  if (!u) { res.status(404).json({ error: 'not found' }); return; }
+  if (u.tenantId !== scope.tenantId) { res.status(403).json({ error: 'forbidden' }); return; }
+  const b = req.body as {
+    name?: string; role?: string; isActive?: boolean;
+    tenantWide?: boolean; scopeCompanyIds?: string[]; scopeBrandIds?: string[];
+    password?: string;
+  };
+  const patch: Partial<typeof usersTable.$inferInsert> = {};
+  if (typeof b.name === 'string' && b.name.trim()) {
+    patch.name = b.name.trim();
+    patch.initials = initials(b.name);
+  }
+  if (typeof b.role === 'string' && b.role.trim()) {
+    if (!(await validateTenantRole(scope.tenantId, b.role))) {
+      res.status(400).json({ error: 'unknown role for this tenant' });
+      return;
+    }
+    patch.role = b.role;
+  }
+  if (typeof b.isActive === 'boolean') {
+    if (!b.isActive && u.id === scope.user.id) {
+      res.status(400).json({ error: 'cannot deactivate your own account' });
+      return;
+    }
+    patch.isActive = b.isActive;
+  }
+  if (typeof b.tenantWide === 'boolean') patch.tenantWide = b.tenantWide;
+  if (Array.isArray(b.scopeCompanyIds) || Array.isArray(b.scopeBrandIds)) {
+    const tenantCompanies = await db.select({ id: companiesTable.id }).from(companiesTable).where(eq(companiesTable.tenantId, scope.tenantId));
+    const tenantCompanyIds = new Set(tenantCompanies.map(c => c.id));
+    const tenantBrands = tenantCompanies.length
+      ? await db.select({ id: brandsTable.id }).from(brandsTable).where(inArray(brandsTable.companyId, [...tenantCompanyIds]))
+      : [];
+    const tenantBrandIds = new Set(tenantBrands.map(x => x.id));
+    if (Array.isArray(b.scopeCompanyIds)) {
+      patch.scopeCompanyIds = JSON.stringify(b.scopeCompanyIds.filter(id => tenantCompanyIds.has(id)));
+    }
+    if (Array.isArray(b.scopeBrandIds)) {
+      patch.scopeBrandIds = JSON.stringify(b.scopeBrandIds.filter(id => tenantBrandIds.has(id)));
+    }
+  }
+  if (typeof b.password === 'string' && b.password.length > 0) {
+    if (b.password.length < 8) { res.status(400).json({ error: 'password must be at least 8 characters' }); return; }
+    const { hashPassword } = await import('../lib/auth');
+    patch.passwordHash = hashPassword(b.password);
+  }
+  if (Object.keys(patch).length > 0) {
+    await db.update(usersTable).set(patch).where(eq(usersTable.id, u.id));
+    const redacted = { ...patch };
+    if ('passwordHash' in redacted) redacted.passwordHash = '[redacted]';
+    await writeAudit({
+      entityType: 'user', entityId: u.id, action: 'update',
+      summary: `Benutzer aktualisiert: ${u.name}`,
+      before: { role: u.role, isActive: u.isActive, tenantWide: u.tenantWide },
+      after: redacted,
+      actor: scope.user.name,
+    });
+  }
+  const [updated] = await db.select().from(usersTable).where(eq(usersTable.id, u.id));
+  res.json(await mapAdminUser(updated!));
+});
+
+router.get('/admin/roles', async (req, res) => {
+  if (!requireAdmin(req, res)) return;
+  const scope = getScope(req);
+  const rows = await db.select().from(rolesTable).where(eq(rolesTable.tenantId, scope.tenantId));
+  res.json(rows.map(r => ({ id: r.id, name: r.name, description: r.description, isSystem: r.isSystem })));
+});
+
+router.get('/admin/scope-tree', async (req, res) => {
+  if (!requireAdmin(req, res)) return;
+  const scope = getScope(req);
+  const companies = await db.select().from(companiesTable).where(eq(companiesTable.tenantId, scope.tenantId));
+  const brandRows = companies.length
+    ? await db.select().from(brandsTable).where(inArray(brandsTable.companyId, companies.map(c => c.id)))
+    : [];
+  res.json({
+    companies: companies.map(c => ({
+      id: c.id,
+      name: c.name,
+      brands: brandRows.filter(b => b.companyId === c.id).map(b => ({ id: b.id, name: b.name })),
+    })),
+  });
+});
+
+// ── DSGVO / GDPR ──
 
 // Search subjects (contacts) within tenant — name/email prefix search.
 router.get('/gdpr/subjects', async (req, res) => {

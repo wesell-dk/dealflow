@@ -6,8 +6,14 @@ import {
   useListBrands,
   useUpdateBrand,
   useListUsers,
+  useListAdminUsers,
+  useCreateAdminUser,
+  useUpdateAdminUser,
+  useListRoles,
+  useGetScopeTree,
   type Brand,
   type BrandUpdate,
+  type AdminUser,
   useSearchGdprSubjects,
   useForgetGdprSubject,
   useListGdprAccessLog,
@@ -219,49 +225,7 @@ export default function Admin() {
         </Card>
       </div>
 
-      <Card>
-        <CardHeader className="flex flex-row items-center gap-2">
-          <Users className="h-5 w-5 text-primary" />
-          <CardTitle>User Directory</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="border rounded-md">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>User</TableHead>
-                  <TableHead>Role</TableHead>
-                  <TableHead>Scope</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {users?.map(user => (
-                  <TableRow key={user.id}>
-                    <TableCell>
-                      <div className="flex items-center gap-3">
-                        <Avatar className="h-8 w-8">
-                          <AvatarFallback style={{ backgroundColor: user.avatarColor || 'var(--primary)', color: 'white' }}>
-                            {user.initials}
-                          </AvatarFallback>
-                        </Avatar>
-                        <div className="flex flex-col">
-                          <span className="font-medium leading-none">{user.name}</span>
-                          <span className="text-xs text-muted-foreground mt-1">{user.email}</span>
-                        </div>
-                      </div>
-                    </TableCell>
-                    <TableCell><Badge variant="outline">{user.role}</Badge></TableCell>
-                    <TableCell><span className="text-sm text-muted-foreground">{user.scope}</span></TableCell>
-                  </TableRow>
-                ))}
-                {!users?.length && (
-                  <TableRow><TableCell colSpan={3} className="text-center h-24">No users found</TableCell></TableRow>
-                )}
-              </TableBody>
-            </Table>
-          </div>
-        </CardContent>
-      </Card>
+      <UserRolesCard />
 
       {/* GDPR Section */}
       <Card>
@@ -548,6 +512,355 @@ function BrandRow({ brand }: { brand: Brand }) {
               </div>
               <div className="col-span-2 flex justify-end gap-2">
                 <Button size="sm" onClick={save} disabled={update.isPending}>Speichern</Button>
+              </div>
+            </div>
+          </TableCell>
+        </TableRow>
+      )}
+    </>
+  );
+}
+
+type NewUserDraft = {
+  name: string;
+  email: string;
+  role: string;
+  password: string;
+  tenantWide: boolean;
+  scopeCompanyIds: string[];
+  scopeBrandIds: string[];
+};
+
+const EMPTY_DRAFT: NewUserDraft = {
+  name: "", email: "", role: "", password: "",
+  tenantWide: false, scopeCompanyIds: [], scopeBrandIds: [],
+};
+
+function ScopeTreeEditor(props: {
+  tenantWide: boolean;
+  onTenantWideChange: (v: boolean) => void;
+  companyIds: string[];
+  brandIds: string[];
+  onCompanyIdsChange: (v: string[]) => void;
+  onBrandIdsChange: (v: string[]) => void;
+}) {
+  const tree = useGetScopeTree();
+  const { tenantWide, onTenantWideChange, companyIds, brandIds, onCompanyIdsChange, onBrandIdsChange } = props;
+  const companies = tree.data?.companies ?? [];
+
+  const toggleCompany = (id: string) => {
+    if (companyIds.includes(id)) onCompanyIdsChange(companyIds.filter(x => x !== id));
+    else onCompanyIdsChange([...companyIds, id]);
+  };
+  const toggleBrand = (id: string) => {
+    if (brandIds.includes(id)) onBrandIdsChange(brandIds.filter(x => x !== id));
+    else onBrandIdsChange([...brandIds, id]);
+  };
+
+  return (
+    <div className="space-y-3 border rounded-md p-3">
+      <label className="flex items-center gap-2 text-sm font-medium">
+        <input type="checkbox" checked={tenantWide} onChange={e => onTenantWideChange(e.target.checked)} />
+        Tenant-weit (vollständiger Zugriff)
+      </label>
+      <div className={tenantWide ? "opacity-40 pointer-events-none" : ""}>
+        <div className="text-xs text-muted-foreground mb-2">
+          Wähle Companies (voller Zugriff auf alle zugehörigen Brands) und/oder einzelne Brands.
+        </div>
+        <div className="space-y-3 max-h-72 overflow-auto">
+          {companies.map(c => (
+            <div key={c.id} className="border-l-2 border-muted pl-2">
+              <label className="flex items-center gap-2 text-sm font-medium">
+                <input type="checkbox" checked={companyIds.includes(c.id)} onChange={() => toggleCompany(c.id)} />
+                {c.name}
+              </label>
+              <div className="ml-6 mt-1 space-y-1">
+                {c.brands.map(b => (
+                  <label key={b.id} className="flex items-center gap-2 text-sm">
+                    <input
+                      type="checkbox"
+                      checked={brandIds.includes(b.id)}
+                      onChange={() => toggleBrand(b.id)}
+                      disabled={companyIds.includes(c.id)}
+                    />
+                    <span className={companyIds.includes(c.id) ? "text-muted-foreground line-through" : ""}>{b.name}</span>
+                  </label>
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function UserRolesCard() {
+  const users = useListAdminUsers();
+  const roles = useListRoles();
+  const createUser = useCreateAdminUser();
+  const updateUser = useUpdateAdminUser();
+  const [dialogOpen, setDialogOpen] = useState(false);
+  const [draft, setDraft] = useState<NewUserDraft>(EMPTY_DRAFT);
+  const [error, setError] = useState<string | null>(null);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editDraft, setEditDraft] = useState<Partial<NewUserDraft>>({});
+
+  const roleOptions = roles.data ?? [];
+
+  const openCreate = () => {
+    setDraft({ ...EMPTY_DRAFT, role: roleOptions[0]?.name ?? "" });
+    setError(null);
+    setDialogOpen(true);
+  };
+
+  const submitCreate = async () => {
+    setError(null);
+    if (!draft.name.trim() || !draft.email.trim() || !draft.role || !draft.password) {
+      setError("Bitte Name, E-Mail, Rolle und Passwort angeben.");
+      return;
+    }
+    if (draft.password.length < 8) {
+      setError("Passwort muss mindestens 8 Zeichen haben.");
+      return;
+    }
+    try {
+      await createUser.mutateAsync({
+        data: {
+          name: draft.name.trim(),
+          email: draft.email.trim().toLowerCase(),
+          role: draft.role,
+          password: draft.password,
+          tenantWide: draft.tenantWide,
+          scopeCompanyIds: draft.scopeCompanyIds,
+          scopeBrandIds: draft.scopeBrandIds,
+        },
+      });
+      setDialogOpen(false);
+      users.refetch();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Anlegen fehlgeschlagen.");
+    }
+  };
+
+  const toggleActive = async (u: AdminUser) => {
+    await updateUser.mutateAsync({ id: u.id, data: { isActive: !u.isActive } });
+    users.refetch();
+  };
+
+  const openEdit = (u: AdminUser) => {
+    setEditingId(u.id);
+    setEditDraft({
+      role: u.role,
+      tenantWide: u.tenantWide,
+      scopeCompanyIds: [...u.scopeCompanyIds],
+      scopeBrandIds: [...u.scopeBrandIds],
+    });
+  };
+
+  const saveEdit = async (u: AdminUser) => {
+    await updateUser.mutateAsync({
+      id: u.id,
+      data: {
+        role: editDraft.role ?? u.role,
+        tenantWide: editDraft.tenantWide ?? u.tenantWide,
+        scopeCompanyIds: editDraft.scopeCompanyIds ?? u.scopeCompanyIds,
+        scopeBrandIds: editDraft.scopeBrandIds ?? u.scopeBrandIds,
+      },
+    });
+    setEditingId(null);
+    setEditDraft({});
+    users.refetch();
+  };
+
+  return (
+    <Card>
+      <CardHeader className="flex flex-row items-center justify-between">
+        <div className="flex items-center gap-2">
+          <Users className="h-5 w-5 text-primary" />
+          <CardTitle>Benutzer & Rechte</CardTitle>
+        </div>
+        <Button size="sm" onClick={openCreate}>Neuer Benutzer</Button>
+      </CardHeader>
+      <CardContent>
+        <div className="border rounded-md">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Benutzer</TableHead>
+                <TableHead>Rolle</TableHead>
+                <TableHead>Sichtbarkeit</TableHead>
+                <TableHead>Status</TableHead>
+                <TableHead className="text-right">Aktionen</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {users.data?.map(u => (
+                <UserAdminRow
+                  key={u.id}
+                  user={u}
+                  roleOptions={roleOptions}
+                  isEditing={editingId === u.id}
+                  editDraft={editDraft}
+                  onEditDraftChange={setEditDraft}
+                  onOpenEdit={() => openEdit(u)}
+                  onCancelEdit={() => { setEditingId(null); setEditDraft({}); }}
+                  onSaveEdit={() => saveEdit(u)}
+                  onToggleActive={() => toggleActive(u)}
+                  savePending={updateUser.isPending}
+                />
+              ))}
+              {!users.data?.length && (
+                <TableRow><TableCell colSpan={5} className="text-center h-24">Keine Benutzer</TableCell></TableRow>
+              )}
+            </TableBody>
+          </Table>
+        </div>
+      </CardContent>
+
+      {dialogOpen && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4" onClick={() => setDialogOpen(false)}>
+          <div className="bg-background rounded-lg shadow-lg max-w-2xl w-full max-h-[90vh] overflow-auto" onClick={e => e.stopPropagation()}>
+            <div className="p-6 space-y-4">
+              <div className="flex items-center justify-between">
+                <h2 className="text-lg font-semibold">Neuen Benutzer anlegen</h2>
+                <Button size="sm" variant="ghost" onClick={() => setDialogOpen(false)}>Abbrechen</Button>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <Label>Name</Label>
+                  <Input value={draft.name} onChange={e => setDraft({ ...draft, name: e.target.value })} />
+                </div>
+                <div>
+                  <Label>E-Mail</Label>
+                  <Input type="email" value={draft.email} onChange={e => setDraft({ ...draft, email: e.target.value })} />
+                </div>
+                <div>
+                  <Label>Rolle</Label>
+                  <select
+                    className="w-full border rounded-md px-2 py-1.5 bg-background"
+                    value={draft.role}
+                    onChange={e => setDraft({ ...draft, role: e.target.value })}
+                  >
+                    <option value="">— Bitte wählen —</option>
+                    {roleOptions.map(r => (
+                      <option key={r.id} value={r.name}>{r.name}</option>
+                    ))}
+                  </select>
+                  {draft.role && (
+                    <p className="text-xs text-muted-foreground mt-1">
+                      {roleOptions.find(r => r.name === draft.role)?.description}
+                    </p>
+                  )}
+                </div>
+                <div>
+                  <Label>Passwort (min. 8 Zeichen)</Label>
+                  <Input type="password" value={draft.password} onChange={e => setDraft({ ...draft, password: e.target.value })} />
+                </div>
+              </div>
+              <div>
+                <Label className="mb-2 block">Sichtbarkeit</Label>
+                <ScopeTreeEditor
+                  tenantWide={draft.tenantWide}
+                  onTenantWideChange={v => setDraft({ ...draft, tenantWide: v })}
+                  companyIds={draft.scopeCompanyIds}
+                  brandIds={draft.scopeBrandIds}
+                  onCompanyIdsChange={v => setDraft({ ...draft, scopeCompanyIds: v })}
+                  onBrandIdsChange={v => setDraft({ ...draft, scopeBrandIds: v })}
+                />
+              </div>
+              {error && <p className="text-sm text-destructive">{error}</p>}
+              <div className="flex justify-end gap-2">
+                <Button variant="outline" onClick={() => setDialogOpen(false)}>Abbrechen</Button>
+                <Button onClick={submitCreate} disabled={createUser.isPending}>
+                  {createUser.isPending ? "Anlegen…" : "Anlegen"}
+                </Button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+    </Card>
+  );
+}
+
+function UserAdminRow(props: {
+  user: AdminUser;
+  roleOptions: { id: string; name: string; description: string }[];
+  isEditing: boolean;
+  editDraft: Partial<NewUserDraft>;
+  onEditDraftChange: (v: Partial<NewUserDraft>) => void;
+  onOpenEdit: () => void;
+  onCancelEdit: () => void;
+  onSaveEdit: () => void;
+  onToggleActive: () => void;
+  savePending: boolean;
+}) {
+  const { user: u, roleOptions, isEditing, editDraft, onEditDraftChange, onOpenEdit, onCancelEdit, onSaveEdit, onToggleActive, savePending } = props;
+  return (
+    <>
+      <TableRow>
+        <TableCell>
+          <div className="flex items-center gap-3">
+            <Avatar className="h-8 w-8">
+              <AvatarFallback style={{ backgroundColor: u.avatarColor || 'var(--primary)', color: 'white' }}>
+                {u.initials}
+              </AvatarFallback>
+            </Avatar>
+            <div className="flex flex-col">
+              <span className="font-medium leading-none">{u.name}</span>
+              <span className="text-xs text-muted-foreground mt-1">{u.email}</span>
+            </div>
+          </div>
+        </TableCell>
+        <TableCell><Badge variant="outline">{u.role}</Badge></TableCell>
+        <TableCell className="text-sm text-muted-foreground max-w-xs">{u.scopeSummary}</TableCell>
+        <TableCell>
+          {u.isActive
+            ? <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200">Aktiv</Badge>
+            : <Badge variant="outline" className="bg-gray-100 text-gray-600">Deaktiviert</Badge>}
+        </TableCell>
+        <TableCell className="text-right">
+          <div className="flex justify-end gap-2">
+            <Button size="sm" variant="outline" onClick={isEditing ? onCancelEdit : onOpenEdit}>
+              {isEditing ? "Schließen" : "Bearbeiten"}
+            </Button>
+            <Button size="sm" variant="outline" onClick={onToggleActive} disabled={savePending}>
+              {u.isActive ? "Deaktivieren" : "Aktivieren"}
+            </Button>
+          </div>
+        </TableCell>
+      </TableRow>
+      {isEditing && (
+        <TableRow>
+          <TableCell colSpan={5} className="bg-muted/30">
+            <div className="grid md:grid-cols-2 gap-4 py-3">
+              <div>
+                <Label className="mb-1 block">Rolle</Label>
+                <select
+                  className="w-full border rounded-md px-2 py-1.5 bg-background"
+                  value={editDraft.role ?? u.role}
+                  onChange={e => onEditDraftChange({ ...editDraft, role: e.target.value })}
+                >
+                  {roleOptions.map(r => (
+                    <option key={r.id} value={r.name}>{r.name}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <Label className="mb-1 block">Sichtbarkeit</Label>
+                <ScopeTreeEditor
+                  tenantWide={editDraft.tenantWide ?? u.tenantWide}
+                  onTenantWideChange={v => onEditDraftChange({ ...editDraft, tenantWide: v })}
+                  companyIds={editDraft.scopeCompanyIds ?? u.scopeCompanyIds}
+                  brandIds={editDraft.scopeBrandIds ?? u.scopeBrandIds}
+                  onCompanyIdsChange={v => onEditDraftChange({ ...editDraft, scopeCompanyIds: v })}
+                  onBrandIdsChange={v => onEditDraftChange({ ...editDraft, scopeBrandIds: v })}
+                />
+              </div>
+              <div className="md:col-span-2 flex justify-end gap-2">
+                <Button size="sm" variant="outline" onClick={onCancelEdit}>Abbrechen</Button>
+                <Button size="sm" onClick={onSaveEdit} disabled={savePending}>Speichern</Button>
               </div>
             </div>
           </TableCell>

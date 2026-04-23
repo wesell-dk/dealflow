@@ -184,6 +184,78 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/User" }
 
+  /admin/users:
+    get:
+      operationId: listAdminUsers
+      tags: [admin]
+      responses:
+        "200":
+          description: ok
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/AdminUser" }
+    post:
+      operationId: createAdminUser
+      tags: [admin]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/AdminUserCreate" }
+      responses:
+        "201":
+          description: created
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AdminUser" }
+
+  /admin/users/{id}:
+    patch:
+      operationId: updateAdminUser
+      tags: [admin]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/AdminUserUpdate" }
+      responses:
+        "200":
+          description: ok
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AdminUser" }
+
+  /admin/roles:
+    get:
+      operationId: listRoles
+      tags: [admin]
+      responses:
+        "200":
+          description: ok
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/Role" }
+
+  /admin/scope-tree:
+    get:
+      operationId: getScopeTree
+      tags: [admin]
+      responses:
+        "200":
+          description: ok
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ScopeTree" }
+
   # ───────────── ACCOUNTS / CONTACTS ─────────────
 
   /accounts:
@@ -1745,6 +1817,88 @@ components:
         initials: { type: string }
         avatarColor:
           type: ["string", "null"]
+
+    AdminUser:
+      type: object
+      required:
+        [id, name, email, role, initials, isActive, tenantWide, scopeCompanyIds, scopeBrandIds]
+      properties:
+        id: { type: string }
+        name: { type: string }
+        email: { type: string }
+        role: { type: string }
+        initials: { type: string }
+        avatarColor: { type: ["string", "null"] }
+        isActive: { type: boolean }
+        tenantWide: { type: boolean }
+        scopeCompanyIds:
+          type: array
+          items: { type: string }
+        scopeBrandIds:
+          type: array
+          items: { type: string }
+        scopeSummary: { type: string }
+
+    AdminUserCreate:
+      type: object
+      required: [name, email, role, password]
+      properties:
+        name: { type: string }
+        email: { type: string }
+        role: { type: string }
+        password: { type: string }
+        tenantWide: { type: boolean }
+        scopeCompanyIds:
+          type: array
+          items: { type: string }
+        scopeBrandIds:
+          type: array
+          items: { type: string }
+
+    AdminUserUpdate:
+      type: object
+      properties:
+        name: { type: string }
+        role: { type: string }
+        isActive: { type: boolean }
+        tenantWide: { type: boolean }
+        scopeCompanyIds:
+          type: array
+          items: { type: string }
+        scopeBrandIds:
+          type: array
+          items: { type: string }
+        password: { type: string }
+
+    Role:
+      type: object
+      required: [id, name, description, isSystem]
+      properties:
+        id: { type: string }
+        name: { type: string }
+        description: { type: string }
+        isSystem: { type: boolean }
+
+    ScopeTree:
+      type: object
+      required: [companies]
+      properties:
+        companies:
+          type: array
+          items:
+            type: object
+            required: [id, name, brands]
+            properties:
+              id: { type: string }
+              name: { type: string }
+              brands:
+                type: array
+                items:
+                  type: object
+                  required: [id, name]
+                  properties:
+                    id: { type: string }
+                    name: { type: string }
 
     # ── Accounts ──
     Account:

@@ -34,6 +34,7 @@ import {
   orderConfirmationsTable,
   orderConfirmationChecksTable,
   entityVersionsTable,
+  rolesTable,
 } from "@workspace/db";
 import { hashPassword } from "./auth";
 import { logger } from "./logger";
@@ -128,12 +129,24 @@ export async function seedIfEmpty(): Promise<void> {
       passwordHash: demoPwHash, isActive: true, tenantId: "tn_root", tenantWide: true,  scopeCompanyIds: JSON.stringify([]),                                  scopeBrandIds: JSON.stringify([]) },
     { id: "u_james",  name: "James Whitfield",  email: "james@helix.com",  role: "Regional Director",  scope: "co_helix_uk",  initials: "JW", avatarColor: "#DC2626",
       passwordHash: demoPwHash, isActive: true, tenantId: "tn_root", tenantWide: false, scopeCompanyIds: JSON.stringify(["co_helix_uk"]),                    scopeBrandIds: JSON.stringify([]) },
-    { id: "u_priya",  name: "Priya Raman",      email: "priya@helix.com",  role: "VP Commercial",      scope: "tn_root",      initials: "PR", avatarColor: "#EA580C",
+    { id: "u_priya",  name: "Priya Raman",      email: "priya@helix.com",  role: "Tenant Admin",       scope: "tn_root",      initials: "PR", avatarColor: "#EA580C",
       passwordHash: demoPwHash, isActive: true, tenantId: "tn_root", tenantWide: true,  scopeCompanyIds: JSON.stringify([]),                                  scopeBrandIds: JSON.stringify([]) },
     { id: "u_tom",    name: "Tom Becker",       email: "tom@helix.com",    role: "Account Executive",  scope: "co_helix_us",  initials: "TB", avatarColor: "#0EA5E9",
       passwordHash: demoPwHash, isActive: true, tenantId: "tn_root", tenantWide: false, scopeCompanyIds: JSON.stringify(["co_helix_us"]),                    scopeBrandIds: JSON.stringify([]) },
   ];
   await db.insert(usersTable).values(users);
+
+  await db.insert(rolesTable).values([
+    { id: "ro_sales_rep", name: "Sales Rep", description: "Führt Deals im zugewiesenen Scope, kann Angebote und Verträge vorbereiten.", isSystem: true, tenantId: "tn_root" },
+    { id: "ro_sales_mgr", name: "Sales Manager", description: "Pipeline-Verantwortung, Approval für Rabatte im Limit.", isSystem: true, tenantId: "tn_root" },
+    { id: "ro_revops", name: "RevOps", description: "Preislisten, Pricing-Regeln, Reports, Datenqualität.", isSystem: true, tenantId: "tn_root" },
+    { id: "ro_legal", name: "Legal Reviewer", description: "Klausel-Freigaben, Risiko-Bewertung, Nachtrags-Freigabe.", isSystem: true, tenantId: "tn_root" },
+    { id: "ro_finance", name: "Finance Approver", description: "Finanz-Approval hoher Rabatte und Margen-Ausnahmen.", isSystem: true, tenantId: "tn_root" },
+    { id: "ro_tenant_admin", name: "Tenant Admin", description: "Volle Rechte, Benutzer und Rollen verwalten.", isSystem: true, tenantId: "tn_root" },
+    { id: "ro_readonly_exec", name: "Read-Only Executive", description: "Nur Lesezugriff auf alle Daten des Tenants.", isSystem: true, tenantId: "tn_root" },
+    { id: "ro_brand_mgr", name: "Brand Manager", description: "Brand-Konfiguration, Klausel-Defaults, Logo und Farben.", isSystem: true, tenantId: "tn_root" },
+    { id: "ro_integration_admin", name: "Integration Admin", description: "Webhooks, Integrationen, Datenimport.", isSystem: true, tenantId: "tn_root" },
+  ]);
 
   const accountsData = [
     { id: "acc_001", name: "Vorwerk Logistics", industry: "Logistics", country: "DE", healthScore: 82, ownerId: "u_anna" },

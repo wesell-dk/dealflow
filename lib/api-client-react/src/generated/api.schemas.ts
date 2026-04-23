@@ -97,6 +97,63 @@ export interface User {
   avatarColor?: string | null;
 }
 
+export interface AdminUser {
+  id: string;
+  name: string;
+  email: string;
+  role: string;
+  initials: string;
+  /** @nullable */
+  avatarColor?: string | null;
+  isActive: boolean;
+  tenantWide: boolean;
+  scopeCompanyIds: string[];
+  scopeBrandIds: string[];
+  scopeSummary?: string;
+}
+
+export interface AdminUserCreate {
+  name: string;
+  email: string;
+  role: string;
+  password: string;
+  tenantWide?: boolean;
+  scopeCompanyIds?: string[];
+  scopeBrandIds?: string[];
+}
+
+export interface AdminUserUpdate {
+  name?: string;
+  role?: string;
+  isActive?: boolean;
+  tenantWide?: boolean;
+  scopeCompanyIds?: string[];
+  scopeBrandIds?: string[];
+  password?: string;
+}
+
+export interface Role {
+  id: string;
+  name: string;
+  description: string;
+  isSystem: boolean;
+}
+
+export type ScopeTreeCompaniesItemBrandsItem = {
+  id: string;
+  name: string;
+};
+
+export type ScopeTreeCompaniesItem = {
+  id: string;
+  name: string;
+  brands: ScopeTreeCompaniesItemBrandsItem[];
+};
+
+export interface ScopeTree {
+  companies: ScopeTreeCompaniesItem[];
+}
+
 export interface Account {
   id: string;
   name: string;

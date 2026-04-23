@@ -179,6 +179,82 @@ export const GetCurrentUserResponse = zod.object({
   avatarColor: zod.string().nullish(),
 });
 
+export const ListAdminUsersResponseItem = zod.object({
+  id: zod.string(),
+  name: zod.string(),
+  email: zod.string(),
+  role: zod.string(),
+  initials: zod.string(),
+  avatarColor: zod.string().nullish(),
+  isActive: zod.boolean(),
+  tenantWide: zod.boolean(),
+  scopeCompanyIds: zod.array(zod.string()),
+  scopeBrandIds: zod.array(zod.string()),
+  scopeSummary: zod.string().optional(),
+});
+export const ListAdminUsersResponse = zod.array(ListAdminUsersResponseItem);
+
+export const CreateAdminUserBody = zod.object({
+  name: zod.string(),
+  email: zod.string(),
+  role: zod.string(),
+  password: zod.string(),
+  tenantWide: zod.boolean().optional(),
+  scopeCompanyIds: zod.array(zod.string()).optional(),
+  scopeBrandIds: zod.array(zod.string()).optional(),
+});
+
+export const UpdateAdminUserParams = zod.object({
+  id: zod.coerce.string(),
+});
+
+export const UpdateAdminUserBody = zod.object({
+  name: zod.string().optional(),
+  role: zod.string().optional(),
+  isActive: zod.boolean().optional(),
+  tenantWide: zod.boolean().optional(),
+  scopeCompanyIds: zod.array(zod.string()).optional(),
+  scopeBrandIds: zod.array(zod.string()).optional(),
+  password: zod.string().optional(),
+});
+
+export const UpdateAdminUserResponse = zod.object({
+  id: zod.string(),
+  name: zod.string(),
+  email: zod.string(),
+  role: zod.string(),
+  initials: zod.string(),
+  avatarColor: zod.string().nullish(),
+  isActive: zod.boolean(),
+  tenantWide: zod.boolean(),
+  scopeCompanyIds: zod.array(zod.string()),
+  scopeBrandIds: zod.array(zod.string()),
+  scopeSummary: zod.string().optional(),
+});
+
+export const ListRolesResponseItem = zod.object({
+  id: zod.string(),
+  name: zod.string(),
+  description: zod.string(),
+  isSystem: zod.boolean(),
+});
+export const ListRolesResponse = zod.array(ListRolesResponseItem);
+
+export const GetScopeTreeResponse = zod.object({
+  companies: zod.array(
+    zod.object({
+      id: zod.string(),
+      name: zod.string(),
+      brands: zod.array(
+        zod.object({
+          id: zod.string(),
+          name: zod.string(),
+        }),
+      ),
+    }),
+  ),
+});
+
 export const ListAccountsResponseItem = zod.object({
   id: zod.string(),
   name: zod.string(),
