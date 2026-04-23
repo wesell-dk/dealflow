@@ -691,6 +691,14 @@ router.get('/contracts', async (req, res) => {
 router.post('/contracts', async (req, res) => {
   const b = req.body as { dealId: string; title: string; template: string; brandId?: string };
   if (!(await gateDeal(req, res, b.dealId))) return;
+  // Pre-validate brand (existence + visibility) BEFORE any writes.
+  let brandForSeed: typeof brandsTable.$inferSelect | undefined;
+  if (b.brandId) {
+    const [brand] = await db.select().from(brandsTable).where(eq(brandsTable.id, b.brandId));
+    if (!brand) { res.status(404).json({ error: 'brand not found' }); return; }
+    if (!(await brandVisible(req, brand))) { res.status(403).json({ error: 'forbidden' }); return; }
+    brandForSeed = brand;
+  }
   const id = `ctr_${randomUUID().slice(0, 8)}`;
   await db.insert(contractsTable).values({
     id, dealId: b.dealId, title: b.title, status: 'drafting',
@@ -698,10 +706,8 @@ router.post('/contracts', async (req, res) => {
     validUntil: new Date(Date.now() + 365 * 86400000).toISOString().slice(0, 10),
   });
   // Seed clauses from brand defaults if provided
-  if (b.brandId) {
-    const [brand] = await db.select().from(brandsTable).where(eq(brandsTable.id, b.brandId));
-    if (!brand) { res.status(404).json({ error: 'brand not found' }); return; }
-    if (!(await brandVisible(req, brand))) { res.status(403).json({ error: 'forbidden' }); return; }
+  if (brandForSeed) {
+    const brand = brandForSeed;
     if (brand.defaultClauseVariants) {
       const families = await db.select().from(clauseFamiliesTable);
       const variants = await db.select().from(clauseVariantsTable);
