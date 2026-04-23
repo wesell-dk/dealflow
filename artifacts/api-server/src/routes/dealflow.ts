@@ -1059,10 +1059,49 @@ router.get('/contracts/:id', async (req, res) => {
   if (!(await gateDeal(req, res, c.dealId))) return;
   const asOf = parseAsOf(req.query.asOf);
   if (asOf) {
-    const snap = await resolveSnapshot<Record<string, unknown>>('contract', c.id, asOf);
+    type ContractSnap =
+      | { contract: typeof contractsTable.$inferSelect; clauses: (typeof contractClausesTable.$inferSelect)[] }
+      | (typeof contractsTable.$inferSelect);
+    const snap = await resolveSnapshot<ContractSnap>('contract', c.id, asOf);
     if (!snap) { res.status(404).json({ error: 'no snapshot for asOf' }); return; }
+    const hasWrapper = snap.data && typeof snap.data === 'object' && 'contract' in (snap.data as Record<string, unknown>);
+    const snapC = hasWrapper
+      ? (snap.data as { contract: Partial<typeof contractsTable.$inferSelect> }).contract
+      : (snap.data as Partial<typeof contractsTable.$inferSelect>);
+    // Merge over live contract so response shape stays canonical even when
+    // older/thin snapshots are missing fields.
+    const rehydrated: typeof contractsTable.$inferSelect = {
+      ...c,
+      ...(snapC ?? {}),
+      createdAt: snapC?.createdAt
+        ? new Date(snapC.createdAt as unknown as string)
+        : c.createdAt,
+    };
+    const snapClauses = hasWrapper
+      ? ((snap.data as { clauses?: (typeof contractClausesTable.$inferSelect)[] }).clauses ?? [])
+      : [];
+    // If snapshot didn't store clauses, fall back to the live clauses (shape
+    // consistency > point-in-time clause fidelity for thin legacy snapshots).
+    const effectiveClauses = snapClauses.length > 0
+      ? snapClauses
+      : await db.select().from(contractClausesTable).where(eq(contractClausesTable.contractId, c.id));
+    const dealMapA = await getDealMap();
+    const variantsAllA = await db.select().from(clauseVariantsTable);
+    const vByIdA = new Map(variantsAllA.map(v => [v.id, v]));
+    const mappedClauses = effectiveClauses.map(cl => {
+      const active = cl.activeVariantId ? vByIdA.get(cl.activeVariantId) : undefined;
+      return {
+        id: cl.id, contractId: cl.contractId, family: cl.family, variant: cl.variant,
+        severity: cl.severity, summary: cl.summary,
+        familyId: cl.familyId ?? null, activeVariantId: cl.activeVariantId ?? null,
+        severityScore: active?.severityScore ?? 3,
+        tone: active?.tone ?? 'standard',
+        body: active?.body ?? '',
+      };
+    });
     res.json({
-      ...snap.data,
+      ...mapContract(rehydrated, dealMapA.get(rehydrated.dealId)?.name ?? 'Unknown', snapClauses),
+      clauses: mappedClauses,
       meta: {
         source: 'version',
         validFrom: snap.validFrom,
@@ -2688,6 +2727,89 @@ router.get('/pricing/resolve', async (req, res) => {
   const brands = await getBrandMap();
   const companies = await getCompanyMap();
 
+  // For asOf: compute historical candidates from snapshots or the pre-change
+  // live row, then apply precedence on those historical records. Positions
+  // whose first existence is after asOf are excluded.
+  if (asOf) {
+    type HistCand = {
+      id: string; brandId: string; companyId: string; sku: string;
+      status: string; listPrice: number; currency: string;
+      validFrom: string | null; validTo: string | null;
+      version: number | null; source: 'live' | 'version';
+    };
+    // Use tenantPositions (unfiltered by sku/status) because historical status
+    // may differ from current; then filter on historical snapshot data.
+    const allCandidates: HistCand[] = [];
+    for (const p of tenantPositions) {
+      const snap = await resolveSnapshot<Record<string, unknown>>('price_position', p.id, asOf);
+      if (snap) {
+        const d = snap.data;
+        allCandidates.push({
+          id: p.id,
+          brandId: String(d.brandId ?? p.brandId),
+          companyId: String(d.companyId ?? p.companyId),
+          sku: String(d.sku ?? p.sku),
+          status: String(d.status ?? p.status),
+          listPrice: num(d.listPrice),
+          currency: String(d.currency ?? p.currency),
+          validFrom: snap.validFrom,
+          validTo: snap.validTo,
+          version: snap.version ?? null,
+          source: 'version',
+        });
+      } else {
+        // No snapshot: only include if position existed at asOf (validFrom <=).
+        const vfDate = p.validFrom ? new Date(String(p.validFrom)).getTime() : 0;
+        if (vfDate > asOf.getTime()) continue;
+        allCandidates.push({
+          id: p.id, brandId: p.brandId, companyId: p.companyId, sku: p.sku,
+          status: p.status, listPrice: num(p.listPrice), currency: p.currency,
+          validFrom: p.validFrom ? String(p.validFrom) : null,
+          validTo: null, version: p.version ?? null, source: 'live',
+        });
+      }
+    }
+    const inScope = allCandidates.filter(c =>
+      c.sku === sku && c.status === 'active' &&
+      (scope.tenantWide || allowedBrands.has(c.brandId) || allowedCompanies.has(c.companyId))
+    );
+    const bHitH = brandId ? inScope.find(c => c.brandId === brandId) : undefined;
+    const cHitH = companyId ? inScope.find(c => c.companyId === companyId && c.brandId !== brandId) : undefined;
+    const tHitH = inScope.find(c => !bHitH || (c.brandId !== bHitH.brandId && c.companyId !== bHitH.companyId));
+    const winnerH = bHitH ?? cHitH ?? tHitH ?? inScope[0];
+    if (!winnerH) { res.status(404).json({ error: 'no price for sku at asOf' }); return; }
+    const chainH = [
+      { level: 'brand', label: brandId ? (brands.get(brandId)?.name ?? 'Brand') : 'Brand',
+        listPrice: bHitH ? bHitH.listPrice : null, applied: !!bHitH, positionId: bHitH?.id ?? null },
+      { level: 'company', label: companyId ? (companies.get(companyId)?.name ?? 'Company') : 'Company',
+        listPrice: cHitH ? cHitH.listPrice : null, applied: !bHitH && !!cHitH, positionId: cHitH?.id ?? null },
+      { level: 'tenant', label: 'Mandanten-Standard',
+        listPrice: tHitH ? tHitH.listPrice : null, applied: !bHitH && !cHitH, positionId: tHitH?.id ?? null },
+    ];
+    res.setHeader('X-Meta-Source', 'version');
+    if (winnerH.validFrom) res.setHeader('X-Meta-Valid-From', winnerH.validFrom);
+    if (winnerH.validTo) res.setHeader('X-Meta-Valid-To', winnerH.validTo);
+    if (winnerH.version != null) res.setHeader('X-Meta-Version', String(winnerH.version));
+    res.setHeader('X-Meta-Generated-At', new Date().toISOString());
+    res.json({
+      sku,
+      listPrice: winnerH.listPrice,
+      currency: winnerH.currency,
+      source: bHitH ? 'brand' : cHitH ? 'company' : 'tenant',
+      positionId: winnerH.id,
+      chain: chainH,
+      meta: {
+        source: 'version',
+        validFrom: winnerH.validFrom,
+        validTo: winnerH.validTo,
+        generatedAt: new Date().toISOString(),
+        version: winnerH.version,
+        asOf: asOf.toISOString(),
+      },
+    });
+    return;
+  }
+
   const brandHit = brandId ? positions.find(p => p.brandId === brandId) : undefined;
   const companyHit = companyId
     ? positions.find(p => p.companyId === companyId && p.brandId !== brandId)
@@ -2765,7 +2887,6 @@ router.get('/pricing/resolve', async (req, res) => {
       validTo: metaValidTo,
       generatedAt: new Date().toISOString(),
       version: metaVersion,
-      ...(asOf ? { asOf: asOf.toISOString() } : {}),
     },
   });
 });
@@ -3532,7 +3653,7 @@ const WebhookCreateBody = z.object({
 });
 const WebhookPatchBody = z.object({
   url: z.string().url().optional(),
-  events: z.array(z.string().min(1)).optional(),
+  events: z.array(z.enum(WEBHOOK_EVENTS as [string, ...string[]])).min(1).optional(),
   description: z.string().nullable().optional(),
   active: z.boolean().optional(),
 });
