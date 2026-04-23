@@ -3284,6 +3284,13 @@ router.patch('/admin/roles/:id', async (req, res) => {
   if (typeof b.name === 'string' && b.name.trim()) patch.name = b.name.trim();
   if (typeof b.description === 'string' && b.description.trim()) patch.description = b.description.trim();
   if (Object.keys(patch).length > 0) {
+    if (patch.name && patch.name !== r.name) {
+      const [dup] = await db.select().from(rolesTable)
+        .where(and(eq(rolesTable.tenantId, scope.tenantId), eq(rolesTable.name, patch.name)));
+      if (dup && dup.id !== r.id) { res.status(409).json({ error: 'role name already exists' }); return; }
+      await db.update(usersTable).set({ role: patch.name })
+        .where(and(eq(usersTable.tenantId, scope.tenantId), eq(usersTable.role, r.name)));
+    }
     await db.update(rolesTable).set(patch).where(eq(rolesTable.id, r.id));
     await writeAudit({
       entityType: 'role', entityId: r.id, action: 'update',
