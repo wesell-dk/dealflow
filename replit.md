@@ -186,3 +186,11 @@ exportable user data, redacted secrets in logs.
 
 ## Spracheinstellung
 - Kommunikation mit dem Nutzer erfolgt **immer auf Deutsch**.
+
+## Konzept-Quelldokumente (verbindliche Spezifikation)
+Die fachliche Zielspezifikation liegt unter `docs/konzept/`:
+- `00_gesamtkonzeption.md` — Gesamtkonzept (Vision, Domänen, Prinzipien)
+- `01_datenmodell_rechte_api.md` — Datenmodell, Rechte, API-Zielbild, Screen-Start
+- `02_screens_teil2.md` — Screen-by-Screen Teil 2 (Negotiation, Signature, Order Confirmation, Price Increase, Reports, Copilot, Platform Admin)
+
+Diese Dokumente sind die Quelle der Wahrheit für jede Frage „ist Feature X im Konzept?". Vor größeren Änderungen immer dort nachlesen.
