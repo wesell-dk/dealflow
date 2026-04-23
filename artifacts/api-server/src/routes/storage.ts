@@ -5,10 +5,40 @@ import {
   RequestUploadUrlResponse,
 } from "@workspace/api-zod";
 import { ObjectStorageService, ObjectNotFoundError } from "../lib/objectStorage";
-import { ObjectPermission } from "../lib/objectAcl";
+import type { AuthedRequest } from "../middlewares/auth";
 
 const router: IRouter = Router();
 const objectStorageService = new ObjectStorageService();
+
+const ALLOWED_UPLOAD_MIME = new Set([
+  "image/png",
+  "image/jpeg",
+  "image/svg+xml",
+  "image/webp",
+]);
+const MAX_UPLOAD_BYTES = 2 * 1024 * 1024;
+
+function requireAuthenticated(req: Request, res: Response): boolean {
+  const scope = (req as AuthedRequest).scope;
+  if (!scope) {
+    res.status(401).json({ error: "not authenticated" });
+    return false;
+  }
+  return true;
+}
+
+function requireAdminScope(req: Request, res: Response): boolean {
+  const scope = (req as AuthedRequest).scope;
+  if (!scope) {
+    res.status(401).json({ error: "not authenticated" });
+    return false;
+  }
+  if (!scope.tenantWide) {
+    res.status(403).json({ error: "admin rights required" });
+    return false;
+  }
+  return true;
+}
 
 /**
  * POST /storage/uploads/request-url
@@ -18,6 +48,7 @@ const objectStorageService = new ObjectStorageService();
  * Then uploads the file directly to the returned presigned URL.
  */
 router.post("/storage/uploads/request-url", async (req: Request, res: Response) => {
+  if (!requireAdminScope(req, res)) return;
   const parsed = RequestUploadUrlBody.safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({ error: "Missing or invalid required fields" });
@@ -26,6 +57,14 @@ router.post("/storage/uploads/request-url", async (req: Request, res: Response) 
 
   try {
     const { name, size, contentType } = parsed.data;
+    if (!ALLOWED_UPLOAD_MIME.has(contentType)) {
+      res.status(400).json({ error: "contentType not allowed (png/jpeg/svg/webp only)" });
+      return;
+    }
+    if (typeof size !== "number" || size <= 0 || size > MAX_UPLOAD_BYTES) {
+      res.status(400).json({ error: `size must be 1..${MAX_UPLOAD_BYTES} bytes` });
+      return;
+    }
 
     const uploadURL = await objectStorageService.getObjectEntityUploadURL();
     const objectPath = objectStorageService.normalizeObjectEntityPath(uploadURL);
@@ -85,26 +124,12 @@ router.get("/storage/public-objects/*filePath", async (req: Request, res: Respon
  * be protected with authentication or ACL checks based on the use case.
  */
 router.get("/storage/objects/*path", async (req: Request, res: Response) => {
+  if (!requireAuthenticated(req, res)) return;
   try {
     const raw = req.params.path;
     const wildcardPath = Array.isArray(raw) ? raw.join("/") : raw;
     const objectPath = `/objects/${wildcardPath}`;
     const objectFile = await objectStorageService.getObjectEntityFile(objectPath);
-
-    // --- Protected route example (uncomment when using replit-auth) ---
-    // if (!req.isAuthenticated()) {
-    //   res.status(401).json({ error: "Unauthorized" });
-    //   return;
-    // }
-    // const canAccess = await objectStorageService.canAccessObjectEntity({
-    //   userId: req.user.id,
-    //   objectFile,
-    //   requestedPermission: ObjectPermission.READ,
-    // });
-    // if (!canAccess) {
-    //   res.status(403).json({ error: "Forbidden" });
-    //   return;
-    // }
 
     const response = await objectStorageService.downloadObject(objectFile);
 
