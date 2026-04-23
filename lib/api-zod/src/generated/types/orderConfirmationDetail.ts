@@ -9,7 +9,25 @@ Multi-tenant, multi-company, multi-brand. Deal-centric.
  */
 import type { OrderConfirmation } from "./orderConfirmation";
 import type { OrderConfirmationDetailChecksItem } from "./orderConfirmationDetailChecksItem";
+import type { OrderConfirmationDetailEscalationsItem } from "./orderConfirmationDetailEscalationsItem";
 
 export type OrderConfirmationDetail = OrderConfirmation & {
+  /** @nullable */
+  handoverNote?: string | null;
+  /** @nullable */
+  handoverContact?: string | null;
+  /** @nullable */
+  handoverContactEmail?: string | null;
+  /** @nullable */
+  handoverDeliveryDate?: string | null;
+  /** @nullable */
+  handoverCriticalNotes?: string | null;
+  handoverReady?: boolean;
+  /** @nullable */
+  daysSinceHandover?: number | null;
+  /** @nullable */
+  slaDeadline?: string | null;
+  slaBreached?: boolean;
+  escalations: OrderConfirmationDetailEscalationsItem[];
   checks: OrderConfirmationDetailChecksItem[];
 };

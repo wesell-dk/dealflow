@@ -7,6 +7,8 @@ Multi-tenant, multi-company, multi-brand. Deal-centric.
 
  * OpenAPI spec version: 0.1.0
  */
+import type { OrderConfirmationActiveOwner } from "./orderConfirmationActiveOwner";
+import type { OrderConfirmationStatus } from "./orderConfirmationStatus";
 
 export interface OrderConfirmation {
   id: string;
@@ -15,7 +17,7 @@ export interface OrderConfirmation {
   /** @nullable */
   contractId?: string | null;
   number: string;
-  status: string;
+  status: OrderConfirmationStatus;
   readinessScore: number;
   totalAmount: number;
   currency: string;
@@ -23,5 +25,17 @@ export interface OrderConfirmation {
   expectedDelivery?: string | null;
   /** @nullable */
   handoverAt?: string | null;
+  /** @nullable */
+  salesOwnerId?: string | null;
+  /** @nullable */
+  salesOwnerName?: string | null;
+  /** @nullable */
+  onboardingOwnerId?: string | null;
+  /** @nullable */
+  onboardingOwnerName?: string | null;
+  /** @nullable */
+  handoverStartedAt?: string | null;
+  slaDays: number;
+  activeOwner?: OrderConfirmationActiveOwner;
   createdAt: Date;
 }

@@ -1171,6 +1171,29 @@ paths:
           name: id
           required: true
           schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/OrderConfirmationHandoverInput" }
+      responses:
+        "200":
+          description: ok
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/OrderConfirmationDetail" }
+        "400":
+          description: required checks not ok
+
+  /order-confirmations/{id}/complete:
+    post:
+      operationId: completeOrderConfirmation
+      tags: [orderConfirmations]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
       responses:
         "200":
           description: ok
@@ -2168,7 +2191,7 @@ components:
 
     OrderConfirmation:
       type: object
-      required: [id, dealId, dealName, number, status, readinessScore, totalAmount, currency, createdAt]
+      required: [id, dealId, dealName, number, status, readinessScore, totalAmount, currency, slaDays, createdAt]
       properties:
         id: { type: string }
         dealId: { type: string }
@@ -2176,7 +2199,9 @@ components:
         contractId:
           type: ["string", "null"]
         number: { type: string }
-        status: { type: string }
+        status:
+          type: string
+          enum: [preparing, checks_pending, ready_for_handover, in_onboarding, completed]
         readinessScore: { type: integer }
         totalAmount: { type: number }
         currency: { type: string }
@@ -2184,22 +2209,75 @@ components:
           type: ["string", "null"]
         handoverAt:
           type: ["string", "null"]
+        salesOwnerId:
+          type: ["string", "null"]
+        salesOwnerName:
+          type: ["string", "null"]
+        onboardingOwnerId:
+          type: ["string", "null"]
+        onboardingOwnerName:
+          type: ["string", "null"]
+        handoverStartedAt:
+          type: ["string", "null"]
+        slaDays: { type: integer }
+        activeOwner:
+          type: string
+          enum: [sales, onboarding]
         createdAt: { type: string, format: date-time }
 
     OrderConfirmationDetail:
       allOf:
         - $ref: "#/components/schemas/OrderConfirmation"
         - type: object
-          required: [checks]
+          required: [checks, escalations]
           properties:
+            handoverNote:
+              type: ["string", "null"]
+            handoverContact:
+              type: ["string", "null"]
+            handoverContactEmail:
+              type: ["string", "null"]
+            handoverDeliveryDate:
+              type: ["string", "null"]
+            handoverCriticalNotes:
+              type: ["string", "null"]
+            handoverReady: { type: boolean }
+            daysSinceHandover:
+              type: ["integer", "null"]
+            slaDeadline:
+              type: ["string", "null"]
+            slaBreached: { type: boolean }
+            escalations:
+              type: array
+              items:
+                type: object
+                required: [checkId, label, reason]
+                properties:
+                  checkId: { type: string }
+                  label: { type: string }
+                  reason: { type: string }
             checks:
               type: array
               items:
                 type: object
-                required: [id, label, status]
+                required: [id, label, status, required]
                 properties:
                   id: { type: string }
                   label: { type: string }
                   status: { type: string }
+                  required: { type: boolean }
                   detail:
                     type: ["string", "null"]
+
+    OrderConfirmationHandoverInput:
+      type: object
+      required: [onboardingOwnerId, contactName, contactEmail, deliveryDate]
+      properties:
+        onboardingOwnerId: { type: string }
+        contactName: { type: string }
+        contactEmail: { type: string }
+        deliveryDate: { type: string }
+        note:
+          type: ["string", "null"]
+        criticalNotes:
+          type: ["string", "null"]

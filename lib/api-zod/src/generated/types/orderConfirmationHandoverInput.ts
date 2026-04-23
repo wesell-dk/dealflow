@@ -8,11 +8,13 @@ Multi-tenant, multi-company, multi-brand. Deal-centric.
  * OpenAPI spec version: 0.1.0
  */
 
-export type OrderConfirmationDetailChecksItem = {
-  id: string;
-  label: string;
-  status: string;
-  required: boolean;
+export interface OrderConfirmationHandoverInput {
+  onboardingOwnerId: string;
+  contactName: string;
+  contactEmail: string;
+  deliveryDate: string;
   /** @nullable */
-  detail?: string | null;
-};
+  note?: string | null;
+  /** @nullable */
+  criticalNotes?: string | null;
+}

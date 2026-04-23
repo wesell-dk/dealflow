@@ -8,10 +8,11 @@ import { Progress } from "@/components/ui/progress";
 import { ClipboardCheck } from "lucide-react";
 
 const statusVariant: Record<string, "default" | "secondary" | "destructive" | "outline"> = {
-  draft: "outline",
-  ready: "secondary",
-  handed_over: "default",
-  blocked: "destructive",
+  preparing: "outline",
+  checks_pending: "outline",
+  ready_for_handover: "secondary",
+  in_onboarding: "default",
+  completed: "default",
 };
 
 export default function OrderConfirmations() {

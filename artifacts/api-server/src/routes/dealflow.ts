@@ -1134,7 +1134,7 @@ async function maybeCompletePackageAndCreateOC(pkg: PackageRow, signers: SignerR
   const seq = String((existingCount[0]?.c ?? 0) + 1).padStart(3, '0');
   await db.insert(orderConfirmationsTable).values({
     id: ocId, dealId: pkg.dealId, contractId: null,
-    number: `OC-${year}-${seq}`, status: 'in_review', readinessScore: 20,
+    number: `OC-${year}-${seq}`, status: 'checks_pending', readinessScore: 20,
     totalAmount: String(num(deal?.value ?? 0)), currency: deal?.currency ?? 'EUR',
     expectedDelivery: null, handoverAt: null,
   });
@@ -1735,6 +1735,7 @@ router.post('/price-increases/:id/letters/:letterId/respond', async (req, res) =
 function mapOC(
   o: typeof orderConfirmationsTable.$inferSelect,
   dealName: string,
+  users?: Map<string, typeof usersTable.$inferSelect>,
 ) {
   return {
     id: o.id, dealId: o.dealId, dealName, contractId: o.contractId,
@@ -1744,7 +1745,49 @@ function mapOC(
       ? (typeof o.expectedDelivery === 'string' ? o.expectedDelivery : iso(o.expectedDelivery)!.slice(0, 10))
       : null,
     handoverAt: iso(o.handoverAt),
+    salesOwnerId: o.salesOwnerId ?? null,
+    salesOwnerName: o.salesOwnerId ? (users?.get(o.salesOwnerId)?.name ?? null) : null,
+    onboardingOwnerId: o.onboardingOwnerId ?? null,
+    onboardingOwnerName: o.onboardingOwnerId ? (users?.get(o.onboardingOwnerId)?.name ?? null) : null,
+    handoverStartedAt: iso(o.handoverStartedAt),
+    slaDays: o.slaDays ?? 7,
+    activeOwner: (o.status === 'in_onboarding' || o.status === 'completed') ? 'onboarding' : 'sales',
     createdAt: iso(o.createdAt)!,
+  };
+}
+
+function buildOcDetail(o: typeof orderConfirmationsTable.$inferSelect, dealName: string, users: Map<string, typeof usersTable.$inferSelect>, checks: Array<typeof orderConfirmationChecksTable.$inferSelect>) {
+  const requiredChecks = checks.filter(c => c.required);
+  const handoverReady = requiredChecks.length > 0 && requiredChecks.every(c => c.status === 'ok');
+  const escalations = checks
+    .filter(c => c.required && c.status === 'blocked')
+    .map(c => ({ checkId: c.id, label: c.label, reason: c.detail ?? 'Pflicht-Check blockiert Handover' }));
+  let daysSinceHandover: number | null = null;
+  let slaDeadline: string | null = null;
+  let slaBreached = false;
+  if (o.handoverStartedAt) {
+    const started = new Date(o.handoverStartedAt).getTime();
+    const now = Date.now();
+    daysSinceHandover = Math.floor((now - started) / 86400000);
+    const deadline = new Date(started + (o.slaDays ?? 7) * 86400000);
+    slaDeadline = deadline.toISOString();
+    slaBreached = o.status !== 'completed' && now > deadline.getTime();
+  }
+  return {
+    ...mapOC(o, dealName, users),
+    handoverNote: o.handoverNote ?? null,
+    handoverContact: o.handoverContact ?? null,
+    handoverContactEmail: o.handoverContactEmail ?? null,
+    handoverDeliveryDate: o.handoverDeliveryDate
+      ? (typeof o.handoverDeliveryDate === 'string' ? o.handoverDeliveryDate : iso(o.handoverDeliveryDate)!.slice(0, 10))
+      : null,
+    handoverCriticalNotes: o.handoverCriticalNotes ?? null,
+    handoverReady,
+    daysSinceHandover,
+    slaDeadline,
+    slaBreached,
+    escalations,
+    checks: checks.map(c => ({ id: c.id, label: c.label, status: c.status, detail: c.detail, required: c.required })),
   };
 }
 
@@ -1755,7 +1798,8 @@ router.get('/order-confirmations', async (req, res) => {
   if (req.query.status) filters.push(eq(orderConfirmationsTable.status, String(req.query.status)));
   const rows = await db.select().from(orderConfirmationsTable).where(and(...filters)).orderBy(desc(orderConfirmationsTable.createdAt));
   const dealMap = await getDealMap();
-  res.json(rows.map(o => mapOC(o, dealMap.get(o.dealId)?.name ?? 'Unknown')));
+  const userMap = await getUserMap();
+  res.json(rows.map(o => mapOC(o, dealMap.get(o.dealId)?.name ?? 'Unknown', userMap)));
 });
 
 router.get('/order-confirmations/:id', async (req, res) => {
@@ -1763,41 +1807,88 @@ router.get('/order-confirmations/:id', async (req, res) => {
   if (!o) { res.status(404).json({ error: 'not found' }); return; }
   if (!(await gateDeal(req, res, o.dealId))) return;
   const dealMap = await getDealMap();
+  const userMap = await getUserMap();
   const checks = await db.select().from(orderConfirmationChecksTable)
     .where(eq(orderConfirmationChecksTable.orderConfirmationId, o.id));
-  res.json({
-    ...mapOC(o, dealMap.get(o.dealId)?.name ?? 'Unknown'),
-    checks: checks.map(c => ({ id: c.id, label: c.label, status: c.status, detail: c.detail })),
-  });
+  res.json(buildOcDetail(o, dealMap.get(o.dealId)?.name ?? 'Unknown', userMap, checks));
 });
+
+async function respondOcDetail(res: Response, ocId: string) {
+  const [u] = await db.select().from(orderConfirmationsTable).where(eq(orderConfirmationsTable.id, ocId));
+  const checks = await db.select().from(orderConfirmationChecksTable)
+    .where(eq(orderConfirmationChecksTable.orderConfirmationId, ocId));
+  const dealMap = await getDealMap();
+  const userMap = await getUserMap();
+  res.json(buildOcDetail(u!, dealMap.get(u!.dealId)?.name ?? 'Unknown', userMap, checks));
+}
 
 router.post('/order-confirmations/:id/handover', async (req, res) => {
   const [o] = await db.select().from(orderConfirmationsTable).where(eq(orderConfirmationsTable.id, req.params.id));
   if (!o) { res.status(404).json({ error: 'not found' }); return; }
   if (!(await gateDeal(req, res, o.dealId))) return;
+  if (o.status !== 'ready_for_handover' && o.status !== 'checks_pending') {
+    res.status(409).json({ error: `handover not allowed in status ${o.status}` }); return;
+  }
+  const { onboardingOwnerId, contactName, contactEmail, deliveryDate, note, criticalNotes } = req.body ?? {};
+  if (!onboardingOwnerId || !contactName || !contactEmail || !deliveryDate) {
+    res.status(400).json({ error: 'missing required fields' }); return;
+  }
+  const [owner] = await db.select().from(usersTable).where(eq(usersTable.id, String(onboardingOwnerId)));
+  if (!owner) { res.status(400).json({ error: 'onboarding owner not found' }); return; }
   const checks = await db.select().from(orderConfirmationChecksTable)
     .where(eq(orderConfirmationChecksTable.orderConfirmationId, o.id));
-  const ready = checks.every(c => c.status === 'ok');
-  if (!ready) { res.status(400).json({ error: 'not all checks ok', readinessScore: o.readinessScore }); return; }
+  const required = checks.filter(c => c.required);
+  const ready = required.length > 0 && required.every(c => c.status === 'ok');
+  if (!ready) {
+    res.status(400).json({ error: 'required checks not ok', readinessScore: o.readinessScore }); return;
+  }
+  const now = new Date();
   await db.update(orderConfirmationsTable).set({
-    status: 'handed_over', handoverAt: new Date(),
+    status: 'in_onboarding',
+    handoverAt: now,
+    handoverStartedAt: now,
+    onboardingOwnerId: owner.id,
+    handoverNote: note ?? null,
+    handoverContact: contactName,
+    handoverContactEmail: contactEmail,
+    handoverDeliveryDate: String(deliveryDate),
+    handoverCriticalNotes: criticalNotes ?? null,
   }).where(eq(orderConfirmationsTable.id, o.id));
   await writeAudit({
-    entityType: 'order_confirmation', entityId: o.id, action: 'handover',
-    summary: `Auftragsbestätigung ${o.number} an Lieferung übergeben`,
+    entityType: 'order_confirmation', entityId: o.id, action: 'handover_completed',
+    summary: `Auftragsbestätigung ${o.number} an ${owner.name} (Onboarding) übergeben`,
+    after: { onboardingOwnerId: owner.id, contactName, contactEmail, deliveryDate, slaDays: o.slaDays },
   });
   await db.insert(timelineEventsTable).values({
     id: `tl_${randomUUID().slice(0, 8)}`, type: 'handover',
-    title: 'Übergabe an Lieferung',
-    description: `Auftragsbestätigung ${o.number} wurde an die Auftragsabwicklung übergeben.`,
+    title: 'Übergabe an Onboarding',
+    description: `Auftragsbestätigung ${o.number} an ${owner.name} übergeben. SLA ${o.slaDays} Tage läuft.`,
     actor: 'Priya Raman', dealId: o.dealId,
   });
-  const [u] = await db.select().from(orderConfirmationsTable).where(eq(orderConfirmationsTable.id, o.id));
-  const dealMap = await getDealMap();
-  res.json({
-    ...mapOC(u!, dealMap.get(u!.dealId)?.name ?? 'Unknown'),
-    checks: checks.map(c => ({ id: c.id, label: c.label, status: c.status, detail: c.detail })),
+  await respondOcDetail(res, o.id);
+});
+
+router.post('/order-confirmations/:id/complete', async (req, res) => {
+  const [o] = await db.select().from(orderConfirmationsTable).where(eq(orderConfirmationsTable.id, req.params.id));
+  if (!o) { res.status(404).json({ error: 'not found' }); return; }
+  if (!(await gateDeal(req, res, o.dealId))) return;
+  if (o.status !== 'in_onboarding') {
+    res.status(409).json({ error: `complete not allowed in status ${o.status}` }); return;
+  }
+  await db.update(orderConfirmationsTable).set({
+    status: 'completed', completedAt: new Date(),
+  }).where(eq(orderConfirmationsTable.id, o.id));
+  await writeAudit({
+    entityType: 'order_confirmation', entityId: o.id, action: 'completed',
+    summary: `Onboarding für ${o.number} abgeschlossen`,
   });
+  await db.insert(timelineEventsTable).values({
+    id: `tl_${randomUUID().slice(0, 8)}`, type: 'handover',
+    title: 'Onboarding abgeschlossen',
+    description: `Auftragsbestätigung ${o.number} ist produktiv übergeben.`,
+    actor: 'Priya Raman', dealId: o.dealId,
+  });
+  await respondOcDetail(res, o.id);
 });
 
 // ── COPILOT CHAT ──

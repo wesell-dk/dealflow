@@ -70,6 +70,7 @@ import type {
   NegotiationImpactResponse,
   OrderConfirmation,
   OrderConfirmationDetail,
+  OrderConfirmationHandoverInput,
   PerformanceReport,
   PriceIncreaseCampaign,
   PriceIncreaseCampaignDetail,
@@ -5209,6 +5210,7 @@ export const getHandoverOrderConfirmationUrl = (id: string) => {
 
 export const handoverOrderConfirmation = async (
   id: string,
+  orderConfirmationHandoverInput: OrderConfirmationHandoverInput,
   options?: RequestInit,
 ): Promise<OrderConfirmationDetail> => {
   return customFetch<OrderConfirmationDetail>(
@@ -5216,25 +5218,27 @@ export const handoverOrderConfirmation = async (
     {
       ...options,
       method: "POST",
+      headers: { "Content-Type": "application/json", ...options?.headers },
+      body: JSON.stringify(orderConfirmationHandoverInput),
     },
   );
 };
 
 export const getHandoverOrderConfirmationMutationOptions = <
-  TError = ErrorType<unknown>,
+  TError = ErrorType<void>,
   TContext = unknown,
 >(options?: {
   mutation?: UseMutationOptions<
     Awaited<ReturnType<typeof handoverOrderConfirmation>>,
     TError,
-    { id: string },
+    { id: string; data: BodyType<OrderConfirmationHandoverInput> },
     TContext
   >;
   request?: SecondParameter<typeof customFetch>;
 }): UseMutationOptions<
   Awaited<ReturnType<typeof handoverOrderConfirmation>>,
   TError,
-  { id: string },
+  { id: string; data: BodyType<OrderConfirmationHandoverInput> },
   TContext
 > => {
   const mutationKey = ["handoverOrderConfirmation"];
@@ -5248,11 +5252,11 @@ export const getHandoverOrderConfirmationMutationOptions = <
 
   const mutationFn: MutationFunction<
     Awaited<ReturnType<typeof handoverOrderConfirmation>>,
-    { id: string }
+    { id: string; data: BodyType<OrderConfirmationHandoverInput> }
   > = (props) => {
-    const { id } = props ?? {};
+    const { id, data } = props ?? {};
 
-    return handoverOrderConfirmation(id, requestOptions);
+    return handoverOrderConfirmation(id, data, requestOptions);
   };
 
   return { mutationFn, ...mutationOptions };
@@ -5261,25 +5265,107 @@ export const getHandoverOrderConfirmationMutationOptions = <
 export type HandoverOrderConfirmationMutationResult = NonNullable<
   Awaited<ReturnType<typeof handoverOrderConfirmation>>
 >;
-
-export type HandoverOrderConfirmationMutationError = ErrorType<unknown>;
+export type HandoverOrderConfirmationMutationBody =
+  BodyType<OrderConfirmationHandoverInput>;
+export type HandoverOrderConfirmationMutationError = ErrorType<void>;
 
 export const useHandoverOrderConfirmation = <
-  TError = ErrorType<unknown>,
+  TError = ErrorType<void>,
   TContext = unknown,
 >(options?: {
   mutation?: UseMutationOptions<
     Awaited<ReturnType<typeof handoverOrderConfirmation>>,
     TError,
-    { id: string },
+    { id: string; data: BodyType<OrderConfirmationHandoverInput> },
     TContext
   >;
   request?: SecondParameter<typeof customFetch>;
 }): UseMutationResult<
   Awaited<ReturnType<typeof handoverOrderConfirmation>>,
   TError,
-  { id: string },
+  { id: string; data: BodyType<OrderConfirmationHandoverInput> },
   TContext
 > => {
   return useMutation(getHandoverOrderConfirmationMutationOptions(options));
+};
+
+export const getCompleteOrderConfirmationUrl = (id: string) => {
+  return `/api/order-confirmations/${id}/complete`;
+};
+
+export const completeOrderConfirmation = async (
+  id: string,
+  options?: RequestInit,
+): Promise<OrderConfirmationDetail> => {
+  return customFetch<OrderConfirmationDetail>(
+    getCompleteOrderConfirmationUrl(id),
+    {
+      ...options,
+      method: "POST",
+    },
+  );
+};
+
+export const getCompleteOrderConfirmationMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof completeOrderConfirmation>>,
+    TError,
+    { id: string },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof completeOrderConfirmation>>,
+  TError,
+  { id: string },
+  TContext
+> => {
+  const mutationKey = ["completeOrderConfirmation"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof completeOrderConfirmation>>,
+    { id: string }
+  > = (props) => {
+    const { id } = props ?? {};
+
+    return completeOrderConfirmation(id, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type CompleteOrderConfirmationMutationResult = NonNullable<
+  Awaited<ReturnType<typeof completeOrderConfirmation>>
+>;
+
+export type CompleteOrderConfirmationMutationError = ErrorType<unknown>;
+
+export const useCompleteOrderConfirmation = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof completeOrderConfirmation>>,
+    TError,
+    { id: string },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof completeOrderConfirmation>>,
+  TError,
+  { id: string },
+  TContext
+> => {
+  return useMutation(getCompleteOrderConfirmationMutationOptions(options));
 };

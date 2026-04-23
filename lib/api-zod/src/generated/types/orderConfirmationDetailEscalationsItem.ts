@@ -8,11 +8,8 @@ Multi-tenant, multi-company, multi-brand. Deal-centric.
  * OpenAPI spec version: 0.1.0
  */
 
-export type OrderConfirmationDetailChecksItem = {
-  id: string;
+export type OrderConfirmationDetailEscalationsItem = {
+  checkId: string;
   label: string;
-  status: string;
-  required: boolean;
-  /** @nullable */
-  detail?: string | null;
+  reason: string;
 };

@@ -1516,12 +1516,25 @@ export const ListOrderConfirmationsResponseItem = zod.object({
   dealName: zod.string(),
   contractId: zod.string().nullish(),
   number: zod.string(),
-  status: zod.string(),
+  status: zod.enum([
+    "preparing",
+    "checks_pending",
+    "ready_for_handover",
+    "in_onboarding",
+    "completed",
+  ]),
   readinessScore: zod.number(),
   totalAmount: zod.number(),
   currency: zod.string(),
   expectedDelivery: zod.string().nullish(),
   handoverAt: zod.string().nullish(),
+  salesOwnerId: zod.string().nullish(),
+  salesOwnerName: zod.string().nullish(),
+  onboardingOwnerId: zod.string().nullish(),
+  onboardingOwnerName: zod.string().nullish(),
+  handoverStartedAt: zod.string().nullish(),
+  slaDays: zod.number(),
+  activeOwner: zod.enum(["sales", "onboarding"]).optional(),
   createdAt: zod.coerce.date(),
 });
 export const ListOrderConfirmationsResponse = zod.array(
@@ -1539,21 +1552,51 @@ export const GetOrderConfirmationResponse = zod
     dealName: zod.string(),
     contractId: zod.string().nullish(),
     number: zod.string(),
-    status: zod.string(),
+    status: zod.enum([
+      "preparing",
+      "checks_pending",
+      "ready_for_handover",
+      "in_onboarding",
+      "completed",
+    ]),
     readinessScore: zod.number(),
     totalAmount: zod.number(),
     currency: zod.string(),
     expectedDelivery: zod.string().nullish(),
     handoverAt: zod.string().nullish(),
+    salesOwnerId: zod.string().nullish(),
+    salesOwnerName: zod.string().nullish(),
+    onboardingOwnerId: zod.string().nullish(),
+    onboardingOwnerName: zod.string().nullish(),
+    handoverStartedAt: zod.string().nullish(),
+    slaDays: zod.number(),
+    activeOwner: zod.enum(["sales", "onboarding"]).optional(),
     createdAt: zod.coerce.date(),
   })
   .and(
     zod.object({
+      handoverNote: zod.string().nullish(),
+      handoverContact: zod.string().nullish(),
+      handoverContactEmail: zod.string().nullish(),
+      handoverDeliveryDate: zod.string().nullish(),
+      handoverCriticalNotes: zod.string().nullish(),
+      handoverReady: zod.boolean().optional(),
+      daysSinceHandover: zod.number().nullish(),
+      slaDeadline: zod.string().nullish(),
+      slaBreached: zod.boolean().optional(),
+      escalations: zod.array(
+        zod.object({
+          checkId: zod.string(),
+          label: zod.string(),
+          reason: zod.string(),
+        }),
+      ),
       checks: zod.array(
         zod.object({
           id: zod.string(),
           label: zod.string(),
           status: zod.string(),
+          required: zod.boolean(),
           detail: zod.string().nullish(),
         }),
       ),
@@ -1564,6 +1607,15 @@ export const HandoverOrderConfirmationParams = zod.object({
   id: zod.coerce.string(),
 });
 
+export const HandoverOrderConfirmationBody = zod.object({
+  onboardingOwnerId: zod.string(),
+  contactName: zod.string(),
+  contactEmail: zod.string(),
+  deliveryDate: zod.string(),
+  note: zod.string().nullish(),
+  criticalNotes: zod.string().nullish(),
+});
+
 export const HandoverOrderConfirmationResponse = zod
   .object({
     id: zod.string(),
@@ -1571,21 +1623,113 @@ export const HandoverOrderConfirmationResponse = zod
     dealName: zod.string(),
     contractId: zod.string().nullish(),
     number: zod.string(),
-    status: zod.string(),
+    status: zod.enum([
+      "preparing",
+      "checks_pending",
+      "ready_for_handover",
+      "in_onboarding",
+      "completed",
+    ]),
     readinessScore: zod.number(),
     totalAmount: zod.number(),
     currency: zod.string(),
     expectedDelivery: zod.string().nullish(),
     handoverAt: zod.string().nullish(),
+    salesOwnerId: zod.string().nullish(),
+    salesOwnerName: zod.string().nullish(),
+    onboardingOwnerId: zod.string().nullish(),
+    onboardingOwnerName: zod.string().nullish(),
+    handoverStartedAt: zod.string().nullish(),
+    slaDays: zod.number(),
+    activeOwner: zod.enum(["sales", "onboarding"]).optional(),
     createdAt: zod.coerce.date(),
   })
   .and(
     zod.object({
+      handoverNote: zod.string().nullish(),
+      handoverContact: zod.string().nullish(),
+      handoverContactEmail: zod.string().nullish(),
+      handoverDeliveryDate: zod.string().nullish(),
+      handoverCriticalNotes: zod.string().nullish(),
+      handoverReady: zod.boolean().optional(),
+      daysSinceHandover: zod.number().nullish(),
+      slaDeadline: zod.string().nullish(),
+      slaBreached: zod.boolean().optional(),
+      escalations: zod.array(
+        zod.object({
+          checkId: zod.string(),
+          label: zod.string(),
+          reason: zod.string(),
+        }),
+      ),
       checks: zod.array(
         zod.object({
           id: zod.string(),
           label: zod.string(),
           status: zod.string(),
+          required: zod.boolean(),
+          detail: zod.string().nullish(),
+        }),
+      ),
+    }),
+  );
+
+export const CompleteOrderConfirmationParams = zod.object({
+  id: zod.coerce.string(),
+});
+
+export const CompleteOrderConfirmationResponse = zod
+  .object({
+    id: zod.string(),
+    dealId: zod.string(),
+    dealName: zod.string(),
+    contractId: zod.string().nullish(),
+    number: zod.string(),
+    status: zod.enum([
+      "preparing",
+      "checks_pending",
+      "ready_for_handover",
+      "in_onboarding",
+      "completed",
+    ]),
+    readinessScore: zod.number(),
+    totalAmount: zod.number(),
+    currency: zod.string(),
+    expectedDelivery: zod.string().nullish(),
+    handoverAt: zod.string().nullish(),
+    salesOwnerId: zod.string().nullish(),
+    salesOwnerName: zod.string().nullish(),
+    onboardingOwnerId: zod.string().nullish(),
+    onboardingOwnerName: zod.string().nullish(),
+    handoverStartedAt: zod.string().nullish(),
+    slaDays: zod.number(),
+    activeOwner: zod.enum(["sales", "onboarding"]).optional(),
+    createdAt: zod.coerce.date(),
+  })
+  .and(
+    zod.object({
+      handoverNote: zod.string().nullish(),
+      handoverContact: zod.string().nullish(),
+      handoverContactEmail: zod.string().nullish(),
+      handoverDeliveryDate: zod.string().nullish(),
+      handoverCriticalNotes: zod.string().nullish(),
+      handoverReady: zod.boolean().optional(),
+      daysSinceHandover: zod.number().nullish(),
+      slaDeadline: zod.string().nullish(),
+      slaBreached: zod.boolean().optional(),
+      escalations: zod.array(
+        zod.object({
+          checkId: zod.string(),
+          label: zod.string(),
+          reason: zod.string(),
+        }),
+      ),
+      checks: zod.array(
+        zod.object({
+          id: zod.string(),
+          label: zod.string(),
+          status: zod.string(),
+          required: zod.boolean(),
           detail: zod.string().nullish(),
         }),
       ),

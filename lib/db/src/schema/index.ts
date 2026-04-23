@@ -367,6 +367,16 @@ export const orderConfirmationsTable = pgTable("order_confirmations", {
   currency: text("currency").notNull(),
   expectedDelivery: date("expected_delivery"),
   handoverAt: timestamp("handover_at", { withTimezone: true }),
+  salesOwnerId: text("sales_owner_id"),
+  onboardingOwnerId: text("onboarding_owner_id"),
+  handoverStartedAt: timestamp("handover_started_at", { withTimezone: true }),
+  handoverNote: text("handover_note"),
+  handoverContact: text("handover_contact"),
+  handoverContactEmail: text("handover_contact_email"),
+  handoverDeliveryDate: date("handover_delivery_date"),
+  handoverCriticalNotes: text("handover_critical_notes"),
+  slaDays: integer("sla_days").notNull().default(7),
+  completedAt: timestamp("completed_at", { withTimezone: true }),
   createdAt: ts("created_at"),
 });
 
@@ -376,6 +386,7 @@ export const orderConfirmationChecksTable = pgTable("order_confirmation_checks",
   label: text("label").notNull(),
   status: text("status").notNull(),
   detail: text("detail"),
+  required: boolean("required").notNull().default(true),
 });
 
 // Generic entity versions (for contracts, price positions, etc.)

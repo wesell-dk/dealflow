@@ -783,6 +783,25 @@ export interface PriceIncreaseResponseInput {
   comment?: string | null;
 }
 
+export type OrderConfirmationStatus =
+  (typeof OrderConfirmationStatus)[keyof typeof OrderConfirmationStatus];
+
+export const OrderConfirmationStatus = {
+  preparing: "preparing",
+  checks_pending: "checks_pending",
+  ready_for_handover: "ready_for_handover",
+  in_onboarding: "in_onboarding",
+  completed: "completed",
+} as const;
+
+export type OrderConfirmationActiveOwner =
+  (typeof OrderConfirmationActiveOwner)[keyof typeof OrderConfirmationActiveOwner];
+
+export const OrderConfirmationActiveOwner = {
+  sales: "sales",
+  onboarding: "onboarding",
+} as const;
+
 export interface OrderConfirmation {
   id: string;
   dealId: string;
@@ -790,7 +809,7 @@ export interface OrderConfirmation {
   /** @nullable */
   contractId?: string | null;
   number: string;
-  status: string;
+  status: OrderConfirmationStatus;
   readinessScore: number;
   totalAmount: number;
   currency: string;
@@ -798,20 +817,67 @@ export interface OrderConfirmation {
   expectedDelivery?: string | null;
   /** @nullable */
   handoverAt?: string | null;
+  /** @nullable */
+  salesOwnerId?: string | null;
+  /** @nullable */
+  salesOwnerName?: string | null;
+  /** @nullable */
+  onboardingOwnerId?: string | null;
+  /** @nullable */
+  onboardingOwnerName?: string | null;
+  /** @nullable */
+  handoverStartedAt?: string | null;
+  slaDays: number;
+  activeOwner?: OrderConfirmationActiveOwner;
   createdAt: string;
 }
+
+export type OrderConfirmationDetailEscalationsItem = {
+  checkId: string;
+  label: string;
+  reason: string;
+};
 
 export type OrderConfirmationDetailChecksItem = {
   id: string;
   label: string;
   status: string;
+  required: boolean;
   /** @nullable */
   detail?: string | null;
 };
 
 export type OrderConfirmationDetail = OrderConfirmation & {
+  /** @nullable */
+  handoverNote?: string | null;
+  /** @nullable */
+  handoverContact?: string | null;
+  /** @nullable */
+  handoverContactEmail?: string | null;
+  /** @nullable */
+  handoverDeliveryDate?: string | null;
+  /** @nullable */
+  handoverCriticalNotes?: string | null;
+  handoverReady?: boolean;
+  /** @nullable */
+  daysSinceHandover?: number | null;
+  /** @nullable */
+  slaDeadline?: string | null;
+  slaBreached?: boolean;
+  escalations: OrderConfirmationDetailEscalationsItem[];
   checks: OrderConfirmationDetailChecksItem[];
 };
+
+export interface OrderConfirmationHandoverInput {
+  onboardingOwnerId: string;
+  contactName: string;
+  contactEmail: string;
+  deliveryDate: string;
+  /** @nullable */
+  note?: string | null;
+  /** @nullable */
+  criticalNotes?: string | null;
+}
 
 export type ListContactsParams = {
   accountId?: string;

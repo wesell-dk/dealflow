@@ -461,23 +461,23 @@ export async function seedIfEmpty(): Promise<void> {
 
   // Order confirmations
   await db.insert(orderConfirmationsTable).values([
-    { id: "oc_001", dealId: "dl_001", contractId: "ctr_002", number: "OC-2026-001", status: "ready",      readinessScore: 100, totalAmount: "184500.00", currency: "EUR", expectedDelivery: isoDate(daysFromNow(21)), handoverAt: null,                createdAt: daysFromNow(-3) },
-    { id: "oc_002", dealId: "dl_005", contractId: null,    number: "OC-2026-002", status: "in_review",  readinessScore: 64, totalAmount: "92800.00",  currency: "EUR", expectedDelivery: isoDate(daysFromNow(35)), handoverAt: null,                createdAt: daysFromNow(-2) },
-    { id: "oc_003", dealId: "dl_013", contractId: null,    number: "OC-2026-003", status: "handed_over",readinessScore: 100,totalAmount: "340000.00", currency: "EUR", expectedDelivery: isoDate(daysFromNow(-5)),  handoverAt: daysFromNow(-7),     createdAt: daysFromNow(-25) },
-    { id: "oc_004", dealId: "dl_007", contractId: null,    number: "OC-2026-004", status: "blocked",    readinessScore: 38, totalAmount: "1240000.00",currency: "EUR", expectedDelivery: isoDate(daysFromNow(60)), handoverAt: null,                createdAt: daysFromNow(-1) },
+    { id: "oc_001", dealId: "dl_001", contractId: "ctr_002", number: "OC-2026-001", status: "ready_for_handover", readinessScore: 100, totalAmount: "184500.00",  currency: "EUR", expectedDelivery: isoDate(daysFromNow(21)), handoverAt: null,            salesOwnerId: "u_anna",   onboardingOwnerId: null,     handoverStartedAt: null,             handoverNote: null, handoverContact: null, handoverContactEmail: null, handoverDeliveryDate: null, handoverCriticalNotes: null, slaDays: 7,  completedAt: null,             createdAt: daysFromNow(-3) },
+    { id: "oc_002", dealId: "dl_005", contractId: null,     number: "OC-2026-002", status: "checks_pending",      readinessScore: 64,  totalAmount: "92800.00",   currency: "EUR", expectedDelivery: isoDate(daysFromNow(35)), handoverAt: null,            salesOwnerId: "u_marcel", onboardingOwnerId: null,     handoverStartedAt: null,             handoverNote: null, handoverContact: null, handoverContactEmail: null, handoverDeliveryDate: null, handoverCriticalNotes: null, slaDays: 7,  completedAt: null,             createdAt: daysFromNow(-2) },
+    { id: "oc_003", dealId: "dl_013", contractId: null,     number: "OC-2026-003", status: "in_onboarding",       readinessScore: 100, totalAmount: "340000.00",  currency: "EUR", expectedDelivery: isoDate(daysFromNow(-5)),  handoverAt: daysFromNow(-7), salesOwnerId: "u_sara",   onboardingOwnerId: "u_priya", handoverStartedAt: daysFromNow(-3), handoverNote: "Kunde erwartet Kickoff mit technischer Betriebsleitung.", handoverContact: "Jens Walter", handoverContactEmail: "j.walter@vorwerk.de", handoverDeliveryDate: isoDate(daysFromNow(14)), handoverCriticalNotes: "Firewall-Freigabe für Telemetrie-Port 8443 benötigt.", slaDays: 7,  completedAt: null,             createdAt: daysFromNow(-25) },
+    { id: "oc_004", dealId: "dl_007", contractId: null,     number: "OC-2026-004", status: "checks_pending",      readinessScore: 38,  totalAmount: "1240000.00", currency: "EUR", expectedDelivery: isoDate(daysFromNow(60)), handoverAt: null,            salesOwnerId: "u_james",  onboardingOwnerId: null,     handoverStartedAt: null,             handoverNote: null, handoverContact: null, handoverContactEmail: null, handoverDeliveryDate: null, handoverCriticalNotes: null, slaDays: 14, completedAt: null,             createdAt: daysFromNow(-1) },
   ]);
 
   await db.insert(orderConfirmationChecksTable).values([
-    { id: "ocx_001", orderConfirmationId: "oc_001", label: "Credit limit verified",    status: "ok",      detail: "EUR 250k available." },
-    { id: "ocx_002", orderConfirmationId: "oc_001", label: "Tax & VAT data complete",  status: "ok",      detail: "DE VAT validated." },
-    { id: "ocx_003", orderConfirmationId: "oc_001", label: "Delivery address confirmed",status: "ok",     detail: "Site Wuppertal." },
-    { id: "ocx_004", orderConfirmationId: "oc_001", label: "Payment terms aligned",    status: "ok",      detail: "Net45 reconfirmed by customer." },
-    { id: "ocx_005", orderConfirmationId: "oc_002", label: "Credit limit verified",    status: "ok",      detail: "EUR 100k available." },
-    { id: "ocx_006", orderConfirmationId: "oc_002", label: "ERP article mapping",      status: "warning", detail: "2 of 14 SKUs pending mapping." },
-    { id: "ocx_007", orderConfirmationId: "oc_002", label: "Logistics slot reserved",  status: "pending", detail: "Awaiting carrier confirmation." },
-    { id: "ocx_008", orderConfirmationId: "oc_003", label: "All checks completed",     status: "ok",      detail: "Handed over to Operations." },
-    { id: "ocx_009", orderConfirmationId: "oc_004", label: "Credit limit verified",    status: "blocked", detail: "Exposure exceeds limit by EUR 240k." },
-    { id: "ocx_010", orderConfirmationId: "oc_004", label: "Export control screening", status: "warning", detail: "Dual-use review required." },
+    { id: "ocx_001", orderConfirmationId: "oc_001", label: "Bonität geprüft",             status: "ok",      detail: "EUR 250k Limit verfügbar.",             required: true  },
+    { id: "ocx_002", orderConfirmationId: "oc_001", label: "Steuer- und USt-Daten",       status: "ok",      detail: "DE-USt-ID validiert.",                  required: true  },
+    { id: "ocx_003", orderConfirmationId: "oc_001", label: "Lieferadresse bestätigt",     status: "ok",      detail: "Standort Wuppertal freigegeben.",       required: true  },
+    { id: "ocx_004", orderConfirmationId: "oc_001", label: "Zahlungsziele abgestimmt",    status: "ok",      detail: "Net45 durch Kunde bestätigt.",          required: true  },
+    { id: "ocx_005", orderConfirmationId: "oc_002", label: "Bonität geprüft",             status: "ok",      detail: "EUR 100k Limit verfügbar.",             required: true  },
+    { id: "ocx_006", orderConfirmationId: "oc_002", label: "ERP-Artikelmapping",          status: "warning", detail: "2 von 14 SKUs unvollständig.",          required: false },
+    { id: "ocx_007", orderConfirmationId: "oc_002", label: "Logistik-Slot reserviert",    status: "pending", detail: "Warten auf Spediteur-Bestätigung.",     required: true  },
+    { id: "ocx_008", orderConfirmationId: "oc_003", label: "Alle Pflicht-Checks grün",    status: "ok",      detail: "Übergabe an Onboarding abgeschlossen.", required: true  },
+    { id: "ocx_009", orderConfirmationId: "oc_004", label: "Bonität geprüft",             status: "blocked", detail: "Exposure übersteigt Limit um EUR 240k.",required: true  },
+    { id: "ocx_010", orderConfirmationId: "oc_004", label: "Exportkontroll-Screening",    status: "warning", detail: "Dual-Use-Prüfung erforderlich.",        required: false },
   ]);
 
   // Entity versions
