@@ -1,6 +1,23 @@
 import { Router, type IRouter, type Request, type Response } from 'express';
 import { and, desc, eq, inArray, sql } from 'drizzle-orm';
 import { randomUUID } from 'node:crypto';
+import { ObjectStorageService } from '../lib/objectStorage';
+
+async function resolveLogoForPdf(logoUrl: string | null | undefined): Promise<string | null> {
+  if (!logoUrl) return null;
+  const m = logoUrl.match(/^(?:\/api)?\/storage\/objects\/(.+)$/) ?? logoUrl.match(/^\/objects\/(.+)$/);
+  if (!m) return logoUrl;
+  try {
+    const svc = new ObjectStorageService();
+    const file = await svc.getObjectEntityFile(`/objects/${m[1]}`);
+    const [buf] = await file.download();
+    const [meta] = await file.getMetadata();
+    const ct = (meta?.contentType as string | undefined) ?? 'image/png';
+    return `data:${ct};base64,${buf.toString('base64')}`;
+  } catch {
+    return null;
+  }
+}
 import {
   allowedAccountIds,
   allowedBrandIds,
@@ -542,7 +559,7 @@ router.get('/quotes/:id/pdf', async (req, res) => {
     })),
     brand: brand ? {
       name: brand.name,
-      logoUrl: brand.logoUrl ?? null,
+      logoUrl: await resolveLogoForPdf(brand.logoUrl),
       primaryColor: brand.primaryColor ?? brand.color,
       secondaryColor: brand.secondaryColor ?? null,
       legalEntityName: brand.legalEntityName ?? null,
@@ -1009,7 +1026,7 @@ router.get('/contracts/:id/pdf', async (req, res) => {
     }),
     brand: brand ? {
       name: brand.name,
-      logoUrl: brand.logoUrl ?? null,
+      logoUrl: await resolveLogoForPdf(brand.logoUrl),
       primaryColor: brand.primaryColor ?? brand.color,
       secondaryColor: brand.secondaryColor ?? null,
       legalEntityName: brand.legalEntityName ?? null,
