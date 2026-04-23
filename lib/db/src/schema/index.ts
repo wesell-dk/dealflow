@@ -7,6 +7,7 @@ import {
   timestamp,
   date,
   jsonb,
+  uniqueIndex,
 } from "drizzle-orm/pg-core";
 
 const id = () => text("id").primaryKey();
@@ -329,8 +330,19 @@ export const copilotInsightsTable = pgTable("copilot_insights", {
   severity: text("severity").notNull(),
   dealId: text("deal_id").notNull(),
   suggestedAction: text("suggested_action"),
+  triggerType: text("trigger_type"),
+  triggerEntityRef: text("trigger_entity_ref"),
+  status: text("status").notNull().default("open"),
+  actionType: text("action_type"),
+  actionPayload: jsonb("action_payload"),
+  acknowledgedAt: timestamp("acknowledged_at", { withTimezone: true }),
+  resolvedAt: timestamp("resolved_at", { withTimezone: true }),
+  dismissedAt: timestamp("dismissed_at", { withTimezone: true }),
   createdAt: ts("created_at"),
-});
+}, (t) => [
+  uniqueIndex("copilot_insights_trigger_uniq")
+    .on(t.triggerType, t.triggerEntityRef),
+]);
 
 export const copilotThreadsTable = pgTable("copilot_threads", {
   id: id(),

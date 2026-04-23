@@ -2,9 +2,14 @@ import app from "./app";
 import { logger } from "./lib/logger";
 import { seedIfEmpty } from "./lib/seed";
 import { pruneExpiredSessions } from "./lib/auth";
+import { runAllGenerators } from "./insights/generators";
 
 await seedIfEmpty().catch((err) => {
   logger.error({ err }, "Seed failed");
+});
+
+await runAllGenerators().catch((err) => {
+  logger.error({ err }, "Copilot insight generators failed");
 });
 
 // Periodically clean up expired sessions (every hour).

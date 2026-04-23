@@ -46,6 +46,13 @@ import {
   orderConfirmationChecksTable,
   entityVersionsTable,
 } from '@workspace/db';
+import {
+  generatePriceRejectionForReaction,
+  generateHighDiscountForApproval,
+  generateStaleLetterForLetter,
+  generateLowMarginForQuoteVersion,
+  resolveInsightsFor,
+} from '../insights/generators';
 
 const router: IRouter = Router();
 
@@ -1158,6 +1165,7 @@ router.post('/negotiations/:id/reactions', async (req, res) => {
     round: sql`${negotiationsTable.round} + 1`,
   }).where(eq(negotiationsTable.id, req.params.id));
   const [r] = await db.select().from(customerReactionsTable).where(eq(customerReactionsTable.id, id));
+  await generatePriceRejectionForReaction(id);
   res.status(201).json(mapReaction(r!));
 });
 
@@ -1290,6 +1298,7 @@ router.post('/negotiations/:id/reactions/:reactionId/request-approval', async (r
   });
   await db.update(customerReactionsTable).set({ linkedApprovalId: aId })
     .where(eq(customerReactionsTable.id, r.id));
+  await generateHighDiscountForApproval(aId);
   res.status(201).json({ reactionId: r.id, approvalId: aId });
 });
 
@@ -1707,16 +1716,157 @@ router.get('/reports/forecast', async (_req, res) => {
 });
 
 // ── COPILOT / ACTIVITY ──
-router.get('/copilot/insights', async (req, res) => {
-  const dealIds = await allowedDealIds(req);
-  const rows = await db.select().from(copilotInsightsTable).orderBy(desc(copilotInsightsTable.createdAt));
-  const filtered = rows.filter(c => !c.dealId || dealIds.has(c.dealId));
-  const dealMap = await getDealMap();
-  res.json(filtered.map(c => ({
+function mapInsight(
+  c: typeof copilotInsightsTable.$inferSelect,
+  dealMap: Map<string, typeof dealsTable.$inferSelect>,
+) {
+  return {
     id: c.id, kind: c.kind, title: c.title, summary: c.summary, severity: c.severity,
     dealId: c.dealId, dealName: dealMap.get(c.dealId)?.name ?? 'Unknown',
     suggestedAction: c.suggestedAction, createdAt: iso(c.createdAt)!,
-  })));
+    triggerType: c.triggerType, triggerEntityRef: c.triggerEntityRef,
+    status: c.status, actionType: c.actionType,
+    actionPayload: c.actionPayload ?? null,
+    acknowledgedAt: iso(c.acknowledgedAt), resolvedAt: iso(c.resolvedAt),
+    dismissedAt: iso(c.dismissedAt),
+  };
+}
+
+router.get('/copilot/insights', async (req, res) => {
+  const dealIds = await allowedDealIds(req);
+  const status = typeof req.query['status'] === 'string' ? req.query['status'] : null;
+  const rows = await db.select().from(copilotInsightsTable).orderBy(desc(copilotInsightsTable.createdAt));
+  const filtered = rows.filter(c =>
+    (!c.dealId || dealIds.has(c.dealId)) &&
+    (!status || c.status === status),
+  );
+  const dealMap = await getDealMap();
+  res.json(filtered.map(c => mapInsight(c, dealMap)));
+});
+
+router.patch('/copilot/insights/:id', async (req, res) => {
+  const scope = getScope(req);
+  const [c] = await db.select().from(copilotInsightsTable).where(eq(copilotInsightsTable.id, req.params.id));
+  if (!c) { res.status(404).json({ error: 'not found' }); return; }
+  if (!(await gateDeal(req, res, c.dealId))) return;
+  const b = req.body as { status?: 'open' | 'acknowledged' | 'resolved' | 'dismissed' };
+  const next = b?.status;
+  if (!next || !['open','acknowledged','resolved','dismissed'].includes(next)) {
+    res.status(400).json({ error: 'invalid status' }); return;
+  }
+  const patch: Record<string, unknown> = { status: next };
+  if (next === 'acknowledged') patch['acknowledgedAt'] = new Date();
+  if (next === 'resolved') patch['resolvedAt'] = new Date();
+  if (next === 'dismissed') patch['dismissedAt'] = new Date();
+  await db.update(copilotInsightsTable).set(patch).where(eq(copilotInsightsTable.id, c.id));
+  await writeAudit({
+    entityType: 'copilot_insight', entityId: c.id, action: `status_${next}`,
+    summary: `Insight "${c.title}" → ${next}`,
+    before: { status: c.status }, after: { status: next },
+    actor: scope?.user.id ?? 'system',
+  });
+  const [updated] = await db.select().from(copilotInsightsTable).where(eq(copilotInsightsTable.id, c.id));
+  const dealMap = await getDealMap();
+  res.json(mapInsight(updated!, dealMap));
+});
+
+router.post('/copilot/insights/:id/execute', async (req, res) => {
+  const scope = getScope(req);
+  const [c] = await db.select().from(copilotInsightsTable).where(eq(copilotInsightsTable.id, req.params.id));
+  if (!c) { res.status(404).json({ error: 'not found' }); return; }
+  if (!(await gateDeal(req, res, c.dealId))) return;
+  if (c.status === 'resolved' || c.status === 'dismissed') {
+    res.status(409).json({ error: 'insight already closed' }); return;
+  }
+
+  const actor = scope?.user.id ?? 'system';
+  const payload = (c.actionPayload ?? {}) as Record<string, unknown>;
+  const result: Record<string, unknown> = { actionType: c.actionType };
+
+  try {
+    if (c.actionType === 'create_quote_version') {
+      const negotiationId = typeof payload['negotiationId'] === 'string' ? payload['negotiationId'] : null;
+      if (!negotiationId) throw new Error('missing negotiationId');
+      const [n] = await db.select().from(negotiationsTable).where(eq(negotiationsTable.id, negotiationId));
+      if (!n) throw new Error('negotiation not found');
+      if (n.dealId !== c.dealId) throw new Error('negotiation/deal mismatch');
+      const [qs] = await db.select().from(quotesTable).where(eq(quotesTable.dealId, n.dealId));
+      if (!qs) throw new Error('no quote for deal');
+      const existing = await db.select().from(quoteVersionsTable).where(eq(quoteVersionsTable.quoteId, qs.id));
+      const latest = existing.sort((a, b) => (b.version ?? 0) - (a.version ?? 0))[0];
+      const delta = typeof payload['priceDeltaPct'] === 'number' ? payload['priceDeltaPct'] : -5;
+      const total = latest ? num(latest.totalAmount) * (1 + delta / 100) : 0;
+      const priorDiscount = latest ? num(latest.discountPct) : 0;
+      const newDiscount = Math.max(0, priorDiscount + Math.abs(delta));
+      const margin = latest ? Math.max(0, num(latest.marginPct) - Math.abs(delta)) : 0;
+      const nextVersion = (latest?.version ?? 0) + 1;
+      const vid = `qv_${randomUUID().slice(0, 8)}`;
+      await db.insert(quoteVersionsTable).values({
+        id: vid, quoteId: qs.id, version: nextVersion,
+        status: 'draft',
+        totalAmount: String(total),
+        discountPct: String(newDiscount),
+        marginPct: String(margin),
+        notes: `Auto-generated from insight ${c.id} (${actor})`,
+      });
+      result['quoteVersionId'] = vid;
+      result['version'] = nextVersion;
+    } else if (c.actionType === 'escalate_approval') {
+      const approvalId = typeof payload['approvalId'] === 'string' ? payload['approvalId'] : c.triggerEntityRef;
+      if (!approvalId) throw new Error('missing approvalId');
+      const [ap] = await db.select().from(approvalsTable).where(eq(approvalsTable.id, approvalId));
+      if (!ap) throw new Error('approval not found');
+      if (ap.dealId !== c.dealId) throw new Error('approval/deal mismatch');
+      await db.update(approvalsTable).set({ priority: 'high' })
+        .where(eq(approvalsTable.id, approvalId));
+      await db.insert(timelineEventsTable).values({
+        id: `tl_${randomUUID().slice(0, 8)}`, type: 'approval',
+        title: 'Approval eskaliert',
+        description: `Approval ${approvalId} eskaliert durch Copilot-Insight.`,
+        actor, dealId: c.dealId,
+      });
+      result['approvalId'] = approvalId;
+    } else if (c.actionType === 'send_letter_reminder') {
+      const letterId = typeof payload['letterId'] === 'string' ? payload['letterId'] : c.triggerEntityRef;
+      if (!letterId) throw new Error('missing letterId');
+      const [l] = await db.select().from(priceIncreaseLettersTable).where(eq(priceIncreaseLettersTable.id, letterId));
+      if (!l) throw new Error('letter not found');
+      const accIds = await allowedAccountIds(req);
+      if (!isAccountAllowed(accIds, l.accountId)) throw new Error('letter/account forbidden');
+      await db.insert(timelineEventsTable).values({
+        id: `tl_${randomUUID().slice(0, 8)}`, type: 'reminder',
+        title: 'Reminder gesendet',
+        description: `Erinnerung an Preiserhöhung (Letter ${l.id}) an Kunde gesendet.`,
+        actor, dealId: null,
+      });
+      result['letterId'] = letterId;
+    } else if (c.actionType === 'escalate_margin') {
+      const quoteVersionId = typeof payload['quoteVersionId'] === 'string' ? payload['quoteVersionId'] : c.triggerEntityRef;
+      if (!quoteVersionId) throw new Error('missing quoteVersionId');
+      const aId = `ap_${randomUUID().slice(0, 8)}`;
+      await db.insert(approvalsTable).values({
+        id: aId, dealId: c.dealId, type: 'margin',
+        reason: `Margin-Floor unterschritten (Quote-Version ${quoteVersionId})`,
+        requestedBy: actor, status: 'pending', priority: 'high',
+        impactValue: '0', currency: 'EUR',
+      });
+      result['approvalId'] = aId;
+    } else {
+      throw new Error(`unknown actionType: ${c.actionType}`);
+    }
+
+    await db.update(copilotInsightsTable).set({
+      status: 'resolved', resolvedAt: new Date(),
+    }).where(eq(copilotInsightsTable.id, c.id));
+    await writeAudit({
+      entityType: 'copilot_insight', entityId: c.id, action: `execute_${c.actionType}`,
+      summary: `Insight "${c.title}" ausgeführt (${c.actionType})`,
+      after: result, actor,
+    });
+    res.json({ ok: true, insightId: c.id, result });
+  } catch (err) {
+    res.status(400).json({ error: (err as Error).message });
+  }
 });
 
 router.get('/copilot/threads', async (req, res) => {
@@ -1968,6 +2118,7 @@ router.post('/price-increases/:id/letters/:letterId/respond', async (req, res) =
     summary: `${accName}: ${b.decision} (+${num(l.upliftPct)}%)`,
     after: { status: newStatus },
   });
+  await resolveInsightsFor('stale_letter', l.id);
 
   res.json({
     id: l.id, campaignId: l.campaignId, accountId: l.accountId,

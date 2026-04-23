@@ -709,6 +709,35 @@ export interface ForecastReport {
   months: ForecastReportMonthsItem[];
 }
 
+export type CopilotInsightStatusPatchStatus =
+  (typeof CopilotInsightStatusPatchStatus)[keyof typeof CopilotInsightStatusPatchStatus];
+
+export const CopilotInsightStatusPatchStatus = {
+  open: "open",
+  acknowledged: "acknowledged",
+  resolved: "resolved",
+  dismissed: "dismissed",
+} as const;
+
+export interface CopilotInsightStatusPatch {
+  status: CopilotInsightStatusPatchStatus;
+}
+
+export type CopilotInsightStatus =
+  (typeof CopilotInsightStatus)[keyof typeof CopilotInsightStatus];
+
+export const CopilotInsightStatus = {
+  open: "open",
+  acknowledged: "acknowledged",
+  resolved: "resolved",
+  dismissed: "dismissed",
+} as const;
+
+/**
+ * @nullable
+ */
+export type CopilotInsightActionPayload = { [key: string]: unknown } | null;
+
 export interface CopilotInsight {
   id: string;
   kind: string;
@@ -720,6 +749,21 @@ export interface CopilotInsight {
   createdAt: string;
   /** @nullable */
   suggestedAction?: string | null;
+  status: CopilotInsightStatus;
+  /** @nullable */
+  triggerType?: string | null;
+  /** @nullable */
+  triggerEntityRef?: string | null;
+  /** @nullable */
+  actionType?: string | null;
+  /** @nullable */
+  actionPayload?: CopilotInsightActionPayload;
+  /** @nullable */
+  acknowledgedAt?: string | null;
+  /** @nullable */
+  resolvedAt?: string | null;
+  /** @nullable */
+  dismissedAt?: string | null;
 }
 
 export interface CopilotThread {
@@ -972,6 +1016,28 @@ export type RequestApprovalFromReaction201 = {
 
 export type ListSignaturePackagesParams = {
   status?: string;
+};
+
+export type ListCopilotInsightsParams = {
+  status?: ListCopilotInsightsStatus;
+};
+
+export type ListCopilotInsightsStatus =
+  (typeof ListCopilotInsightsStatus)[keyof typeof ListCopilotInsightsStatus];
+
+export const ListCopilotInsightsStatus = {
+  open: "open",
+  acknowledged: "acknowledged",
+  resolved: "resolved",
+  dismissed: "dismissed",
+} as const;
+
+export type ExecuteCopilotInsight200Result = { [key: string]: unknown };
+
+export type ExecuteCopilotInsight200 = {
+  ok?: boolean;
+  insightId?: string;
+  result?: ExecuteCopilotInsight200Result;
 };
 
 export type ListAuditEntriesParams = {

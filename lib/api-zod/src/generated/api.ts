@@ -1436,6 +1436,12 @@ export const GetForecastResponse = zod.object({
 /**
  * @summary AI-orchestrated next-best-actions and risks
  */
+export const ListCopilotInsightsQueryParams = zod.object({
+  status: zod
+    .enum(["open", "acknowledged", "resolved", "dismissed"])
+    .optional(),
+});
+
 export const ListCopilotInsightsResponseItem = zod.object({
   id: zod.string(),
   kind: zod.string(),
@@ -1446,10 +1452,56 @@ export const ListCopilotInsightsResponseItem = zod.object({
   dealName: zod.string(),
   createdAt: zod.coerce.date(),
   suggestedAction: zod.string().nullish(),
+  status: zod.enum(["open", "acknowledged", "resolved", "dismissed"]),
+  triggerType: zod.string().nullish(),
+  triggerEntityRef: zod.string().nullish(),
+  actionType: zod.string().nullish(),
+  actionPayload: zod.record(zod.string(), zod.unknown()).nullish(),
+  acknowledgedAt: zod.coerce.date().nullish(),
+  resolvedAt: zod.coerce.date().nullish(),
+  dismissedAt: zod.coerce.date().nullish(),
 });
 export const ListCopilotInsightsResponse = zod.array(
   ListCopilotInsightsResponseItem,
 );
+
+export const PatchCopilotInsightParams = zod.object({
+  id: zod.coerce.string(),
+});
+
+export const PatchCopilotInsightBody = zod.object({
+  status: zod.enum(["open", "acknowledged", "resolved", "dismissed"]),
+});
+
+export const PatchCopilotInsightResponse = zod.object({
+  id: zod.string(),
+  kind: zod.string(),
+  title: zod.string(),
+  summary: zod.string(),
+  severity: zod.string(),
+  dealId: zod.string(),
+  dealName: zod.string(),
+  createdAt: zod.coerce.date(),
+  suggestedAction: zod.string().nullish(),
+  status: zod.enum(["open", "acknowledged", "resolved", "dismissed"]),
+  triggerType: zod.string().nullish(),
+  triggerEntityRef: zod.string().nullish(),
+  actionType: zod.string().nullish(),
+  actionPayload: zod.record(zod.string(), zod.unknown()).nullish(),
+  acknowledgedAt: zod.coerce.date().nullish(),
+  resolvedAt: zod.coerce.date().nullish(),
+  dismissedAt: zod.coerce.date().nullish(),
+});
+
+export const ExecuteCopilotInsightParams = zod.object({
+  id: zod.coerce.string(),
+});
+
+export const ExecuteCopilotInsightResponse = zod.object({
+  ok: zod.boolean().optional(),
+  insightId: zod.string().optional(),
+  result: zod.record(zod.string(), zod.unknown()).optional(),
+});
 
 export const ListCopilotThreadsResponseItem = zod.object({
   id: zod.string(),

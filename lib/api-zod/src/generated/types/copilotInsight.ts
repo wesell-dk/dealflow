@@ -7,6 +7,8 @@ Multi-tenant, multi-company, multi-brand. Deal-centric.
 
  * OpenAPI spec version: 0.1.0
  */
+import type { CopilotInsightActionPayload } from "./copilotInsightActionPayload";
+import type { CopilotInsightStatus } from "./copilotInsightStatus";
 
 export interface CopilotInsight {
   id: string;
@@ -19,4 +21,19 @@ export interface CopilotInsight {
   createdAt: Date;
   /** @nullable */
   suggestedAction?: string | null;
+  status: CopilotInsightStatus;
+  /** @nullable */
+  triggerType?: string | null;
+  /** @nullable */
+  triggerEntityRef?: string | null;
+  /** @nullable */
+  actionType?: string | null;
+  /** @nullable */
+  actionPayload?: CopilotInsightActionPayload;
+  /** @nullable */
+  acknowledgedAt?: Date | null;
+  /** @nullable */
+  resolvedAt?: Date | null;
+  /** @nullable */
+  dismissedAt?: Date | null;
 }

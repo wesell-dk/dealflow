@@ -231,7 +231,17 @@
       "insights": "Latest Insights",
       "placeholder": "Ask about deals, contracts, pricing…",
       "newThreadTitle": "New Thread",
-      "newThreadTopic": "Topic (e.g. deal, quote)"
+      "newThreadTopic": "Topic (e.g. deal, quote)",
+      "execute": "Run action",
+      "acknowledge": "Acknowledge",
+      "dismiss": "Dismiss",
+      "markResolved": "Mark resolved",
+      "status": {
+        "open": "Open",
+        "acknowledged": "In progress",
+        "resolved": "Resolved",
+        "dismissed": "Dismissed"
+      }
     },
     "reports": {
       "title": "Reports",

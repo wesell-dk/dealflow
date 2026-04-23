@@ -474,15 +474,8 @@ export async function seedIfEmpty(): Promise<void> {
   ];
   await db.insert(timelineEventsTable).values(tl.map((t, i) => ({ id: id("tl", i + 1), ...t })));
 
-  // Copilot
-  await db.insert(copilotInsightsTable).values([
-    { id: "ci_001", kind: "risk",        title: "Vorwerk Rabattrisiko",                 summary: "12% Rabatt liegen über dem Median von 7,8% gewonnener Deals in diesem Segment.", severity: "high",   dealId: "dl_001", suggestedAction: "Gegenangebot 9% + 24-Monats-Bindung." },
-    { id: "ci_002", kind: "next_action", title: "Technischen Workshop planen",          summary: "Vorwerk-Add-on hängt seit 9 Tagen; Champion hat einen Workshop angefragt.",       severity: "medium", dealId: "dl_002", suggestedAction: "3 Workshop-Slot-Vorschläge heute senden." },
-    { id: "ci_003", kind: "risk",        title: "Nordstern Legal blockiert",            summary: "Haftungs-Cap-Verzicht seit 3 Tagen offen; Wettbewerber in 2. Runde.",              severity: "high",   dealId: "dl_003", suggestedAction: "An Sara Lindqvist eskalieren." },
-    { id: "ci_004", kind: "opportunity", title: "Castell Renewal-Fenster offen",        summary: "Castell Health-Score 88; idealer Moment für 22% Expansion.",                       severity: "low",    dealId: "dl_005", suggestedAction: "Pro-Tier-Upgrade pitchen." },
-    { id: "ci_005", kind: "next_action", title: "Atlas CAPEX-Freigabe verzögert sich",  summary: "Kunden-CAPEX-Zyklus endet in 14 Tagen.",                                          severity: "medium", dealId: "dl_007", suggestedAction: "Gestaffeltes Zahlungsmodell vorschlagen." },
-    { id: "ci_006", kind: "risk",        title: "Apex ROI-Analyse offen",               summary: "30% Abschluss-Wahrscheinlichkeit; ROI-Deck noch nicht geteilt.",                  severity: "medium", dealId: "dl_010", suggestedAction: "ROI-Rechner innerhalb 48h teilen." },
-  ]);
+  // Copilot — insights are generated dynamically by insights/generators.ts
+  // from reactions, approvals, letters and quote-versions. No static seed.
 
   await db.insert(copilotThreadsTable).values([
     { id: "ct_th_001", title: "Wie gehe ich mit Vorwerks 12%-Forderung um?",    scope: "deal:dl_001", lastMessage: "Vorschlag 9% + Mehrjahres-Bindung. Marge bleibt über 30% Floor.",                messageCount: 6 },

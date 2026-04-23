@@ -40,6 +40,7 @@ import type {
   ContractInput,
   CopilotChatReply,
   CopilotInsight,
+  CopilotInsightStatusPatch,
   CopilotMessage,
   CopilotMessageInput,
   CopilotThread,
@@ -57,6 +58,7 @@ import type {
   EntityVersion,
   EntityVersionInput,
   EscalateSignatureInput,
+  ExecuteCopilotInsight200,
   ForecastReport,
   HealthStatus,
   HelpBotInput,
@@ -65,6 +67,7 @@ import type {
   ListAuditEntriesParams,
   ListContactsParams,
   ListContractsParams,
+  ListCopilotInsightsParams,
   ListDealsParams,
   ListNegotiationsParams,
   ListOrderConfirmationsParams,
@@ -4344,41 +4347,63 @@ export function useGetForecast<
 /**
  * @summary AI-orchestrated next-best-actions and risks
  */
-export const getListCopilotInsightsUrl = () => {
-  return `/api/copilot/insights`;
+export const getListCopilotInsightsUrl = (
+  params?: ListCopilotInsightsParams,
+) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? "null" : value.toString());
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0
+    ? `/api/copilot/insights?${stringifiedParams}`
+    : `/api/copilot/insights`;
 };
 
 export const listCopilotInsights = async (
+  params?: ListCopilotInsightsParams,
   options?: RequestInit,
 ): Promise<CopilotInsight[]> => {
-  return customFetch<CopilotInsight[]>(getListCopilotInsightsUrl(), {
+  return customFetch<CopilotInsight[]>(getListCopilotInsightsUrl(params), {
     ...options,
     method: "GET",
   });
 };
 
-export const getListCopilotInsightsQueryKey = () => {
-  return [`/api/copilot/insights`] as const;
+export const getListCopilotInsightsQueryKey = (
+  params?: ListCopilotInsightsParams,
+) => {
+  return [`/api/copilot/insights`, ...(params ? [params] : [])] as const;
 };
 
 export const getListCopilotInsightsQueryOptions = <
   TData = Awaited<ReturnType<typeof listCopilotInsights>>,
   TError = ErrorType<unknown>,
->(options?: {
-  query?: UseQueryOptions<
-    Awaited<ReturnType<typeof listCopilotInsights>>,
-    TError,
-    TData
-  >;
-  request?: SecondParameter<typeof customFetch>;
-}) => {
+>(
+  params?: ListCopilotInsightsParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof listCopilotInsights>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
   const { query: queryOptions, request: requestOptions } = options ?? {};
 
-  const queryKey = queryOptions?.queryKey ?? getListCopilotInsightsQueryKey();
+  const queryKey =
+    queryOptions?.queryKey ?? getListCopilotInsightsQueryKey(params);
 
   const queryFn: QueryFunction<
     Awaited<ReturnType<typeof listCopilotInsights>>
-  > = ({ signal }) => listCopilotInsights({ signal, ...requestOptions });
+  > = ({ signal }) =>
+    listCopilotInsights(params, { signal, ...requestOptions });
 
   return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
     Awaited<ReturnType<typeof listCopilotInsights>>,
@@ -4399,15 +4424,18 @@ export type ListCopilotInsightsQueryError = ErrorType<unknown>;
 export function useListCopilotInsights<
   TData = Awaited<ReturnType<typeof listCopilotInsights>>,
   TError = ErrorType<unknown>,
->(options?: {
-  query?: UseQueryOptions<
-    Awaited<ReturnType<typeof listCopilotInsights>>,
-    TError,
-    TData
-  >;
-  request?: SecondParameter<typeof customFetch>;
-}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
-  const queryOptions = getListCopilotInsightsQueryOptions(options);
+>(
+  params?: ListCopilotInsightsParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof listCopilotInsights>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getListCopilotInsightsQueryOptions(params, options);
 
   const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
     queryKey: QueryKey;
@@ -4415,6 +4443,169 @@ export function useListCopilotInsights<
 
   return { ...query, queryKey: queryOptions.queryKey };
 }
+
+export const getPatchCopilotInsightUrl = (id: string) => {
+  return `/api/copilot/insights/${id}`;
+};
+
+export const patchCopilotInsight = async (
+  id: string,
+  copilotInsightStatusPatch: CopilotInsightStatusPatch,
+  options?: RequestInit,
+): Promise<CopilotInsight> => {
+  return customFetch<CopilotInsight>(getPatchCopilotInsightUrl(id), {
+    ...options,
+    method: "PATCH",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(copilotInsightStatusPatch),
+  });
+};
+
+export const getPatchCopilotInsightMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof patchCopilotInsight>>,
+    TError,
+    { id: string; data: BodyType<CopilotInsightStatusPatch> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof patchCopilotInsight>>,
+  TError,
+  { id: string; data: BodyType<CopilotInsightStatusPatch> },
+  TContext
+> => {
+  const mutationKey = ["patchCopilotInsight"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof patchCopilotInsight>>,
+    { id: string; data: BodyType<CopilotInsightStatusPatch> }
+  > = (props) => {
+    const { id, data } = props ?? {};
+
+    return patchCopilotInsight(id, data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type PatchCopilotInsightMutationResult = NonNullable<
+  Awaited<ReturnType<typeof patchCopilotInsight>>
+>;
+export type PatchCopilotInsightMutationBody =
+  BodyType<CopilotInsightStatusPatch>;
+export type PatchCopilotInsightMutationError = ErrorType<unknown>;
+
+export const usePatchCopilotInsight = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof patchCopilotInsight>>,
+    TError,
+    { id: string; data: BodyType<CopilotInsightStatusPatch> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof patchCopilotInsight>>,
+  TError,
+  { id: string; data: BodyType<CopilotInsightStatusPatch> },
+  TContext
+> => {
+  return useMutation(getPatchCopilotInsightMutationOptions(options));
+};
+
+export const getExecuteCopilotInsightUrl = (id: string) => {
+  return `/api/copilot/insights/${id}/execute`;
+};
+
+export const executeCopilotInsight = async (
+  id: string,
+  options?: RequestInit,
+): Promise<ExecuteCopilotInsight200> => {
+  return customFetch<ExecuteCopilotInsight200>(
+    getExecuteCopilotInsightUrl(id),
+    {
+      ...options,
+      method: "POST",
+    },
+  );
+};
+
+export const getExecuteCopilotInsightMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof executeCopilotInsight>>,
+    TError,
+    { id: string },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof executeCopilotInsight>>,
+  TError,
+  { id: string },
+  TContext
+> => {
+  const mutationKey = ["executeCopilotInsight"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof executeCopilotInsight>>,
+    { id: string }
+  > = (props) => {
+    const { id } = props ?? {};
+
+    return executeCopilotInsight(id, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type ExecuteCopilotInsightMutationResult = NonNullable<
+  Awaited<ReturnType<typeof executeCopilotInsight>>
+>;
+
+export type ExecuteCopilotInsightMutationError = ErrorType<unknown>;
+
+export const useExecuteCopilotInsight = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof executeCopilotInsight>>,
+    TError,
+    { id: string },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof executeCopilotInsight>>,
+  TError,
+  { id: string },
+  TContext
+> => {
+  return useMutation(getExecuteCopilotInsightMutationOptions(options));
+};
 
 export const getListCopilotThreadsUrl = () => {
   return `/api/copilot/threads`;

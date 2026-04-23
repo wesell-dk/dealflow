@@ -971,6 +971,13 @@ paths:
       operationId: listCopilotInsights
       tags: [copilot]
       summary: AI-orchestrated next-best-actions and risks
+      parameters:
+        - in: query
+          name: status
+          required: false
+          schema:
+            type: string
+            enum: [open, acknowledged, resolved, dismissed]
       responses:
         "200":
           description: ok
@@ -979,6 +986,50 @@ paths:
               schema:
                 type: array
                 items: { $ref: "#/components/schemas/CopilotInsight" }
+
+  /copilot/insights/{id}:
+    patch:
+      operationId: patchCopilotInsight
+      tags: [copilot]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CopilotInsightStatusPatch" }
+      responses:
+        "200":
+          description: ok
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CopilotInsight" }
+
+  /copilot/insights/{id}/execute:
+    post:
+      operationId: executeCopilotInsight
+      tags: [copilot]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: ok
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok: { type: boolean }
+                  insightId: { type: string }
+                  result:
+                    type: object
+                    additionalProperties: true
 
   /copilot/threads:
     get:
@@ -2180,9 +2231,17 @@ components:
               pipeline: { type: number }
 
     # ── Copilot ──
+    CopilotInsightStatusPatch:
+      type: object
+      required: [status]
+      properties:
+        status:
+          type: string
+          enum: [open, acknowledged, resolved, dismissed]
+
     CopilotInsight:
       type: object
-      required: [id, kind, title, summary, severity, dealId, dealName, createdAt]
+      required: [id, kind, title, summary, severity, dealId, dealName, createdAt, status]
       properties:
         id: { type: string }
         kind: { type: string }
@@ -2194,6 +2253,27 @@ components:
         createdAt: { type: string, format: date-time }
         suggestedAction:
           type: ["string", "null"]
+        status:
+          type: string
+          enum: [open, acknowledged, resolved, dismissed]
+        triggerType:
+          type: ["string", "null"]
+        triggerEntityRef:
+          type: ["string", "null"]
+        actionType:
+          type: ["string", "null"]
+        actionPayload:
+          type: ["object", "null"]
+          additionalProperties: true
+        acknowledgedAt:
+          type: ["string", "null"]
+          format: date-time
+        resolvedAt:
+          type: ["string", "null"]
+          format: date-time
+        dismissedAt:
+          type: ["string", "null"]
+          format: date-time
 
     CopilotThread:
       type: object

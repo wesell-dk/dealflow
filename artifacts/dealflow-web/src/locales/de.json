@@ -231,7 +231,17 @@
       "insights": "Aktuelle Insights",
       "placeholder": "Frage etwas zu Deals, Verträgen, Preisen…",
       "newThreadTitle": "Neuer Thread",
-      "newThreadTopic": "Thema (z.B. Deal, Angebot)"
+      "newThreadTopic": "Thema (z.B. Deal, Angebot)",
+      "execute": "Aktion ausführen",
+      "acknowledge": "Zur Kenntnis",
+      "dismiss": "Verwerfen",
+      "markResolved": "Erledigt",
+      "status": {
+        "open": "Offen",
+        "acknowledged": "In Arbeit",
+        "resolved": "Erledigt",
+        "dismissed": "Verworfen"
+      }
     },
     "reports": {
       "title": "Berichte",

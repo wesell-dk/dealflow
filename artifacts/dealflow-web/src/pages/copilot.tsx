@@ -7,8 +7,11 @@ import {
   useListCopilotMessages,
   usePostCopilotMessage,
   useCreateCopilotThread,
+  usePatchCopilotInsight,
+  useExecuteCopilotInsight,
   getListCopilotMessagesQueryKey,
   getListCopilotThreadsQueryKey,
+  getListCopilotInsightsQueryKey,
 } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -138,11 +141,32 @@ function NewThreadDialog({ onCreated }: { onCreated: (id: string) => void }) {
   );
 }
 
+const STATUSES = ["open", "acknowledged", "resolved", "dismissed"] as const;
+type InsightStatus = (typeof STATUSES)[number];
+
 export default function Copilot() {
   const { t, i18n } = useTranslation();
-  const { data: insights } = useListCopilotInsights();
+  const qc = useQueryClient();
+  const [statusFilter, setStatusFilter] = useState<InsightStatus>("open");
+  const { data: insights } = useListCopilotInsights({ status: statusFilter });
   const { data: threads } = useListCopilotThreads();
   const [activeThreadId, setActiveThreadId] = useState<string | null>(null);
+  const patchInsight = usePatchCopilotInsight();
+  const executeInsight = useExecuteCopilotInsight();
+
+  const invalidateInsights = () =>
+    qc.invalidateQueries({ queryKey: getListCopilotInsightsQueryKey() });
+
+  const onExecute = async (id: string) => {
+    if (executeInsight.isPending) return;
+    await executeInsight.mutateAsync({ id });
+    invalidateInsights();
+  };
+  const onPatch = async (id: string, status: InsightStatus) => {
+    if (patchInsight.isPending) return;
+    await patchInsight.mutateAsync({ id, data: { status } });
+    invalidateInsights();
+  };
 
   useEffect(() => {
     if (!activeThreadId && threads && threads.length > 0) {
@@ -212,25 +236,102 @@ export default function Copilot() {
         </Card>
 
         <Card>
-          <CardHeader>
+          <CardHeader className="space-y-2">
             <CardTitle className="text-base">{t("pages.copilot.insights")}</CardTitle>
+            <div className="flex flex-wrap gap-1">
+              {STATUSES.map((s) => (
+                <Button
+                  key={s}
+                  size="sm"
+                  variant={statusFilter === s ? "default" : "outline"}
+                  className="h-7 text-xs"
+                  onClick={() => setStatusFilter(s)}
+                  data-testid={`insights-filter-${s}`}
+                >
+                  {t(`pages.copilot.status.${s}`)}
+                </Button>
+              ))}
+            </div>
           </CardHeader>
           <CardContent className="space-y-3">
-            {(insights ?? []).slice(0, 6).map((ins) => (
-              <div key={ins.id} className="border-l-2 border-primary/40 pl-3 py-1">
+            {(insights ?? []).slice(0, 10).map((ins) => (
+              <div key={ins.id} className="border-l-2 border-primary/40 pl-3 py-1" data-testid={`insight-${ins.id}`}>
                 <div className="flex items-center gap-2 text-sm font-medium">
                   {insightIcon(ins.kind)}
                   {ins.title}
                 </div>
                 <p className="text-xs text-muted-foreground mt-1">{ins.summary}</p>
-                <div className="flex items-center gap-2 mt-1.5">
-                  <Badge variant="outline" className="text-[10px]">
-                    {ins.severity}
+                {ins.suggestedAction && (
+                  <p className="text-xs mt-1 text-foreground/80 italic">{ins.suggestedAction}</p>
+                )}
+                <div className="flex flex-wrap items-center gap-2 mt-1.5">
+                  <Badge variant="outline" className="text-[10px]">{ins.severity}</Badge>
+                  <Badge variant="secondary" className="text-[10px]">
+                    {t(`pages.copilot.status.${ins.status}`)}
                   </Badge>
                   <Link href={`/deals/${ins.dealId}`} className="text-xs text-primary hover:underline">
                     {ins.dealName}
                   </Link>
                 </div>
+                {ins.status === "open" && (
+                  <div className="flex flex-wrap gap-1 mt-2">
+                    {ins.actionType && (
+                      <Button
+                        size="sm"
+                        variant="default"
+                        className="h-7 text-xs"
+                        onClick={() => onExecute(ins.id)}
+                        disabled={executeInsight.isPending}
+                        data-testid={`insight-execute-${ins.id}`}
+                      >
+                        {t("pages.copilot.execute")}
+                      </Button>
+                    )}
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="h-7 text-xs"
+                      onClick={() => onPatch(ins.id, "acknowledged")}
+                      disabled={patchInsight.isPending}
+                    >
+                      {t("pages.copilot.acknowledge")}
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      className="h-7 text-xs"
+                      onClick={() => onPatch(ins.id, "dismissed")}
+                      disabled={patchInsight.isPending}
+                    >
+                      {t("pages.copilot.dismiss")}
+                    </Button>
+                  </div>
+                )}
+                {ins.status === "acknowledged" && (
+                  <div className="flex flex-wrap gap-1 mt-2">
+                    {ins.actionType && (
+                      <Button
+                        size="sm"
+                        variant="default"
+                        className="h-7 text-xs"
+                        onClick={() => onExecute(ins.id)}
+                        disabled={executeInsight.isPending}
+                        data-testid={`insight-execute-${ins.id}`}
+                      >
+                        {t("pages.copilot.execute")}
+                      </Button>
+                    )}
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      className="h-7 text-xs"
+                      onClick={() => onPatch(ins.id, "resolved")}
+                      disabled={patchInsight.isPending}
+                    >
+                      {t("pages.copilot.markResolved")}
+                    </Button>
+                  </div>
+                )}
               </div>
             ))}
             {(!insights || insights.length === 0) && (
