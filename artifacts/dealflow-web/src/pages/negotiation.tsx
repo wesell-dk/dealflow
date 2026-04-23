@@ -7,6 +7,8 @@ import {
   useAddCustomerReaction,
   useCreateVersionFromReaction,
   useRequestApprovalFromReaction,
+  getListQuotesQueryKey,
+  getListApprovalsQueryKey,
   type CustomerReaction,
 } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
@@ -132,7 +134,7 @@ export default function NegotiationWorkspace() {
         onSuccess: (r: CustomerReaction) => {
           toast({ title: r.linkedQuoteVersionId ? "Gegenvorschlag + neue Version erstellt" : "Gegenvorschlag erfasst" });
           invalidate(); resetForm();
-          qc.invalidateQueries({ predicate: q => String(q.queryKey[0] ?? "").includes("Quote") });
+          qc.invalidateQueries({ queryKey: getListQuotesQueryKey() });
         },
         onError: () => toast({ title: "Fehler beim Speichern", variant: "destructive" }),
       },
@@ -144,7 +146,7 @@ export default function NegotiationWorkspace() {
       onSuccess: () => {
         toast({ title: "Neue Angebotsversion erstellt" });
         invalidate();
-        qc.invalidateQueries({ predicate: q => String(q.queryKey[0] ?? "").includes("Quote") });
+        qc.invalidateQueries({ queryKey: getListQuotesQueryKey() });
       },
       onError: () => toast({ title: "Version konnte nicht erstellt werden", variant: "destructive" }),
     });
@@ -155,7 +157,7 @@ export default function NegotiationWorkspace() {
       onSuccess: (result) => {
         toast({ title: "Approval angefordert", description: "Weiterleitung zur Approval-Hub..." });
         invalidate();
-        qc.invalidateQueries({ predicate: q => String(q.queryKey[0] ?? "").includes("Approval") });
+        qc.invalidateQueries({ queryKey: getListApprovalsQueryKey() });
         setLocation(`/approvals?highlight=${encodeURIComponent(result.approvalId)}`);
       },
       onError: () => toast({ title: "Approval konnte nicht angefordert werden", variant: "destructive" }),
@@ -386,6 +388,7 @@ export default function NegotiationWorkspace() {
                         <SelectItem value="question">Frage</SelectItem>
                         <SelectItem value="objection">Einwand</SelectItem>
                         <SelectItem value="partial">Teilweise</SelectItem>
+                        <SelectItem value="price_rejected">Preis abgelehnt</SelectItem>
                         <SelectItem value="clause_rejected">Klausel abgelehnt</SelectItem>
                         <SelectItem value="term_change">Laufzeit-Änderung</SelectItem>
                         <SelectItem value="acceptance">Akzeptiert</SelectItem>
