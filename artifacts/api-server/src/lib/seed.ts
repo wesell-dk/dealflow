@@ -21,6 +21,8 @@ import {
   negotiationsTable,
   customerReactionsTable,
   signaturePackagesTable,
+  contractAmendmentsTable,
+  amendmentClausesTable,
   signersTable,
   priceIncreaseCampaignsTable,
   priceIncreaseLettersTable,
@@ -464,6 +466,58 @@ export async function seedIfEmpty(): Promise<void> {
     { id: "sn_006", packageId: "sg_003", name: "Marcel Voss",    email: "marcel@helix.com",  role: "Senior AE",            order: 2, status: "pending", sentAt: null, isFallback: false },
     { id: "sn_007", packageId: "sg_004", name: "Eleanor Whitcombe", email: "e.whitcombe@blueriver.co.uk", role: "Director", order: 1, status: "signed", sentAt: daysFromNow(-10), viewedAt: daysFromNow(-9), signedAt: daysFromNow(-8), isFallback: false },
     { id: "sn_008", packageId: "sg_004", name: "James Whitfield",  email: "james@helix.com", role: "Regional Director",    order: 2, status: "signed", sentAt: daysFromNow(-10), viewedAt: daysFromNow(-8), signedAt: daysFromNow(-7), isFallback: false },
+  ]);
+
+  // Contract Amendments (Nachträge zu ctr_003 Fjord, der signed ist)
+  await db.insert(contractAmendmentsTable).values([
+    {
+      id: "am_001",
+      originalContractId: "ctr_003",
+      number: "C-2026-003-A1",
+      type: "price-change",
+      title: "Preisanpassung +4,5% (Index-Klausel)",
+      description: "Jährliche Indexierung auf Basis VPI, wie in §9.3 des Originalvertrags vereinbart.",
+      status: "active",
+      effectiveFrom: isoDate(daysFromNow(-30)),
+      createdBy: "Priya Raman",
+    },
+    {
+      id: "am_002",
+      originalContractId: "ctr_003",
+      number: "C-2026-003-A2",
+      type: "scope-change",
+      title: "Erweiterung um Wartungspaket Pro",
+      description: "Zusätzliches Wartungspaket inkl. 24/7 Priority Support. Preisaufschlag separat geregelt.",
+      status: "in_review",
+      effectiveFrom: null,
+      createdBy: "James Whitfield",
+    },
+  ]);
+  await db.insert(amendmentClausesTable).values([
+    {
+      id: "ac_001",
+      amendmentId: "am_001",
+      operation: "modify",
+      family: "Payment",
+      familyId: "cf_pay",
+      beforeVariantId: null,
+      afterVariantId: null,
+      beforeSummary: "Preisliste Stand 2025, Net 30",
+      afterSummary: "Preisliste +4,5% gemäß VPI, Net 30 unverändert",
+      severity: "low",
+    },
+    {
+      id: "ac_002",
+      amendmentId: "am_002",
+      operation: "add",
+      family: "SLA",
+      familyId: "cf_sla",
+      beforeVariantId: null,
+      afterVariantId: "cv_sla_2",
+      beforeSummary: null,
+      afterSummary: "24/7 Priority Support mit 2h-Reaktionszeit für P1-Incidents",
+      severity: "medium",
+    },
   ]);
 
   // Price increases

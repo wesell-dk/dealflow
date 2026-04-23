@@ -35,6 +35,8 @@ import type {
   Company,
   Contact,
   Contract,
+  ContractAmendment,
+  ContractAmendmentDetail,
   ContractClause,
   ContractClausePatchInput,
   ContractDetail,
@@ -47,6 +49,7 @@ import type {
   CopilotThread,
   CopilotThreadInput,
   CounterproposalInput,
+  CreateAmendmentInput,
   CreateVersionFromReaction201,
   CustomerReaction,
   DashboardSummary,
@@ -56,6 +59,7 @@ import type {
   DealPatch,
   DealPipeline,
   DeclineSignerInput,
+  EffectiveContractState,
   EntityVersion,
   EntityVersionInput,
   EscalateSignatureInput,
@@ -90,6 +94,7 @@ import type {
   OrderConfirmation,
   OrderConfirmationDetail,
   OrderConfirmationHandoverInput,
+  PatchAmendmentInput,
   PerformanceReport,
   PriceIncreaseCampaign,
   PriceIncreaseCampaignDetail,
@@ -2968,6 +2973,422 @@ export function useListClauseFamilies<
 
   return { ...query, queryKey: queryOptions.queryKey };
 }
+
+export const getListContractAmendmentsUrl = (id: string) => {
+  return `/api/contracts/${id}/amendments`;
+};
+
+export const listContractAmendments = async (
+  id: string,
+  options?: RequestInit,
+): Promise<ContractAmendment[]> => {
+  return customFetch<ContractAmendment[]>(getListContractAmendmentsUrl(id), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getListContractAmendmentsQueryKey = (id: string) => {
+  return [`/api/contracts/${id}/amendments`] as const;
+};
+
+export const getListContractAmendmentsQueryOptions = <
+  TData = Awaited<ReturnType<typeof listContractAmendments>>,
+  TError = ErrorType<unknown>,
+>(
+  id: string,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof listContractAmendments>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey =
+    queryOptions?.queryKey ?? getListContractAmendmentsQueryKey(id);
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof listContractAmendments>>
+  > = ({ signal }) => listContractAmendments(id, { signal, ...requestOptions });
+
+  return {
+    queryKey,
+    queryFn,
+    enabled: !!id,
+    ...queryOptions,
+  } as UseQueryOptions<
+    Awaited<ReturnType<typeof listContractAmendments>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type ListContractAmendmentsQueryResult = NonNullable<
+  Awaited<ReturnType<typeof listContractAmendments>>
+>;
+export type ListContractAmendmentsQueryError = ErrorType<unknown>;
+
+export function useListContractAmendments<
+  TData = Awaited<ReturnType<typeof listContractAmendments>>,
+  TError = ErrorType<unknown>,
+>(
+  id: string,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof listContractAmendments>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getListContractAmendmentsQueryOptions(id, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+export const getCreateContractAmendmentUrl = (id: string) => {
+  return `/api/contracts/${id}/amendments`;
+};
+
+export const createContractAmendment = async (
+  id: string,
+  createAmendmentInput: CreateAmendmentInput,
+  options?: RequestInit,
+): Promise<ContractAmendmentDetail> => {
+  return customFetch<ContractAmendmentDetail>(
+    getCreateContractAmendmentUrl(id),
+    {
+      ...options,
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...options?.headers },
+      body: JSON.stringify(createAmendmentInput),
+    },
+  );
+};
+
+export const getCreateContractAmendmentMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof createContractAmendment>>,
+    TError,
+    { id: string; data: BodyType<CreateAmendmentInput> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof createContractAmendment>>,
+  TError,
+  { id: string; data: BodyType<CreateAmendmentInput> },
+  TContext
+> => {
+  const mutationKey = ["createContractAmendment"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof createContractAmendment>>,
+    { id: string; data: BodyType<CreateAmendmentInput> }
+  > = (props) => {
+    const { id, data } = props ?? {};
+
+    return createContractAmendment(id, data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type CreateContractAmendmentMutationResult = NonNullable<
+  Awaited<ReturnType<typeof createContractAmendment>>
+>;
+export type CreateContractAmendmentMutationBody =
+  BodyType<CreateAmendmentInput>;
+export type CreateContractAmendmentMutationError = ErrorType<unknown>;
+
+export const useCreateContractAmendment = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof createContractAmendment>>,
+    TError,
+    { id: string; data: BodyType<CreateAmendmentInput> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof createContractAmendment>>,
+  TError,
+  { id: string; data: BodyType<CreateAmendmentInput> },
+  TContext
+> => {
+  return useMutation(getCreateContractAmendmentMutationOptions(options));
+};
+
+export const getGetContractEffectiveStateUrl = (id: string) => {
+  return `/api/contracts/${id}/effective-state`;
+};
+
+export const getContractEffectiveState = async (
+  id: string,
+  options?: RequestInit,
+): Promise<EffectiveContractState> => {
+  return customFetch<EffectiveContractState>(
+    getGetContractEffectiveStateUrl(id),
+    {
+      ...options,
+      method: "GET",
+    },
+  );
+};
+
+export const getGetContractEffectiveStateQueryKey = (id: string) => {
+  return [`/api/contracts/${id}/effective-state`] as const;
+};
+
+export const getGetContractEffectiveStateQueryOptions = <
+  TData = Awaited<ReturnType<typeof getContractEffectiveState>>,
+  TError = ErrorType<unknown>,
+>(
+  id: string,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getContractEffectiveState>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey =
+    queryOptions?.queryKey ?? getGetContractEffectiveStateQueryKey(id);
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof getContractEffectiveState>>
+  > = ({ signal }) =>
+    getContractEffectiveState(id, { signal, ...requestOptions });
+
+  return {
+    queryKey,
+    queryFn,
+    enabled: !!id,
+    ...queryOptions,
+  } as UseQueryOptions<
+    Awaited<ReturnType<typeof getContractEffectiveState>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetContractEffectiveStateQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getContractEffectiveState>>
+>;
+export type GetContractEffectiveStateQueryError = ErrorType<unknown>;
+
+export function useGetContractEffectiveState<
+  TData = Awaited<ReturnType<typeof getContractEffectiveState>>,
+  TError = ErrorType<unknown>,
+>(
+  id: string,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getContractEffectiveState>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetContractEffectiveStateQueryOptions(id, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+export const getGetContractAmendmentUrl = (id: string) => {
+  return `/api/amendments/${id}`;
+};
+
+export const getContractAmendment = async (
+  id: string,
+  options?: RequestInit,
+): Promise<ContractAmendmentDetail> => {
+  return customFetch<ContractAmendmentDetail>(getGetContractAmendmentUrl(id), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getGetContractAmendmentQueryKey = (id: string) => {
+  return [`/api/amendments/${id}`] as const;
+};
+
+export const getGetContractAmendmentQueryOptions = <
+  TData = Awaited<ReturnType<typeof getContractAmendment>>,
+  TError = ErrorType<unknown>,
+>(
+  id: string,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getContractAmendment>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey =
+    queryOptions?.queryKey ?? getGetContractAmendmentQueryKey(id);
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof getContractAmendment>>
+  > = ({ signal }) => getContractAmendment(id, { signal, ...requestOptions });
+
+  return {
+    queryKey,
+    queryFn,
+    enabled: !!id,
+    ...queryOptions,
+  } as UseQueryOptions<
+    Awaited<ReturnType<typeof getContractAmendment>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetContractAmendmentQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getContractAmendment>>
+>;
+export type GetContractAmendmentQueryError = ErrorType<unknown>;
+
+export function useGetContractAmendment<
+  TData = Awaited<ReturnType<typeof getContractAmendment>>,
+  TError = ErrorType<unknown>,
+>(
+  id: string,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getContractAmendment>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetContractAmendmentQueryOptions(id, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+export const getPatchContractAmendmentUrl = (id: string) => {
+  return `/api/amendments/${id}`;
+};
+
+export const patchContractAmendment = async (
+  id: string,
+  patchAmendmentInput: PatchAmendmentInput,
+  options?: RequestInit,
+): Promise<ContractAmendmentDetail> => {
+  return customFetch<ContractAmendmentDetail>(
+    getPatchContractAmendmentUrl(id),
+    {
+      ...options,
+      method: "PATCH",
+      headers: { "Content-Type": "application/json", ...options?.headers },
+      body: JSON.stringify(patchAmendmentInput),
+    },
+  );
+};
+
+export const getPatchContractAmendmentMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof patchContractAmendment>>,
+    TError,
+    { id: string; data: BodyType<PatchAmendmentInput> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof patchContractAmendment>>,
+  TError,
+  { id: string; data: BodyType<PatchAmendmentInput> },
+  TContext
+> => {
+  const mutationKey = ["patchContractAmendment"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof patchContractAmendment>>,
+    { id: string; data: BodyType<PatchAmendmentInput> }
+  > = (props) => {
+    const { id, data } = props ?? {};
+
+    return patchContractAmendment(id, data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type PatchContractAmendmentMutationResult = NonNullable<
+  Awaited<ReturnType<typeof patchContractAmendment>>
+>;
+export type PatchContractAmendmentMutationBody = BodyType<PatchAmendmentInput>;
+export type PatchContractAmendmentMutationError = ErrorType<unknown>;
+
+export const usePatchContractAmendment = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof patchContractAmendment>>,
+    TError,
+    { id: string; data: BodyType<PatchAmendmentInput> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof patchContractAmendment>>,
+  TError,
+  { id: string; data: BodyType<PatchAmendmentInput> },
+  TContext
+> => {
+  return useMutation(getPatchContractAmendmentMutationOptions(options));
+};
 
 export const getListContractClausesUrl = (id: string) => {
   return `/api/contracts/${id}/clauses`;

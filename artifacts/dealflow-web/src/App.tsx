@@ -17,6 +17,7 @@ import Pricing from "@/pages/pricing";
 import Approvals from "@/pages/approvals";
 import Contracts from "@/pages/contracts";
 import ContractDetail from "@/pages/contract";
+import AmendmentDetail from "@/pages/amendment";
 import Negotiations from "@/pages/negotiations";
 import NegotiationDetail from "@/pages/negotiation";
 import Signatures from "@/pages/signatures";
@@ -61,6 +62,7 @@ function ProtectedRoutes() {
         <Route path="/approvals" component={Approvals} />
         <Route path="/contracts" component={Contracts} />
         <Route path="/contracts/:id" component={ContractDetail} />
+        <Route path="/amendments/:id" component={AmendmentDetail} />
         <Route path="/negotiations" component={Negotiations} />
         <Route path="/negotiations/:id" component={NegotiationDetail} />
         <Route path="/signatures" component={Signatures} />

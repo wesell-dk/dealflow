@@ -62,6 +62,8 @@ import {
   orderConfirmationsTable,
   orderConfirmationChecksTable,
   entityVersionsTable,
+  contractAmendmentsTable,
+  amendmentClausesTable,
 } from '@workspace/db';
 import {
   generatePriceRejectionForReaction,
@@ -990,6 +992,263 @@ router.get('/contracts/:id', async (req, res) => {
   res.json({
     ...mapContract(c, dealMap.get(c.dealId)?.name ?? 'Unknown', rawClauses),
     clauses,
+  });
+});
+
+// ── CONTRACT AMENDMENTS ──
+function mapAmendment(a: typeof contractAmendmentsTable.$inferSelect) {
+  return {
+    id: a.id,
+    originalContractId: a.originalContractId,
+    number: a.number,
+    type: a.type,
+    title: a.title,
+    description: a.description ?? null,
+    status: a.status,
+    effectiveFrom: a.effectiveFrom ? String(a.effectiveFrom) : null,
+    createdBy: a.createdBy ?? null,
+    createdAt: iso(a.createdAt)!,
+  };
+}
+
+function mapAmendmentChange(c: typeof amendmentClausesTable.$inferSelect) {
+  return {
+    id: c.id,
+    amendmentId: c.amendmentId,
+    operation: c.operation,
+    family: c.family,
+    familyId: c.familyId ?? null,
+    beforeVariantId: c.beforeVariantId ?? null,
+    afterVariantId: c.afterVariantId ?? null,
+    beforeSummary: c.beforeSummary ?? null,
+    afterSummary: c.afterSummary ?? null,
+    severity: c.severity ?? null,
+  };
+}
+
+async function nextAmendmentNumber(originalContractId: string): Promise<string> {
+  const [ctr] = await db.select().from(contractsTable).where(eq(contractsTable.id, originalContractId));
+  const base = ctr ? (ctr.title.match(/C-\d{4}-\d+/)?.[0] ?? `C-${originalContractId}`) : `C-${originalContractId}`;
+  const existing = await db.select().from(contractAmendmentsTable)
+    .where(eq(contractAmendmentsTable.originalContractId, originalContractId));
+  return `${base}-A${existing.length + 1}`;
+}
+
+router.get('/contracts/:id/amendments', async (req, res) => {
+  const [c] = await db.select().from(contractsTable).where(eq(contractsTable.id, req.params.id));
+  if (!c) { res.status(404).json({ error: 'not found' }); return; }
+  if (!(await gateDeal(req, res, c.dealId))) return;
+  const rows = await db.select().from(contractAmendmentsTable)
+    .where(eq(contractAmendmentsTable.originalContractId, req.params.id))
+    .orderBy(desc(contractAmendmentsTable.createdAt));
+  res.json(rows.map(mapAmendment));
+});
+
+router.post('/contracts/:id/amendments', async (req, res) => {
+  const [c] = await db.select().from(contractsTable).where(eq(contractsTable.id, req.params.id));
+  if (!c) { res.status(404).json({ error: 'not found' }); return; }
+  if (!(await gateDeal(req, res, c.dealId))) return;
+  if (!['signed', 'active', 'countersigned'].includes(c.status)) {
+    res.status(400).json({ error: 'amendment only allowed on signed/active contracts' });
+    return;
+  }
+  const b = req.body as {
+    type: string;
+    title: string;
+    description?: string | null;
+    effectiveFrom?: string | null;
+    changes?: Array<{
+      family: string; familyId?: string | null;
+      operation: string;
+      beforeVariantId?: string | null; afterVariantId?: string | null;
+      beforeSummary?: string | null; afterSummary?: string | null;
+      severity?: string | null;
+    }>;
+  };
+  if (!b?.type || !b?.title) { res.status(400).json({ error: 'type and title required' }); return; }
+  const scope = getScope(req);
+  const actor = scope.user?.name ?? null;
+  const id = `am_${randomUUID().slice(0, 8)}`;
+  const number = await nextAmendmentNumber(c.id);
+  await db.insert(contractAmendmentsTable).values({
+    id,
+    originalContractId: c.id,
+    number,
+    type: b.type,
+    title: b.title,
+    description: b.description ?? null,
+    status: 'drafting',
+    effectiveFrom: b.effectiveFrom ?? null,
+    createdBy: actor ?? null,
+  });
+  const changes = b.changes ?? [];
+  for (const ch of changes) {
+    await db.insert(amendmentClausesTable).values({
+      id: `ac_${randomUUID().slice(0, 8)}`,
+      amendmentId: id,
+      operation: ch.operation,
+      family: ch.family,
+      familyId: ch.familyId ?? null,
+      beforeVariantId: ch.beforeVariantId ?? null,
+      afterVariantId: ch.afterVariantId ?? null,
+      beforeSummary: ch.beforeSummary ?? null,
+      afterSummary: ch.afterSummary ?? null,
+      severity: ch.severity ?? null,
+    });
+  }
+  await writeAudit({
+    entityType: 'contract_amendment', entityId: id, action: 'create',
+    summary: `Amendment ${number} (${b.type}) angelegt`,
+    after: { number, type: b.type, title: b.title },
+  });
+  const [created] = await db.select().from(contractAmendmentsTable).where(eq(contractAmendmentsTable.id, id));
+  const ch = await db.select().from(amendmentClausesTable).where(eq(amendmentClausesTable.amendmentId, id));
+  res.status(201).json({ ...mapAmendment(created!), changes: ch.map(mapAmendmentChange) });
+});
+
+router.get('/amendments/:id', async (req, res) => {
+  const [a] = await db.select().from(contractAmendmentsTable).where(eq(contractAmendmentsTable.id, req.params.id));
+  if (!a) { res.status(404).json({ error: 'not found' }); return; }
+  const [c] = await db.select().from(contractsTable).where(eq(contractsTable.id, a.originalContractId));
+  if (!c || !(await gateDeal(req, res, c.dealId))) return;
+  const changes = await db.select().from(amendmentClausesTable).where(eq(amendmentClausesTable.amendmentId, a.id));
+  res.json({ ...mapAmendment(a), changes: changes.map(mapAmendmentChange) });
+});
+
+const AMENDMENT_TRANSITIONS: Record<string, string[]> = {
+  drafting: ['proposed', 'rejected'],
+  proposed: ['in_review', 'rejected'],
+  in_review: ['approved', 'rejected'],
+  approved: ['out_for_signature', 'rejected'],
+  out_for_signature: ['signed', 'rejected'],
+  signed: ['active'],
+  active: [],
+  executed: [],
+  rejected: [],
+};
+
+router.patch('/amendments/:id', async (req, res) => {
+  const [a] = await db.select().from(contractAmendmentsTable).where(eq(contractAmendmentsTable.id, req.params.id));
+  if (!a) { res.status(404).json({ error: 'not found' }); return; }
+  const [c] = await db.select().from(contractsTable).where(eq(contractsTable.id, a.originalContractId));
+  if (!c || !(await gateDeal(req, res, c.dealId))) return;
+  const b = req.body as Partial<{ status: string; effectiveFrom: string | null; description: string | null; title: string }>;
+  const patch: Partial<typeof contractAmendmentsTable.$inferInsert> = {};
+  if (typeof b.status === 'string') {
+    const allowed = AMENDMENT_TRANSITIONS[a.status] ?? [];
+    if (!allowed.includes(b.status)) {
+      res.status(400).json({
+        error: `invalid status transition ${a.status} → ${b.status}`,
+        allowedNext: allowed,
+      });
+      return;
+    }
+    patch.status = b.status;
+  }
+  if ('effectiveFrom' in b) patch.effectiveFrom = b.effectiveFrom ?? null;
+  if ('description' in b) patch.description = b.description ?? null;
+  if (typeof b.title === 'string') patch.title = b.title;
+  if (Object.keys(patch).length > 0) {
+    await db.update(contractAmendmentsTable).set(patch).where(eq(contractAmendmentsTable.id, a.id));
+    await writeAudit({
+      entityType: 'contract_amendment', entityId: a.id, action: 'update',
+      summary: `Amendment ${a.number} aktualisiert`,
+      before: { status: a.status }, after: patch,
+    });
+  }
+  const [updated] = await db.select().from(contractAmendmentsTable).where(eq(contractAmendmentsTable.id, a.id));
+  const changes = await db.select().from(amendmentClausesTable).where(eq(amendmentClausesTable.amendmentId, a.id));
+  res.json({ ...mapAmendment(updated!), changes: changes.map(mapAmendmentChange) });
+});
+
+router.get('/contracts/:id/effective-state', async (req, res) => {
+  const [c] = await db.select().from(contractsTable).where(eq(contractsTable.id, req.params.id));
+  if (!c) { res.status(404).json({ error: 'not found' }); return; }
+  if (!(await gateDeal(req, res, c.dealId))) return;
+  const rawClauses = await db.select().from(contractClausesTable).where(eq(contractClausesTable.contractId, c.id));
+  const variantsAll = await db.select().from(clauseVariantsTable);
+  const vById = new Map(variantsAll.map(v => [v.id, v]));
+  // Apply oldest-first so newer amendments override older ones. Deterministic
+  // ordering: (effectiveFrom ASC NULLS LAST, createdAt ASC, id ASC).
+  const activeAmendments = await db.select().from(contractAmendmentsTable)
+    .where(and(
+      eq(contractAmendmentsTable.originalContractId, c.id),
+      inArray(contractAmendmentsTable.status, ['active', 'executed', 'signed']),
+    ))
+    .orderBy(
+      sql`${contractAmendmentsTable.effectiveFrom} ASC NULLS LAST`,
+      contractAmendmentsTable.createdAt,
+      contractAmendmentsTable.id,
+    );
+  const amendmentIds = activeAmendments.map(a => a.id);
+  const allChanges = amendmentIds.length
+    ? await db.select().from(amendmentClausesTable)
+        .where(inArray(amendmentClausesTable.amendmentId, amendmentIds))
+        .orderBy(amendmentClausesTable.id)
+    : [];
+  // Group changes by amendment so we apply in amendment order
+  const changesByAmendment = new Map<string, typeof allChanges>();
+  for (const ch of allChanges) {
+    const arr = changesByAmendment.get(ch.amendmentId) ?? [];
+    arr.push(ch);
+    changesByAmendment.set(ch.amendmentId, arr);
+  }
+  const clausesByFamily = new Map<string, typeof rawClauses[number]>();
+  for (const cl of rawClauses) clausesByFamily.set(cl.family, cl);
+  for (const am of activeAmendments) {
+    for (const ch of (changesByAmendment.get(am.id) ?? [])) {
+      if (ch.operation === 'remove') {
+        clausesByFamily.delete(ch.family);
+        continue;
+      }
+      if ((ch.operation === 'modify' || ch.operation === 'add') && ch.afterVariantId) {
+        const cur = clausesByFamily.get(ch.family);
+        const v = vById.get(ch.afterVariantId);
+        if (!v) continue;
+        clausesByFamily.set(ch.family, {
+          ...(cur ?? {
+            id: `virt_${am.id}_${ch.family}`,
+            contractId: c.id,
+            family: ch.family,
+            familyId: ch.familyId ?? null,
+          } as typeof rawClauses[number]),
+          activeVariantId: ch.afterVariantId,
+          variant: v.name,
+          severity: v.severity,
+          summary: v.summary,
+        });
+      } else if (ch.operation === 'add' && ch.afterSummary) {
+        // add without variantId: synthesize a clause entry from summary
+        if (!clausesByFamily.has(ch.family)) {
+          clausesByFamily.set(ch.family, {
+            id: `virt_${am.id}_${ch.family}`,
+            contractId: c.id,
+            family: ch.family,
+            familyId: ch.familyId ?? null,
+            activeVariantId: null,
+            variant: 'Amendment',
+            severity: ch.severity ?? 'low',
+            summary: ch.afterSummary,
+          } as typeof rawClauses[number]);
+        }
+      }
+    }
+  }
+  const effective = [...clausesByFamily.values()].map(cl => {
+    const active = cl.activeVariantId ? vById.get(cl.activeVariantId) : undefined;
+    return {
+      id: cl.id, contractId: cl.contractId, family: cl.family, variant: cl.variant,
+      severity: cl.severity, summary: cl.summary,
+      familyId: cl.familyId ?? null, activeVariantId: cl.activeVariantId ?? null,
+      severityScore: active?.severityScore ?? 3,
+      tone: active?.tone ?? 'standard',
+      body: active?.body ?? '',
+    };
+  });
+  res.json({
+    contractId: c.id,
+    clauses: effective,
+    appliedAmendments: activeAmendments.map(mapAmendment),
   });
 });
 
@@ -2323,6 +2582,35 @@ router.post('/price-increases/:id/letters/:letterId/respond', async (req, res) =
       description: `${accName} akzeptierte +${num(l.upliftPct)}%. Vertragsanpassung wird angestoßen.`,
       actor: 'System', dealId: null,
     });
+    // Only consider contracts tied to deals the caller can access.
+    const scopedDealIds = await allowedDealIds(req);
+    const activeContracts = await db.select().from(contractsTable)
+      .where(inArray(contractsTable.status, ['signed', 'active', 'countersigned']));
+    const deals = await getDealMap();
+    const target = activeContracts.find(ctr => {
+      if (!scopedDealIds.has(ctr.dealId)) return false;
+      return deals.get(ctr.dealId)?.accountId === l.accountId;
+    });
+    if (target) {
+      const aid = `am_${randomUUID().slice(0, 8)}`;
+      const number = await nextAmendmentNumber(target.id);
+      await db.insert(contractAmendmentsTable).values({
+        id: aid,
+        originalContractId: target.id,
+        number,
+        type: 'price-change',
+        title: `Preisanpassung +${num(l.upliftPct)}%`,
+        description: `Automatisch erzeugt aus akzeptierter Preiserhöhung für ${accName}.`,
+        status: 'proposed',
+        effectiveFrom: null,
+        createdBy: 'System',
+      });
+      await writeAudit({
+        entityType: 'contract_amendment', entityId: aid, action: 'create',
+        summary: `Amendment ${number} automatisch aus Preiserhöhung erzeugt`,
+        after: { from: 'price_increase_letter', letterId: l.id, upliftPct: num(l.upliftPct) },
+      });
+    }
   }
   await writeAudit({
     entityType: 'price_increase_letter', entityId: l.id,

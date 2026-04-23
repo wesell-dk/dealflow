@@ -834,6 +834,167 @@ export const ListClauseFamiliesResponse = zod.array(
   ListClauseFamiliesResponseItem,
 );
 
+export const ListContractAmendmentsParams = zod.object({
+  id: zod.coerce.string(),
+});
+
+export const ListContractAmendmentsResponseItem = zod.object({
+  id: zod.string(),
+  originalContractId: zod.string(),
+  number: zod.string(),
+  type: zod.string(),
+  title: zod.string(),
+  description: zod.string().nullish(),
+  status: zod.string(),
+  effectiveFrom: zod.string().nullish(),
+  createdBy: zod.string().nullish(),
+  createdAt: zod.string(),
+});
+export const ListContractAmendmentsResponse = zod.array(
+  ListContractAmendmentsResponseItem,
+);
+
+export const CreateContractAmendmentParams = zod.object({
+  id: zod.coerce.string(),
+});
+
+export const CreateContractAmendmentBody = zod.object({
+  type: zod.string(),
+  title: zod.string(),
+  description: zod.string().nullish(),
+  effectiveFrom: zod.string().nullish(),
+  changes: zod
+    .array(
+      zod.object({
+        family: zod.string(),
+        familyId: zod.string().nullish(),
+        operation: zod.string(),
+        beforeVariantId: zod.string().nullish(),
+        afterVariantId: zod.string().nullish(),
+        beforeSummary: zod.string().nullish(),
+        afterSummary: zod.string().nullish(),
+        severity: zod.string().nullish(),
+      }),
+    )
+    .optional(),
+});
+
+export const GetContractEffectiveStateParams = zod.object({
+  id: zod.coerce.string(),
+});
+
+export const GetContractEffectiveStateResponse = zod.object({
+  contractId: zod.string(),
+  clauses: zod.array(
+    zod.object({
+      id: zod.string(),
+      contractId: zod.string(),
+      family: zod.string(),
+      variant: zod.string(),
+      severity: zod.string(),
+      summary: zod.string(),
+      familyId: zod.string().nullish(),
+      activeVariantId: zod.string().nullish(),
+      severityScore: zod.number(),
+      tone: zod.string(),
+      body: zod.string(),
+    }),
+  ),
+  appliedAmendments: zod.array(
+    zod.object({
+      id: zod.string(),
+      originalContractId: zod.string(),
+      number: zod.string(),
+      type: zod.string(),
+      title: zod.string(),
+      description: zod.string().nullish(),
+      status: zod.string(),
+      effectiveFrom: zod.string().nullish(),
+      createdBy: zod.string().nullish(),
+      createdAt: zod.string(),
+    }),
+  ),
+});
+
+export const GetContractAmendmentParams = zod.object({
+  id: zod.coerce.string(),
+});
+
+export const GetContractAmendmentResponse = zod
+  .object({
+    id: zod.string(),
+    originalContractId: zod.string(),
+    number: zod.string(),
+    type: zod.string(),
+    title: zod.string(),
+    description: zod.string().nullish(),
+    status: zod.string(),
+    effectiveFrom: zod.string().nullish(),
+    createdBy: zod.string().nullish(),
+    createdAt: zod.string(),
+  })
+  .and(
+    zod.object({
+      changes: zod.array(
+        zod.object({
+          id: zod.string(),
+          amendmentId: zod.string(),
+          operation: zod.string(),
+          family: zod.string(),
+          familyId: zod.string().nullish(),
+          beforeVariantId: zod.string().nullish(),
+          afterVariantId: zod.string().nullish(),
+          beforeSummary: zod.string().nullish(),
+          afterSummary: zod.string().nullish(),
+          severity: zod.string().nullish(),
+        }),
+      ),
+    }),
+  );
+
+export const PatchContractAmendmentParams = zod.object({
+  id: zod.coerce.string(),
+});
+
+export const PatchContractAmendmentBody = zod.object({
+  status: zod.string().optional(),
+  effectiveFrom: zod.string().nullish(),
+  description: zod.string().nullish(),
+  title: zod.string().optional(),
+});
+
+export const PatchContractAmendmentResponse = zod
+  .object({
+    id: zod.string(),
+    originalContractId: zod.string(),
+    number: zod.string(),
+    type: zod.string(),
+    title: zod.string(),
+    description: zod.string().nullish(),
+    status: zod.string(),
+    effectiveFrom: zod.string().nullish(),
+    createdBy: zod.string().nullish(),
+    createdAt: zod.string(),
+  })
+  .and(
+    zod.object({
+      changes: zod.array(
+        zod.object({
+          id: zod.string(),
+          amendmentId: zod.string(),
+          operation: zod.string(),
+          family: zod.string(),
+          familyId: zod.string().nullish(),
+          beforeVariantId: zod.string().nullish(),
+          afterVariantId: zod.string().nullish(),
+          beforeSummary: zod.string().nullish(),
+          afterSummary: zod.string().nullish(),
+          severity: zod.string().nullish(),
+        }),
+      ),
+    }),
+  );
+
 export const ListContractClausesParams = zod.object({
   id: zod.coerce.string(),
 });

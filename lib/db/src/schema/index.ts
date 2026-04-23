@@ -216,6 +216,7 @@ export const priceRulesTable = pgTable("price_rules", {
 export const approvalsTable = pgTable("approvals", {
   id: id(),
   dealId: text("deal_id").notNull(),
+  amendmentId: text("amendment_id"),
   type: text("type").notNull(),
   reason: text("reason").notNull(),
   requestedBy: text("requested_by").notNull(),
@@ -258,6 +259,32 @@ export const clauseVariantsTable = pgTable("clause_variants", {
   summary: text("summary").notNull(),
   body: text("body").notNull().default(""),
   tone: text("tone").notNull().default("standard"),
+});
+
+export const contractAmendmentsTable = pgTable("contract_amendments", {
+  id: id(),
+  originalContractId: text("original_contract_id").notNull(),
+  number: text("number").notNull(),
+  type: text("type").notNull(),
+  title: text("title").notNull(),
+  description: text("description"),
+  status: text("status").notNull(),
+  effectiveFrom: date("effective_from"),
+  createdBy: text("created_by"),
+  createdAt: ts("created_at"),
+});
+
+export const amendmentClausesTable = pgTable("amendment_clauses", {
+  id: id(),
+  amendmentId: text("amendment_id").notNull(),
+  operation: text("operation").notNull(),
+  family: text("family").notNull(),
+  familyId: text("family_id"),
+  beforeVariantId: text("before_variant_id"),
+  afterVariantId: text("after_variant_id"),
+  beforeSummary: text("before_summary"),
+  afterSummary: text("after_summary"),
+  severity: text("severity"),
 });
 
 export const contractClausesTable = pgTable("contract_clauses", {
@@ -304,6 +331,7 @@ export const customerReactionsTable = pgTable("customer_reactions", {
 export const signaturePackagesTable = pgTable("signature_packages", {
   id: id(),
   dealId: text("deal_id").notNull(),
+  amendmentId: text("amendment_id"),
   title: text("title").notNull(),
   status: text("status").notNull(),
   mode: text("mode").notNull().default("sequential"),

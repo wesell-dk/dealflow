@@ -643,6 +643,94 @@ paths:
                 type: array
                 items: { $ref: "#/components/schemas/ClauseFamily" }
 
+  /contracts/{id}/amendments:
+    get:
+      operationId: listContractAmendments
+      tags: [contracts]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: ok
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/ContractAmendment" }
+    post:
+      operationId: createContractAmendment
+      tags: [contracts]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CreateAmendmentInput" }
+      responses:
+        "201":
+          description: created
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ContractAmendmentDetail" }
+
+  /contracts/{id}/effective-state:
+    get:
+      operationId: getContractEffectiveState
+      tags: [contracts]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: ok
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/EffectiveContractState" }
+
+  /amendments/{id}:
+    get:
+      operationId: getContractAmendment
+      tags: [contracts]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: ok
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ContractAmendmentDetail" }
+    patch:
+      operationId: patchContractAmendment
+      tags: [contracts]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/PatchAmendmentInput" }
+      responses:
+        "200":
+          description: ok
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ContractAmendmentDetail" }
+
   /contracts/{id}/clauses:
     get:
       operationId: listContractClauses
@@ -2115,6 +2203,90 @@ components:
         softer: { type: boolean }
         approvalId: { type: ["string", "null"] }
         approvalReason: { type: ["string", "null"] }
+
+    # ── Amendments ──
+    ContractAmendment:
+      type: object
+      required: [id, originalContractId, number, type, title, status, createdAt]
+      properties:
+        id: { type: string }
+        originalContractId: { type: string }
+        number: { type: string }
+        type: { type: string }
+        title: { type: string }
+        description: { type: ["string", "null"] }
+        status: { type: string }
+        effectiveFrom: { type: ["string", "null"] }
+        createdBy: { type: ["string", "null"] }
+        createdAt: { type: string }
+
+    AmendmentClauseChange:
+      type: object
+      required: [id, amendmentId, operation, family]
+      properties:
+        id: { type: string }
+        amendmentId: { type: string }
+        operation: { type: string }
+        family: { type: string }
+        familyId: { type: ["string", "null"] }
+        beforeVariantId: { type: ["string", "null"] }
+        afterVariantId: { type: ["string", "null"] }
+        beforeSummary: { type: ["string", "null"] }
+        afterSummary: { type: ["string", "null"] }
+        severity: { type: ["string", "null"] }
+
+    ContractAmendmentDetail:
+      allOf:
+        - $ref: "#/components/schemas/ContractAmendment"
+        - type: object
+          required: [changes]
+          properties:
+            changes:
+              type: array
+              items: { $ref: "#/components/schemas/AmendmentClauseChange" }
+
+    CreateAmendmentInput:
+      type: object
+      required: [type, title]
+      properties:
+        type: { type: string }
+        title: { type: string }
+        description: { type: ["string", "null"] }
+        effectiveFrom: { type: ["string", "null"] }
+        changes:
+          type: array
+          items:
+            type: object
+            required: [family, operation]
+            properties:
+              family: { type: string }
+              familyId: { type: ["string", "null"] }
+              operation: { type: string }
+              beforeVariantId: { type: ["string", "null"] }
+              afterVariantId: { type: ["string", "null"] }
+              beforeSummary: { type: ["string", "null"] }
+              afterSummary: { type: ["string", "null"] }
+              severity: { type: ["string", "null"] }
+
+    PatchAmendmentInput:
+      type: object
+      properties:
+        status: { type: string }
+        effectiveFrom: { type: ["string", "null"] }
+        description: { type: ["string", "null"] }
+        title: { type: string }
+
+    EffectiveContractState:
+      type: object
+      required: [contractId, clauses, appliedAmendments]
+      properties:
+        contractId: { type: string }
+        clauses:
+          type: array
+          items: { $ref: "#/components/schemas/ContractClause" }
+        appliedAmendments:
+          type: array
+          items: { $ref: "#/components/schemas/ContractAmendment" }
 
     # ── Negotiations ──
     Negotiation:

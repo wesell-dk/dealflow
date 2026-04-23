@@ -7,6 +7,7 @@ import {
   brandsTable,
   quotesTable,
   contractsTable,
+  contractAmendmentsTable,
   negotiationsTable,
   signaturePackagesTable,
   approvalsTable,
@@ -269,6 +270,14 @@ export async function entityScopeStatus(
       if (p.brandId && brands.has(p.brandId)) return "ok";
       if (p.companyId && companies.has(p.companyId)) return "ok";
       return "forbidden";
+    }
+    case "contract_amendment":
+    case "amendment": {
+      const [a] = await db.select().from(contractAmendmentsTable).where(eq(contractAmendmentsTable.id, entityId));
+      if (!a) return "missing";
+      const [c] = await db.select().from(contractsTable).where(eq(contractsTable.id, a.originalContractId));
+      if (!c) return "forbidden";
+      return dealOk(c.dealId) ? "ok" : "forbidden";
     }
     case "letter":
     case "price_increase_letter": {

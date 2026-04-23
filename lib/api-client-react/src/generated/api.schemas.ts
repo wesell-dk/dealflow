@@ -476,6 +476,87 @@ export interface ClauseChangeResult {
   approvalReason?: string | null;
 }
 
+export interface ContractAmendment {
+  id: string;
+  originalContractId: string;
+  number: string;
+  type: string;
+  title: string;
+  /** @nullable */
+  description?: string | null;
+  status: string;
+  /** @nullable */
+  effectiveFrom?: string | null;
+  /** @nullable */
+  createdBy?: string | null;
+  createdAt: string;
+}
+
+export interface AmendmentClauseChange {
+  id: string;
+  amendmentId: string;
+  operation: string;
+  family: string;
+  /** @nullable */
+  familyId?: string | null;
+  /** @nullable */
+  beforeVariantId?: string | null;
+  /** @nullable */
+  afterVariantId?: string | null;
+  /** @nullable */
+  beforeSummary?: string | null;
+  /** @nullable */
+  afterSummary?: string | null;
+  /** @nullable */
+  severity?: string | null;
+}
+
+export type ContractAmendmentDetail = ContractAmendment & {
+  changes: AmendmentClauseChange[];
+};
+
+export type CreateAmendmentInputChangesItem = {
+  family: string;
+  /** @nullable */
+  familyId?: string | null;
+  operation: string;
+  /** @nullable */
+  beforeVariantId?: string | null;
+  /** @nullable */
+  afterVariantId?: string | null;
+  /** @nullable */
+  beforeSummary?: string | null;
+  /** @nullable */
+  afterSummary?: string | null;
+  /** @nullable */
+  severity?: string | null;
+};
+
+export interface CreateAmendmentInput {
+  type: string;
+  title: string;
+  /** @nullable */
+  description?: string | null;
+  /** @nullable */
+  effectiveFrom?: string | null;
+  changes?: CreateAmendmentInputChangesItem[];
+}
+
+export interface PatchAmendmentInput {
+  status?: string;
+  /** @nullable */
+  effectiveFrom?: string | null;
+  /** @nullable */
+  description?: string | null;
+  title?: string;
+}
+
+export interface EffectiveContractState {
+  contractId: string;
+  clauses: ContractClause[];
+  appliedAmendments: ContractAmendment[];
+}
+
 export interface CustomerReaction {
   id: string;
   negotiationId: string;

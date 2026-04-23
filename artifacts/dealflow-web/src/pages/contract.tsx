@@ -6,8 +6,11 @@ import {
   useListClauseFamilies,
   useListContractClauses,
   usePatchContractClause,
+  useListContractAmendments,
+  useCreateContractAmendment,
   getGetContractQueryKey,
   getListContractClausesQueryKey,
+  getListContractAmendmentsQueryKey,
   type ContractClause,
   type ClauseVariant,
   type ClauseFamily,
@@ -32,7 +35,7 @@ import {
   DialogTitle,
   DialogDescription,
 } from "@/components/ui/dialog";
-import { FileText, ShieldAlert, Library, Activity, GitCompare, AlertTriangle } from "lucide-react";
+import { FileText, ShieldAlert, Library, Activity, GitCompare, AlertTriangle, FileStack, Plus } from "lucide-react";
 import { EntityVersions } from "@/components/ui/entity-versions";
 import { useToast } from "@/hooks/use-toast";
 
@@ -197,6 +200,8 @@ export default function Contract() {
       </Card>
 
       <EntityVersions entityType="contract" entityId={id} />
+
+      <AmendmentsSection contractId={id} contractStatus={contract.status} />
 
       <div className="space-y-4">
         <div className="flex items-center gap-2 pb-2 border-b">
@@ -398,6 +403,170 @@ export default function Contract() {
               </div>
             </>
           )}
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+}
+
+function amendmentTypeLabel(type: string): string {
+  switch (type) {
+    case "price-change": return "Preisänderung";
+    case "scope-change": return "Leistungsänderung";
+    case "term-extension": return "Laufzeitverlängerung";
+    case "renewal": return "Verlängerung";
+    default: return type;
+  }
+}
+
+function amendmentStatusClass(status: string): string {
+  switch (status) {
+    case "drafting": return "bg-slate-500/10 text-slate-600 border-slate-500/30";
+    case "proposed": return "bg-sky-500/10 text-sky-600 border-sky-500/30";
+    case "in_review": return "bg-amber-500/10 text-amber-600 border-amber-500/30";
+    case "approved": return "bg-emerald-500/10 text-emerald-600 border-emerald-500/30";
+    case "out_for_signature": return "bg-indigo-500/10 text-indigo-600 border-indigo-500/30";
+    case "signed":
+    case "executed":
+    case "active": return "bg-emerald-600/10 text-emerald-700 border-emerald-600/30";
+    case "rejected": return "bg-rose-500/10 text-rose-600 border-rose-500/30";
+    default: return "bg-muted text-muted-foreground";
+  }
+}
+
+function AmendmentsSection({ contractId, contractStatus }: { contractId: string; contractStatus: string }) {
+  const { t } = useTranslation();
+  const { toast } = useToast();
+  const qc = useQueryClient();
+  const { data: amendments, isLoading } = useListContractAmendments(contractId);
+  const create = useCreateContractAmendment();
+  const [open, setOpen] = useState(false);
+  const [type, setType] = useState("price-change");
+  const [title, setTitle] = useState("");
+  const [description, setDescription] = useState("");
+
+  const canAmend = ["signed", "active", "countersigned"].includes(contractStatus);
+
+  async function onCreate() {
+    if (!title.trim()) return;
+    try {
+      await create.mutateAsync({
+        id: contractId,
+        data: { type, title: title.trim(), description: description.trim() || null },
+      });
+      await qc.invalidateQueries({ queryKey: getListContractAmendmentsQueryKey(contractId) });
+      setOpen(false);
+      setTitle("");
+      setDescription("");
+      toast({ title: "Nachtrag angelegt" });
+    } catch (e) {
+      toast({ title: "Fehler", description: String(e), variant: "destructive" });
+    }
+  }
+
+  return (
+    <div className="space-y-3">
+      <div className="flex items-center justify-between pb-2 border-b">
+        <div className="flex items-center gap-2">
+          <FileStack className="h-5 w-5 text-muted-foreground" />
+          <h2 className="text-xl font-semibold">Nachträge (Amendments)</h2>
+          <Badge variant="outline" className="ml-2">{amendments?.length ?? 0}</Badge>
+        </div>
+        {canAmend && (
+          <Button size="sm" variant="outline" onClick={() => setOpen(true)} data-testid="button-new-amendment">
+            <Plus className="h-4 w-4 mr-1" /> Neuer Nachtrag
+          </Button>
+        )}
+      </div>
+
+      {isLoading ? (
+        <Skeleton className="h-24 w-full" />
+      ) : (amendments?.length ?? 0) === 0 ? (
+        <div className="p-6 text-center border rounded-md text-muted-foreground bg-muted/10 text-sm">
+          {canAmend ? "Keine Nachträge vorhanden." : `Nachträge sind erst ab Vertragsstatus "signed" möglich.`}
+        </div>
+      ) : (
+        <div className="grid gap-2">
+          {amendments?.map(a => (
+            <Link key={a.id} href={`/amendments/${a.id}`}>
+              <Card className="hover:bg-muted/30 transition-colors cursor-pointer" data-testid={`amendment-${a.id}`}>
+                <CardContent className="p-4 flex items-center justify-between gap-4">
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                      <span className="font-mono">{a.number}</span>
+                      <span>·</span>
+                      <span>{amendmentTypeLabel(a.type)}</span>
+                      {a.effectiveFrom && (
+                        <>
+                          <span>·</span>
+                          <span>gültig ab {new Date(a.effectiveFrom).toLocaleDateString()}</span>
+                        </>
+                      )}
+                    </div>
+                    <div className="font-medium truncate mt-1">{a.title}</div>
+                    {a.description && (
+                      <div className="text-xs text-muted-foreground truncate mt-1">{a.description}</div>
+                    )}
+                  </div>
+                  <Badge variant="outline" className={amendmentStatusClass(a.status)}>
+                    {a.status}
+                  </Badge>
+                </CardContent>
+              </Card>
+            </Link>
+          ))}
+        </div>
+      )}
+
+      <Dialog open={open} onOpenChange={setOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Neuer Nachtrag</DialogTitle>
+            <DialogDescription>
+              Nachtrag zum aktiven Vertrag. Eigener Approval- und Signaturprozess.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3 pt-2">
+            <div>
+              <label className="text-xs font-medium text-muted-foreground uppercase">Typ</label>
+              <Select value={type} onValueChange={setType}>
+                <SelectTrigger data-testid="select-amendment-type"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="price-change">Preisänderung</SelectItem>
+                  <SelectItem value="scope-change">Leistungsänderung</SelectItem>
+                  <SelectItem value="term-extension">Laufzeitverlängerung</SelectItem>
+                  <SelectItem value="renewal">Verlängerung</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <label className="text-xs font-medium text-muted-foreground uppercase">Titel</label>
+              <input
+                type="text"
+                className="w-full px-3 py-2 border rounded-md text-sm bg-background"
+                value={title}
+                onChange={e => setTitle(e.target.value)}
+                placeholder="z.B. Preisanpassung Q2 2026"
+                data-testid="input-amendment-title"
+              />
+            </div>
+            <div>
+              <label className="text-xs font-medium text-muted-foreground uppercase">Beschreibung</label>
+              <textarea
+                className="w-full px-3 py-2 border rounded-md text-sm bg-background min-h-[80px]"
+                value={description}
+                onChange={e => setDescription(e.target.value)}
+                placeholder="Begründung und Umfang der Änderung"
+                data-testid="textarea-amendment-description"
+              />
+            </div>
+            <div className="flex justify-end gap-2 pt-2">
+              <Button variant="outline" onClick={() => setOpen(false)}>{t("common.cancel")}</Button>
+              <Button onClick={onCreate} disabled={!title.trim() || create.isPending} data-testid="button-create-amendment">
+                Anlegen
+              </Button>
+            </div>
+          </div>
         </DialogContent>
       </Dialog>
     </div>
