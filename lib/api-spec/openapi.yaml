@@ -82,6 +82,40 @@ paths:
                 type: array
                 items: { $ref: "#/components/schemas/Brand" }
 
+  /brands:
+    get:
+      operationId: listBrandsWithDefaults
+      tags: [clauses]
+      responses:
+        "200":
+          description: ok
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/Brand" }
+
+  /brands/{id}/default-clauses:
+    patch:
+      operationId: updateBrandDefaultClauses
+      tags: [clauses]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/BrandDefaultsInput" }
+      responses:
+        "200":
+          description: ok
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Brand" }
+
   /orgs/users:
     get:
       operationId: listUsers
@@ -1300,6 +1334,18 @@ components:
         name: { type: string }
         color: { type: string }
         voice: { type: string }
+        defaultClauseVariants:
+          type: object
+          additionalProperties: { type: string }
+          description: Map familyId → variantId
+
+    BrandDefaultsInput:
+      type: object
+      required: [defaults]
+      properties:
+        defaults:
+          type: object
+          additionalProperties: { type: string }
 
     User:
       type: object
@@ -1698,6 +1744,9 @@ components:
         dealId: { type: string }
         title: { type: string }
         template: { type: string }
+        brandId:
+          type: string
+          description: Optional brand whose default clause variants should be applied on creation.
 
     ContractDetail:
       allOf:

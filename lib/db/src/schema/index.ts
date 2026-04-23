@@ -6,6 +6,7 @@ import {
   boolean,
   timestamp,
   date,
+  jsonb,
 } from "drizzle-orm/pg-core";
 
 const id = () => text("id").primaryKey();
@@ -36,6 +37,7 @@ export const brandsTable = pgTable("brands", {
   name: text("name").notNull(),
   color: text("color").notNull(),
   voice: text("voice").notNull(),
+  defaultClauseVariants: jsonb("default_clause_variants").$type<Record<string, string>>().default({}).notNull(),
 });
 
 export const usersTable = pgTable("users", {

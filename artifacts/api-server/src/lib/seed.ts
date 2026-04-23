@@ -63,11 +63,29 @@ export async function seedIfEmpty(): Promise<void> {
   ];
   await db.insert(companiesTable).values(companies);
 
+  // Brand-specific default clause variants (familyId -> variantId).
+  // helix_pro = premium/strict; helix_core = standard; helix_uk = moderate; helix_velocity = bold/softer.
   const brands = [
-    { id: "br_helix", companyId: "co_helix", name: "Helix Core", color: "#2D6CDF", voice: "precise" },
-    { id: "br_helix_pro", companyId: "co_helix", name: "Helix Pro", color: "#0F766E", voice: "premium" },
-    { id: "br_helix_uk", companyId: "co_helix_uk", name: "Helix UK", color: "#9333EA", voice: "concise" },
-    { id: "br_helix_us", companyId: "co_helix_us", name: "Helix Velocity", color: "#DC2626", voice: "bold" },
+    { id: "br_helix", companyId: "co_helix", name: "Helix Core", color: "#2D6CDF", voice: "precise",
+      defaultClauseVariants: {
+        cf_liab: "cv_liab_3", cf_term: "cv_term_3", cf_data: "cv_data_3",
+        cf_pay: "cv_pay_3", cf_sla: "cv_sla_3", cf_ip: "cv_ip_3",
+      } },
+    { id: "br_helix_pro", companyId: "co_helix", name: "Helix Pro", color: "#0F766E", voice: "premium",
+      defaultClauseVariants: {
+        cf_liab: "cv_liab_4", cf_term: "cv_term_4", cf_data: "cv_data_4",
+        cf_pay: "cv_pay_4", cf_sla: "cv_sla_4", cf_ip: "cv_ip_4",
+      } },
+    { id: "br_helix_uk", companyId: "co_helix_uk", name: "Helix UK", color: "#9333EA", voice: "concise",
+      defaultClauseVariants: {
+        cf_liab: "cv_liab_2", cf_term: "cv_term_2", cf_data: "cv_data_2",
+        cf_pay: "cv_pay_2", cf_sla: "cv_sla_2", cf_ip: "cv_ip_2",
+      } },
+    { id: "br_helix_us", companyId: "co_helix_us", name: "Helix Velocity", color: "#DC2626", voice: "bold",
+      defaultClauseVariants: {
+        cf_liab: "cv_liab_1", cf_term: "cv_term_1", cf_data: "cv_data_1",
+        cf_pay: "cv_pay_1", cf_sla: "cv_sla_1", cf_ip: "cv_ip_1",
+      } },
   ];
   await db.insert(brandsTable).values(brands);
 

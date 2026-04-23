@@ -27,6 +27,7 @@ import type {
   ApprovalFromReactionInput,
   AuditEntry,
   Brand,
+  BrandDefaultsInput,
   ClauseChangeResult,
   ClauseDiff,
   ClauseFamily,
@@ -382,6 +383,157 @@ export function useListBrands<
 
   return { ...query, queryKey: queryOptions.queryKey };
 }
+
+export const getListBrandsWithDefaultsUrl = () => {
+  return `/api/brands`;
+};
+
+export const listBrandsWithDefaults = async (
+  options?: RequestInit,
+): Promise<Brand[]> => {
+  return customFetch<Brand[]>(getListBrandsWithDefaultsUrl(), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getListBrandsWithDefaultsQueryKey = () => {
+  return [`/api/brands`] as const;
+};
+
+export const getListBrandsWithDefaultsQueryOptions = <
+  TData = Awaited<ReturnType<typeof listBrandsWithDefaults>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof listBrandsWithDefaults>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey =
+    queryOptions?.queryKey ?? getListBrandsWithDefaultsQueryKey();
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof listBrandsWithDefaults>>
+  > = ({ signal }) => listBrandsWithDefaults({ signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof listBrandsWithDefaults>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type ListBrandsWithDefaultsQueryResult = NonNullable<
+  Awaited<ReturnType<typeof listBrandsWithDefaults>>
+>;
+export type ListBrandsWithDefaultsQueryError = ErrorType<unknown>;
+
+export function useListBrandsWithDefaults<
+  TData = Awaited<ReturnType<typeof listBrandsWithDefaults>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof listBrandsWithDefaults>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getListBrandsWithDefaultsQueryOptions(options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+export const getUpdateBrandDefaultClausesUrl = (id: string) => {
+  return `/api/brands/${id}/default-clauses`;
+};
+
+export const updateBrandDefaultClauses = async (
+  id: string,
+  brandDefaultsInput: BrandDefaultsInput,
+  options?: RequestInit,
+): Promise<Brand> => {
+  return customFetch<Brand>(getUpdateBrandDefaultClausesUrl(id), {
+    ...options,
+    method: "PATCH",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(brandDefaultsInput),
+  });
+};
+
+export const getUpdateBrandDefaultClausesMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof updateBrandDefaultClauses>>,
+    TError,
+    { id: string; data: BodyType<BrandDefaultsInput> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof updateBrandDefaultClauses>>,
+  TError,
+  { id: string; data: BodyType<BrandDefaultsInput> },
+  TContext
+> => {
+  const mutationKey = ["updateBrandDefaultClauses"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof updateBrandDefaultClauses>>,
+    { id: string; data: BodyType<BrandDefaultsInput> }
+  > = (props) => {
+    const { id, data } = props ?? {};
+
+    return updateBrandDefaultClauses(id, data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type UpdateBrandDefaultClausesMutationResult = NonNullable<
+  Awaited<ReturnType<typeof updateBrandDefaultClauses>>
+>;
+export type UpdateBrandDefaultClausesMutationBody =
+  BodyType<BrandDefaultsInput>;
+export type UpdateBrandDefaultClausesMutationError = ErrorType<unknown>;
+
+export const useUpdateBrandDefaultClauses = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof updateBrandDefaultClauses>>,
+    TError,
+    { id: string; data: BodyType<BrandDefaultsInput> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof updateBrandDefaultClauses>>,
+  TError,
+  { id: string; data: BodyType<BrandDefaultsInput> },
+  TContext
+> => {
+  return useMutation(getUpdateBrandDefaultClausesMutationOptions(options));
+};
 
 export const getListUsersUrl = () => {
   return `/api/orgs/users`;

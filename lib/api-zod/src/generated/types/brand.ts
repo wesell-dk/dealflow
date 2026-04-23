@@ -7,6 +7,7 @@ Multi-tenant, multi-company, multi-brand. Deal-centric.
 
  * OpenAPI spec version: 0.1.0
  */
+import type { BrandDefaultClauseVariants } from "./brandDefaultClauseVariants";
 
 export interface Brand {
   id: string;
@@ -14,4 +15,6 @@ export interface Brand {
   name: string;
   color: string;
   voice: string;
+  /** Map familyId → variantId */
+  defaultClauseVariants?: BrandDefaultClauseVariants;
 }

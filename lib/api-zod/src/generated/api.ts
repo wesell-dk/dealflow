@@ -43,8 +43,47 @@ export const ListBrandsResponseItem = zod.object({
   name: zod.string(),
   color: zod.string(),
   voice: zod.string(),
+  defaultClauseVariants: zod
+    .record(zod.string(), zod.string())
+    .optional()
+    .describe("Map familyId → variantId"),
 });
 export const ListBrandsResponse = zod.array(ListBrandsResponseItem);
+
+export const ListBrandsWithDefaultsResponseItem = zod.object({
+  id: zod.string(),
+  companyId: zod.string(),
+  name: zod.string(),
+  color: zod.string(),
+  voice: zod.string(),
+  defaultClauseVariants: zod
+    .record(zod.string(), zod.string())
+    .optional()
+    .describe("Map familyId → variantId"),
+});
+export const ListBrandsWithDefaultsResponse = zod.array(
+  ListBrandsWithDefaultsResponseItem,
+);
+
+export const UpdateBrandDefaultClausesParams = zod.object({
+  id: zod.coerce.string(),
+});
+
+export const UpdateBrandDefaultClausesBody = zod.object({
+  defaults: zod.record(zod.string(), zod.string()),
+});
+
+export const UpdateBrandDefaultClausesResponse = zod.object({
+  id: zod.string(),
+  companyId: zod.string(),
+  name: zod.string(),
+  color: zod.string(),
+  voice: zod.string(),
+  defaultClauseVariants: zod
+    .record(zod.string(), zod.string())
+    .optional()
+    .describe("Map familyId → variantId"),
+});
 
 export const ListUsersResponseItem = zod.object({
   id: zod.string(),
@@ -645,6 +684,12 @@ export const CreateContractBody = zod.object({
   dealId: zod.string(),
   title: zod.string(),
   template: zod.string(),
+  brandId: zod
+    .string()
+    .optional()
+    .describe(
+      "Optional brand whose default clause variants should be applied on creation.",
+    ),
 });
 
 export const GetContractParams = zod.object({

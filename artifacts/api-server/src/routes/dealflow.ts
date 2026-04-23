@@ -689,7 +689,7 @@ router.get('/contracts', async (req, res) => {
 });
 
 router.post('/contracts', async (req, res) => {
-  const b = req.body as { dealId: string; title: string; template: string };
+  const b = req.body as { dealId: string; title: string; template: string; brandId?: string };
   if (!(await gateDeal(req, res, b.dealId))) return;
   const id = `ctr_${randomUUID().slice(0, 8)}`;
   await db.insert(contractsTable).values({
@@ -697,9 +697,94 @@ router.post('/contracts', async (req, res) => {
     version: 1, riskLevel: 'low', template: b.template,
     validUntil: new Date(Date.now() + 365 * 86400000).toISOString().slice(0, 10),
   });
+  // Seed clauses from brand defaults if provided
+  if (b.brandId) {
+    const [brand] = await db.select().from(brandsTable).where(eq(brandsTable.id, b.brandId));
+    if (brand && brand.defaultClauseVariants) {
+      const families = await db.select().from(clauseFamiliesTable);
+      const variants = await db.select().from(clauseVariantsTable);
+      const vById = new Map(variants.map(v => [v.id, v]));
+      const rows = families
+        .map(f => {
+          const vId = (brand.defaultClauseVariants as Record<string, string>)[f.id];
+          const v = vId ? vById.get(vId) : undefined;
+          if (!v) return null;
+          const sev = v.severityScore <= 2 ? 'high' : v.severityScore === 3 ? 'medium' : 'low';
+          return {
+            id: `cc_${randomUUID().slice(0, 8)}`,
+            contractId: id, familyId: f.id, activeVariantId: v.id,
+            family: f.name, variant: v.name, severity: sev, summary: v.summary,
+          };
+        })
+        .filter((r): r is NonNullable<typeof r> => r !== null);
+      if (rows.length) await db.insert(contractClausesTable).values(rows);
+    }
+  }
   const [c] = await db.select().from(contractsTable).where(eq(contractsTable.id, id));
   const dealMap = await getDealMap();
   res.status(201).json(mapContract(c!, dealMap.get(c!.dealId)?.name ?? 'Unknown'));
+});
+
+function mapBrand(b: typeof brandsTable.$inferSelect) {
+  return {
+    id: b.id, companyId: b.companyId, name: b.name, color: b.color, voice: b.voice,
+    defaultClauseVariants: b.defaultClauseVariants ?? {},
+  };
+}
+
+async function brandVisible(req: Request, b: typeof brandsTable.$inferSelect): Promise<boolean> {
+  const scope = getScope(req);
+  const [company] = await db.select().from(companiesTable).where(eq(companiesTable.id, b.companyId));
+  if (!company || company.tenantId !== scope.tenantId) return false;
+  if (scope.tenantWide) return true;
+  if (scope.companyIds.includes(b.companyId)) return true;
+  if (scope.brandIds.includes(b.id)) return true;
+  return false;
+}
+
+router.get('/brands', async (req, res) => {
+  const scope = getScope(req);
+  const rows = await db
+    .select()
+    .from(brandsTable)
+    .innerJoin(companiesTable, eq(companiesTable.id, brandsTable.companyId))
+    .where(eq(companiesTable.tenantId, scope.tenantId));
+  const brands = rows.map(r => r.brands);
+  const visible = scope.tenantWide
+    ? brands
+    : brands.filter(b => scope.companyIds.includes(b.companyId) || scope.brandIds.includes(b.id));
+  res.json(visible.map(mapBrand));
+});
+
+router.patch('/brands/:id/default-clauses', async (req, res) => {
+  const { defaults } = (req.body ?? {}) as { defaults?: Record<string, string> };
+  if (!defaults || typeof defaults !== 'object') {
+    res.status(400).json({ error: 'defaults required' }); return;
+  }
+  const [existing] = await db.select().from(brandsTable).where(eq(brandsTable.id, req.params.id));
+  if (!existing) { res.status(404).json({ error: 'brand not found' }); return; }
+  if (!(await brandVisible(req, existing))) {
+    res.status(403).json({ error: 'forbidden' }); return;
+  }
+  const variants = await db.select().from(clauseVariantsTable);
+  const vById = new Map(variants.map(v => [v.id, v]));
+  for (const [famId, varId] of Object.entries(defaults)) {
+    const v = vById.get(varId);
+    if (!v || v.familyId !== famId) {
+      res.status(400).json({ error: `variant ${varId} does not belong to family ${famId}` });
+      return;
+    }
+  }
+  await db.update(brandsTable)
+    .set({ defaultClauseVariants: defaults })
+    .where(eq(brandsTable.id, req.params.id));
+  await writeAudit({
+    entityType: 'brand', entityId: req.params.id, action: 'default_clauses_updated',
+    summary: `Brand defaults aktualisiert (${Object.keys(defaults).length} Familien)`,
+    before: existing.defaultClauseVariants, after: defaults,
+  });
+  const [updated] = await db.select().from(brandsTable).where(eq(brandsTable.id, req.params.id));
+  res.json(mapBrand(updated!));
 });
 
 router.get('/contracts/:id', async (req, res) => {

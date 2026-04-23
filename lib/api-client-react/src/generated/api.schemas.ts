@@ -28,12 +28,25 @@ export interface Company {
   currency: string;
 }
 
+/**
+ * Map familyId → variantId
+ */
+export type BrandDefaultClauseVariants = { [key: string]: string };
+
 export interface Brand {
   id: string;
   companyId: string;
   name: string;
   color: string;
   voice: string;
+  /** Map familyId → variantId */
+  defaultClauseVariants?: BrandDefaultClauseVariants;
+}
+
+export type BrandDefaultsInputDefaults = { [key: string]: string };
+
+export interface BrandDefaultsInput {
+  defaults: BrandDefaultsInputDefaults;
 }
 
 export interface User {
@@ -360,6 +373,8 @@ export interface ContractInput {
   dealId: string;
   title: string;
   template: string;
+  /** Optional brand whose default clause variants should be applied on creation. */
+  brandId?: string;
 }
 
 export interface ContractClause {

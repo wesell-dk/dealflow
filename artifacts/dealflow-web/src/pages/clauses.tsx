@@ -1,9 +1,25 @@
 import { useTranslation } from "react-i18next";
-import { useListClauseFamilies } from "@workspace/api-client-react";
+import { useState } from "react";
+import {
+  useListClauseFamilies,
+  useListBrandsWithDefaults,
+  useUpdateBrandDefaultClauses,
+  getListBrandsWithDefaultsQueryKey,
+} from "@workspace/api-client-react";
+import { useQueryClient } from "@tanstack/react-query";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Library } from "lucide-react";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Library, Palette, Save } from "lucide-react";
+import { useToast } from "@/hooks/use-toast";
 
 function toneClass(tone: string) {
   switch (tone) {
@@ -24,9 +40,31 @@ function severityDot(severity?: string) {
 
 export default function Clauses() {
   const { t } = useTranslation();
+  const { toast } = useToast();
+  const qc = useQueryClient();
   const { data: families, isLoading } = useListClauseFamilies();
+  const { data: brands } = useListBrandsWithDefaults();
+  const updateBrand = useUpdateBrandDefaultClauses();
+
+  const [draft, setDraft] = useState<Record<string, Record<string, string>>>({});
+  const [saving, setSaving] = useState<string | null>(null);
 
   if (isLoading) return <div className="p-8"><Skeleton className="h-64 w-full" /></div>;
+
+  async function saveBrand(brandId: string, current: Record<string, string>) {
+    setSaving(brandId);
+    try {
+      const merged = { ...current, ...(draft[brandId] ?? {}) };
+      await updateBrand.mutateAsync({ id: brandId, data: { defaults: merged } });
+      await qc.invalidateQueries({ queryKey: getListBrandsWithDefaultsQueryKey() });
+      setDraft(d => { const n = { ...d }; delete n[brandId]; return n; });
+      toast({ title: t("pages.clauses.brandSaved") });
+    } catch (e) {
+      toast({ title: "Error", description: String(e), variant: "destructive" });
+    } finally {
+      setSaving(null);
+    }
+  }
 
   const totalVariants = (families ?? []).reduce((sum, f) => sum + (f.variants?.length ?? 0), 0);
 
@@ -47,6 +85,73 @@ export default function Clauses() {
           </Badge>
         </div>
       </div>
+
+      {(brands?.length ?? 0) > 0 && (
+        <Card data-testid="brand-defaults-card">
+          <CardHeader className="flex flex-row items-center gap-2 space-y-0">
+            <Palette className="h-5 w-5 text-muted-foreground" />
+            <div>
+              <CardTitle>{t("pages.clauses.brandDefaults")}</CardTitle>
+              <p className="text-xs text-muted-foreground mt-1">
+                {t("pages.clauses.brandDefaultsHint")}
+              </p>
+            </div>
+          </CardHeader>
+          <CardContent className="space-y-6">
+            {brands?.map(brand => {
+              const current = brand.defaultClauseVariants ?? {};
+              const pending = draft[brand.id] ?? {};
+              const merged = { ...current, ...pending };
+              const dirty = Object.keys(pending).length > 0;
+              return (
+                <div key={brand.id} className="space-y-2 pb-4 border-b last:border-b-0">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <span className="w-3 h-3 rounded-full" style={{ backgroundColor: brand.color }} />
+                      <span className="font-semibold text-sm">{brand.name}</span>
+                      <Badge variant="outline" className="text-xs">{brand.voice}</Badge>
+                    </div>
+                    <Button
+                      size="sm"
+                      disabled={!dirty || saving === brand.id}
+                      onClick={() => saveBrand(brand.id, current)}
+                      data-testid={`save-brand-${brand.id}`}
+                    >
+                      <Save className="h-3 w-3 mr-1" />
+                      {t("common.save")}
+                    </Button>
+                  </div>
+                  <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-2">
+                    {families?.map(fam => (
+                      <div key={fam.id} className="flex flex-col gap-1">
+                        <span className="text-xs text-muted-foreground">{fam.name}</span>
+                        <Select
+                          value={merged[fam.id] ?? ""}
+                          onValueChange={(v) => setDraft(d => ({
+                            ...d,
+                            [brand.id]: { ...(d[brand.id] ?? {}), [fam.id]: v },
+                          }))}
+                        >
+                          <SelectTrigger className="h-8 text-xs" data-testid={`brand-${brand.id}-family-${fam.id}`}>
+                            <SelectValue placeholder="—" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {fam.variants.map(v => (
+                              <SelectItem key={v.id} value={v.id}>
+                                <span className="text-xs">{v.tone} ({v.severityScore}) · {v.name}</span>
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              );
+            })}
+          </CardContent>
+        </Card>
+      )}
 
       {(families?.length ?? 0) === 0 ? (
         <div className="p-8 text-center border rounded-md text-muted-foreground bg-muted/10">
