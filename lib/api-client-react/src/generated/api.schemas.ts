@@ -226,6 +226,8 @@ export interface ApprovalCase {
   decidedBy?: string | null;
   /** @nullable */
   decisionComment?: string | null;
+  /** @nullable */
+  amendmentId?: string | null;
 }
 
 export type SignaturePackageStatus =
@@ -258,6 +260,8 @@ export interface SignaturePackage {
   createdAt: string;
   /** @nullable */
   deadline?: string | null;
+  /** @nullable */
+  amendmentId?: string | null;
 }
 
 export interface Negotiation {
@@ -1188,6 +1192,7 @@ export type ListQuotesParams = {
 
 export type ListApprovalsParams = {
   status?: string;
+  amendmentId?: string;
 };
 
 export type ListContractsParams = {
@@ -1212,6 +1217,7 @@ export type RequestApprovalFromReaction201 = {
 
 export type ListSignaturePackagesParams = {
   status?: string;
+  amendmentId?: string;
 };
 
 export type ListCopilotInsightsParams = {

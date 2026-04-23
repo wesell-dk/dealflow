@@ -10,4 +10,5 @@ Multi-tenant, multi-company, multi-brand. Deal-centric.
 
 export type ListApprovalsParams = {
   status?: string;
+  amendmentId?: string;
 };

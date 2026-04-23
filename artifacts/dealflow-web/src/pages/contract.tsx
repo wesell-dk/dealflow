@@ -8,6 +8,7 @@ import {
   usePatchContractClause,
   useListContractAmendments,
   useCreateContractAmendment,
+  useGetContractEffectiveState,
   getGetContractQueryKey,
   getListContractClausesQueryKey,
   getListContractAmendmentsQueryKey,
@@ -202,6 +203,8 @@ export default function Contract() {
       <EntityVersions entityType="contract" entityId={id} />
 
       <AmendmentsSection contractId={id} contractStatus={contract.status} />
+
+      <EffectiveStateSection contractId={id} contractStatus={contract.status} />
 
       <div className="space-y-4">
         <div className="flex items-center gap-2 pb-2 border-b">
@@ -432,6 +435,59 @@ function amendmentStatusClass(status: string): string {
     case "rejected": return "bg-rose-500/10 text-rose-600 border-rose-500/30";
     default: return "bg-muted text-muted-foreground";
   }
+}
+
+function EffectiveStateSection({ contractId, contractStatus }: { contractId: string; contractStatus: string }) {
+  const [open, setOpen] = useState(false);
+  const { data, isLoading } = useGetContractEffectiveState(contractId, {
+    query: { enabled: open, queryKey: ["contractEffectiveState", contractId] },
+  });
+  const show = ["signed", "active", "countersigned"].includes(contractStatus);
+  if (!show) return null;
+  return (
+    <div className="space-y-3">
+      <div className="flex items-center justify-between pb-2 border-b">
+        <div className="flex items-center gap-2">
+          <Library className="h-5 w-5 text-muted-foreground" />
+          <h2 className="text-xl font-semibold">Aktueller Vertragsstand</h2>
+          {data && <Badge variant="outline" className="ml-2">{data.appliedAmendments.length} Nachträge angewandt</Badge>}
+        </div>
+        <Button variant="outline" size="sm" onClick={() => setOpen(!open)} data-testid="button-toggle-effective-state">
+          {open ? "Ausblenden" : "Anzeigen"}
+        </Button>
+      </div>
+      {open && (
+        isLoading || !data ? (
+          <Skeleton className="h-32 w-full" />
+        ) : (
+          <div className="space-y-2">
+            <p className="text-sm text-muted-foreground">
+              Klausel-Bestand inkl. aller aktiven Nachträge ({data.appliedAmendments.length} angewandt).
+            </p>
+            {data.clauses.length === 0 ? (
+              <div className="p-4 text-center border rounded-md text-muted-foreground bg-muted/10 text-sm">
+                Keine Klauseln vorhanden.
+              </div>
+            ) : (
+              <div className="grid gap-2">
+                {data.clauses.map(cl => (
+                  <Card key={cl.id} data-testid={`effective-clause-${cl.id}`}>
+                    <CardContent className="p-3 flex items-center justify-between">
+                      <div className="flex flex-col gap-0.5">
+                        <div className="text-sm font-medium">{cl.family}</div>
+                        <div className="text-xs text-muted-foreground">{cl.summary}</div>
+                      </div>
+                      <Badge variant="outline" className={toneClass(cl.variant)}>{cl.variant}</Badge>
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+            )}
+          </div>
+        )
+      )}
+    </div>
+  );
 }
 
 function AmendmentsSection({ contractId, contractStatus }: { contractId: string; contractStatus: string }) {

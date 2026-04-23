@@ -22,4 +22,6 @@ export interface SignaturePackage {
   createdAt: Date;
   /** @nullable */
   deadline?: Date | null;
+  /** @nullable */
+  amendmentId?: string | null;
 }

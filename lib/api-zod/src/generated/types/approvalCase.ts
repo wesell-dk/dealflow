@@ -29,4 +29,6 @@ export interface ApprovalCase {
   decidedBy?: string | null;
   /** @nullable */
   decisionComment?: string | null;
+  /** @nullable */
+  amendmentId?: string | null;
 }

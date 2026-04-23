@@ -738,12 +738,14 @@ function mapApproval(
     status: a.status, priority: a.priority, createdAt: iso(a.createdAt)!,
     deadline: iso(a.deadline), impactValue: num(a.impactValue), currency: a.currency,
     decidedAt: iso(a.decidedAt), decidedBy: a.decidedBy, decisionComment: a.decisionComment,
+    amendmentId: a.amendmentId,
   };
 }
 
 router.get('/approvals', async (req, res) => {
   const filters = [];
   if (req.query.status) filters.push(eq(approvalsTable.status, String(req.query.status)));
+  if (req.query.amendmentId) filters.push(eq(approvalsTable.amendmentId, String(req.query.amendmentId)));
   const dealIds = await scopedDealIds(req);
   if (dealIds.length === 0) { res.json([]); return; }
   filters.push(inArray(approvalsTable.dealId, dealIds));
@@ -1155,6 +1157,53 @@ router.patch('/amendments/:id', async (req, res) => {
       summary: `Amendment ${a.number} aktualisiert`,
       before: { status: a.status }, after: patch,
     });
+    // Lifecycle side effects on status transitions
+    if (patch.status === 'in_review') {
+      const existing = await db.select().from(approvalsTable).where(eq(approvalsTable.amendmentId, a.id));
+      if (existing.length === 0) {
+        const scope = getScope(req);
+        const approvalId = `ap_${randomUUID().slice(0, 8)}`;
+        await db.insert(approvalsTable).values({
+          id: approvalId,
+          dealId: c.dealId,
+          amendmentId: a.id,
+          type: 'amendment',
+          reason: `Nachtrag ${a.number}: ${a.title}`,
+          requestedBy: scope.user?.id ?? null,
+          status: 'pending',
+          priority: a.type === 'price-change' ? 'high' : 'medium',
+          impactValue: '0',
+          currency: 'EUR',
+        });
+        await writeAudit({
+          entityType: 'contract_amendment', entityId: a.id, action: 'approval_created',
+          summary: `Approval angelegt für Nachtrag ${a.number}`,
+          after: { approvalId },
+        });
+      }
+    }
+    if (patch.status === 'out_for_signature') {
+      const existing = await db.select().from(signaturePackagesTable).where(eq(signaturePackagesTable.amendmentId, a.id));
+      if (existing.length === 0) {
+        const pkgId = `sg_${randomUUID().slice(0, 8)}`;
+        await db.insert(signaturePackagesTable).values({
+          id: pkgId,
+          dealId: c.dealId,
+          amendmentId: a.id,
+          title: `Nachtrag ${a.number}: ${a.title}`,
+          status: 'in_progress',
+          mode: 'sequential',
+          reminderIntervalHours: 48,
+          escalationAfterHours: 120,
+          deadline: null,
+        });
+        await writeAudit({
+          entityType: 'contract_amendment', entityId: a.id, action: 'signature_created',
+          summary: `Signatur-Paket angelegt für Nachtrag ${a.number}`,
+          after: { packageId: pkgId },
+        });
+      }
+    }
   }
   const [updated] = await db.select().from(contractAmendmentsTable).where(eq(contractAmendmentsTable.id, a.id));
   const changes = await db.select().from(amendmentClausesTable).where(eq(amendmentClausesTable.amendmentId, a.id));
@@ -1785,6 +1834,7 @@ function mapSignaturePackageSummary(
     mode: s.mode, signedCount, totalSigners,
     createdAt: iso(s.createdAt)!,
     deadline: iso(s.deadline),
+    amendmentId: s.amendmentId,
   };
 }
 
@@ -1891,6 +1941,7 @@ router.get('/signatures', async (req, res) => {
   if (dealIds.length === 0) { res.json([]); return; }
   const filters = [inArray(signaturePackagesTable.dealId, dealIds)];
   if (req.query.status) filters.push(eq(signaturePackagesTable.status, String(req.query.status)));
+  if (req.query.amendmentId) filters.push(eq(signaturePackagesTable.amendmentId, String(req.query.amendmentId)));
   const rows = await db.select().from(signaturePackagesTable).where(and(...filters)).orderBy(desc(signaturePackagesTable.createdAt));
   const dealMap = await getDealMap();
   const allSigners = await db.select().from(signersTable);

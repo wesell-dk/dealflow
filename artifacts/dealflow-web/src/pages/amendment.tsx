@@ -3,6 +3,8 @@ import { useTranslation } from "react-i18next";
 import {
   useGetContractAmendment,
   usePatchContractAmendment,
+  useListApprovals,
+  useListSignaturePackages,
   getGetContractAmendmentQueryKey,
   getListContractAmendmentsQueryKey,
 } from "@workspace/api-client-react";
@@ -18,7 +20,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { FileStack, GitCompare, ArrowLeft, ClipboardList, History } from "lucide-react";
+import { FileStack, GitCompare, ArrowLeft, ClipboardList, History, CheckCircle2, PenLine } from "lucide-react";
 import { EntityVersions } from "@/components/ui/entity-versions";
 import { useToast } from "@/hooks/use-toast";
 
@@ -85,6 +87,8 @@ export default function Amendment() {
   const qc = useQueryClient();
   const { data: a, isLoading } = useGetContractAmendment(id ?? "");
   const patch = usePatchContractAmendment();
+  const { data: approvals } = useListApprovals({ amendmentId: id });
+  const { data: signatures } = useListSignaturePackages({ amendmentId: id });
 
   if (isLoading) return <div className="p-8"><Skeleton className="h-64 w-full" /></div>;
   if (!a) return <div className="p-8 text-center text-muted-foreground">Nicht gefunden</div>;
@@ -217,6 +221,66 @@ export default function Amendment() {
                   </div>
                 </CardContent>
               </Card>
+            ))}
+          </div>
+        )}
+      </div>
+
+      <div className="space-y-3">
+        <div className="flex items-center gap-2 pb-2 border-b">
+          <CheckCircle2 className="h-5 w-5 text-muted-foreground" />
+          <h2 className="text-xl font-semibold">Approvals</h2>
+          <Badge variant="outline" className="ml-2">{approvals?.length ?? 0}</Badge>
+        </div>
+        {!approvals || approvals.length === 0 ? (
+          <div className="p-4 text-center border rounded-md text-muted-foreground bg-muted/10 text-sm">
+            Kein Approval-Fall verknüpft. Wird beim Status „In Prüfung" automatisch erzeugt.
+          </div>
+        ) : (
+          <div className="grid gap-2">
+            {approvals.map(ap => (
+              <Link key={ap.id} href="/approvals" className="block">
+                <Card className="hover-elevate" data-testid={`amendment-approval-${ap.id}`}>
+                  <CardContent className="p-3 flex items-center justify-between">
+                    <div className="flex flex-col gap-0.5">
+                      <div className="text-sm font-medium">{ap.reason}</div>
+                      <div className="text-xs text-muted-foreground font-mono">{ap.id} · {ap.requestedByName}</div>
+                    </div>
+                    <Badge variant="outline" className={statusClass(ap.status)}>{ap.status}</Badge>
+                  </CardContent>
+                </Card>
+              </Link>
+            ))}
+          </div>
+        )}
+      </div>
+
+      <div className="space-y-3">
+        <div className="flex items-center gap-2 pb-2 border-b">
+          <PenLine className="h-5 w-5 text-muted-foreground" />
+          <h2 className="text-xl font-semibold">Unterschriften</h2>
+          <Badge variant="outline" className="ml-2">{signatures?.length ?? 0}</Badge>
+        </div>
+        {!signatures || signatures.length === 0 ? (
+          <div className="p-4 text-center border rounded-md text-muted-foreground bg-muted/10 text-sm">
+            Kein Signatur-Paket verknüpft. Wird beim Status „Zur Unterschrift" automatisch erzeugt.
+          </div>
+        ) : (
+          <div className="grid gap-2">
+            {signatures.map(sg => (
+              <Link key={sg.id} href={`/signatures/${sg.id}`} className="block">
+                <Card className="hover-elevate" data-testid={`amendment-signature-${sg.id}`}>
+                  <CardContent className="p-3 flex items-center justify-between">
+                    <div className="flex flex-col gap-0.5">
+                      <div className="text-sm font-medium">{sg.title}</div>
+                      <div className="text-xs text-muted-foreground font-mono">
+                        {sg.id} · {sg.signedCount}/{sg.totalSigners} signiert
+                      </div>
+                    </div>
+                    <Badge variant="outline" className={statusClass(sg.status)}>{sg.status}</Badge>
+                  </CardContent>
+                </Card>
+              </Link>
             ))}
           </div>
         )}

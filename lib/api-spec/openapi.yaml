@@ -534,6 +534,10 @@ paths:
           name: status
           required: false
           schema: { type: string }
+        - in: query
+          name: amendmentId
+          required: false
+          schema: { type: string }
       responses:
         "200":
           description: ok
@@ -953,6 +957,10 @@ paths:
       parameters:
         - in: query
           name: status
+          required: false
+          schema: { type: string }
+        - in: query
+          name: amendmentId
           required: false
           schema: { type: string }
       responses:
@@ -2084,6 +2092,8 @@ components:
           type: ["string", "null"]
         decisionComment:
           type: ["string", "null"]
+        amendmentId:
+          type: ["string", "null"]
 
     ApprovalDecisionInput:
       type: object
@@ -2455,6 +2465,8 @@ components:
         deadline:
           type: ["string", "null"]
           format: date-time
+        amendmentId:
+          type: ["string", "null"]
 
     Signer:
       type: object

@@ -421,6 +421,7 @@ export const GetDealResponse = zod
           decidedAt: zod.coerce.date().nullish(),
           decidedBy: zod.string().nullish(),
           decisionComment: zod.string().nullish(),
+          amendmentId: zod.string().nullish(),
         }),
       ),
       signatures: zod.array(
@@ -435,6 +436,7 @@ export const GetDealResponse = zod
           totalSigners: zod.number(),
           createdAt: zod.coerce.date(),
           deadline: zod.coerce.date().nullish(),
+          amendmentId: zod.string().nullish(),
         }),
       ),
       contacts: zod.array(
@@ -685,6 +687,7 @@ export const GetPricingSummaryResponse = zod.object({
 
 export const ListApprovalsQueryParams = zod.object({
   status: zod.coerce.string().optional(),
+  amendmentId: zod.coerce.string().optional(),
 });
 
 export const ListApprovalsResponseItem = zod.object({
@@ -704,6 +707,7 @@ export const ListApprovalsResponseItem = zod.object({
   decidedAt: zod.coerce.date().nullish(),
   decidedBy: zod.string().nullish(),
   decisionComment: zod.string().nullish(),
+  amendmentId: zod.string().nullish(),
 });
 export const ListApprovalsResponse = zod.array(ListApprovalsResponseItem);
 
@@ -733,6 +737,7 @@ export const DecideApprovalResponse = zod.object({
   decidedAt: zod.coerce.date().nullish(),
   decidedBy: zod.string().nullish(),
   decisionComment: zod.string().nullish(),
+  amendmentId: zod.string().nullish(),
 });
 
 export const ListContractsQueryParams = zod.object({
@@ -1270,6 +1275,7 @@ export const RequestApprovalFromReactionBody = zod.object({
 
 export const ListSignaturePackagesQueryParams = zod.object({
   status: zod.coerce.string().optional(),
+  amendmentId: zod.coerce.string().optional(),
 });
 
 export const ListSignaturePackagesResponseItem = zod.object({
@@ -1283,6 +1289,7 @@ export const ListSignaturePackagesResponseItem = zod.object({
   totalSigners: zod.number(),
   createdAt: zod.coerce.date(),
   deadline: zod.coerce.date().nullish(),
+  amendmentId: zod.string().nullish(),
 });
 export const ListSignaturePackagesResponse = zod.array(
   ListSignaturePackagesResponseItem,
@@ -1304,6 +1311,7 @@ export const GetSignaturePackageResponse = zod
     totalSigners: zod.number(),
     createdAt: zod.coerce.date(),
     deadline: zod.coerce.date().nullish(),
+    amendmentId: zod.string().nullish(),
   })
   .and(
     zod.object({
@@ -1353,6 +1361,7 @@ export const SendSignatureReminderResponse = zod
     totalSigners: zod.number(),
     createdAt: zod.coerce.date(),
     deadline: zod.coerce.date().nullish(),
+    amendmentId: zod.string().nullish(),
   })
   .and(
     zod.object({
@@ -1409,6 +1418,7 @@ export const EscalateSignaturePackageResponse = zod
     totalSigners: zod.number(),
     createdAt: zod.coerce.date(),
     deadline: zod.coerce.date().nullish(),
+    amendmentId: zod.string().nullish(),
   })
   .and(
     zod.object({
@@ -1462,6 +1472,7 @@ export const DeclineSignerResponse = zod
     totalSigners: zod.number(),
     createdAt: zod.coerce.date(),
     deadline: zod.coerce.date().nullish(),
+    amendmentId: zod.string().nullish(),
   })
   .and(
     zod.object({
@@ -1511,6 +1522,7 @@ export const SignSignerResponse = zod
     totalSigners: zod.number(),
     createdAt: zod.coerce.date(),
     deadline: zod.coerce.date().nullish(),
+    amendmentId: zod.string().nullish(),
   })
   .and(
     zod.object({
