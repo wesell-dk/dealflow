@@ -1,4 +1,4 @@
-import { and, desc, eq, lte } from "drizzle-orm";
+import { and, asc, desc, eq, gt, lte } from "drizzle-orm";
 import { db, entityVersionsTable } from "@workspace/db";
 
 export interface AsOfResult<T> {
@@ -43,7 +43,7 @@ export async function resolveSnapshot<T = unknown>(
     .orderBy(desc(entityVersionsTable.createdAt))
     .limit(1);
   if (!row) return null;
-  // Find the next version (valid-to) to establish the open/closed range.
+  // validTo = createdAt of the immediate successor version (if any).
   const [next] = await db
     .select()
     .from(entityVersionsTable)
@@ -51,9 +51,10 @@ export async function resolveSnapshot<T = unknown>(
       and(
         eq(entityVersionsTable.entityType, entityType),
         eq(entityVersionsTable.entityId, entityId),
+        gt(entityVersionsTable.createdAt, row.createdAt),
       ),
     )
-    .orderBy(desc(entityVersionsTable.version))
+    .orderBy(asc(entityVersionsTable.createdAt))
     .limit(1);
   let parsed: T;
   try {
@@ -64,7 +65,7 @@ export async function resolveSnapshot<T = unknown>(
   return {
     data: parsed,
     validFrom: row.createdAt.toISOString(),
-    validTo: next && next.version !== row.version ? next.createdAt.toISOString() : null,
+    validTo: next ? next.createdAt.toISOString() : null,
     source: "version",
     version: row.version,
   };
