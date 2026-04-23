@@ -137,4 +137,7 @@ export * from "./signer";
 export * from "./signerStatus";
 export * from "./tenant";
 export * from "./timelineEvent";
+export * from "./uploadUrlRequest";
+export * from "./uploadUrlResponse";
+export * from "./uploadUrlResponseMetadata";
 export * from "./user";

@@ -6,6 +6,8 @@ import {
   useListBrands,
   useUpdateBrand,
   useListUsers,
+  type Brand,
+  type BrandUpdate,
   useSearchGdprSubjects,
   useForgetGdprSubject,
   useListGdprAccessLog,
@@ -446,9 +448,9 @@ export default function Admin() {
   );
 }
 
-function BrandRow({ brand }: { brand: any }) {
+function BrandRow({ brand }: { brand: Brand }) {
   const [editing, setEditing] = useState(false);
-  const [draft, setDraft] = useState({
+  const [draft, setDraft] = useState<Required<Omit<BrandUpdate, "name" | "color" | "voice">>>({
     logoUrl: brand.logoUrl ?? "",
     primaryColor: brand.primaryColor ?? brand.color ?? "#2D6CDF",
     secondaryColor: brand.secondaryColor ?? "",
@@ -457,9 +459,32 @@ function BrandRow({ brand }: { brand: any }) {
     addressLine: brand.addressLine ?? "",
   });
   const update = useUpdateBrand();
+  const [uploading, setUploading] = useState(false);
+  const [uploadError, setUploadError] = useState<string | null>(null);
   const save = async () => {
-    await update.mutateAsync({ id: brand.id, data: draft as any });
+    const payload: BrandUpdate = { ...draft };
+    await update.mutateAsync({ id: brand.id, data: payload });
     setEditing(false);
+  };
+  const onUpload = async (file: File) => {
+    setUploading(true); setUploadError(null);
+    try {
+      const res = await fetch(`${import.meta.env.BASE_URL}api/storage/uploads/request-url`, {
+        method: "POST", credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: file.name, size: file.size, contentType: file.type }),
+      });
+      if (!res.ok) throw new Error(`upload URL failed (${res.status})`);
+      const { uploadURL, objectPath } = await res.json();
+      const put = await fetch(uploadURL, { method: "PUT", headers: { "Content-Type": file.type }, body: file });
+      if (!put.ok) throw new Error(`PUT failed (${put.status})`);
+      const servingUrl = `/api/storage${objectPath}`;
+      setDraft(d => ({ ...d, logoUrl: servingUrl }));
+    } catch (e: unknown) {
+      setUploadError(e instanceof Error ? e.message : "upload failed");
+    } finally {
+      setUploading(false);
+    }
   };
   return (
     <>
@@ -484,29 +509,42 @@ function BrandRow({ brand }: { brand: any }) {
         <TableRow>
           <TableCell colSpan={3} className="bg-muted/30">
             <div className="grid grid-cols-2 gap-3 py-2">
-              <div>
-                <Label>Logo URL</Label>
-                <Input value={draft.logoUrl} onChange={e => setDraft({ ...draft, logoUrl: e.target.value })} />
+              <div className="col-span-2">
+                <Label>Logo</Label>
+                <div className="flex items-center gap-2">
+                  <Input className="flex-1" value={draft.logoUrl ?? ""} onChange={e => setDraft({ ...draft, logoUrl: e.target.value })} placeholder="https://… / data:image/… / /api/storage/objects/…" />
+                  <input
+                    type="file" accept="image/png,image/jpeg,image/svg+xml"
+                    onChange={e => { const f = e.target.files?.[0]; if (f) void onUpload(f); }}
+                    disabled={uploading}
+                    className="text-sm"
+                  />
+                </div>
+                {uploading && <p className="text-xs text-muted-foreground mt-1">Wird hochgeladen…</p>}
+                {uploadError && <p className="text-xs text-destructive mt-1">{uploadError}</p>}
+                {draft.logoUrl && !uploading && (
+                  <img src={draft.logoUrl} alt="logo preview" className="mt-2 max-h-12 border rounded bg-white p-1" />
+                )}
               </div>
               <div>
                 <Label>Tone / Voice</Label>
-                <Input value={draft.tone} onChange={e => setDraft({ ...draft, tone: e.target.value })} />
+                <Input value={draft.tone ?? ""} onChange={e => setDraft({ ...draft, tone: e.target.value })} />
               </div>
               <div>
                 <Label>Primary Color</Label>
-                <Input type="color" value={draft.primaryColor} onChange={e => setDraft({ ...draft, primaryColor: e.target.value })} />
+                <Input type="color" value={draft.primaryColor || "#2D6CDF"} onChange={e => setDraft({ ...draft, primaryColor: e.target.value })} />
               </div>
               <div>
                 <Label>Secondary Color</Label>
-                <Input type="color" value={draft.secondaryColor} onChange={e => setDraft({ ...draft, secondaryColor: e.target.value })} />
+                <Input type="color" value={draft.secondaryColor || "#000000"} onChange={e => setDraft({ ...draft, secondaryColor: e.target.value })} />
               </div>
               <div>
                 <Label>Legal Entity Name</Label>
-                <Input value={draft.legalEntityName} onChange={e => setDraft({ ...draft, legalEntityName: e.target.value })} />
+                <Input value={draft.legalEntityName ?? ""} onChange={e => setDraft({ ...draft, legalEntityName: e.target.value })} />
               </div>
               <div>
                 <Label>Address Line</Label>
-                <Input value={draft.addressLine} onChange={e => setDraft({ ...draft, addressLine: e.target.value })} />
+                <Input value={draft.addressLine ?? ""} onChange={e => setDraft({ ...draft, addressLine: e.target.value })} />
               </div>
               <div className="col-span-2 flex justify-end gap-2">
                 <Button size="sm" onClick={save} disabled={update.isPending}>Speichern</Button>

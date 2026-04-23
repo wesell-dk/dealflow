@@ -382,6 +382,15 @@ router.patch('/deals/:id', async (req, res) => {
     if (b[k] !== undefined) update[k] = b[k];
   }
   if (b.value !== undefined) update.value = String(b.value);
+  if (b.brandId !== undefined) {
+    const bid = b.brandId === null ? null : String(b.brandId);
+    if (bid !== null) {
+      const [bb] = await db.select().from(brandsTable).where(eq(brandsTable.id, bid));
+      if (!bb) { res.status(400).json({ error: 'brandId not found' }); return; }
+      if (!(await brandVisible(req, bb))) { res.status(403).json({ error: 'brand not in scope' }); return; }
+    }
+    update.brandId = bid;
+  }
   await db.update(dealsTable).set(update).where(eq(dealsTable.id, req.params.id));
   const [d] = await db.select().from(dealsTable).where(eq(dealsTable.id, req.params.id));
   if (!d) { res.status(404).json({ error: 'not found' }); return; }
@@ -776,8 +785,13 @@ router.post('/contracts', async (req, res) => {
   if (!(await gateDeal(req, res, b.dealId))) return;
   // Pre-validate brand (existence + visibility) BEFORE any writes.
   let brandForSeed: typeof brandsTable.$inferSelect | undefined;
-  if (b.brandId) {
-    const [brand] = await db.select().from(brandsTable).where(eq(brandsTable.id, b.brandId));
+  let effectiveBrandId: string | null = b.brandId ?? null;
+  if (!effectiveBrandId) {
+    const [deal] = await db.select().from(dealsTable).where(eq(dealsTable.id, b.dealId));
+    effectiveBrandId = deal?.brandId ?? null;
+  }
+  if (effectiveBrandId) {
+    const [brand] = await db.select().from(brandsTable).where(eq(brandsTable.id, effectiveBrandId));
     if (!brand) { res.status(404).json({ error: 'brand not found' }); return; }
     if (!(await brandVisible(req, brand))) { res.status(403).json({ error: 'forbidden' }); return; }
     brandForSeed = brand;
@@ -868,12 +882,27 @@ router.patch('/brands/:id', async (req, res) => {
   const body = (req.body ?? {}) as Record<string, unknown>;
   const patch: Partial<typeof brandsTable.$inferInsert> = {};
   const strFields = ['name', 'color', 'voice', 'logoUrl', 'primaryColor', 'secondaryColor', 'tone', 'legalEntityName', 'addressLine'] as const;
+  const hexRe = /^#[0-9a-fA-F]{6}$/;
   for (const k of strFields) {
     if (!(k in body)) continue;
     const v = body[k];
-    if (v === null || typeof v === 'string') {
-      (patch as Record<string, unknown>)[k] = v;
+    if (v !== null && typeof v !== 'string') continue;
+    if (v !== null) {
+      if (v.length > 512) { res.status(400).json({ error: `${k} too long` }); return; }
+      if ((k === 'color' || k === 'primaryColor' || k === 'secondaryColor') && v !== '' && !hexRe.test(v)) {
+        res.status(400).json({ error: `${k} must be #RRGGBB hex` }); return;
+      }
+      if (k === 'logoUrl' && v !== '') {
+        const lower = v.toLowerCase();
+        const okStored = lower.startsWith('/api/storage/') || lower.startsWith('/storage/') || lower.startsWith('/objects/');
+        const okData = lower.startsWith('data:image/svg+xml') || lower.startsWith('data:image/png') || lower.startsWith('data:image/jpeg');
+        const okHttps = lower.startsWith('https://');
+        if (!(okStored || okData || okHttps)) {
+          res.status(400).json({ error: 'logoUrl must be https://, data:image/*, or a stored object path' }); return;
+        }
+      }
     }
+    (patch as Record<string, unknown>)[k] = v;
   }
   if (Object.keys(patch).length > 0) {
     await db.update(brandsTable).set(patch).where(eq(brandsTable.id, existing.id));
