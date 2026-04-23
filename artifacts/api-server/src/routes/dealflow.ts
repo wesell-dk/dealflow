@@ -1799,17 +1799,70 @@ router.get('/order-confirmations', async (req, res) => {
   const rows = await db.select().from(orderConfirmationsTable).where(and(...filters)).orderBy(desc(orderConfirmationsTable.createdAt));
   const dealMap = await getDealMap();
   const userMap = await getUserMap();
-  res.json(rows.map(o => mapOC(o, dealMap.get(o.dealId)?.name ?? 'Unknown', userMap)));
+  const reconciled = await Promise.all(rows.map(async (o) => {
+    if (o.status === 'in_onboarding' || o.status === 'completed') return o;
+    const checks = await db.select().from(orderConfirmationChecksTable)
+      .where(eq(orderConfirmationChecksTable.orderConfirmationId, o.id));
+    return reconcileOcState(o, checks);
+  }));
+  res.json(reconciled.map(o => mapOC(o, dealMap.get(o.dealId)?.name ?? 'Unknown', userMap)));
 });
 
+async function reconcileOcState(
+  o: typeof orderConfirmationsTable.$inferSelect,
+  checks: Array<typeof orderConfirmationChecksTable.$inferSelect>,
+): Promise<typeof orderConfirmationsTable.$inferSelect> {
+  if (o.status === 'in_onboarding' || o.status === 'completed') return o;
+  const req = checks.filter(c => c.required);
+  const allOk = req.length > 0 && req.every(c => c.status === 'ok');
+  const anyBlocked = req.some(c => c.status === 'blocked');
+  let target = o.status;
+  if (allOk) target = 'ready_for_handover';
+  else if (req.length > 0) target = 'checks_pending';
+  if (target !== o.status) {
+    await db.update(orderConfirmationsTable).set({ status: target })
+      .where(eq(orderConfirmationsTable.id, o.id));
+    await writeAudit({
+      entityType: 'order_confirmation', entityId: o.id, action: 'status_auto_transition',
+      summary: `${o.number}: Status automatisch von ${o.status} auf ${target} gesetzt`,
+      before: { status: o.status }, after: { status: target },
+    });
+    o = { ...o, status: target };
+  }
+  if (anyBlocked) {
+    const existing = await db.select().from(auditLogTable)
+      .where(and(
+        eq(auditLogTable.entityType, 'order_confirmation'),
+        eq(auditLogTable.entityId, o.id),
+        eq(auditLogTable.action, 'escalation_raised'),
+      ));
+    if (existing.length === 0) {
+      const blocked = req.filter(c => c.status === 'blocked');
+      await writeAudit({
+        entityType: 'order_confirmation', entityId: o.id, action: 'escalation_raised',
+        summary: `${o.number}: ${blocked.length} Pflicht-Check blockiert — Eskalation an Sales-Owner`,
+        after: { blockedChecks: blocked.map(b => ({ id: b.id, label: b.label, reason: b.detail })), salesOwnerId: o.salesOwnerId },
+      });
+      await db.insert(timelineEventsTable).values({
+        id: `tl_${randomUUID().slice(0, 8)}`, type: 'handover',
+        title: 'Eskalation: Pflicht-Check blockiert',
+        description: `${o.number}: ${blocked.map(b => b.label).join(', ')}`,
+        actor: 'System', dealId: o.dealId,
+      });
+    }
+  }
+  return o;
+}
+
 router.get('/order-confirmations/:id', async (req, res) => {
-  const [o] = await db.select().from(orderConfirmationsTable).where(eq(orderConfirmationsTable.id, req.params.id));
-  if (!o) { res.status(404).json({ error: 'not found' }); return; }
-  if (!(await gateDeal(req, res, o.dealId))) return;
+  const [raw] = await db.select().from(orderConfirmationsTable).where(eq(orderConfirmationsTable.id, req.params.id));
+  if (!raw) { res.status(404).json({ error: 'not found' }); return; }
+  if (!(await gateDeal(req, res, raw.dealId))) return;
   const dealMap = await getDealMap();
   const userMap = await getUserMap();
   const checks = await db.select().from(orderConfirmationChecksTable)
-    .where(eq(orderConfirmationChecksTable.orderConfirmationId, o.id));
+    .where(eq(orderConfirmationChecksTable.orderConfirmationId, raw.id));
+  const o = await reconcileOcState(raw, checks);
   res.json(buildOcDetail(o, dealMap.get(o.dealId)?.name ?? 'Unknown', userMap, checks));
 });
 

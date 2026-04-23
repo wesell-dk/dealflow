@@ -105,10 +105,17 @@ export default function OrderConfirmationDetail() {
           </h1>
           <p className="text-sm text-muted-foreground">{data.dealName}</p>
         </div>
-        {data.status === "ready_for_handover" && (
-          <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+        {(data.status === "preparing" || data.status === "checks_pending" || data.status === "ready_for_handover") && (
+          <Dialog open={dialogOpen} onOpenChange={(o) => canHandover && setDialogOpen(o)}>
             <DialogTrigger asChild>
-              <Button disabled={!canHandover} title={!canHandover ? t("pages.orderConfirmations.handoverBlocked") : undefined}>
+              <Button
+                disabled={!canHandover}
+                title={!canHandover
+                  ? (data.escalations.length > 0
+                      ? `${t("pages.orderConfirmations.handoverBlocked")}: ${data.escalations.map(e => e.label).join(", ")}`
+                      : t("pages.orderConfirmations.handoverBlocked"))
+                  : undefined}
+              >
                 <ArrowRightCircle className="h-4 w-4 mr-2" />
                 {t("pages.orderConfirmations.startHandover")}
               </Button>
