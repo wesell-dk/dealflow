@@ -533,6 +533,65 @@ paths:
                 type: array
                 items: { $ref: "#/components/schemas/ClauseFamily" }
 
+  /contracts/{id}/clauses:
+    get:
+      operationId: listContractClauses
+      tags: [contracts]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: ok
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/ContractClause" }
+
+  /contract-clauses/{id}:
+    patch:
+      operationId: patchContractClause
+      tags: [contracts]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ContractClausePatchInput" }
+      responses:
+        "200":
+          description: ok
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ClauseChangeResult" }
+
+  /clauses/{fromId}/diff/{toId}:
+    get:
+      operationId: getClauseDiff
+      tags: [contracts]
+      parameters:
+        - in: path
+          name: fromId
+          required: true
+          schema: { type: string }
+        - in: path
+          name: toId
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: ok
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ClauseDiff" }
+
   # ───────────── NEGOTIATIONS ─────────────
 
   /negotiations:
@@ -1650,6 +1709,24 @@ components:
               type: array
               items: { $ref: "#/components/schemas/ContractClause" }
 
+    ContractClausePatchInput:
+      type: object
+      required: [variantId]
+      properties:
+        variantId: { type: string }
+
+    ClauseVariant:
+      type: object
+      required: [id, name, severity, severityScore, summary, body, tone]
+      properties:
+        id: { type: string }
+        name: { type: string }
+        severity: { type: string }
+        severityScore: { type: integer }
+        summary: { type: string }
+        body: { type: string }
+        tone: { type: string }
+
     ClauseFamily:
       type: object
       required: [id, name, description, variants]
@@ -1659,18 +1736,11 @@ components:
         description: { type: string }
         variants:
           type: array
-          items:
-            type: object
-            required: [id, name, severity, summary]
-            properties:
-              id: { type: string }
-              name: { type: string }
-              severity: { type: string }
-              summary: { type: string }
+          items: { $ref: "#/components/schemas/ClauseVariant" }
 
     ContractClause:
       type: object
-      required: [id, contractId, family, variant, severity, summary]
+      required: [id, contractId, family, variant, severity, summary, severityScore, tone, body]
       properties:
         id: { type: string }
         contractId: { type: string }
@@ -1678,6 +1748,34 @@ components:
         variant: { type: string }
         severity: { type: string }
         summary: { type: string }
+        familyId: { type: ["string", "null"] }
+        activeVariantId: { type: ["string", "null"] }
+        severityScore: { type: integer }
+        tone: { type: string }
+        body: { type: string }
+
+    ClauseDiff:
+      type: object
+      required: [from, to, deltaScore, softer, approvalRequired]
+      properties:
+        from: { $ref: "#/components/schemas/ClauseVariant" }
+        to: { $ref: "#/components/schemas/ClauseVariant" }
+        deltaScore: { type: integer }
+        softer: { type: boolean }
+        approvalRequired: { type: boolean }
+
+    ClauseChangeResult:
+      type: object
+      required: [clause, contractRiskLevel, contractRiskScore, deltaScore, softer]
+      properties:
+        clause: { $ref: "#/components/schemas/ContractClause" }
+        contractRiskLevel: { type: string }
+        contractRiskScore: { type: integer }
+        dealName: { type: string }
+        deltaScore: { type: integer }
+        softer: { type: boolean }
+        approvalId: { type: ["string", "null"] }
+        approvalReason: { type: ["string", "null"] }
 
     # ── Negotiations ──
     Negotiation:

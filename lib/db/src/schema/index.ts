@@ -208,7 +208,10 @@ export const clauseVariantsTable = pgTable("clause_variants", {
   familyId: text("family_id").notNull(),
   name: text("name").notNull(),
   severity: text("severity").notNull(),
+  severityScore: integer("severity_score").notNull().default(3),
   summary: text("summary").notNull(),
+  body: text("body").notNull().default(""),
+  tone: text("tone").notNull().default("standard"),
 });
 
 export const contractClausesTable = pgTable("contract_clauses", {
@@ -218,6 +221,8 @@ export const contractClausesTable = pgTable("contract_clauses", {
   variant: text("variant").notNull(),
   severity: text("severity").notNull(),
   summary: text("summary").notNull(),
+  familyId: text("family_id"),
+  activeVariantId: text("active_variant_id"),
 });
 
 // Negotiations

@@ -27,10 +27,14 @@ import type {
   ApprovalFromReactionInput,
   AuditEntry,
   Brand,
+  ClauseChangeResult,
+  ClauseDiff,
   ClauseFamily,
   Company,
   Contact,
   Contract,
+  ContractClause,
+  ContractClausePatchInput,
   ContractDetail,
   ContractInput,
   CopilotChatReply,
@@ -2461,6 +2465,252 @@ export function useListClauseFamilies<
   request?: SecondParameter<typeof customFetch>;
 }): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
   const queryOptions = getListClauseFamiliesQueryOptions(options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+export const getListContractClausesUrl = (id: string) => {
+  return `/api/contracts/${id}/clauses`;
+};
+
+export const listContractClauses = async (
+  id: string,
+  options?: RequestInit,
+): Promise<ContractClause[]> => {
+  return customFetch<ContractClause[]>(getListContractClausesUrl(id), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getListContractClausesQueryKey = (id: string) => {
+  return [`/api/contracts/${id}/clauses`] as const;
+};
+
+export const getListContractClausesQueryOptions = <
+  TData = Awaited<ReturnType<typeof listContractClauses>>,
+  TError = ErrorType<unknown>,
+>(
+  id: string,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof listContractClauses>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getListContractClausesQueryKey(id);
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof listContractClauses>>
+  > = ({ signal }) => listContractClauses(id, { signal, ...requestOptions });
+
+  return {
+    queryKey,
+    queryFn,
+    enabled: !!id,
+    ...queryOptions,
+  } as UseQueryOptions<
+    Awaited<ReturnType<typeof listContractClauses>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type ListContractClausesQueryResult = NonNullable<
+  Awaited<ReturnType<typeof listContractClauses>>
+>;
+export type ListContractClausesQueryError = ErrorType<unknown>;
+
+export function useListContractClauses<
+  TData = Awaited<ReturnType<typeof listContractClauses>>,
+  TError = ErrorType<unknown>,
+>(
+  id: string,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof listContractClauses>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getListContractClausesQueryOptions(id, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+export const getPatchContractClauseUrl = (id: string) => {
+  return `/api/contract-clauses/${id}`;
+};
+
+export const patchContractClause = async (
+  id: string,
+  contractClausePatchInput: ContractClausePatchInput,
+  options?: RequestInit,
+): Promise<ClauseChangeResult> => {
+  return customFetch<ClauseChangeResult>(getPatchContractClauseUrl(id), {
+    ...options,
+    method: "PATCH",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(contractClausePatchInput),
+  });
+};
+
+export const getPatchContractClauseMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof patchContractClause>>,
+    TError,
+    { id: string; data: BodyType<ContractClausePatchInput> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof patchContractClause>>,
+  TError,
+  { id: string; data: BodyType<ContractClausePatchInput> },
+  TContext
+> => {
+  const mutationKey = ["patchContractClause"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof patchContractClause>>,
+    { id: string; data: BodyType<ContractClausePatchInput> }
+  > = (props) => {
+    const { id, data } = props ?? {};
+
+    return patchContractClause(id, data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type PatchContractClauseMutationResult = NonNullable<
+  Awaited<ReturnType<typeof patchContractClause>>
+>;
+export type PatchContractClauseMutationBody =
+  BodyType<ContractClausePatchInput>;
+export type PatchContractClauseMutationError = ErrorType<unknown>;
+
+export const usePatchContractClause = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof patchContractClause>>,
+    TError,
+    { id: string; data: BodyType<ContractClausePatchInput> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof patchContractClause>>,
+  TError,
+  { id: string; data: BodyType<ContractClausePatchInput> },
+  TContext
+> => {
+  return useMutation(getPatchContractClauseMutationOptions(options));
+};
+
+export const getGetClauseDiffUrl = (fromId: string, toId: string) => {
+  return `/api/clauses/${fromId}/diff/${toId}`;
+};
+
+export const getClauseDiff = async (
+  fromId: string,
+  toId: string,
+  options?: RequestInit,
+): Promise<ClauseDiff> => {
+  return customFetch<ClauseDiff>(getGetClauseDiffUrl(fromId, toId), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getGetClauseDiffQueryKey = (fromId: string, toId: string) => {
+  return [`/api/clauses/${fromId}/diff/${toId}`] as const;
+};
+
+export const getGetClauseDiffQueryOptions = <
+  TData = Awaited<ReturnType<typeof getClauseDiff>>,
+  TError = ErrorType<unknown>,
+>(
+  fromId: string,
+  toId: string,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getClauseDiff>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey =
+    queryOptions?.queryKey ?? getGetClauseDiffQueryKey(fromId, toId);
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof getClauseDiff>>> = ({
+    signal,
+  }) => getClauseDiff(fromId, toId, { signal, ...requestOptions });
+
+  return {
+    queryKey,
+    queryFn,
+    enabled: !!(fromId && toId),
+    ...queryOptions,
+  } as UseQueryOptions<
+    Awaited<ReturnType<typeof getClauseDiff>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetClauseDiffQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getClauseDiff>>
+>;
+export type GetClauseDiffQueryError = ErrorType<unknown>;
+
+export function useGetClauseDiff<
+  TData = Awaited<ReturnType<typeof getClauseDiff>>,
+  TError = ErrorType<unknown>,
+>(
+  fromId: string,
+  toId: string,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getClauseDiff>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetClauseDiffQueryOptions(fromId, toId, options);
 
   const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
     queryKey: QueryKey;

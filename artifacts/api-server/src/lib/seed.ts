@@ -300,22 +300,51 @@ export async function seedIfEmpty(): Promise<void> {
   ];
   await db.insert(clauseFamiliesTable).values(families);
 
-  const variants: Array<{ id: string; familyId: string; name: string; severity: string; summary: string }> = [
-    { id: "cv_liab_std", familyId: "cf_liab", name: "Standard cap (12 months fees)", severity: "low",    summary: "Liability capped at 12 months of fees paid." },
-    { id: "cv_liab_2x",  familyId: "cf_liab", name: "2x annual fees",                severity: "medium", summary: "Cap raised to 2x annual fees." },
-    { id: "cv_liab_un",  familyId: "cf_liab", name: "Uncapped for IP infringement",  severity: "high",   summary: "Uncapped liability for IP infringement claims." },
-    { id: "cv_term_36",  familyId: "cf_term", name: "36-month auto-renew",           severity: "low",    summary: "Initial term 36 months with 90-day notice." },
-    { id: "cv_term_24",  familyId: "cf_term", name: "24-month with opt-out",         severity: "medium", summary: "24-month term with opt-out at month 12." },
-    { id: "cv_data_eu",  familyId: "cf_data", name: "EU-hosted data",                severity: "low",    summary: "All data hosted in EU; SCCs included." },
-    { id: "cv_data_loc", familyId: "cf_data", name: "Customer-hosted",               severity: "medium", summary: "Customer-hosted deployment with audit rights." },
-    { id: "cv_pay_n30",  familyId: "cf_pay",  name: "Net 30",                        severity: "low",    summary: "Standard net-30 payment terms." },
-    { id: "cv_pay_n60",  familyId: "cf_pay",  name: "Net 60",                        severity: "medium", summary: "Extended net-60 terms with discount surrender." },
-    { id: "cv_sla_99",   familyId: "cf_sla",  name: "99.5% uptime",                  severity: "low",    summary: "99.5% monthly uptime, credits up to 10%." },
-    { id: "cv_sla_999",  familyId: "cf_sla",  name: "99.9% uptime",                  severity: "medium", summary: "99.9% uptime with 25% credit ceiling." },
-    { id: "cv_ip_lic",   familyId: "cf_ip",   name: "License only",                  severity: "low",    summary: "Customer receives non-exclusive license; Helix retains IP." },
-    { id: "cv_ip_assign",familyId: "cf_ip",   name: "Assignment of derivatives",     severity: "high",   summary: "Custom derivatives assigned to customer." },
+  // 5 Varianten je Familie: zart(1) / moderat(2) / standard(3) / streng(4) / hart(5)
+  // severity: 1-2 → high (für uns), 3 → medium, 4-5 → low
+  const sevFromScore = (s: number) => (s <= 2 ? "high" : s === 3 ? "medium" : "low");
+  const variantRows: Array<{ id: string; familyId: string; name: string; tone: string; severityScore: number; summary: string; body: string }> = [
+    // Liability
+    { id: "cv_liab_1", familyId: "cf_liab", tone: "zart",     severityScore: 1, name: "Unbegrenzt bei IP-Verletzung", summary: "Unbegrenzte Haftung bei IP-Infringement-Ansprüchen.", body: "Der Anbieter haftet unbegrenzt für alle Ansprüche aus Verletzungen geistiger Eigentumsrechte Dritter, einschließlich direkter und indirekter Schäden." },
+    { id: "cv_liab_2", familyId: "cf_liab", tone: "moderat",  severityScore: 2, name: "3× Jahresgebühr",              summary: "Haftung auf 3× Jahresgebühr gedeckelt.", body: "Die Gesamthaftung des Anbieters ist auf das Dreifache der jährlich gezahlten Gebühren beschränkt." },
+    { id: "cv_liab_3", familyId: "cf_liab", tone: "standard", severityScore: 3, name: "2× Jahresgebühr",              summary: "Standard-Cap: 2× Jahresgebühr.", body: "Die Gesamthaftung ist auf das Zweifache der innerhalb der letzten 12 Monate gezahlten Gebühren begrenzt." },
+    { id: "cv_liab_4", familyId: "cf_liab", tone: "streng",   severityScore: 4, name: "12-Monats-Cap",                summary: "Cap auf 12-Monats-Gebühren.", body: "Die Haftung ist auf die Summe der in den 12 Monaten vor dem Schadensereignis gezahlten Gebühren beschränkt." },
+    { id: "cv_liab_5", familyId: "cf_liab", tone: "hart",     severityScore: 5, name: "6-Monats-Cap, grobe Fahrlässigkeit ausgeschlossen", summary: "Harter Cap: 6 Monate; leichte Fahrlässigkeit ausgeschlossen.", body: "Haftung gedeckelt auf 6-Monats-Gebühren. Haftung für leichte Fahrlässigkeit, Folgeschäden und entgangenen Gewinn ausgeschlossen." },
+    // Term & Termination
+    { id: "cv_term_1", familyId: "cf_term", tone: "zart",     severityScore: 1, name: "Jederzeitige Kündigung 30 Tage", summary: "Kunde kann jederzeit mit 30 Tagen kündigen.", body: "Der Kunde kann den Vertrag jederzeit ohne Grund mit 30 Tagen Kündigungsfrist beenden." },
+    { id: "cv_term_2", familyId: "cf_term", tone: "moderat",  severityScore: 2, name: "12 Monate mit Opt-out",         summary: "12 Monate Mindestlaufzeit, Opt-out nach Monat 6.", body: "Mindestlaufzeit 12 Monate, Opt-out zum Monat 6 mit 60 Tagen Frist." },
+    { id: "cv_term_3", familyId: "cf_term", tone: "standard", severityScore: 3, name: "24 Monate mit Opt-out",         summary: "24 Monate mit Opt-out zu Monat 12.", body: "Mindestlaufzeit 24 Monate; einseitiges Opt-out-Recht zu Monat 12 mit 90 Tagen Frist." },
+    { id: "cv_term_4", familyId: "cf_term", tone: "streng",   severityScore: 4, name: "36 Monate Auto-Renewal",        summary: "36 Monate, automatische Verlängerung um 12.", body: "36 Monate Mindestlaufzeit, automatische Verlängerung um 12 Monate; Kündigung 90 Tage vor Ablauf." },
+    { id: "cv_term_5", familyId: "cf_term", tone: "hart",     severityScore: 5, name: "60 Monate, Exit-Fee",           summary: "60 Monate, Early-Termination-Fee 50% Restwert.", body: "Laufzeit 60 Monate. Vorzeitige Kündigung führt zu einer Entschädigung in Höhe von 50% des Restwerts." },
+    // Data Protection
+    { id: "cv_data_1", familyId: "cf_data", tone: "zart",     severityScore: 1, name: "Kunden-Hosting, volle Audit-Rechte", summary: "On-Prem beim Kunden, volle Auditrechte ohne Ankündigung.", body: "Datenverarbeitung ausschließlich beim Kunden. Kunde kann jederzeit ohne Vorankündigung prüfen." },
+    { id: "cv_data_2", familyId: "cf_data", tone: "moderat",  severityScore: 2, name: "Kunden-Hosting mit Audit",      summary: "Kundengehostet mit jährlichem Audit.", body: "Datenverarbeitung in Kundenumgebung. Jährliches Audit-Recht mit 30 Tagen Vorankündigung." },
+    { id: "cv_data_3", familyId: "cf_data", tone: "standard", severityScore: 3, name: "EU-Hosting, SCC",               summary: "EU-Rechenzentren, Standardvertragsklauseln.", body: "Alle personenbezogenen Daten werden in EU-Rechenzentren verarbeitet. Standardvertragsklauseln (SCC) und TOMs Anlage B." },
+    { id: "cv_data_4", familyId: "cf_data", tone: "streng",   severityScore: 4, name: "EU-Hosting + Subprozessoren-Whitelist", summary: "EU-Hosting, genehmigte Subprozessoren.", body: "EU-Hosting; Einsatz von Subprozessoren erfordert schriftliche Genehmigung durch den Kunden." },
+    { id: "cv_data_5", familyId: "cf_data", tone: "hart",     severityScore: 5, name: "Regional EU + Haftungsausschluss", summary: "EU-Hosting; Datenschutzhaftung beim Kunden.", body: "EU-Hosting; Kunde bleibt Verantwortlicher; Anbieter haftet nur bei Vorsatz für DSGVO-Verstöße." },
+    // Payment Terms
+    { id: "cv_pay_1",  familyId: "cf_pay",  tone: "zart",     severityScore: 1, name: "Netto 90 mit Skonto",           summary: "Zahlungsziel 90 Tage, 3% Skonto bei 30 Tagen.", body: "Zahlungsziel 90 Tage netto. 3% Skonto bei Zahlung innerhalb von 30 Tagen." },
+    { id: "cv_pay_2",  familyId: "cf_pay",  tone: "moderat",  severityScore: 2, name: "Netto 60",                      summary: "Netto 60 Tage.", body: "Zahlungsziel 60 Tage netto." },
+    { id: "cv_pay_3",  familyId: "cf_pay",  tone: "standard", severityScore: 3, name: "Netto 30",                      summary: "Netto 30 Tage.", body: "Zahlungsziel 30 Tage netto ab Rechnungsdatum." },
+    { id: "cv_pay_4",  familyId: "cf_pay",  tone: "streng",   severityScore: 4, name: "Netto 14",                      summary: "Netto 14 Tage, Verzugszinsen.", body: "Zahlungsziel 14 Tage netto. Bei Verzug 9% Zinsen über Basiszinssatz." },
+    { id: "cv_pay_5",  familyId: "cf_pay",  tone: "hart",     severityScore: 5, name: "Vorauskasse",                   summary: "Zahlung vor Leistungserbringung.", body: "Rechnung vorab; Leistungserbringung erst nach Zahlungseingang." },
+    // Service Levels
+    { id: "cv_sla_1",  familyId: "cf_sla",  tone: "zart",     severityScore: 1, name: "99,99% mit Pönale 50%",         summary: "99,99% Uptime, Pönale bis 50% Monatsgebühr.", body: "Verfügbarkeit 99,99% pro Monat. Service-Credits bis 50% der Monatsgebühr bei Unterschreitung." },
+    { id: "cv_sla_2",  familyId: "cf_sla",  tone: "moderat",  severityScore: 2, name: "99,95% mit 25% Credit",         summary: "99,95% Uptime, 25% Credit-Cap.", body: "Verfügbarkeit 99,95%; Service-Credits gedeckelt bei 25% der Monatsgebühr." },
+    { id: "cv_sla_3",  familyId: "cf_sla",  tone: "standard", severityScore: 3, name: "99,9% mit 10% Credit",          summary: "99,9% Uptime, 10% Credit-Cap.", body: "Verfügbarkeit 99,9%; Service-Credits bis 10% der Monatsgebühr." },
+    { id: "cv_sla_4",  familyId: "cf_sla",  tone: "streng",   severityScore: 4, name: "99,5% ohne Credits",            summary: "99,5% Uptime, keine Credits.", body: "Zielverfügbarkeit 99,5%; keine automatischen Service-Credits." },
+    { id: "cv_sla_5",  familyId: "cf_sla",  tone: "hart",     severityScore: 5, name: "Best Effort",                   summary: "Best-Effort-Verfügbarkeit.", body: "Verfügbarkeit nach bestem Bemühen ohne Zusicherung oder Credits." },
+    // Intellectual Property
+    { id: "cv_ip_1",   familyId: "cf_ip",   tone: "zart",     severityScore: 1, name: "Volle Abtretung inkl. Derivate", summary: "Alle Derivate gehen an Kunden.", body: "Sämtliche im Rahmen des Vertrags geschaffenen Arbeitsergebnisse und Derivate werden an den Kunden abgetreten." },
+    { id: "cv_ip_2",   familyId: "cf_ip",   tone: "moderat",  severityScore: 2, name: "Abtretung kundenspezifischer Derivate", summary: "Nur maßgeschneiderte Derivate abgetreten.", body: "Kundenspezifische Derivate werden abgetreten; Standard-Komponenten verbleiben beim Anbieter." },
+    { id: "cv_ip_3",   familyId: "cf_ip",   tone: "standard", severityScore: 3, name: "Nutzungslizenz nicht-exklusiv",  summary: "Nicht-exklusive Nutzungslizenz.", body: "Kunde erhält eine nicht-exklusive, nicht-übertragbare Nutzungslizenz; IP verbleibt beim Anbieter." },
+    { id: "cv_ip_4",   familyId: "cf_ip",   tone: "streng",   severityScore: 4, name: "Nutzungslizenz mit Audit",       summary: "Nicht-exklusiv mit Nutzungsaudit.", body: "Nicht-exklusive Nutzungslizenz; Anbieter hat Auditrecht bezüglich Nutzungsumfang." },
+    { id: "cv_ip_5",   familyId: "cf_ip",   tone: "hart",     severityScore: 5, name: "Named-User, keine Abtretung",    summary: "Named-User-Lizenz, keine Übertragung.", body: "Lizenz gebunden an benannte Nutzer; Weitergabe oder Übertragung ausgeschlossen." },
   ];
-  await db.insert(clauseVariantsTable).values(variants);
+  await db.insert(clauseVariantsTable).values(variantRows.map(v => ({
+    id: v.id, familyId: v.familyId, name: v.name, summary: v.summary, body: v.body,
+    severity: sevFromScore(v.severityScore), severityScore: v.severityScore, tone: v.tone,
+  })));
 
   // Contracts
   const contracts = [
@@ -327,18 +356,29 @@ export async function seedIfEmpty(): Promise<void> {
   ];
   await db.insert(contractsTable).values(contracts.map(c => ({ ...c, validUntil: isoDate(daysFromNow(365)) })));
 
-  await db.insert(contractClausesTable).values([
-    { id: "cc_001", contractId: "ctr_001", family: "Liability",          variant: "Uncapped for IP infringement", severity: "high",   summary: "Customer requires uncapped IP indemnity." },
-    { id: "cc_002", contractId: "ctr_001", family: "Term & Termination", variant: "36-month auto-renew",          severity: "low",    summary: "36 months with 90-day notice." },
-    { id: "cc_003", contractId: "ctr_001", family: "Service Levels",     variant: "99.9% uptime",                 severity: "medium", summary: "Tightened to 99.9% with 25% credit ceiling." },
-    { id: "cc_004", contractId: "ctr_001", family: "Payment Terms",      variant: "Net 60",                       severity: "medium", summary: "Customer requested Net 60." },
-    { id: "cc_005", contractId: "ctr_002", family: "Liability",          variant: "Standard cap (12 months fees)",severity: "low",    summary: "Default cap of 12 months." },
-    { id: "cc_006", contractId: "ctr_002", family: "Term & Termination", variant: "24-month with opt-out",        severity: "medium", summary: "24 months with month-12 opt-out." },
-    { id: "cc_007", contractId: "ctr_003", family: "Liability",          variant: "2x annual fees",               severity: "medium", summary: "Cap negotiated to 2x annual fees." },
-    { id: "cc_008", contractId: "ctr_003", family: "Service Levels",     variant: "99.9% uptime",                 severity: "medium", summary: "99.9% uptime SLA." },
-    { id: "cc_009", contractId: "ctr_004", family: "Data Protection",    variant: "EU-hosted data",               severity: "low",    summary: "EU hosting with SCCs." },
-    { id: "cc_010", contractId: "ctr_005", family: "Payment Terms",      variant: "Net 30",                       severity: "low",    summary: "Standard payment terms." },
-  ]);
+  const ccSeed: Array<{ id: string; contractId: string; familyId: string; activeVariantId: string }> = [
+    { id: "cc_001", contractId: "ctr_001", familyId: "cf_liab", activeVariantId: "cv_liab_1" }, // zart — Eskalation erwartet
+    { id: "cc_002", contractId: "ctr_001", familyId: "cf_term", activeVariantId: "cv_term_4" },
+    { id: "cc_003", contractId: "ctr_001", familyId: "cf_sla",  activeVariantId: "cv_sla_2"  },
+    { id: "cc_004", contractId: "ctr_001", familyId: "cf_pay",  activeVariantId: "cv_pay_2"  },
+    { id: "cc_005", contractId: "ctr_002", familyId: "cf_liab", activeVariantId: "cv_liab_4" },
+    { id: "cc_006", contractId: "ctr_002", familyId: "cf_term", activeVariantId: "cv_term_2" },
+    { id: "cc_007", contractId: "ctr_003", familyId: "cf_liab", activeVariantId: "cv_liab_2" },
+    { id: "cc_008", contractId: "ctr_003", familyId: "cf_sla",  activeVariantId: "cv_sla_2"  },
+    { id: "cc_009", contractId: "ctr_004", familyId: "cf_data", activeVariantId: "cv_data_3" },
+    { id: "cc_010", contractId: "ctr_005", familyId: "cf_pay",  activeVariantId: "cv_pay_3"  },
+  ];
+  const famMap = new Map(families.map(f => [f.id, f.name]));
+  const varMap = new Map(variantRows.map(v => [v.id, v]));
+  await db.insert(contractClausesTable).values(ccSeed.map(cc => {
+    const v = varMap.get(cc.activeVariantId)!;
+    return {
+      id: cc.id, contractId: cc.contractId,
+      familyId: cc.familyId, activeVariantId: cc.activeVariantId,
+      family: famMap.get(cc.familyId) ?? "", variant: v.name,
+      severity: sevFromScore(v.severityScore), summary: v.summary,
+    };
+  }));
 
   // Negotiations
   await db.insert(negotiationsTable).values([

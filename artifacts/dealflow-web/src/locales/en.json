@@ -115,6 +115,15 @@
       "approve": "Approve",
       "reject": "Reject"
     },
+    "clauses": {
+      "title": "Clause Library",
+      "subtitle": "Standardised clause families with variants from soft to hard.",
+      "families": "Families",
+      "variants": "Variants",
+      "severityScore": "Severity score",
+      "toneLabel": "Tone",
+      "empty": "No clause families defined."
+    },
     "contracts": {
       "title": "Contracts",
       "subtitle": "All contracts across your deals.",

@@ -707,9 +707,22 @@ router.get('/contracts/:id', async (req, res) => {
   if (!c) { res.status(404).json({ error: 'not found' }); return; }
   if (!(await gateDeal(req, res, c.dealId))) return;
   const dealMap = await getDealMap();
-  const clauses = await db.select().from(contractClausesTable).where(eq(contractClausesTable.contractId, c.id));
+  const rawClauses = await db.select().from(contractClausesTable).where(eq(contractClausesTable.contractId, c.id));
+  const variantsAll = await db.select().from(clauseVariantsTable);
+  const vById = new Map(variantsAll.map(v => [v.id, v]));
+  const clauses = rawClauses.map(cl => {
+    const active = cl.activeVariantId ? vById.get(cl.activeVariantId) : undefined;
+    return {
+      id: cl.id, contractId: cl.contractId, family: cl.family, variant: cl.variant,
+      severity: cl.severity, summary: cl.summary,
+      familyId: cl.familyId ?? null, activeVariantId: cl.activeVariantId ?? null,
+      severityScore: active?.severityScore ?? 3,
+      tone: active?.tone ?? 'standard',
+      body: active?.body ?? '',
+    };
+  });
   res.json({
-    ...mapContract(c, dealMap.get(c.dealId)?.name ?? 'Unknown', clauses),
+    ...mapContract(c, dealMap.get(c.dealId)?.name ?? 'Unknown', rawClauses),
     clauses,
   });
 });
@@ -719,10 +732,148 @@ router.get('/clause-families', async (_req, res) => {
   const variants = await db.select().from(clauseVariantsTable);
   res.json(families.map(f => ({
     ...f,
-    variants: variants.filter(v => v.familyId === f.id).map(v => ({
-      id: v.id, name: v.name, severity: v.severity, summary: v.summary,
-    })),
+    variants: variants
+      .filter(v => v.familyId === f.id)
+      .sort((a, b) => a.severityScore - b.severityScore)
+      .map(v => ({
+        id: v.id, name: v.name, severity: v.severity,
+        severityScore: v.severityScore, summary: v.summary, body: v.body, tone: v.tone,
+      })),
   })));
+});
+
+router.get('/contracts/:id/clauses', async (req, res) => {
+  const [c] = await db.select().from(contractsTable).where(eq(contractsTable.id, req.params.id));
+  if (!c) { res.status(404).json({ error: 'not found' }); return; }
+  if (!(await gateDeal(req, res, c.dealId))) return;
+  const clauses = await db.select().from(contractClausesTable)
+    .where(eq(contractClausesTable.contractId, c.id));
+  const variants = await db.select().from(clauseVariantsTable);
+  const variantById = new Map(variants.map(v => [v.id, v]));
+  res.json(clauses.map(cl => {
+    const active = cl.activeVariantId ? variantById.get(cl.activeVariantId) : undefined;
+    return {
+      id: cl.id, contractId: cl.contractId, family: cl.family, variant: cl.variant,
+      severity: cl.severity, summary: cl.summary,
+      familyId: cl.familyId ?? null, activeVariantId: cl.activeVariantId ?? null,
+      severityScore: active?.severityScore ?? 3,
+      tone: active?.tone ?? 'standard',
+      body: active?.body ?? '',
+    };
+  }));
+});
+
+router.patch('/contract-clauses/:id', async (req, res) => {
+  const { variantId } = (req.body ?? {}) as { variantId?: string };
+  if (!variantId) { res.status(400).json({ error: 'variantId required' }); return; }
+  const actor = getScope(req).user;
+  const [cl] = await db.select().from(contractClausesTable).where(eq(contractClausesTable.id, req.params.id));
+  if (!cl) { res.status(404).json({ error: 'not found' }); return; }
+  const [ctr] = await db.select().from(contractsTable).where(eq(contractsTable.id, cl.contractId));
+  if (!ctr) { res.status(404).json({ error: 'contract not found' }); return; }
+  if (!(await gateDeal(req, res, ctr.dealId))) return;
+  const [nextVar] = await db.select().from(clauseVariantsTable).where(eq(clauseVariantsTable.id, variantId));
+  if (!nextVar) { res.status(400).json({ error: 'variant not found' }); return; }
+  if (cl.familyId && nextVar.familyId !== cl.familyId) {
+    res.status(400).json({ error: 'variant belongs to different family' }); return;
+  }
+  const [prevVar] = cl.activeVariantId
+    ? await db.select().from(clauseVariantsTable).where(eq(clauseVariantsTable.id, cl.activeVariantId))
+    : [undefined];
+  const prevScore = prevVar?.severityScore ?? 3;
+  const nextScore = nextVar.severityScore;
+  const deltaScore = nextScore - prevScore; // negativ = weicher
+  const softer = deltaScore < 0;
+  const softenBy2 = deltaScore <= -2;
+  const dealMap = await getDealMap();
+  const dealName = dealMap.get(ctr.dealId)?.name ?? 'Unknown';
+  const sevLabel = (s: number) => (s <= 2 ? 'high' : s === 3 ? 'medium' : 'low');
+  await db.update(contractClausesTable).set({
+    activeVariantId: nextVar.id,
+    variant: nextVar.name,
+    severity: sevLabel(nextScore),
+    summary: nextVar.summary,
+  }).where(eq(contractClausesTable.id, cl.id));
+  await writeAudit({
+    entityType: 'contract', entityId: ctr.id, action: 'clause_variant_changed',
+    summary: `${cl.family}: ${prevVar?.name ?? '—'} → ${nextVar.name} (Δ severityScore ${deltaScore >= 0 ? '+' : ''}${deltaScore})`,
+    before: { variantId: cl.activeVariantId, name: prevVar?.name, severityScore: prevScore },
+    after: { variantId: nextVar.id, name: nextVar.name, severityScore: nextScore },
+  });
+  await db.insert(timelineEventsTable).values({
+    id: `tl_${randomUUID().slice(0, 8)}`, type: 'contract',
+    title: `Klausel geändert: ${cl.family}`,
+    description: `${prevVar?.name ?? '—'} → ${nextVar.name}`,
+    actor: actor.name, dealId: ctr.dealId,
+  });
+  let approvalId: string | null = null;
+  if (softenBy2 || (softer && nextScore <= 2)) {
+    approvalId = `ap_${randomUUID().slice(0, 8)}`;
+    await db.insert(approvalsTable).values({
+      id: approvalId, dealId: ctr.dealId, type: 'clause_change',
+      reason: `Non-standard clause: ${cl.family} von ${prevVar?.name ?? '—'} auf ${nextVar.name} (severityScore ${prevScore}→${nextScore})`,
+      requestedBy: actor.name, status: 'pending',
+      priority: nextScore <= 1 ? 'high' : 'medium',
+      impactValue: '0', currency: 'EUR',
+    });
+    await writeAudit({
+      entityType: 'contract', entityId: ctr.id, action: 'approval_created',
+      summary: `Approval angelegt für ${cl.family} (weichere Variante, Δ ${deltaScore})`,
+      after: { approvalId, dealId: ctr.dealId },
+    });
+  }
+  // Recompute risk
+  const allClauses = await db.select().from(contractClausesTable)
+    .where(eq(contractClausesTable.contractId, ctr.id));
+  const variants = await db.select().from(clauseVariantsTable);
+  const variantById = new Map(variants.map(v => [v.id, v]));
+  const sevWeight: Record<string, number> = { high: 25, medium: 10, low: 3 };
+  const riskScore = Math.min(100, allClauses.reduce((s, c) => s + (sevWeight[c.severity] ?? 0), 0));
+  const avgScore = allClauses.length
+    ? allClauses.reduce((s, c) => s + (c.activeVariantId ? variantById.get(c.activeVariantId)?.severityScore ?? 3 : 3), 0) / allClauses.length
+    : 3;
+  const newRiskLevel = avgScore <= 2 ? 'high' : avgScore <= 3.5 ? 'medium' : 'low';
+  if (newRiskLevel !== ctr.riskLevel) {
+    await db.update(contractsTable).set({ riskLevel: newRiskLevel }).where(eq(contractsTable.id, ctr.id));
+  }
+  const [updatedCl] = await db.select().from(contractClausesTable).where(eq(contractClausesTable.id, cl.id));
+  res.json({
+    clause: {
+      id: updatedCl!.id, contractId: updatedCl!.contractId,
+      family: updatedCl!.family, variant: updatedCl!.variant,
+      severity: updatedCl!.severity, summary: updatedCl!.summary,
+      familyId: updatedCl!.familyId ?? null, activeVariantId: updatedCl!.activeVariantId ?? null,
+      severityScore: nextScore, tone: nextVar.tone, body: nextVar.body,
+    },
+    contractRiskLevel: newRiskLevel,
+    contractRiskScore: riskScore,
+    dealName,
+    deltaScore, softer,
+    approvalId,
+    approvalReason: approvalId ? 'non-standard clause weakened' : null,
+  });
+});
+
+router.get('/clauses/:fromId/diff/:toId', async (req, res) => {
+  const [fromV, toV] = await Promise.all([
+    db.select().from(clauseVariantsTable).where(eq(clauseVariantsTable.id, req.params.fromId)).then(r => r[0]),
+    db.select().from(clauseVariantsTable).where(eq(clauseVariantsTable.id, req.params.toId)).then(r => r[0]),
+  ]);
+  if (!fromV || !toV) { res.status(404).json({ error: 'variant not found' }); return; }
+  const deltaScore = toV.severityScore - fromV.severityScore;
+  res.json({
+    from: {
+      id: fromV.id, name: fromV.name, severity: fromV.severity,
+      severityScore: fromV.severityScore, tone: fromV.tone, summary: fromV.summary, body: fromV.body,
+    },
+    to: {
+      id: toV.id, name: toV.name, severity: toV.severity,
+      severityScore: toV.severityScore, tone: toV.tone, summary: toV.summary, body: toV.body,
+    },
+    deltaScore,
+    softer: deltaScore < 0,
+    approvalRequired: deltaScore <= -2 || (deltaScore < 0 && toV.severityScore <= 2),
+  });
 });
 
 // ── NEGOTIATIONS ──

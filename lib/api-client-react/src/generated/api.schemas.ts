@@ -369,24 +369,59 @@ export interface ContractClause {
   variant: string;
   severity: string;
   summary: string;
+  /** @nullable */
+  familyId?: string | null;
+  /** @nullable */
+  activeVariantId?: string | null;
+  severityScore: number;
+  tone: string;
+  body: string;
 }
 
 export type ContractDetail = Contract & {
   clauses: ContractClause[];
 };
 
-export type ClauseFamilyVariantsItem = {
+export interface ContractClausePatchInput {
+  variantId: string;
+}
+
+export interface ClauseVariant {
   id: string;
   name: string;
   severity: string;
+  severityScore: number;
   summary: string;
-};
+  body: string;
+  tone: string;
+}
 
 export interface ClauseFamily {
   id: string;
   name: string;
   description: string;
-  variants: ClauseFamilyVariantsItem[];
+  variants: ClauseVariant[];
+}
+
+export interface ClauseDiff {
+  from: ClauseVariant;
+  to: ClauseVariant;
+  deltaScore: number;
+  softer: boolean;
+  approvalRequired: boolean;
+}
+
+export interface ClauseChangeResult {
+  clause: ContractClause;
+  contractRiskLevel: string;
+  contractRiskScore: number;
+  dealName?: string;
+  deltaScore: number;
+  softer: boolean;
+  /** @nullable */
+  approvalId?: string | null;
+  /** @nullable */
+  approvalReason?: string | null;
 }
 
 export interface CustomerReaction {

@@ -678,6 +678,11 @@ export const GetContractResponse = zod
           variant: zod.string(),
           severity: zod.string(),
           summary: zod.string(),
+          familyId: zod.string().nullish(),
+          activeVariantId: zod.string().nullish(),
+          severityScore: zod.number(),
+          tone: zod.string(),
+          body: zod.string(),
         }),
       ),
     }),
@@ -692,13 +697,97 @@ export const ListClauseFamiliesResponseItem = zod.object({
       id: zod.string(),
       name: zod.string(),
       severity: zod.string(),
+      severityScore: zod.number(),
       summary: zod.string(),
+      body: zod.string(),
+      tone: zod.string(),
     }),
   ),
 });
 export const ListClauseFamiliesResponse = zod.array(
   ListClauseFamiliesResponseItem,
 );
+
+export const ListContractClausesParams = zod.object({
+  id: zod.coerce.string(),
+});
+
+export const ListContractClausesResponseItem = zod.object({
+  id: zod.string(),
+  contractId: zod.string(),
+  family: zod.string(),
+  variant: zod.string(),
+  severity: zod.string(),
+  summary: zod.string(),
+  familyId: zod.string().nullish(),
+  activeVariantId: zod.string().nullish(),
+  severityScore: zod.number(),
+  tone: zod.string(),
+  body: zod.string(),
+});
+export const ListContractClausesResponse = zod.array(
+  ListContractClausesResponseItem,
+);
+
+export const PatchContractClauseParams = zod.object({
+  id: zod.coerce.string(),
+});
+
+export const PatchContractClauseBody = zod.object({
+  variantId: zod.string(),
+});
+
+export const PatchContractClauseResponse = zod.object({
+  clause: zod.object({
+    id: zod.string(),
+    contractId: zod.string(),
+    family: zod.string(),
+    variant: zod.string(),
+    severity: zod.string(),
+    summary: zod.string(),
+    familyId: zod.string().nullish(),
+    activeVariantId: zod.string().nullish(),
+    severityScore: zod.number(),
+    tone: zod.string(),
+    body: zod.string(),
+  }),
+  contractRiskLevel: zod.string(),
+  contractRiskScore: zod.number(),
+  dealName: zod.string().optional(),
+  deltaScore: zod.number(),
+  softer: zod.boolean(),
+  approvalId: zod.string().nullish(),
+  approvalReason: zod.string().nullish(),
+});
+
+export const GetClauseDiffParams = zod.object({
+  fromId: zod.coerce.string(),
+  toId: zod.coerce.string(),
+});
+
+export const GetClauseDiffResponse = zod.object({
+  from: zod.object({
+    id: zod.string(),
+    name: zod.string(),
+    severity: zod.string(),
+    severityScore: zod.number(),
+    summary: zod.string(),
+    body: zod.string(),
+    tone: zod.string(),
+  }),
+  to: zod.object({
+    id: zod.string(),
+    name: zod.string(),
+    severity: zod.string(),
+    severityScore: zod.number(),
+    summary: zod.string(),
+    body: zod.string(),
+    tone: zod.string(),
+  }),
+  deltaScore: zod.number(),
+  softer: zod.boolean(),
+  approvalRequired: zod.boolean(),
+});
 
 export const ListNegotiationsQueryParams = zod.object({
   dealId: zod.coerce.string().optional(),

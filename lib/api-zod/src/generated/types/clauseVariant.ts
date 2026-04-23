@@ -7,11 +7,13 @@ Multi-tenant, multi-company, multi-brand. Deal-centric.
 
  * OpenAPI spec version: 0.1.0
  */
-import type { ClauseVariant } from "./clauseVariant";
 
-export interface ClauseFamily {
+export interface ClauseVariant {
   id: string;
   name: string;
-  description: string;
-  variants: ClauseVariant[];
+  severity: string;
+  severityScore: number;
+  summary: string;
+  body: string;
+  tone: string;
 }

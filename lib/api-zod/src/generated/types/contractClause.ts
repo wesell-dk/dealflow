@@ -15,4 +15,11 @@ export interface ContractClause {
   variant: string;
   severity: string;
   summary: string;
+  /** @nullable */
+  familyId?: string | null;
+  /** @nullable */
+  activeVariantId?: string | null;
+  severityScore: number;
+  tone: string;
+  body: string;
 }

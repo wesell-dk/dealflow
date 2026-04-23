@@ -9,9 +9,10 @@ Multi-tenant, multi-company, multi-brand. Deal-centric.
  */
 import type { ClauseVariant } from "./clauseVariant";
 
-export interface ClauseFamily {
-  id: string;
-  name: string;
-  description: string;
-  variants: ClauseVariant[];
+export interface ClauseDiff {
+  from: ClauseVariant;
+  to: ClauseVariant;
+  deltaScore: number;
+  softer: boolean;
+  approvalRequired: boolean;
 }
