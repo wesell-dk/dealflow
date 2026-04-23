@@ -24,7 +24,8 @@
     "google-auth-library": "^10.6.2",
     "pino": "^9",
     "pino-http": "^10",
-    "react": "catalog:"
+    "react": "catalog:",
+    "zod": "catalog:"
   },
   "devDependencies": {
     "@types/archiver": "^7.0.0",

@@ -2,6 +2,8 @@ import { Router, type IRouter, type Request, type Response } from 'express';
 import { and, desc, eq, inArray, sql } from 'drizzle-orm';
 import { randomUUID } from 'node:crypto';
 import { ObjectStorageService } from '../lib/objectStorage';
+import { validateInline } from '../middlewares/validate';
+import * as Z from '@workspace/api-zod';
 
 async function resolveLogoForPdf(logoUrl: string | null | undefined): Promise<string | null> {
   if (!logoUrl) return null;
@@ -247,7 +249,8 @@ router.get('/accounts', async (req, res) => {
 });
 
 router.post('/accounts', async (req, res) => {
-  const body = req.body as { name: string; industry: string; country: string };
+  if (!validateInline(req, res, { body: Z.CreateAccountBody })) return;
+  const body = req.body;
   const id = `acc_${randomUUID().slice(0, 8)}`;
   await db.insert(accountsTable).values({
     id, name: body.name, industry: body.industry, country: body.country,
@@ -321,10 +324,8 @@ router.get('/deals', async (req, res) => {
 });
 
 router.post('/deals', async (req, res) => {
-  const b = req.body as {
-    name: string; accountId: string; value: number; stage: string;
-    brandId: string; companyId: string; ownerId: string; expectedCloseDate: string;
-  };
+  if (!validateInline(req, res, { body: Z.CreateDealBody })) return;
+  const b = req.body;
   const scope = getScope(req);
   // Tenant-bound for every user (including tenantWide): companyId must belong
   // to the user's tenant.
@@ -395,8 +396,9 @@ router.get('/deals/:id', async (req, res) => {
 });
 
 router.patch('/deals/:id', async (req, res) => {
+  if (!validateInline(req, res, { params: Z.UpdateDealParams, body: Z.UpdateDealBody })) return;
   if (!(await gateDeal(req, res, req.params.id))) return;
-  const b = req.body as Record<string, unknown>;
+  const b = req.body;
   const update: Record<string, unknown> = { updatedAt: new Date() };
   for (const k of ['name', 'stage', 'probability', 'riskLevel', 'nextStep', 'expectedCloseDate']) {
     if (b[k] !== undefined) update[k] = b[k];
@@ -472,7 +474,8 @@ router.get('/quotes', async (req, res) => {
 });
 
 router.post('/quotes', async (req, res) => {
-  const b = req.body as { dealId: string; validUntil?: string };
+  if (!validateInline(req, res, { body: Z.CreateQuoteBody })) return;
+  const b = req.body;
   if (!(await gateDeal(req, res, b.dealId))) return;
   const [d] = await db.select().from(dealsTable).where(eq(dealsTable.id, b.dealId));
   if (!d) { res.status(404).json({ error: 'deal not found' }); return; }
@@ -576,7 +579,8 @@ router.get('/quotes/:id/pdf', async (req, res) => {
 });
 
 router.post('/quotes/:id/versions', async (req, res) => {
-  const b = req.body as { discountPct: number; notes?: string };
+  if (!validateInline(req, res, { params: Z.CreateQuoteVersionParams, body: Z.CreateQuoteVersionBody })) return;
+  const b = req.body;
   const [q] = await db.select().from(quotesTable).where(eq(quotesTable.id, req.params.id));
   if (!q) { res.status(404).json({ error: 'not found' }); return; }
   if (!(await gateDeal(req, res, q.dealId))) return;
@@ -604,6 +608,7 @@ router.post('/quotes/:id/versions', async (req, res) => {
 });
 
 router.post('/quotes/:id/accept', async (req, res) => {
+  if (!validateInline(req, res, { params: Z.AcceptQuoteParams })) return;
   const [q0] = await db.select().from(quotesTable).where(eq(quotesTable.id, req.params.id));
   if (!q0) { res.status(404).json({ error: 'not found' }); return; }
   if (!(await gateDeal(req, res, q0.dealId))) return;
@@ -643,11 +648,9 @@ router.get('/price-positions', async (req, res) => {
 });
 
 router.post('/price-positions', async (req, res) => {
+  if (!validateInline(req, res, { body: Z.CreatePricePositionBody })) return;
   const scope = getScope(req);
-  const b = req.body as {
-    sku: string; name: string; category: string; listPrice: number;
-    currency: string; brandId: string; companyId: string; validFrom: string;
-  };
+  const b = req.body;
   // Scope-check target brand/company unless user is tenantWide.
   if (!scope.tenantWide) {
     const brandAllowed = (await allowedBrandIds(req)).includes(b.brandId);
@@ -757,7 +760,8 @@ router.get('/approvals', async (req, res) => {
 });
 
 router.post('/approvals/:id/decide', async (req, res) => {
-  const b = req.body as { decision: string; comment?: string };
+  if (!validateInline(req, res, { params: Z.DecideApprovalParams, body: Z.DecideApprovalBody })) return;
+  const b = req.body;
   const [pre] = await db.select().from(approvalsTable).where(eq(approvalsTable.id, req.params.id));
   if (!pre) { res.status(404).json({ error: 'not found' }); return; }
   if (!(await gateDeal(req, res, pre.dealId))) return;
@@ -803,7 +807,8 @@ router.get('/contracts', async (req, res) => {
 });
 
 router.post('/contracts', async (req, res) => {
-  const b = req.body as { dealId: string; title: string; template: string; brandId?: string };
+  if (!validateInline(req, res, { body: Z.CreateContractBody })) return;
+  const b = req.body;
   if (!(await gateDeal(req, res, b.dealId))) return;
   // Pre-validate brand (existence + visibility) BEFORE any writes.
   let brandForSeed: typeof brandsTable.$inferSelect | undefined;
@@ -890,6 +895,7 @@ router.get('/brands', async (req, res) => {
 });
 
 router.patch('/brands/:id', async (req, res) => {
+  if (!validateInline(req, res, { params: Z.UpdateBrandParams, body: Z.UpdateBrandBody })) return;
   if (!requireAdmin(req, res)) return;
   const scope = getScope(req);
   const [existing] = await db.select().from(brandsTable).where(eq(brandsTable.id, req.params.id));
@@ -943,6 +949,7 @@ router.patch('/brands/:id', async (req, res) => {
 });
 
 router.patch('/brands/:id/default-clauses', async (req, res) => {
+  if (!validateInline(req, res, { params: Z.UpdateBrandDefaultClausesParams, body: Z.UpdateBrandDefaultClausesBody })) return;
   const { defaults } = (req.body ?? {}) as { defaults?: Record<string, string> };
   if (!defaults || typeof defaults !== 'object') {
     res.status(400).json({ error: 'defaults required' }); return;
@@ -1048,6 +1055,7 @@ router.get('/contracts/:id/amendments', async (req, res) => {
 });
 
 router.post('/contracts/:id/amendments', async (req, res) => {
+  if (!validateInline(req, res, { params: Z.CreateContractAmendmentParams, body: Z.CreateContractAmendmentBody })) return;
   const [c] = await db.select().from(contractsTable).where(eq(contractsTable.id, req.params.id));
   if (!c) { res.status(404).json({ error: 'not found' }); return; }
   if (!(await gateDeal(req, res, c.dealId))) return;
@@ -1055,19 +1063,7 @@ router.post('/contracts/:id/amendments', async (req, res) => {
     res.status(400).json({ error: 'amendment only allowed on signed/active contracts' });
     return;
   }
-  const b = req.body as {
-    type: string;
-    title: string;
-    description?: string | null;
-    effectiveFrom?: string | null;
-    changes?: Array<{
-      family: string; familyId?: string | null;
-      operation: string;
-      beforeVariantId?: string | null; afterVariantId?: string | null;
-      beforeSummary?: string | null; afterSummary?: string | null;
-      severity?: string | null;
-    }>;
-  };
+  const b = req.body;
   if (!b?.type || !b?.title) { res.status(400).json({ error: 'type and title required' }); return; }
   const scope = getScope(req);
   const actor = scope.user?.name ?? null;
@@ -1131,11 +1127,12 @@ const AMENDMENT_TRANSITIONS: Record<string, string[]> = {
 };
 
 router.patch('/amendments/:id', async (req, res) => {
+  if (!validateInline(req, res, { params: Z.PatchContractAmendmentParams, body: Z.PatchContractAmendmentBody })) return;
   const [a] = await db.select().from(contractAmendmentsTable).where(eq(contractAmendmentsTable.id, req.params.id));
   if (!a) { res.status(404).json({ error: 'not found' }); return; }
   const [c] = await db.select().from(contractsTable).where(eq(contractsTable.id, a.originalContractId));
   if (!c || !(await gateDeal(req, res, c.dealId))) return;
-  const b = req.body as Partial<{ status: string; effectiveFrom: string | null; description: string | null; title: string }>;
+  const b = req.body;
   const patch: Partial<typeof contractAmendmentsTable.$inferInsert> = {};
   if (typeof b.status === 'string') {
     const allowed = AMENDMENT_TRANSITIONS[a.status] ?? [];
@@ -1385,6 +1382,7 @@ router.get('/contracts/:id/clauses', async (req, res) => {
 });
 
 router.patch('/contract-clauses/:id', async (req, res) => {
+  if (!validateInline(req, res, { params: Z.PatchContractClauseParams, body: Z.PatchContractClauseBody })) return;
   const { variantId } = (req.body ?? {}) as { variantId?: string };
   if (!variantId) { res.status(400).json({ error: 'variantId required' }); return; }
   const actor = getScope(req).user;
@@ -1662,15 +1660,11 @@ router.get('/negotiations/:id/impact', async (req, res) => {
 });
 
 router.post('/negotiations/:id/reactions', async (req, res) => {
+  if (!validateInline(req, res, { params: Z.AddCustomerReactionParams, body: Z.AddCustomerReactionBody })) return;
   const [n0] = await db.select().from(negotiationsTable).where(eq(negotiationsTable.id, req.params.id));
   if (!n0) { res.status(404).json({ error: 'not found' }); return; }
   if (!(await gateDeal(req, res, n0.dealId))) return;
-  const b = req.body as {
-    type: string; topic: string; summary: string; source: string; priority: string;
-    impactPct?: number;
-    priceDeltaPct?: number; termMonthsDelta?: number;
-    paymentTermsDeltaDays?: number; requestedClauseVariantId?: string;
-  };
+  const b = req.body;
   const id = `cr_${randomUUID().slice(0, 8)}`;
   await db.insert(customerReactionsTable).values({
     id, negotiationId: req.params.id, type: b.type, topic: b.topic,
@@ -1691,15 +1685,11 @@ router.post('/negotiations/:id/reactions', async (req, res) => {
 });
 
 router.post('/negotiations/:id/counterproposal', async (req, res) => {
+  if (!validateInline(req, res, { params: Z.CreateCounterproposalParams, body: Z.CreateCounterproposalBody })) return;
   const [n0] = await db.select().from(negotiationsTable).where(eq(negotiationsTable.id, req.params.id));
   if (!n0) { res.status(404).json({ error: 'not found' }); return; }
   if (!(await gateDeal(req, res, n0.dealId))) return;
-  const b = req.body as {
-    topic: string; summary: string; source: string; priority?: string;
-    priceDeltaPct?: number; termMonthsDelta?: number;
-    paymentTermsDeltaDays?: number; requestedClauseVariantId?: string;
-    createNewVersion?: boolean;
-  };
+  const b = req.body;
   const id = `cr_${randomUUID().slice(0, 8)}`;
 
   // Optionally create new quote version if createNewVersion=true and price delta given
@@ -1750,6 +1740,7 @@ router.post('/negotiations/:id/counterproposal', async (req, res) => {
 });
 
 router.post('/negotiations/:id/reactions/:reactionId/create-version', async (req, res) => {
+  if (!validateInline(req, res, { params: Z.CreateVersionFromReactionParams })) return;
   const [n0] = await db.select().from(negotiationsTable).where(eq(negotiationsTable.id, req.params.id));
   if (!n0) { res.status(404).json({ error: 'not found' }); return; }
   if (!(await gateDeal(req, res, n0.dealId))) return;
@@ -1784,6 +1775,7 @@ router.post('/negotiations/:id/reactions/:reactionId/create-version', async (req
 });
 
 router.post('/negotiations/:id/reactions/:reactionId/request-approval', async (req, res) => {
+  if (!validateInline(req, res, { params: Z.RequestApprovalFromReactionParams, body: Z.RequestApprovalFromReactionBody })) return;
   const [n0] = await db.select().from(negotiationsTable).where(eq(negotiationsTable.id, req.params.id));
   if (!n0) { res.status(404).json({ error: 'not found' }); return; }
   if (!(await gateDeal(req, res, n0.dealId))) return;
@@ -1800,7 +1792,7 @@ router.post('/negotiations/:id/reactions/:reactionId/request-approval', async (r
   const priceDelta = r.priceDeltaPct != null ? Number(r.priceDeltaPct) : 0;
   const baselineDiscount = latest ? num(latest.version.discountPct) : 0;
   const newDiscount = Math.max(0, baselineDiscount - priceDelta);
-  const b = req.body as { type?: string; reason?: string; priority?: string };
+  const b = req.body;
   const type = b?.type ?? 'discount';
   const reason = b?.reason ?? (priceDelta !== 0
     ? `Discount ${newDiscount.toFixed(1)}% requested via negotiation (topic: ${r.topic})`
@@ -1961,6 +1953,7 @@ router.get('/signatures/:id', async (req, res) => {
 });
 
 router.post('/signatures/:id/send-reminder', async (req, res) => {
+  if (!validateInline(req, res, { params: Z.SendSignatureReminderParams })) return;
   const [s] = await db.select().from(signaturePackagesTable).where(eq(signaturePackagesTable.id, req.params.id));
   if (!s) { res.status(404).json({ error: 'not found' }); return; }
   if (!(await gateDeal(req, res, s.dealId))) return;
@@ -1990,6 +1983,7 @@ router.post('/signatures/:id/send-reminder', async (req, res) => {
 });
 
 router.patch('/signers/:id/decline', async (req, res) => {
+  if (!validateInline(req, res, { params: Z.DeclineSignerParams, body: Z.DeclineSignerBody })) return;
   const [sg] = await db.select().from(signersTable).where(eq(signersTable.id, req.params.id));
   if (!sg) { res.status(404).json({ error: 'not found' }); return; }
   const [pkg] = await db.select().from(signaturePackagesTable).where(eq(signaturePackagesTable.id, sg.packageId));
@@ -2022,6 +2016,7 @@ router.patch('/signers/:id/decline', async (req, res) => {
 });
 
 router.post('/signatures/:id/escalate', async (req, res) => {
+  if (!validateInline(req, res, { params: Z.EscalateSignaturePackageParams, body: Z.EscalateSignaturePackageBody })) return;
   const [s] = await db.select().from(signaturePackagesTable).where(eq(signaturePackagesTable.id, req.params.id));
   if (!s) { res.status(404).json({ error: 'not found' }); return; }
   if (!(await gateDeal(req, res, s.dealId))) return;
@@ -2067,6 +2062,7 @@ router.post('/signatures/:id/escalate', async (req, res) => {
 });
 
 router.post('/signers/:id/sign', async (req, res) => {
+  if (!validateInline(req, res, { params: Z.SignSignerParams })) return;
   const [sg] = await db.select().from(signersTable).where(eq(signersTable.id, req.params.id));
   if (!sg) { res.status(404).json({ error: 'not found' }); return; }
   const [pkg] = await db.select().from(signaturePackagesTable).where(eq(signaturePackagesTable.id, sg.packageId));
@@ -2268,11 +2264,12 @@ router.get('/copilot/insights', async (req, res) => {
 });
 
 router.patch('/copilot/insights/:id', async (req, res) => {
+  if (!validateInline(req, res, { params: Z.PatchCopilotInsightParams, body: Z.PatchCopilotInsightBody })) return;
   const scope = getScope(req);
   const [c] = await db.select().from(copilotInsightsTable).where(eq(copilotInsightsTable.id, req.params.id));
   if (!c) { res.status(404).json({ error: 'not found' }); return; }
   if (!(await gateDeal(req, res, c.dealId))) return;
-  const b = req.body as { status?: 'open' | 'acknowledged' | 'resolved' | 'dismissed' };
+  const b = req.body;
   const next = b?.status;
   if (!next || !['open','acknowledged','resolved','dismissed'].includes(next)) {
     res.status(400).json({ error: 'invalid status' }); return;
@@ -2294,6 +2291,7 @@ router.patch('/copilot/insights/:id', async (req, res) => {
 });
 
 router.post('/copilot/insights/:id/execute', async (req, res) => {
+  if (!validateInline(req, res, { params: Z.ExecuteCopilotInsightParams })) return;
   const scope = getScope(req);
   const [c] = await db.select().from(copilotInsightsTable).where(eq(copilotInsightsTable.id, req.params.id));
   if (!c) { res.status(404).json({ error: 'not found' }); return; }
@@ -2488,7 +2486,8 @@ async function snapshotContract(contractId: string): Promise<string> {
 }
 
 router.post('/contracts/:id/versions', async (req, res) => {
-  const b = req.body as { label: string; comment?: string; snapshot?: string };
+  if (!validateInline(req, res, { params: Z.CreateContractVersionParams, body: Z.CreateContractVersionBody })) return;
+  const b = req.body;
   const stC = await entityScopeStatus(req, 'contract', req.params.id);
   if (stC !== 'ok') { res.status(stC === 'missing' ? 404 : 403).json({ error: stC === 'missing' ? 'not found' : 'forbidden' }); return; }
   const [c] = await db.select().from(contractsTable).where(eq(contractsTable.id, req.params.id));
@@ -2516,7 +2515,8 @@ router.post('/contracts/:id/versions', async (req, res) => {
 });
 
 router.post('/price-positions/:id/versions', async (req, res) => {
-  const b = req.body as { label: string; comment?: string; snapshot?: string };
+  if (!validateInline(req, res, { params: Z.CreatePricePositionVersionParams, body: Z.CreatePricePositionVersionBody })) return;
+  const b = req.body;
   const stP = await entityScopeStatus(req, 'price_position', req.params.id);
   if (stP !== 'ok') { res.status(stP === 'missing' ? 404 : 403).json({ error: stP === 'missing' ? 'not found' : 'forbidden' }); return; }
   const [p] = await db.select().from(pricePositionsTable).where(eq(pricePositionsTable.id, req.params.id));
@@ -2611,10 +2611,11 @@ router.get('/pricing/resolve', async (req, res) => {
 
 // ── PRICE INCREASE LETTER WORKFLOW ──
 router.post('/price-increases/:id/letters/:letterId/respond', async (req, res) => {
+  if (!validateInline(req, res, { params: Z.RespondToPriceIncreaseLetterParams, body: Z.RespondToPriceIncreaseLetterBody })) return;
   const [pre] = await db.select().from(priceIncreaseLettersTable).where(eq(priceIncreaseLettersTable.id, req.params.letterId));
   if (!pre) { res.status(404).json({ error: 'letter not found' }); return; }
   if (!(await gateAccount(req, res, pre.accountId))) return;
-  const b = req.body as { decision: string; comment?: string };
+  const b = req.body;
   const newStatus = b.decision === 'accept' ? 'accepted'
     : b.decision === 'reject' ? 'rejected'
     : b.decision === 'negotiate' ? 'negotiating'
@@ -2824,6 +2825,7 @@ async function respondOcDetail(res: Response, ocId: string) {
 }
 
 router.post('/order-confirmations/:id/handover', async (req, res) => {
+  if (!validateInline(req, res, { params: Z.HandoverOrderConfirmationParams, body: Z.HandoverOrderConfirmationBody })) return;
   const [o] = await db.select().from(orderConfirmationsTable).where(eq(orderConfirmationsTable.id, req.params.id));
   if (!o) { res.status(404).json({ error: 'not found' }); return; }
   if (!(await gateDeal(req, res, o.dealId))) return;
@@ -2870,6 +2872,7 @@ router.post('/order-confirmations/:id/handover', async (req, res) => {
 });
 
 router.post('/order-confirmations/:id/complete', async (req, res) => {
+  if (!validateInline(req, res, { params: Z.CompleteOrderConfirmationParams })) return;
   const [o] = await db.select().from(orderConfirmationsTable).where(eq(orderConfirmationsTable.id, req.params.id));
   if (!o) { res.status(404).json({ error: 'not found' }); return; }
   if (!(await gateDeal(req, res, o.dealId))) return;
@@ -2924,8 +2927,9 @@ function craftAssistantReply(userText: string): string {
 }
 
 router.post('/copilot/threads/:id/messages', async (req, res) => {
+  if (!validateInline(req, res, { params: Z.PostCopilotMessageParams, body: Z.PostCopilotMessageBody })) return;
   if (!(await gateThread(req, res, req.params.id))) return;
-  const b = req.body as { content: string };
+  const b = req.body;
   const userId = `cm_${randomUUID().slice(0, 10)}`;
   await db.insert(copilotMessagesTable).values({
     id: userId, threadId: req.params.id, role: 'user', content: b.content,
@@ -2949,7 +2953,8 @@ router.post('/copilot/threads/:id/messages', async (req, res) => {
 });
 
 router.post('/copilot/threads', async (req, res) => {
-  const b = req.body as { title: string; scope?: string };
+  if (!validateInline(req, res, { body: Z.CreateCopilotThreadBody })) return;
+  const b = req.body;
   const id = `ct_${randomUUID().slice(0, 10)}`;
   await db.insert(copilotThreadsTable).values({
     id, title: b.title, scope: b.scope ?? 'global',
@@ -3022,7 +3027,8 @@ const helpRules: Array<{ match: RegExp; reply: string; suggestions: { label: str
 ];
 
 router.post('/copilot/help', async (req, res) => {
-  const b = req.body as { question: string; currentPath?: string | null };
+  if (!validateInline(req, res, { body: Z.AskHelpBotBody })) return;
+  const b = req.body;
   const q = b.question ?? '';
   const hit = helpRules.find(r => r.match.test(q));
   if (hit) {
@@ -3043,7 +3049,7 @@ router.post('/copilot/help', async (req, res) => {
 // We hook into existing endpoints by re-using writeAudit at point-of-call would
 // require refactoring. Instead expose a lightweight wrapper for new clients:
 router.post('/audit/manual', async (req, res) => {
-  const b = req.body as { entityType: string; entityId: string; action: string; summary: string };
+  const b = req.body;
   await writeAudit(b);
   res.status(201).json({ ok: true });
 });
@@ -3121,12 +3127,10 @@ router.get('/admin/users', async (req, res) => {
 });
 
 router.post('/admin/users', async (req, res) => {
+  if (!validateInline(req, res, { body: Z.CreateAdminUserBody })) return;
   if (!requireTenantAdmin(req, res)) return;
   const scope = getScope(req);
-  const b = req.body as {
-    name?: string; email?: string; role?: string; password?: string;
-    tenantWide?: boolean; scopeCompanyIds?: string[]; scopeBrandIds?: string[];
-  };
+  const b = req.body;
   if (!b.name || !b.email || !b.role || !b.password) {
     res.status(400).json({ error: 'name, email, role, password required' });
     return;
@@ -3147,8 +3151,8 @@ router.post('/admin/users', async (req, res) => {
     ? await db.select({ id: brandsTable.id }).from(brandsTable).where(inArray(brandsTable.companyId, [...tenantCompanyIds]))
     : [];
   const tenantBrandIds = new Set(tenantBrands.map(x => x.id));
-  const validCompanies = (b.scopeCompanyIds ?? []).filter(id => tenantCompanyIds.has(id));
-  const validBrands = (b.scopeBrandIds ?? []).filter(id => tenantBrandIds.has(id));
+  const validCompanies = ((b.scopeCompanyIds ?? []) as string[]).filter((id: string) => tenantCompanyIds.has(id));
+  const validBrands = ((b.scopeBrandIds ?? []) as string[]).filter((id: string) => tenantBrandIds.has(id));
   const { hashPassword } = await import('../lib/auth');
   const id = `u_${randomUUID().slice(0, 8)}`;
   const [ins] = await db.insert(usersTable).values({
@@ -3176,16 +3180,13 @@ router.post('/admin/users', async (req, res) => {
 });
 
 router.patch('/admin/users/:id', async (req, res) => {
+  if (!validateInline(req, res, { params: Z.UpdateAdminUserParams, body: Z.UpdateAdminUserBody })) return;
   if (!requireTenantAdmin(req, res)) return;
   const scope = getScope(req);
   const [u] = await db.select().from(usersTable).where(eq(usersTable.id, req.params.id));
   if (!u) { res.status(404).json({ error: 'not found' }); return; }
   if (u.tenantId !== scope.tenantId) { res.status(403).json({ error: 'forbidden' }); return; }
-  const b = req.body as {
-    name?: string; role?: string; isActive?: boolean;
-    tenantWide?: boolean; scopeCompanyIds?: string[]; scopeBrandIds?: string[];
-    password?: string;
-  };
+  const b = req.body;
   const patch: Partial<typeof usersTable.$inferInsert> = {};
   if (typeof b.name === 'string' && b.name.trim()) {
     patch.name = b.name.trim();
@@ -3214,10 +3215,10 @@ router.patch('/admin/users/:id', async (req, res) => {
       : [];
     const tenantBrandIds = new Set(tenantBrands.map(x => x.id));
     if (Array.isArray(b.scopeCompanyIds)) {
-      patch.scopeCompanyIds = JSON.stringify(b.scopeCompanyIds.filter(id => tenantCompanyIds.has(id)));
+      patch.scopeCompanyIds = JSON.stringify((b.scopeCompanyIds as string[]).filter((id: string) => tenantCompanyIds.has(id)));
     }
     if (Array.isArray(b.scopeBrandIds)) {
-      patch.scopeBrandIds = JSON.stringify(b.scopeBrandIds.filter(id => tenantBrandIds.has(id)));
+      patch.scopeBrandIds = JSON.stringify((b.scopeBrandIds as string[]).filter((id: string) => tenantBrandIds.has(id)));
     }
   }
   if (typeof b.password === 'string' && b.password.length > 0) {
@@ -3249,9 +3250,10 @@ router.get('/admin/roles', async (req, res) => {
 });
 
 router.post('/admin/roles', async (req, res) => {
+  if (!validateInline(req, res, { body: Z.CreateRoleBody })) return;
   if (!requireTenantAdmin(req, res)) return;
   const scope = getScope(req);
-  const b = req.body as { name?: string; description?: string };
+  const b = req.body;
   if (!b.name?.trim() || !b.description?.trim()) {
     res.status(400).json({ error: 'name and description required' });
     return;
@@ -3274,12 +3276,13 @@ router.post('/admin/roles', async (req, res) => {
 });
 
 router.patch('/admin/roles/:id', async (req, res) => {
+  if (!validateInline(req, res, { params: Z.UpdateRoleParams, body: Z.UpdateRoleBody })) return;
   if (!requireTenantAdmin(req, res)) return;
   const scope = getScope(req);
   const [r] = await db.select().from(rolesTable).where(eq(rolesTable.id, req.params.id));
   if (!r || r.tenantId !== scope.tenantId) { res.status(404).json({ error: 'not found' }); return; }
   if (r.isSystem) { res.status(400).json({ error: 'cannot modify system role' }); return; }
-  const b = req.body as { name?: string; description?: string };
+  const b = req.body;
   const patch: Partial<typeof rolesTable.$inferInsert> = {};
   if (typeof b.name === 'string' && b.name.trim()) patch.name = b.name.trim();
   if (typeof b.description === 'string' && b.description.trim()) patch.description = b.description.trim();
@@ -3305,6 +3308,7 @@ router.patch('/admin/roles/:id', async (req, res) => {
 });
 
 router.delete('/admin/roles/:id', async (req, res) => {
+  if (!validateInline(req, res, { params: Z.DeleteRoleParams })) return;
   if (!requireTenantAdmin(req, res)) return;
   const scope = getScope(req);
   const [r] = await db.select().from(rolesTable).where(eq(rolesTable.id, req.params.id));
@@ -3399,6 +3403,7 @@ router.get('/gdpr/export', async (req, res) => {
 });
 
 router.post('/gdpr/forget', async (req, res) => {
+  if (!validateInline(req, res, { body: Z.ForgetGdprSubjectBody })) return;
   if (!requireAdmin(req, res)) return;
   const scope = getScope(req);
   const { subjectType, subjectId, reason } = (req.body ?? {}) as {
@@ -3483,6 +3488,7 @@ router.get('/gdpr/retention-policy', async (req, res) => {
 });
 
 router.patch('/gdpr/retention-policy', async (req, res) => {
+  if (!validateInline(req, res, { body: Z.UpdateGdprRetentionPolicyBody })) return;
   if (!requireAdmin(req, res)) return;
   const scope = getScope(req);
   const body = (req.body ?? {}) as Record<string, unknown>;
