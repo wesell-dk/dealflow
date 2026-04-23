@@ -350,13 +350,13 @@ export async function seedIfEmpty(): Promise<void> {
   ]);
 
   await db.insert(customerReactionsTable).values([
-    { id: "cr_001", negotiationId: "ng_001", type: "counterproposal", topic: "Pricing",     summary: "Asked for 12% volume discount given multi-site rollout.",        source: "Email – Klaus Vorwerk", priority: "high",   impactPct: "12" },
+    { id: "cr_001", negotiationId: "ng_001", type: "counterproposal", topic: "Pricing",     summary: "Asked for 12% volume discount given multi-site rollout.",        source: "Email – Klaus Vorwerk", priority: "high",   impactPct: "12",  priceDeltaPct: "-12" },
     { id: "cr_002", negotiationId: "ng_001", type: "question",        topic: "Implementation", summary: "Wants confirmation on rollout timeline across 3 sites.",      source: "Workshop call",        priority: "medium", impactPct: null },
-    { id: "cr_003", negotiationId: "ng_002", type: "objection",       topic: "Liability",   summary: "Refusing standard cap; demanding uncapped IP indemnity.",        source: "Legal redline",        priority: "high",   impactPct: null },
-    { id: "cr_004", negotiationId: "ng_002", type: "counterproposal", topic: "Payment",     summary: "Proposes Net 60 instead of Net 30.",                            source: "CFO email",            priority: "medium", impactPct: "2.5" },
+    { id: "cr_003", negotiationId: "ng_002", type: "objection",       topic: "Liability",   summary: "Refusing standard cap; demanding uncapped IP indemnity.",        source: "Legal redline",        priority: "high",   impactPct: null, requestedClauseVariantId: "cv_001" },
+    { id: "cr_004", negotiationId: "ng_002", type: "counterproposal", topic: "Payment",     summary: "Proposes Net 60 instead of Net 30.",                            source: "CFO email",            priority: "medium", impactPct: "2.5", paymentTermsDeltaDays: 30 },
     { id: "cr_005", negotiationId: "ng_003", type: "question",        topic: "SLA",         summary: "Requesting clarity on response times during weekends.",          source: "Procurement call",     priority: "medium", impactPct: null },
     { id: "cr_006", negotiationId: "ng_004", type: "acceptance",      topic: "Final terms", summary: "Confirmed acceptance of revised counter.",                       source: "Email – Oliver Hayes", priority: "low",    impactPct: null },
-    { id: "cr_007", negotiationId: "ng_005", type: "objection",       topic: "Total price", summary: "Concerns about CAPEX impact – wants phased rollout pricing.",    source: "CFO meeting",          priority: "high",   impactPct: "15" },
+    { id: "cr_007", negotiationId: "ng_005", type: "objection",       topic: "Total price", summary: "Concerns about CAPEX impact – wants phased rollout pricing.",    source: "CFO meeting",          priority: "high",   impactPct: "15",  priceDeltaPct: "-8", termMonthsDelta: 12 },
   ]);
 
   // Signatures

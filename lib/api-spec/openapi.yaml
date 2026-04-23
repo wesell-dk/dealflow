@@ -594,6 +594,99 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/CustomerReaction" }
 
+  /negotiations/{id}/impact:
+    get:
+      operationId: getNegotiationImpact
+      tags: [negotiations]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: ok
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/NegotiationImpactResponse" }
+
+  /negotiations/{id}/counterproposal:
+    post:
+      operationId: createCounterproposal
+      tags: [negotiations]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CounterproposalInput" }
+      responses:
+        "201":
+          description: created
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CustomerReaction" }
+
+  /negotiations/{id}/reactions/{reactionId}/create-version:
+    post:
+      operationId: createVersionFromReaction
+      tags: [negotiations]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+        - in: path
+          name: reactionId
+          required: true
+          schema: { type: string }
+      responses:
+        "201":
+          description: created
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [reactionId, quoteVersionId, version]
+                properties:
+                  reactionId: { type: string }
+                  quoteVersionId: { type: string }
+                  version: { type: integer }
+
+  /negotiations/{id}/reactions/{reactionId}/request-approval:
+    post:
+      operationId: requestApprovalFromReaction
+      tags: [negotiations]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+        - in: path
+          name: reactionId
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ApprovalFromReactionInput" }
+      responses:
+        "201":
+          description: created
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [reactionId, approvalId]
+                properties:
+                  reactionId: { type: string }
+                  approvalId: { type: string }
+
   # ───────────── SIGNATURES ─────────────
 
   /signatures:
@@ -1543,8 +1636,13 @@ components:
         source: { type: string }
         createdAt: { type: string, format: date-time }
         priority: { type: string }
-        impactPct:
-          type: ["number", "null"]
+        impactPct: { type: ["number", "null"] }
+        priceDeltaPct: { type: ["number", "null"] }
+        termMonthsDelta: { type: ["integer", "null"] }
+        paymentTermsDeltaDays: { type: ["integer", "null"] }
+        requestedClauseVariantId: { type: ["string", "null"] }
+        linkedQuoteVersionId: { type: ["string", "null"] }
+        linkedApprovalId: { type: ["string", "null"] }
 
     ReactionInput:
       type: object
@@ -1556,6 +1654,83 @@ components:
         source: { type: string }
         priority: { type: string }
         impactPct: { type: number }
+        priceDeltaPct: { type: number }
+        termMonthsDelta: { type: integer }
+        paymentTermsDeltaDays: { type: integer }
+        requestedClauseVariantId: { type: string }
+
+    ApprovalFromReactionInput:
+      type: object
+      properties:
+        type: { type: string }
+        reason: { type: string }
+        priority: { type: string }
+
+    CounterproposalInput:
+      type: object
+      required: [topic, summary, source]
+      properties:
+        topic: { type: string }
+        summary: { type: string }
+        source: { type: string }
+        priority: { type: string }
+        priceDeltaPct: { type: number }
+        termMonthsDelta: { type: integer }
+        paymentTermsDeltaDays: { type: integer }
+        requestedClauseVariantId: { type: string }
+        createNewVersion: { type: boolean }
+
+    NegotiationImpact:
+      type: object
+      required: [reactionId, followUps, approvalsTriggered, riskTrend]
+      properties:
+        reactionId: { type: string }
+        priceDeltaPct: { type: ["number", "null"] }
+        newTotalAmount: { type: ["number", "null"] }
+        newDiscountPct: { type: ["number", "null"] }
+        newMarginPct: { type: ["number", "null"] }
+        marginDeltaPct: { type: ["number", "null"] }
+        termMonthsDelta: { type: ["integer", "null"] }
+        paymentTermsDeltaDays: { type: ["integer", "null"] }
+        requestedClauseVariantId: { type: ["string", "null"] }
+        linkedQuoteVersionId: { type: ["string", "null"] }
+        linkedApprovalId: { type: ["string", "null"] }
+        followUps:
+          type: array
+          items: { type: string }
+        approvalsTriggered:
+          type: array
+          items:
+            type: object
+            required: [type, reason]
+            properties:
+              type: { type: string }
+              reason: { type: string }
+        riskTrend:
+          type: string
+          enum: [up, down, flat]
+
+    NegotiationBaseline:
+      type: object
+      required: [totalAmount, discountPct, marginPct]
+      properties:
+        totalAmount: { type: number }
+        discountPct: { type: number }
+        marginPct: { type: number }
+
+    NegotiationImpactResponse:
+      type: object
+      required: [negotiationId, approvalThresholdPct, impacts]
+      properties:
+        negotiationId: { type: string }
+        approvalThresholdPct: { type: number }
+        baseline:
+          oneOf:
+            - $ref: "#/components/schemas/NegotiationBaseline"
+            - type: "null"
+        impacts:
+          type: array
+          items: { $ref: "#/components/schemas/NegotiationImpact" }
 
     # ── Signatures ──
     SignaturePackage:

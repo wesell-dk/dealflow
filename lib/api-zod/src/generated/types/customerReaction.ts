@@ -19,4 +19,16 @@ export interface CustomerReaction {
   priority: string;
   /** @nullable */
   impactPct?: number | null;
+  /** @nullable */
+  priceDeltaPct?: number | null;
+  /** @nullable */
+  termMonthsDelta?: number | null;
+  /** @nullable */
+  paymentTermsDeltaDays?: number | null;
+  /** @nullable */
+  requestedClauseVariantId?: string | null;
+  /** @nullable */
+  linkedQuoteVersionId?: string | null;
+  /** @nullable */
+  linkedApprovalId?: string | null;
 }

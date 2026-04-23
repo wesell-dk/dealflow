@@ -747,6 +747,96 @@ router.get('/negotiations', async (req, res) => {
   res.json(rows.map(n => mapNegotiation(n, dealMap.get(n.dealId)?.name ?? 'Unknown')));
 });
 
+function mapReaction(r: typeof customerReactionsTable.$inferSelect) {
+  return {
+    id: r.id, negotiationId: r.negotiationId, type: r.type, topic: r.topic,
+    summary: r.summary, source: r.source, priority: r.priority,
+    impactPct: numOrNull(r.impactPct),
+    priceDeltaPct: numOrNull(r.priceDeltaPct),
+    termMonthsDelta: r.termMonthsDelta ?? null,
+    paymentTermsDeltaDays: r.paymentTermsDeltaDays ?? null,
+    requestedClauseVariantId: r.requestedClauseVariantId ?? null,
+    linkedQuoteVersionId: r.linkedQuoteVersionId ?? null,
+    linkedApprovalId: r.linkedApprovalId ?? null,
+    createdAt: iso(r.createdAt)!,
+  };
+}
+
+// Discount approval threshold (percentage above which approval is required)
+const DISCOUNT_APPROVAL_THRESHOLD_PCT = 10;
+
+async function loadLatestQuoteVersion(dealId: string) {
+  const [q] = await db.select().from(quotesTable).where(eq(quotesTable.dealId, dealId));
+  if (!q) return null;
+  const [v] = await db.select().from(quoteVersionsTable)
+    .where(eq(quoteVersionsTable.quoteId, q.id))
+    .orderBy(desc(quoteVersionsTable.version));
+  return v ? { quote: q, version: v } : null;
+}
+
+function computeImpactForReaction(
+  r: typeof customerReactionsTable.$inferSelect,
+  baseline: { totalAmount: number; discountPct: number; marginPct: number } | null,
+) {
+  const priceDelta = r.priceDeltaPct != null ? Number(r.priceDeltaPct) : null;
+  let newDiscountPct: number | null = null;
+  let newTotalAmount: number | null = null;
+  let newMarginPct: number | null = null;
+  const followUps: string[] = [];
+  const approvalsTriggered: Array<{ type: string; reason: string }> = [];
+
+  if (priceDelta != null && baseline) {
+    newDiscountPct = Math.max(0, baseline.discountPct - priceDelta);
+    newTotalAmount = Math.round(baseline.totalAmount * (1 + priceDelta / 100) * 100) / 100;
+    // Naive margin model: margin absorbs price change 1:1 in percentage points.
+    newMarginPct = Math.round((baseline.marginPct + priceDelta) * 100) / 100;
+    followUps.push('new_quote_version');
+    if (newDiscountPct > DISCOUNT_APPROVAL_THRESHOLD_PCT && !r.linkedApprovalId) {
+      approvalsTriggered.push({
+        type: 'discount',
+        reason: `Discount ${newDiscountPct.toFixed(1)}% exceeds ${DISCOUNT_APPROVAL_THRESHOLD_PCT}% threshold`,
+      });
+      followUps.push('discount_approval');
+    }
+  }
+  if (r.termMonthsDelta != null && r.termMonthsDelta !== 0) {
+    followUps.push('contract_amendment');
+  }
+  if (r.paymentTermsDeltaDays != null && r.paymentTermsDeltaDays !== 0) {
+    followUps.push('contract_amendment');
+    if (r.paymentTermsDeltaDays > 14) {
+      approvalsTriggered.push({
+        type: 'payment_terms',
+        reason: `Payment terms extended by ${r.paymentTermsDeltaDays} days`,
+      });
+    }
+  }
+  if (r.requestedClauseVariantId) {
+    followUps.push('clause_change');
+  }
+
+  let riskTrend: 'up' | 'down' | 'flat' = 'flat';
+  if (r.type === 'acceptance') riskTrend = 'down';
+  else if (r.priority === 'high' || (priceDelta != null && priceDelta <= -5)) riskTrend = 'up';
+
+  return {
+    reactionId: r.id,
+    priceDeltaPct: priceDelta,
+    newTotalAmount,
+    newDiscountPct: newDiscountPct != null ? Math.round(newDiscountPct * 100) / 100 : null,
+    newMarginPct,
+    marginDeltaPct: newMarginPct != null && baseline ? Math.round((newMarginPct - baseline.marginPct) * 100) / 100 : null,
+    termMonthsDelta: r.termMonthsDelta ?? null,
+    paymentTermsDeltaDays: r.paymentTermsDeltaDays ?? null,
+    requestedClauseVariantId: r.requestedClauseVariantId ?? null,
+    followUps: Array.from(new Set(followUps)),
+    approvalsTriggered,
+    riskTrend,
+    linkedQuoteVersionId: r.linkedQuoteVersionId ?? null,
+    linkedApprovalId: r.linkedApprovalId ?? null,
+  };
+}
+
 router.get('/negotiations/:id', async (req, res) => {
   const [n] = await db.select().from(negotiationsTable).where(eq(negotiationsTable.id, req.params.id));
   if (!n) { res.status(404).json({ error: 'not found' }); return; }
@@ -758,13 +848,17 @@ router.get('/negotiations/:id', async (req, res) => {
   const tlRows = await db.select().from(timelineEventsTable)
     .where(eq(timelineEventsTable.dealId, n.dealId))
     .orderBy(desc(timelineEventsTable.at));
+  const latest = await loadLatestQuoteVersion(n.dealId);
+  const baseline = latest ? {
+    totalAmount: num(latest.version.totalAmount),
+    discountPct: num(latest.version.discountPct),
+    marginPct: num(latest.version.marginPct),
+  } : null;
   res.json({
     ...mapNegotiation(n, dealMap.get(n.dealId)?.name ?? 'Unknown'),
-    reactions: reactions.map(r => ({
-      id: r.id, negotiationId: r.negotiationId, type: r.type, topic: r.topic,
-      summary: r.summary, source: r.source, priority: r.priority,
-      impactPct: numOrNull(r.impactPct), createdAt: iso(r.createdAt)!,
-    })),
+    baseline,
+    reactions: reactions.map(mapReaction),
+    impacts: reactions.map(r => computeImpactForReaction(r, baseline)),
     timeline: tlRows.map(t => ({
       id: t.id, type: t.type, title: t.title, description: t.description,
       actor: t.actor, dealId: t.dealId,
@@ -774,29 +868,185 @@ router.get('/negotiations/:id', async (req, res) => {
   });
 });
 
+router.get('/negotiations/:id/impact', async (req, res) => {
+  const [n] = await db.select().from(negotiationsTable).where(eq(negotiationsTable.id, req.params.id));
+  if (!n) { res.status(404).json({ error: 'not found' }); return; }
+  if (!(await gateDeal(req, res, n.dealId))) return;
+  const reactions = await db.select().from(customerReactionsTable)
+    .where(eq(customerReactionsTable.negotiationId, n.id))
+    .orderBy(desc(customerReactionsTable.createdAt));
+  const latest = await loadLatestQuoteVersion(n.dealId);
+  const baseline = latest ? {
+    totalAmount: num(latest.version.totalAmount),
+    discountPct: num(latest.version.discountPct),
+    marginPct: num(latest.version.marginPct),
+  } : null;
+  res.json({
+    negotiationId: n.id,
+    baseline,
+    approvalThresholdPct: DISCOUNT_APPROVAL_THRESHOLD_PCT,
+    impacts: reactions.map(r => computeImpactForReaction(r, baseline)),
+  });
+});
+
 router.post('/negotiations/:id/reactions', async (req, res) => {
   const [n0] = await db.select().from(negotiationsTable).where(eq(negotiationsTable.id, req.params.id));
   if (!n0) { res.status(404).json({ error: 'not found' }); return; }
   if (!(await gateDeal(req, res, n0.dealId))) return;
   const b = req.body as {
-    type: string; topic: string; summary: string; source: string; priority: string; impactPct?: number;
+    type: string; topic: string; summary: string; source: string; priority: string;
+    impactPct?: number;
+    priceDeltaPct?: number; termMonthsDelta?: number;
+    paymentTermsDeltaDays?: number; requestedClauseVariantId?: string;
   };
   const id = `cr_${randomUUID().slice(0, 8)}`;
   await db.insert(customerReactionsTable).values({
     id, negotiationId: req.params.id, type: b.type, topic: b.topic,
     summary: b.summary, source: b.source, priority: b.priority,
     impactPct: b.impactPct != null ? String(b.impactPct) : null,
+    priceDeltaPct: b.priceDeltaPct != null ? String(b.priceDeltaPct) : null,
+    termMonthsDelta: b.termMonthsDelta ?? null,
+    paymentTermsDeltaDays: b.paymentTermsDeltaDays ?? null,
+    requestedClauseVariantId: b.requestedClauseVariantId ?? null,
   });
   await db.update(negotiationsTable).set({
     lastReactionType: b.type, updatedAt: new Date(),
     round: sql`${negotiationsTable.round} + 1`,
   }).where(eq(negotiationsTable.id, req.params.id));
   const [r] = await db.select().from(customerReactionsTable).where(eq(customerReactionsTable.id, id));
-  res.status(201).json({
-    id: r!.id, negotiationId: r!.negotiationId, type: r!.type, topic: r!.topic,
-    summary: r!.summary, source: r!.source, priority: r!.priority,
-    impactPct: numOrNull(r!.impactPct), createdAt: iso(r!.createdAt)!,
+  res.status(201).json(mapReaction(r!));
+});
+
+router.post('/negotiations/:id/counterproposal', async (req, res) => {
+  const [n0] = await db.select().from(negotiationsTable).where(eq(negotiationsTable.id, req.params.id));
+  if (!n0) { res.status(404).json({ error: 'not found' }); return; }
+  if (!(await gateDeal(req, res, n0.dealId))) return;
+  const b = req.body as {
+    topic: string; summary: string; source: string; priority?: string;
+    priceDeltaPct?: number; termMonthsDelta?: number;
+    paymentTermsDeltaDays?: number; requestedClauseVariantId?: string;
+    createNewVersion?: boolean;
+  };
+  const id = `cr_${randomUUID().slice(0, 8)}`;
+
+  // Optionally create new quote version if createNewVersion=true and price delta given
+  let linkedQuoteVersionId: string | null = null;
+  if (b.createNewVersion && b.priceDeltaPct != null) {
+    const latest = await loadLatestQuoteVersion(n0.dealId);
+    if (latest) {
+      const newTotal = num(latest.version.totalAmount) * (1 + b.priceDeltaPct / 100);
+      const newDiscount = Math.max(0, num(latest.version.discountPct) - b.priceDeltaPct);
+      const newMargin = num(latest.version.marginPct) + b.priceDeltaPct;
+      const vId = `qv_${randomUUID().slice(0, 8)}`;
+      await db.insert(quoteVersionsTable).values({
+        id: vId,
+        quoteId: latest.quote.id,
+        version: latest.version.version + 1,
+        totalAmount: String(Math.round(newTotal * 100) / 100),
+        discountPct: String(Math.round(newDiscount * 100) / 100),
+        marginPct: String(Math.round(newMargin * 100) / 100),
+        status: 'draft',
+        notes: `Counterproposal: ${b.topic}`,
+      });
+      await db.update(quotesTable).set({ currentVersion: latest.version.version + 1 })
+        .where(eq(quotesTable.id, latest.quote.id));
+      linkedQuoteVersionId = vId;
+    }
+  }
+
+  await db.insert(customerReactionsTable).values({
+    id,
+    negotiationId: req.params.id,
+    type: 'counterproposal',
+    topic: b.topic,
+    summary: b.summary,
+    source: b.source,
+    priority: b.priority ?? 'medium',
+    priceDeltaPct: b.priceDeltaPct != null ? String(b.priceDeltaPct) : null,
+    termMonthsDelta: b.termMonthsDelta ?? null,
+    paymentTermsDeltaDays: b.paymentTermsDeltaDays ?? null,
+    requestedClauseVariantId: b.requestedClauseVariantId ?? null,
+    linkedQuoteVersionId,
   });
+  await db.update(negotiationsTable).set({
+    lastReactionType: 'counterproposal', updatedAt: new Date(),
+    round: sql`${negotiationsTable.round} + 1`,
+  }).where(eq(negotiationsTable.id, req.params.id));
+  const [r] = await db.select().from(customerReactionsTable).where(eq(customerReactionsTable.id, id));
+  res.status(201).json(mapReaction(r!));
+});
+
+router.post('/negotiations/:id/reactions/:reactionId/create-version', async (req, res) => {
+  const [n0] = await db.select().from(negotiationsTable).where(eq(negotiationsTable.id, req.params.id));
+  if (!n0) { res.status(404).json({ error: 'not found' }); return; }
+  if (!(await gateDeal(req, res, n0.dealId))) return;
+  const [r] = await db.select().from(customerReactionsTable)
+    .where(and(eq(customerReactionsTable.id, req.params.reactionId),
+               eq(customerReactionsTable.negotiationId, req.params.id)));
+  if (!r) { res.status(404).json({ error: 'reaction not found' }); return; }
+  if (r.linkedQuoteVersionId) {
+    res.status(409).json({ error: 'already linked to quote version', linkedQuoteVersionId: r.linkedQuoteVersionId });
+    return;
+  }
+  const priceDelta = r.priceDeltaPct != null ? Number(r.priceDeltaPct) : 0;
+  const latest = await loadLatestQuoteVersion(n0.dealId);
+  if (!latest) { res.status(400).json({ error: 'no existing quote to version from' }); return; }
+  const newTotal = num(latest.version.totalAmount) * (1 + priceDelta / 100);
+  const newDiscount = Math.max(0, num(latest.version.discountPct) - priceDelta);
+  const newMargin = num(latest.version.marginPct) + priceDelta;
+  const vId = `qv_${randomUUID().slice(0, 8)}`;
+  await db.insert(quoteVersionsTable).values({
+    id: vId, quoteId: latest.quote.id, version: latest.version.version + 1,
+    totalAmount: String(Math.round(newTotal * 100) / 100),
+    discountPct: String(Math.round(newDiscount * 100) / 100),
+    marginPct: String(Math.round(newMargin * 100) / 100),
+    status: 'draft',
+    notes: `From reaction ${r.id}: ${r.topic}`,
+  });
+  await db.update(quotesTable).set({ currentVersion: latest.version.version + 1 })
+    .where(eq(quotesTable.id, latest.quote.id));
+  await db.update(customerReactionsTable).set({ linkedQuoteVersionId: vId })
+    .where(eq(customerReactionsTable.id, r.id));
+  res.status(201).json({ reactionId: r.id, quoteVersionId: vId, version: latest.version.version + 1 });
+});
+
+router.post('/negotiations/:id/reactions/:reactionId/request-approval', async (req, res) => {
+  const [n0] = await db.select().from(negotiationsTable).where(eq(negotiationsTable.id, req.params.id));
+  if (!n0) { res.status(404).json({ error: 'not found' }); return; }
+  if (!(await gateDeal(req, res, n0.dealId))) return;
+  const [r] = await db.select().from(customerReactionsTable)
+    .where(and(eq(customerReactionsTable.id, req.params.reactionId),
+               eq(customerReactionsTable.negotiationId, req.params.id)));
+  if (!r) { res.status(404).json({ error: 'reaction not found' }); return; }
+  if (r.linkedApprovalId) {
+    res.status(409).json({ error: 'already linked to approval', linkedApprovalId: r.linkedApprovalId });
+    return;
+  }
+  const scope = getScope(req);
+  const latest = await loadLatestQuoteVersion(n0.dealId);
+  const priceDelta = r.priceDeltaPct != null ? Number(r.priceDeltaPct) : 0;
+  const baselineDiscount = latest ? num(latest.version.discountPct) : 0;
+  const newDiscount = Math.max(0, baselineDiscount - priceDelta);
+  const b = req.body as { type?: string; reason?: string; priority?: string };
+  const type = b?.type ?? 'discount';
+  const reason = b?.reason ?? (priceDelta !== 0
+    ? `Discount ${newDiscount.toFixed(1)}% requested via negotiation (topic: ${r.topic})`
+    : `Approval requested for reaction: ${r.topic}`);
+  const aId = `ap_${randomUUID().slice(0, 8)}`;
+  await db.insert(approvalsTable).values({
+    id: aId,
+    dealId: n0.dealId,
+    type,
+    reason,
+    requestedBy: scope?.user.id ?? 'system',
+    status: 'pending',
+    priority: b?.priority ?? (r.priority === 'high' ? 'high' : 'medium'),
+    impactValue: String(latest ? num(latest.version.totalAmount) * (priceDelta / 100) : 0),
+    currency: 'EUR',
+  });
+  await db.update(customerReactionsTable).set({ linkedApprovalId: aId })
+    .where(eq(customerReactionsTable.id, r.id));
+  res.status(201).json({ reactionId: r.id, approvalId: aId });
 });
 
 // ── SIGNATURES ──

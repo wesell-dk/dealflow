@@ -8,15 +8,14 @@ Multi-tenant, multi-company, multi-brand. Deal-centric.
  * OpenAPI spec version: 0.1.0
  */
 
-export interface ReactionInput {
-  type: string;
+export interface CounterproposalInput {
   topic: string;
   summary: string;
   source: string;
-  priority: string;
-  impactPct?: number;
+  priority?: string;
   priceDeltaPct?: number;
   termMonthsDelta?: number;
   paymentTermsDeltaDays?: number;
   requestedClauseVariantId?: string;
+  createNewVersion?: boolean;
 }

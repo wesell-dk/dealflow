@@ -240,6 +240,12 @@ export const customerReactionsTable = pgTable("customer_reactions", {
   source: text("source").notNull(),
   priority: text("priority").notNull(),
   impactPct: numeric("impact_pct"),
+  priceDeltaPct: numeric("price_delta_pct"),
+  termMonthsDelta: integer("term_months_delta"),
+  paymentTermsDeltaDays: integer("payment_terms_delta_days"),
+  requestedClauseVariantId: text("requested_clause_variant_id"),
+  linkedQuoteVersionId: text("linked_quote_version_id"),
+  linkedApprovalId: text("linked_approval_id"),
   createdAt: ts("created_at"),
 });
 

@@ -381,6 +381,18 @@ export interface CustomerReaction {
   priority: string;
   /** @nullable */
   impactPct?: number | null;
+  /** @nullable */
+  priceDeltaPct?: number | null;
+  /** @nullable */
+  termMonthsDelta?: number | null;
+  /** @nullable */
+  paymentTermsDeltaDays?: number | null;
+  /** @nullable */
+  requestedClauseVariantId?: string | null;
+  /** @nullable */
+  linkedQuoteVersionId?: string | null;
+  /** @nullable */
+  linkedApprovalId?: string | null;
 }
 
 export type NegotiationDetail = Negotiation & {
@@ -395,6 +407,82 @@ export interface ReactionInput {
   source: string;
   priority: string;
   impactPct?: number;
+  priceDeltaPct?: number;
+  termMonthsDelta?: number;
+  paymentTermsDeltaDays?: number;
+  requestedClauseVariantId?: string;
+}
+
+export interface ApprovalFromReactionInput {
+  type?: string;
+  reason?: string;
+  priority?: string;
+}
+
+export interface CounterproposalInput {
+  topic: string;
+  summary: string;
+  source: string;
+  priority?: string;
+  priceDeltaPct?: number;
+  termMonthsDelta?: number;
+  paymentTermsDeltaDays?: number;
+  requestedClauseVariantId?: string;
+  createNewVersion?: boolean;
+}
+
+export type NegotiationImpactApprovalsTriggeredItem = {
+  type: string;
+  reason: string;
+};
+
+export type NegotiationImpactRiskTrend =
+  (typeof NegotiationImpactRiskTrend)[keyof typeof NegotiationImpactRiskTrend];
+
+export const NegotiationImpactRiskTrend = {
+  up: "up",
+  down: "down",
+  flat: "flat",
+} as const;
+
+export interface NegotiationImpact {
+  reactionId: string;
+  /** @nullable */
+  priceDeltaPct?: number | null;
+  /** @nullable */
+  newTotalAmount?: number | null;
+  /** @nullable */
+  newDiscountPct?: number | null;
+  /** @nullable */
+  newMarginPct?: number | null;
+  /** @nullable */
+  marginDeltaPct?: number | null;
+  /** @nullable */
+  termMonthsDelta?: number | null;
+  /** @nullable */
+  paymentTermsDeltaDays?: number | null;
+  /** @nullable */
+  requestedClauseVariantId?: string | null;
+  /** @nullable */
+  linkedQuoteVersionId?: string | null;
+  /** @nullable */
+  linkedApprovalId?: string | null;
+  followUps: string[];
+  approvalsTriggered: NegotiationImpactApprovalsTriggeredItem[];
+  riskTrend: NegotiationImpactRiskTrend;
+}
+
+export interface NegotiationBaseline {
+  totalAmount: number;
+  discountPct: number;
+  marginPct: number;
+}
+
+export interface NegotiationImpactResponse {
+  negotiationId: string;
+  approvalThresholdPct: number;
+  baseline?: NegotiationBaseline | null;
+  impacts: NegotiationImpact[];
 }
 
 export interface Signer {
@@ -684,6 +772,17 @@ export type ListContractsParams = {
 export type ListNegotiationsParams = {
   dealId?: string;
   status?: string;
+};
+
+export type CreateVersionFromReaction201 = {
+  reactionId: string;
+  quoteVersionId: string;
+  version: number;
+};
+
+export type RequestApprovalFromReaction201 = {
+  reactionId: string;
+  approvalId: string;
 };
 
 export type ListSignaturePackagesParams = {

@@ -744,6 +744,12 @@ export const GetNegotiationResponse = zod
           createdAt: zod.coerce.date(),
           priority: zod.string(),
           impactPct: zod.number().nullish(),
+          priceDeltaPct: zod.number().nullish(),
+          termMonthsDelta: zod.number().nullish(),
+          paymentTermsDeltaDays: zod.number().nullish(),
+          requestedClauseVariantId: zod.string().nullish(),
+          linkedQuoteVersionId: zod.string().nullish(),
+          linkedApprovalId: zod.string().nullish(),
         }),
       ),
       timeline: zod.array(
@@ -772,6 +778,84 @@ export const AddCustomerReactionBody = zod.object({
   source: zod.string(),
   priority: zod.string(),
   impactPct: zod.number().optional(),
+  priceDeltaPct: zod.number().optional(),
+  termMonthsDelta: zod.number().optional(),
+  paymentTermsDeltaDays: zod.number().optional(),
+  requestedClauseVariantId: zod.string().optional(),
+});
+
+export const GetNegotiationImpactParams = zod.object({
+  id: zod.coerce.string(),
+});
+
+export const GetNegotiationImpactResponse = zod.object({
+  negotiationId: zod.string(),
+  approvalThresholdPct: zod.number(),
+  baseline: zod
+    .union([
+      zod.object({
+        totalAmount: zod.number(),
+        discountPct: zod.number(),
+        marginPct: zod.number(),
+      }),
+      zod.null(),
+    ])
+    .optional(),
+  impacts: zod.array(
+    zod.object({
+      reactionId: zod.string(),
+      priceDeltaPct: zod.number().nullish(),
+      newTotalAmount: zod.number().nullish(),
+      newDiscountPct: zod.number().nullish(),
+      newMarginPct: zod.number().nullish(),
+      marginDeltaPct: zod.number().nullish(),
+      termMonthsDelta: zod.number().nullish(),
+      paymentTermsDeltaDays: zod.number().nullish(),
+      requestedClauseVariantId: zod.string().nullish(),
+      linkedQuoteVersionId: zod.string().nullish(),
+      linkedApprovalId: zod.string().nullish(),
+      followUps: zod.array(zod.string()),
+      approvalsTriggered: zod.array(
+        zod.object({
+          type: zod.string(),
+          reason: zod.string(),
+        }),
+      ),
+      riskTrend: zod.enum(["up", "down", "flat"]),
+    }),
+  ),
+});
+
+export const CreateCounterproposalParams = zod.object({
+  id: zod.coerce.string(),
+});
+
+export const CreateCounterproposalBody = zod.object({
+  topic: zod.string(),
+  summary: zod.string(),
+  source: zod.string(),
+  priority: zod.string().optional(),
+  priceDeltaPct: zod.number().optional(),
+  termMonthsDelta: zod.number().optional(),
+  paymentTermsDeltaDays: zod.number().optional(),
+  requestedClauseVariantId: zod.string().optional(),
+  createNewVersion: zod.boolean().optional(),
+});
+
+export const CreateVersionFromReactionParams = zod.object({
+  id: zod.coerce.string(),
+  reactionId: zod.coerce.string(),
+});
+
+export const RequestApprovalFromReactionParams = zod.object({
+  id: zod.coerce.string(),
+  reactionId: zod.coerce.string(),
+});
+
+export const RequestApprovalFromReactionBody = zod.object({
+  type: zod.string().optional(),
+  reason: zod.string().optional(),
+  priority: zod.string().optional(),
 });
 
 export const ListSignaturePackagesQueryParams = zod.object({

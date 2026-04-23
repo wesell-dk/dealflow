@@ -24,6 +24,7 @@ import type {
   AccountInput,
   ApprovalCase,
   ApprovalDecisionInput,
+  ApprovalFromReactionInput,
   AuditEntry,
   Brand,
   ClauseFamily,
@@ -38,6 +39,8 @@ import type {
   CopilotMessageInput,
   CopilotThread,
   CopilotThreadInput,
+  CounterproposalInput,
+  CreateVersionFromReaction201,
   CustomerReaction,
   DashboardSummary,
   Deal,
@@ -62,6 +65,7 @@ import type {
   ListSignaturePackagesParams,
   Negotiation,
   NegotiationDetail,
+  NegotiationImpactResponse,
   OrderConfirmation,
   OrderConfirmationDetail,
   PerformanceReport,
@@ -79,6 +83,7 @@ import type {
   QuoteVersion,
   QuoteVersionInput,
   ReactionInput,
+  RequestApprovalFromReaction201,
   ResolvePriceParams,
   ResolvedPrice,
   SignaturePackage,
@@ -2710,6 +2715,357 @@ export const useAddCustomerReaction = <
   TContext
 > => {
   return useMutation(getAddCustomerReactionMutationOptions(options));
+};
+
+export const getGetNegotiationImpactUrl = (id: string) => {
+  return `/api/negotiations/${id}/impact`;
+};
+
+export const getNegotiationImpact = async (
+  id: string,
+  options?: RequestInit,
+): Promise<NegotiationImpactResponse> => {
+  return customFetch<NegotiationImpactResponse>(
+    getGetNegotiationImpactUrl(id),
+    {
+      ...options,
+      method: "GET",
+    },
+  );
+};
+
+export const getGetNegotiationImpactQueryKey = (id: string) => {
+  return [`/api/negotiations/${id}/impact`] as const;
+};
+
+export const getGetNegotiationImpactQueryOptions = <
+  TData = Awaited<ReturnType<typeof getNegotiationImpact>>,
+  TError = ErrorType<unknown>,
+>(
+  id: string,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getNegotiationImpact>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey =
+    queryOptions?.queryKey ?? getGetNegotiationImpactQueryKey(id);
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof getNegotiationImpact>>
+  > = ({ signal }) => getNegotiationImpact(id, { signal, ...requestOptions });
+
+  return {
+    queryKey,
+    queryFn,
+    enabled: !!id,
+    ...queryOptions,
+  } as UseQueryOptions<
+    Awaited<ReturnType<typeof getNegotiationImpact>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetNegotiationImpactQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getNegotiationImpact>>
+>;
+export type GetNegotiationImpactQueryError = ErrorType<unknown>;
+
+export function useGetNegotiationImpact<
+  TData = Awaited<ReturnType<typeof getNegotiationImpact>>,
+  TError = ErrorType<unknown>,
+>(
+  id: string,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getNegotiationImpact>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetNegotiationImpactQueryOptions(id, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+export const getCreateCounterproposalUrl = (id: string) => {
+  return `/api/negotiations/${id}/counterproposal`;
+};
+
+export const createCounterproposal = async (
+  id: string,
+  counterproposalInput: CounterproposalInput,
+  options?: RequestInit,
+): Promise<CustomerReaction> => {
+  return customFetch<CustomerReaction>(getCreateCounterproposalUrl(id), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(counterproposalInput),
+  });
+};
+
+export const getCreateCounterproposalMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof createCounterproposal>>,
+    TError,
+    { id: string; data: BodyType<CounterproposalInput> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof createCounterproposal>>,
+  TError,
+  { id: string; data: BodyType<CounterproposalInput> },
+  TContext
+> => {
+  const mutationKey = ["createCounterproposal"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof createCounterproposal>>,
+    { id: string; data: BodyType<CounterproposalInput> }
+  > = (props) => {
+    const { id, data } = props ?? {};
+
+    return createCounterproposal(id, data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type CreateCounterproposalMutationResult = NonNullable<
+  Awaited<ReturnType<typeof createCounterproposal>>
+>;
+export type CreateCounterproposalMutationBody = BodyType<CounterproposalInput>;
+export type CreateCounterproposalMutationError = ErrorType<unknown>;
+
+export const useCreateCounterproposal = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof createCounterproposal>>,
+    TError,
+    { id: string; data: BodyType<CounterproposalInput> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof createCounterproposal>>,
+  TError,
+  { id: string; data: BodyType<CounterproposalInput> },
+  TContext
+> => {
+  return useMutation(getCreateCounterproposalMutationOptions(options));
+};
+
+export const getCreateVersionFromReactionUrl = (
+  id: string,
+  reactionId: string,
+) => {
+  return `/api/negotiations/${id}/reactions/${reactionId}/create-version`;
+};
+
+export const createVersionFromReaction = async (
+  id: string,
+  reactionId: string,
+  options?: RequestInit,
+): Promise<CreateVersionFromReaction201> => {
+  return customFetch<CreateVersionFromReaction201>(
+    getCreateVersionFromReactionUrl(id, reactionId),
+    {
+      ...options,
+      method: "POST",
+    },
+  );
+};
+
+export const getCreateVersionFromReactionMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof createVersionFromReaction>>,
+    TError,
+    { id: string; reactionId: string },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof createVersionFromReaction>>,
+  TError,
+  { id: string; reactionId: string },
+  TContext
+> => {
+  const mutationKey = ["createVersionFromReaction"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof createVersionFromReaction>>,
+    { id: string; reactionId: string }
+  > = (props) => {
+    const { id, reactionId } = props ?? {};
+
+    return createVersionFromReaction(id, reactionId, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type CreateVersionFromReactionMutationResult = NonNullable<
+  Awaited<ReturnType<typeof createVersionFromReaction>>
+>;
+
+export type CreateVersionFromReactionMutationError = ErrorType<unknown>;
+
+export const useCreateVersionFromReaction = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof createVersionFromReaction>>,
+    TError,
+    { id: string; reactionId: string },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof createVersionFromReaction>>,
+  TError,
+  { id: string; reactionId: string },
+  TContext
+> => {
+  return useMutation(getCreateVersionFromReactionMutationOptions(options));
+};
+
+export const getRequestApprovalFromReactionUrl = (
+  id: string,
+  reactionId: string,
+) => {
+  return `/api/negotiations/${id}/reactions/${reactionId}/request-approval`;
+};
+
+export const requestApprovalFromReaction = async (
+  id: string,
+  reactionId: string,
+  approvalFromReactionInput?: ApprovalFromReactionInput,
+  options?: RequestInit,
+): Promise<RequestApprovalFromReaction201> => {
+  return customFetch<RequestApprovalFromReaction201>(
+    getRequestApprovalFromReactionUrl(id, reactionId),
+    {
+      ...options,
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...options?.headers },
+      body: JSON.stringify(approvalFromReactionInput),
+    },
+  );
+};
+
+export const getRequestApprovalFromReactionMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof requestApprovalFromReaction>>,
+    TError,
+    {
+      id: string;
+      reactionId: string;
+      data: BodyType<ApprovalFromReactionInput>;
+    },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof requestApprovalFromReaction>>,
+  TError,
+  { id: string; reactionId: string; data: BodyType<ApprovalFromReactionInput> },
+  TContext
+> => {
+  const mutationKey = ["requestApprovalFromReaction"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof requestApprovalFromReaction>>,
+    {
+      id: string;
+      reactionId: string;
+      data: BodyType<ApprovalFromReactionInput>;
+    }
+  > = (props) => {
+    const { id, reactionId, data } = props ?? {};
+
+    return requestApprovalFromReaction(id, reactionId, data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type RequestApprovalFromReactionMutationResult = NonNullable<
+  Awaited<ReturnType<typeof requestApprovalFromReaction>>
+>;
+export type RequestApprovalFromReactionMutationBody =
+  BodyType<ApprovalFromReactionInput>;
+export type RequestApprovalFromReactionMutationError = ErrorType<unknown>;
+
+export const useRequestApprovalFromReaction = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof requestApprovalFromReaction>>,
+    TError,
+    {
+      id: string;
+      reactionId: string;
+      data: BodyType<ApprovalFromReactionInput>;
+    },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof requestApprovalFromReaction>>,
+  TError,
+  { id: string; reactionId: string; data: BodyType<ApprovalFromReactionInput> },
+  TContext
+> => {
+  return useMutation(getRequestApprovalFromReactionMutationOptions(options));
 };
 
 export const getListSignaturePackagesUrl = (
