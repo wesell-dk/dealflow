@@ -129,10 +129,10 @@ function TraceCard({ trace }: { trace: Trace }) {
           )}
         </ul>
       )}
-      {!isList && tool === "pipeline_stats" && trace.result && typeof trace.result === "object" && (
+      {!isList && tool === "pipeline_stats" && typeof trace.result === "object" && trace.result !== null && (
         <PipelineStatsView data={trace.result as PipelineStats} />
       )}
-      {!isList && tool.startsWith("create_") && trace.result && typeof trace.result === "object" && (
+      {!isList && tool.startsWith("create_") && typeof trace.result === "object" && trace.result !== null && (
         <div className="mt-1 text-muted-foreground">
           ID: <code className="font-mono">{String((trace.result as Record<string, unknown>).id ?? "")}</code>
         </div>

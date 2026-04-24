@@ -46,8 +46,8 @@ function StatRow({ stats, loading }: { stats: Stat[]; loading?: boolean }) {
 }
 
 function AccountsLive() {
-  const accounts = useListAccounts({ query: { staleTime: 30_000 } });
-  const deals = useListDeals(undefined, { query: { staleTime: 30_000 } });
+  const accounts = useListAccounts();
+  const deals = useListDeals();
   const loading = accounts.isLoading || deals.isLoading;
   const accountList = accounts.data ?? [];
   const dealList = deals.data ?? [];
@@ -61,7 +61,7 @@ function AccountsLive() {
 }
 
 function DealsLive() {
-  const deals = useListDeals(undefined, { query: { staleTime: 30_000 } });
+  const deals = useListDeals();
   if (deals.isLoading) return <StatRow stats={[]} loading />;
   const list = deals.data ?? [];
   const open = list.filter((d) => d.stage !== "won" && d.stage !== "lost");
@@ -78,7 +78,7 @@ function DealsLive() {
 }
 
 function ApprovalsLive() {
-  const q = useListApprovals(undefined, { query: { staleTime: 30_000 } });
+  const q = useListApprovals();
   if (q.isLoading) return <StatRow stats={[]} loading />;
   const list = q.data ?? [];
   const pending = list.filter((a) => a.status === "pending").length;
@@ -94,7 +94,7 @@ function ApprovalsLive() {
 }
 
 function SignaturesLive() {
-  const q = useListSignaturePackages(undefined, { query: { staleTime: 30_000 } });
+  const q = useListSignaturePackages();
   if (q.isLoading) return <StatRow stats={[]} loading />;
   const list = q.data ?? [];
   const inProgress = list.filter((s) => s.status === "in_progress").length;
@@ -110,7 +110,7 @@ function SignaturesLive() {
 }
 
 function ContractsLive() {
-  const q = useListContracts(undefined, { query: { staleTime: 30_000 } });
+  const q = useListContracts();
   if (q.isLoading) return <StatRow stats={[]} loading />;
   const list = q.data ?? [];
   const inReview = list.filter((c) => c.status === "in_review").length;
@@ -126,7 +126,7 @@ function ContractsLive() {
 }
 
 function QuotesLive() {
-  const q = useListQuotes(undefined, { query: { staleTime: 30_000 } });
+  const q = useListQuotes();
   if (q.isLoading) return <StatRow stats={[]} loading />;
   const list = q.data ?? [];
   const draft = list.filter((c) => c.status === "draft").length;
@@ -142,7 +142,7 @@ function QuotesLive() {
 }
 
 function NegotiationsLive() {
-  const q = useListNegotiations(undefined, { query: { staleTime: 30_000 } });
+  const q = useListNegotiations();
   if (q.isLoading) return <StatRow stats={[]} loading />;
   const list = q.data ?? [];
   const stats: Stat[] = [{ label: "Verhandlungen erfasst", value: list.length }];
@@ -150,9 +150,9 @@ function NegotiationsLive() {
 }
 
 function HomeLive() {
-  const accounts = useListAccounts({ query: { staleTime: 30_000 } });
-  const deals = useListDeals(undefined, { query: { staleTime: 30_000 } });
-  const approvals = useListApprovals(undefined, { query: { staleTime: 30_000 } });
+  const accounts = useListAccounts();
+  const deals = useListDeals();
+  const approvals = useListApprovals();
   if (accounts.isLoading || deals.isLoading || approvals.isLoading) return <StatRow stats={[]} loading />;
   const dealList = deals.data ?? [];
   const open = dealList.filter((d) => d.stage !== "won" && d.stage !== "lost").length;
