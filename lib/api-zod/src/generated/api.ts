@@ -2593,16 +2593,25 @@ export const PostCopilotMessageBody = zod.object({
 /**
  * @summary Floating help-bot — stateless guidance reply based on app context
  */
+export const askHelpBotBodyQuestionMax = 2000;
+
+export const askHelpBotBodyCurrentPathMax = 200;
+
+export const askHelpBotBodyHistoryItemContentMax = 4000;
+
+export const askHelpBotBodyHistoryMax = 20;
+
 export const AskHelpBotBody = zod.object({
-  question: zod.string(),
-  currentPath: zod.string().nullish(),
+  question: zod.string().max(askHelpBotBodyQuestionMax),
+  currentPath: zod.string().max(askHelpBotBodyCurrentPathMax).nullish(),
   history: zod
     .array(
       zod.object({
         role: zod.string(),
-        content: zod.string(),
+        content: zod.string().max(askHelpBotBodyHistoryItemContentMax),
       }),
     )
+    .max(askHelpBotBodyHistoryMax)
     .optional(),
 });
 
@@ -2614,6 +2623,25 @@ export const AskHelpBotResponse = zod.object({
       path: zod.string(),
     }),
   ),
+  action: zod
+    .object({
+      kind: zod.enum([
+        "none",
+        "navigate",
+        "open_create_account",
+        "open_create_deal",
+      ]),
+      path: zod.string().nullish(),
+      accountId: zod.string().nullish(),
+    })
+    .optional(),
+  meta: zod
+    .object({
+      source: zod.enum(["ai", "fallback"]).optional(),
+      model: zod.string().nullish(),
+      latencyMs: zod.number().nullish(),
+    })
+    .optional(),
 });
 
 export const ListAuditEntriesQueryParams = zod.object({

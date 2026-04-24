@@ -479,6 +479,83 @@ export const commercialHealthCheck: PromptDefinition<
   toolName: "report_health_check",
 };
 
+// ───────────────────────── 11. In-App Help Assistant ─────────────────────────
+
+const HelpAssistantOutput = z.object({
+  reply: z.string().min(1).max(800),
+  suggestions: z.array(z.object({
+    label: z.string().min(1).max(40),
+    path: z.string().min(1).max(80),
+  })).max(4),
+  action: z.object({
+    kind: z.enum([
+      "none",
+      "navigate",
+      "open_create_account",
+      "open_create_deal",
+    ]),
+    path: z.string().max(120).nullable().optional(),
+    accountId: z.string().max(60).nullable().optional(),
+  }),
+});
+
+export interface HelpAssistantInput {
+  question: string;
+  history: Array<{ role: "user" | "assistant"; content: string }>;
+  currentPath: string;
+  user: { name: string; role: string; tenantWide: boolean };
+  counts: { accounts: number; deals: number; quotes: number; contracts: number; approvals: number };
+  routes: Array<{ path: string; title: string; purpose: string }>;
+  recentAccounts: Array<{ id: string; name: string }>;
+  recentDeals: Array<{ id: string; name: string; accountName: string; stage: string }>;
+}
+
+export const helpAssistant: PromptDefinition<
+  HelpAssistantInput,
+  z.infer<typeof HelpAssistantOutput>
+> = {
+  key: "assistant.help",
+  model: "claude-haiku-4-5",
+  system:
+    "Du bist der Hilfe-Assistent von DealFlow.One — einer B2B Commercial " +
+    "Execution Platform. Beantworte Fragen kurz, konkret und auf Deutsch. " +
+    "Du kennst die Plattform-Struktur (siehe routes im Input) und kannst " +
+    "über das Tool eine optionale UI-Aktion vorschlagen.\n\n" +
+    "Regeln für action.kind:\n" +
+    " - 'open_create_account' wenn der Nutzer einen Kunden/Account anlegen will. " +
+    "Sage in reply z.B. 'Klar, ich öffne den Dialog – fülle Name, Branche und Land aus.'\n" +
+    " - 'open_create_deal' wenn ein Deal/Opportunity angelegt werden soll. " +
+    "Wenn der Nutzer einen Kunden namentlich nennt und du ihn in recentAccounts findest, " +
+    "setze accountId. Sage in reply z.B. 'Alles klar, ich öffne den Deal-Dialog.'\n" +
+    " - 'navigate' nur wenn der Nutzer explizit zu einem Bereich gehen will " +
+    "(z.B. 'zeig mir die Pipeline'). Setze path auf eine Route aus dem Input.\n" +
+    " - 'none' für reine Fragen-Beantwortung.\n\n" +
+    "suggestions: 0–3 weiterführende Klick-Vorschläge (Label + Pfad aus routes).\n\n" +
+    "Halte reply prägnant (max. 3 Sätze). Keine Marketing-Phrasen, keine Emojis. " +
+    "Wenn du die Antwort nicht weißt, sag das ehrlich und schlage einen passenden " +
+    "Bereich vor. Beziehe dich bei Bedarf auf currentPath, um die Antwort zu " +
+    "kontextualisieren ('Auf dieser Seite siehst du…').",
+  buildUser: (input) => {
+    const recentHistory = input.history.slice(-6);
+    return [
+      `currentPath: ${input.currentPath}`,
+      `user: ${input.user.name} (${input.user.role}${input.user.tenantWide ? ", tenant-weit" : ", eingeschränkter Scope"})`,
+      `Plattform-Daten: ${input.counts.accounts} Kunden, ${input.counts.deals} Deals, ${input.counts.quotes} Angebote, ${input.counts.contracts} Verträge, ${input.counts.approvals} Approvals`,
+      `verfügbare Routen (Auswahl):\n${input.routes.map(r => `  - ${r.path} — ${r.title}: ${r.purpose}`).join("\n")}`,
+      `letzte Kunden:\n${input.recentAccounts.map(a => `  - ${a.id}: ${a.name}`).join("\n") || "  (keine)"}`,
+      `letzte Deals:\n${input.recentDeals.map(d => `  - ${d.id}: ${d.name} → ${d.accountName} (${d.stage})`).join("\n") || "  (keine)"}`,
+      recentHistory.length > 0 ? `\nGesprächsverlauf:\n${recentHistory.map(m => `  ${m.role}: ${m.content}`).join("\n")}` : "",
+      `\nFrage: ${input.question}`,
+    ].filter(Boolean).join("\n");
+  },
+  outputSchema: HelpAssistantOutput,
+  toolDescription:
+    "Antwort des Hilfe-Assistenten. reply = kurze deutsche Antwort. " +
+    "suggestions = 0-3 weiterführende Links. action = optionale UI-Aktion " +
+    "(none / navigate / open_create_account / open_create_deal).",
+  toolName: "help_assistant_reply",
+};
+
 // ───────────────────────── Bundle ─────────────────────────
 
 export const DEALFLOW_PROMPTS = {
@@ -492,4 +569,5 @@ export const DEALFLOW_PROMPTS = {
   [priceIncreaseSupport.key]: priceIncreaseSupport,
   [executiveBrief.key]: executiveBrief,
   [commercialHealthCheck.key]: commercialHealthCheck,
+  [helpAssistant.key]: helpAssistant,
 } as const;

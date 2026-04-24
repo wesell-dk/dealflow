@@ -63,6 +63,14 @@ Key capabilities include managing deals, accounts, contacts, and roles; versione
 - **Header Buttons**: `header-tour-button` re-opens welcome dialog; `header-help-button` opens page help drawer.
 - **Context Provider**: `contexts/onboarding-context.tsx` wraps the app and persists `seenWelcome`, `completedSteps`, `currentRoute`.
 
+**AI Help-Bot (April 2026):**
+- **Endpoint**: `POST /api/v1/copilot/help` calls `runStructured('assistant.help')` (Anthropic Haiku) with scope-aware context (counts of accounts/deals/quotes/contracts/approvals, last 8 recent accounts and deals derived from `allowedAccountIds`/`allowedDealIds`, current path, route inventory, last 10 history messages).
+- **Prompt**: `assistant.help` in `artifacts/api-server/src/lib/ai/prompts/dealflow.ts` returns `{reply, suggestions[], action{kind, path?, accountId?}}` where `kind ∈ {none, navigate, open_create_account, open_create_deal}`.
+- **Untrusted-Output Guard**: Server-side validation downgrades any AI action to `none` if `path` is not in `HELP_ROUTES` or `accountId` is not in `allowedAccountIds`. Suggestions filtered to known routes.
+- **Fallback**: On `AIOrchestrationError` or missing provider config, a small regex set produces sensible canned responses (with `meta.source='fallback'`) so the bot never returns 5xx.
+- **Input Caps**: `HelpBotInput` schema limits `question` to 2000 chars, `history` to 20 items × 4000 chars each.
+- **Frontend**: `components/help-bot.tsx` renders 4 quick-action chips on greeting, executes returned actions (navigate via wouter, open `AccountFormDialog` or `DealFormDialog` with optional `defaultAccountId`), shows "Offline-Modus" hint when `meta.source='fallback'`.
+
 **Frontend CRUD (April 2026):**
 - **Account Form**: `components/accounts/account-form-dialog.tsx` (create + edit, with health-score field on edit). New "Kunde anlegen" button on `/accounts` and empty-state CTA. "Bearbeiten" button on account detail.
 - **Deal Form**: `components/deals/deal-form-dialog.tsx` (create + edit). Create wires to `/deals` Plus button and account-detail "Deal anlegen" button. Edit wires to deal-detail "Bearbeiten" button.

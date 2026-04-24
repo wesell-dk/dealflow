@@ -104,6 +104,7 @@ import {
 import { emitEvent, WEBHOOK_EVENTS, assertSafeWebhookUrl, assertSafeResolvedUrl } from '../lib/webhooks';
 import { parseAsOf, resolveSnapshot, isInvalidAsOf } from '../lib/asOf';
 import { runStructured, isAIConfigured, AIOrchestrationError } from '../lib/ai';
+import type { HelpAssistantInput } from '../lib/ai/prompts/dealflow';
 import {
   buildDealContext,
   buildQuoteContext,
@@ -533,6 +534,13 @@ router.post('/deals', async (req, res) => {
     if (!okCompany && !okBrand) {
       res.status(403).json({ error: 'forbidden (out of scope)' }); return;
     }
+  }
+  // Authz: der referenzierte Account muss existieren und für den User sichtbar
+  // sein. Ohne diesen Check könnte jemand mit gültigem company/brand-Scope
+  // Deals an fremde Accounts hängen (IDOR / Cross-Account-Linkage).
+  const allowedAccs = await allowedAccountIds(req);
+  if (!allowedAccs.has(b.accountId)) {
+    res.status(403).json({ error: 'forbidden (account not in scope)' }); return;
   }
   const id = `dl_${randomUUID().slice(0, 8)}`;
   await db.insert(dealsTable).values({
@@ -4691,23 +4699,179 @@ const helpRules: Array<{ match: RegExp; reply: string; suggestions: { label: str
   },
 ];
 
-router.post('/copilot/help', async (req, res) => {
-  if (!validateInline(req, res, { body: Z.AskHelpBotBody })) return;
-  const b = req.body;
-  const q = b.question ?? '';
-  const hit = helpRules.find(r => r.match.test(q));
+// Statisches Routen-Inventar — wird dem KI-Assistenten als Kontext gegeben,
+// damit er Navigation und Hilfetexte sinnvoll vorschlagen kann.
+const HELP_ROUTES: Array<{ path: string; title: string; purpose: string }> = [
+  { path: '/', title: 'Startseite', purpose: 'Tagesüberblick, Pipeline-Snapshot, Aufgaben' },
+  { path: '/accounts', title: 'Kunden', purpose: 'Alle Accounts mit Health-Score, Deals und Kontakten' },
+  { path: '/contacts', title: 'Kontakte', purpose: 'Personen pro Kunde mit Rollen' },
+  { path: '/deals', title: 'Deals', purpose: 'Pipeline-Ansicht aller Verkaufschancen' },
+  { path: '/quotes', title: 'Angebote', purpose: 'Versionsbasierte Angebote, Rabatt + Marge' },
+  { path: '/pricing', title: 'Pricing', purpose: 'Preislisten und Pricing-Workspace' },
+  { path: '/approvals', title: 'Approvals', purpose: 'Freigaben für Rabatte oder Sonderkonditionen' },
+  { path: '/contracts', title: 'Verträge', purpose: 'Verträge mit Klauseln und Risiko-Score' },
+  { path: '/negotiations', title: 'Verhandlungen', purpose: 'Strukturierte Kundenreaktionen, Counterproposals' },
+  { path: '/signatures', title: 'Unterschriften', purpose: 'Sequenzielle Signature-Pakete' },
+  { path: '/order-confirmations', title: 'Auftragsbestätigungen', purpose: 'Handover-Checks und Übergabe' },
+  { path: '/price-increases', title: 'Preiserhöhungen', purpose: 'Kampagnen mit Annahme-Quote' },
+  { path: '/reports', title: 'Reports', purpose: 'Win-Rate, Margendisziplin, Forecast' },
+  { path: '/audit', title: 'Audit-Log', purpose: 'Wer hat wann was geändert' },
+  { path: '/copilot', title: 'AI Copilot', purpose: 'Geführte AI-Modi für Zusammenfassungen, Pricing, Approvals' },
+  { path: '/admin', title: 'Tenant Admin', purpose: 'User-, Rollen- und Scope-Verwaltung' },
+];
+
+const HelpFallbackResponses: Array<{ test: RegExp; reply: string; action?: { kind: string; path?: string } }> = [
+  { test: /(kunde|account).*(anlegen|erstellen|neu)/i, reply: 'Klar, ich öffne den Dialog "Kunde anlegen". Trag Name, Branche und Land ein.', action: { kind: 'open_create_account' } },
+  { test: /(deal|opportunity).*(anlegen|erstellen|neu)/i, reply: 'Alles klar, ich öffne den Dialog "Deal anlegen".', action: { kind: 'open_create_deal' } },
+  { test: /(zeig.*pipeline|wo.*pipeline|alle deals)/i, reply: 'Hier geht\'s zur Pipeline.', action: { kind: 'navigate', path: '/deals' } },
+];
+
+function helpFallback(question: string) {
+  const hit = HelpFallbackResponses.find(r => r.test.test(question));
   if (hit) {
-    res.json({ reply: hit.reply, suggestions: hit.suggestions });
-    return;
+    return {
+      reply: hit.reply,
+      suggestions: [] as Array<{ label: string; path: string }>,
+      action: hit.action ?? { kind: 'none' as const },
+      meta: { source: 'fallback' as const, model: null, latencyMs: null },
+    };
   }
-  res.json({
-    reply: 'Gute Frage — ich kann dich durch alle Bereiche der Plattform führen: Deals, Angebote, Verträge, Verhandlungen, Unterschriften, Preise, Preiserhöhungen, Reports und Audit. Sag mir einfach, womit du anfangen willst.',
+  // Letzter Fallback: kein KI-Provider verfügbar.
+  return {
+    reply: 'Der KI-Assistent ist gerade nicht erreichbar. Ich kann dich aber zu den passenden Bereichen lotsen — wonach suchst du?',
     suggestions: [
-      { label: 'Home', path: '/' },
+      { label: 'Kunden', path: '/accounts' },
       { label: 'Deals', path: '/deals' },
       { label: 'Reports', path: '/reports' },
     ],
-  });
+    action: { kind: 'none' as const },
+    meta: { source: 'fallback' as const, model: null, latencyMs: null },
+  };
+}
+
+router.post('/copilot/help', async (req, res) => {
+  if (!validateInline(req, res, { body: Z.AskHelpBotBody })) return;
+  const b = req.body;
+  const question = (b.question ?? '').trim();
+  if (!question) {
+    res.json({
+      reply: 'Stell mir gerne eine Frage — z.B. "Wie lege ich einen neuen Deal an?" oder "Wo finde ich offene Approvals?"',
+      suggestions: [],
+      action: { kind: 'none' },
+      meta: { source: 'fallback', model: null, latencyMs: null },
+    });
+    return;
+  }
+
+  const scope = getScope(req);
+  const history = (b.history ?? []).filter((h: { role: string; content: string }) => h.role === 'user' || h.role === 'assistant') as Array<{ role: 'user' | 'assistant'; content: string }>;
+  const currentPath = (b.currentPath as string | null | undefined) ?? '/';
+
+  // Plattform-Kontext sammeln (scope-bewusst).
+  let counts = { accounts: 0, deals: 0, quotes: 0, contracts: 0, approvals: 0 };
+  let recentAccounts: Array<{ id: string; name: string }> = [];
+  let recentDeals: Array<{ id: string; name: string; accountName: string; stage: string }> = [];
+  try {
+    const accIds = await allowedAccountIds(req);
+    const dealIds = await allowedDealIds(req);
+    counts.accounts = accIds.size;
+    counts.deals = dealIds.size;
+    if (accIds.size > 0) {
+      const accs = await db.select({ id: accountsTable.id, name: accountsTable.name })
+        .from(accountsTable)
+        .where(inArray(accountsTable.id, [...accIds].slice(0, 200)))
+        .orderBy(desc(accountsTable.id))
+        .limit(8);
+      recentAccounts = accs;
+    }
+    if (dealIds.size > 0) {
+      const ds = await db.select({
+        id: dealsTable.id, name: dealsTable.name, stage: dealsTable.stage,
+        accountName: accountsTable.name,
+      })
+        .from(dealsTable)
+        .leftJoin(accountsTable, eq(dealsTable.accountId, accountsTable.id))
+        .where(inArray(dealsTable.id, [...dealIds].slice(0, 200)))
+        .orderBy(desc(dealsTable.updatedAt))
+        .limit(8);
+      recentDeals = ds.map(d => ({ id: d.id, name: d.name, accountName: d.accountName ?? '', stage: d.stage }));
+      const qs = await db.select({ id: quotesTable.id }).from(quotesTable)
+        .where(inArray(quotesTable.dealId, [...dealIds]));
+      counts.quotes = qs.length;
+      const cs = await db.select({ id: contractsTable.id }).from(contractsTable)
+        .where(inArray(contractsTable.dealId, [...dealIds]));
+      counts.contracts = cs.length;
+      const aps = await db.select({ id: approvalsTable.id }).from(approvalsTable)
+        .where(inArray(approvalsTable.dealId, [...dealIds]));
+      counts.approvals = aps.length;
+    }
+  } catch {
+    // Kontext-Anreicherung ist best-effort — bei Fehler weiter mit Defaults.
+  }
+
+  if (!isAIConfigured()) {
+    res.json(helpFallback(question));
+    return;
+  }
+
+  try {
+    const result = await runStructured<HelpAssistantInput, {
+      reply: string;
+      suggestions: Array<{ label: string; path: string }>;
+      action: { kind: 'none' | 'navigate' | 'open_create_account' | 'open_create_deal'; path?: string | null; accountId?: string | null };
+    }>({
+      promptKey: 'assistant.help',
+      input: {
+        question,
+        history: history.slice(-10),
+        currentPath,
+        user: {
+          name: scope.user.name,
+          role: scope.user.role,
+          tenantWide: scope.tenantWide,
+        },
+        counts,
+        routes: HELP_ROUTES,
+        recentAccounts,
+        recentDeals,
+      },
+      scope,
+    });
+
+    // AI-Output ist untrusted: Aktionen müssen gegen Allowlist und Scope geprüft
+    // werden, sonst kann ein manipuliertes Modell unsinnige Routen oder
+    // fremde accountIds zurückgeben.
+    const validRoutes = new Set(HELP_ROUTES.map(r => r.path));
+    const allowedAccs = await allowedAccountIds(req);
+    const rawAction = result.output.action;
+    let action: { kind: string; path?: string | null; accountId?: string | null } = { kind: 'none' };
+    if (rawAction?.kind === 'navigate' && rawAction.path && validRoutes.has(rawAction.path)) {
+      action = { kind: 'navigate', path: rawAction.path };
+    } else if (rawAction?.kind === 'open_create_account') {
+      action = { kind: 'open_create_account' };
+    } else if (rawAction?.kind === 'open_create_deal') {
+      const acc = rawAction.accountId && allowedAccs.has(rawAction.accountId) ? rawAction.accountId : null;
+      action = { kind: 'open_create_deal', accountId: acc };
+    }
+
+    // Suggestions ebenfalls auf bekannte Routen einschränken.
+    const safeSuggestions = (result.output.suggestions ?? []).filter(s => validRoutes.has(s.path)).slice(0, 4);
+
+    res.json({
+      reply: result.output.reply,
+      suggestions: safeSuggestions,
+      action,
+      meta: { source: 'ai', model: result.model, latencyMs: result.latencyMs },
+    });
+  } catch (err) {
+    if (err instanceof AIOrchestrationError) {
+      // Fail soft — der Hilfe-Assistent darf nie 5xx erzeugen.
+      req.log?.warn({ code: err.code, msg: err.message }, 'help-bot AI error, using fallback');
+      res.json(helpFallback(question));
+      return;
+    }
+    throw err;
+  }
 });
 
 // ── EXTEND APPROVAL & DEAL DECISIONS WITH AUDIT ──

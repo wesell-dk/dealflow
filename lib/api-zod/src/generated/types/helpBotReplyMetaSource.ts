@@ -8,8 +8,10 @@ Multi-tenant, multi-company, multi-brand. Deal-centric.
  * OpenAPI spec version: 0.1.0
  */
 
-export type HelpBotInputHistoryItem = {
-  role: string;
-  /** @maxLength 4000 */
-  content: string;
-};
+export type HelpBotReplyMetaSource =
+  (typeof HelpBotReplyMetaSource)[keyof typeof HelpBotReplyMetaSource];
+
+export const HelpBotReplyMetaSource = {
+  ai: "ai",
+  fallback: "fallback",
+} as const;

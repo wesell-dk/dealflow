@@ -3887,17 +3887,19 @@ components:
       type: object
       required: [question]
       properties:
-        question: { type: string }
+        question: { type: string, maxLength: 2000 }
         currentPath:
           type: ["string", "null"]
+          maxLength: 200
         history:
           type: array
+          maxItems: 20
           items:
             type: object
             required: [role, content]
             properties:
               role: { type: string }
-              content: { type: string }
+              content: { type: string, maxLength: 4000 }
 
     HelpBotReply:
       type: object
@@ -3912,6 +3914,27 @@ components:
             properties:
               label: { type: string }
               path: { type: string }
+        action:
+          type: object
+          required: [kind]
+          properties:
+            kind:
+              type: string
+              enum: [none, navigate, open_create_account, open_create_deal]
+            path:
+              type: ["string", "null"]
+            accountId:
+              type: ["string", "null"]
+        meta:
+          type: object
+          properties:
+            source:
+              type: string
+              enum: [ai, fallback]
+            model:
+              type: ["string", "null"]
+            latencyMs:
+              type: ["integer", "null"]
 
     AuditEntry:
       type: object

@@ -1476,13 +1476,19 @@ export type ContractRiskEnvelope = CopilotAiInsightRef & {
 
 export type HelpBotInputHistoryItem = {
   role: string;
+  /** @maxLength 4000 */
   content: string;
 };
 
 export interface HelpBotInput {
+  /** @maxLength 2000 */
   question: string;
-  /** @nullable */
+  /**
+   * @maxLength 200
+   * @nullable
+   */
   currentPath?: string | null;
+  /** @maxItems 20 */
   history?: HelpBotInputHistoryItem[];
 }
 
@@ -1491,9 +1497,45 @@ export type HelpBotReplySuggestionsItem = {
   path: string;
 };
 
+export type HelpBotReplyActionKind =
+  (typeof HelpBotReplyActionKind)[keyof typeof HelpBotReplyActionKind];
+
+export const HelpBotReplyActionKind = {
+  none: "none",
+  navigate: "navigate",
+  open_create_account: "open_create_account",
+  open_create_deal: "open_create_deal",
+} as const;
+
+export type HelpBotReplyAction = {
+  kind: HelpBotReplyActionKind;
+  /** @nullable */
+  path?: string | null;
+  /** @nullable */
+  accountId?: string | null;
+};
+
+export type HelpBotReplyMetaSource =
+  (typeof HelpBotReplyMetaSource)[keyof typeof HelpBotReplyMetaSource];
+
+export const HelpBotReplyMetaSource = {
+  ai: "ai",
+  fallback: "fallback",
+} as const;
+
+export type HelpBotReplyMeta = {
+  source?: HelpBotReplyMetaSource;
+  /** @nullable */
+  model?: string | null;
+  /** @nullable */
+  latencyMs?: number | null;
+};
+
 export interface HelpBotReply {
   reply: string;
   suggestions: HelpBotReplySuggestionsItem[];
+  action?: HelpBotReplyAction;
+  meta?: HelpBotReplyMeta;
 }
 
 export interface AuditEntry {

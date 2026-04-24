@@ -7,9 +7,13 @@ Multi-tenant, multi-company, multi-brand. Deal-centric.
 
  * OpenAPI spec version: 0.1.0
  */
+import type { HelpBotReplyAction } from "./helpBotReplyAction";
+import type { HelpBotReplyMeta } from "./helpBotReplyMeta";
 import type { HelpBotReplySuggestionsItem } from "./helpBotReplySuggestionsItem";
 
 export interface HelpBotReply {
   reply: string;
   suggestions: HelpBotReplySuggestionsItem[];
+  action?: HelpBotReplyAction;
+  meta?: HelpBotReplyMeta;
 }

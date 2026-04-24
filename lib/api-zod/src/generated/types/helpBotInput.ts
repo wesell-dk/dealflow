@@ -10,8 +10,13 @@ Multi-tenant, multi-company, multi-brand. Deal-centric.
 import type { HelpBotInputHistoryItem } from "./helpBotInputHistoryItem";
 
 export interface HelpBotInput {
+  /** @maxLength 2000 */
   question: string;
-  /** @nullable */
+  /**
+   * @maxLength 200
+   * @nullable
+   */
   currentPath?: string | null;
+  /** @maxItems 20 */
   history?: HelpBotInputHistoryItem[];
 }
