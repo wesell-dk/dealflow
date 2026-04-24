@@ -30,6 +30,7 @@ import type {
   ApprovalCase,
   ApprovalDecisionInput,
   ApprovalFromReactionInput,
+  ApprovalReadinessEnvelope,
   AttachmentLibraryInput,
   AttachmentLibraryItem,
   AuditEntry,
@@ -48,6 +49,7 @@ import type {
   ContractClausePatchInput,
   ContractDetail,
   ContractInput,
+  ContractRiskEnvelope,
   CopilotChatReply,
   CopilotInsight,
   CopilotInsightStatusPatch,
@@ -65,6 +67,7 @@ import type {
   DealInput,
   DealPatch,
   DealPipeline,
+  DealSummaryEnvelope,
   DeclineSignerInput,
   EffectiveContractState,
   EntityVersion,
@@ -118,6 +121,7 @@ import type {
   PricePosition,
   PricePositionInput,
   PriceRule,
+  PricingReviewEnvelope,
   PricingSummary,
   Quote,
   QuoteAttachment,
@@ -7668,6 +7672,365 @@ export function useGetAiHealth<
 
   return { ...query, queryKey: queryOptions.queryKey };
 }
+
+/**
+ * @summary AI-generated deal summary (10 modes / mode 1). Builds a tenant- and
+scope-validated DealContext, calls the LLM via the structured-output
+orchestrator, persists a copilot_insight (kind=ai_deal_summary), and
+writes one ai_invocations audit row.
+
+ */
+export const getRunDealSummaryUrl = (dealId: string) => {
+  return `/api/v1/copilot/deal-summary/${dealId}`;
+};
+
+export const runDealSummary = async (
+  dealId: string,
+  options?: RequestInit,
+): Promise<DealSummaryEnvelope> => {
+  return customFetch<DealSummaryEnvelope>(getRunDealSummaryUrl(dealId), {
+    ...options,
+    method: "POST",
+  });
+};
+
+export const getRunDealSummaryMutationOptions = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof runDealSummary>>,
+    TError,
+    { dealId: string },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof runDealSummary>>,
+  TError,
+  { dealId: string },
+  TContext
+> => {
+  const mutationKey = ["runDealSummary"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof runDealSummary>>,
+    { dealId: string }
+  > = (props) => {
+    const { dealId } = props ?? {};
+
+    return runDealSummary(dealId, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type RunDealSummaryMutationResult = NonNullable<
+  Awaited<ReturnType<typeof runDealSummary>>
+>;
+
+export type RunDealSummaryMutationError = ErrorType<void>;
+
+/**
+ * @summary AI-generated deal summary (10 modes / mode 1). Builds a tenant- and
+scope-validated DealContext, calls the LLM via the structured-output
+orchestrator, persists a copilot_insight (kind=ai_deal_summary), and
+writes one ai_invocations audit row.
+
+ */
+export const useRunDealSummary = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof runDealSummary>>,
+    TError,
+    { dealId: string },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof runDealSummary>>,
+  TError,
+  { dealId: string },
+  TContext
+> => {
+  return useMutation(getRunDealSummaryMutationOptions(options));
+};
+
+/**
+ * @summary AI-generated pricing review for a quote. Same persistence + audit
+contract as deal-summary; insight kind=ai_pricing_review.
+
+ */
+export const getRunPricingReviewUrl = (quoteId: string) => {
+  return `/api/v1/copilot/pricing-review/${quoteId}`;
+};
+
+export const runPricingReview = async (
+  quoteId: string,
+  options?: RequestInit,
+): Promise<PricingReviewEnvelope> => {
+  return customFetch<PricingReviewEnvelope>(getRunPricingReviewUrl(quoteId), {
+    ...options,
+    method: "POST",
+  });
+};
+
+export const getRunPricingReviewMutationOptions = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof runPricingReview>>,
+    TError,
+    { quoteId: string },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof runPricingReview>>,
+  TError,
+  { quoteId: string },
+  TContext
+> => {
+  const mutationKey = ["runPricingReview"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof runPricingReview>>,
+    { quoteId: string }
+  > = (props) => {
+    const { quoteId } = props ?? {};
+
+    return runPricingReview(quoteId, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type RunPricingReviewMutationResult = NonNullable<
+  Awaited<ReturnType<typeof runPricingReview>>
+>;
+
+export type RunPricingReviewMutationError = ErrorType<void>;
+
+/**
+ * @summary AI-generated pricing review for a quote. Same persistence + audit
+contract as deal-summary; insight kind=ai_pricing_review.
+
+ */
+export const useRunPricingReview = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof runPricingReview>>,
+    TError,
+    { quoteId: string },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof runPricingReview>>,
+  TError,
+  { quoteId: string },
+  TContext
+> => {
+  return useMutation(getRunPricingReviewMutationOptions(options));
+};
+
+/**
+ * @summary AI-generated approval-readiness assessment. Same contract as the
+other modes; insight kind=ai_approval_readiness.
+
+ */
+export const getRunApprovalReadinessUrl = (approvalId: string) => {
+  return `/api/v1/copilot/approval-readiness/${approvalId}`;
+};
+
+export const runApprovalReadiness = async (
+  approvalId: string,
+  options?: RequestInit,
+): Promise<ApprovalReadinessEnvelope> => {
+  return customFetch<ApprovalReadinessEnvelope>(
+    getRunApprovalReadinessUrl(approvalId),
+    {
+      ...options,
+      method: "POST",
+    },
+  );
+};
+
+export const getRunApprovalReadinessMutationOptions = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof runApprovalReadiness>>,
+    TError,
+    { approvalId: string },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof runApprovalReadiness>>,
+  TError,
+  { approvalId: string },
+  TContext
+> => {
+  const mutationKey = ["runApprovalReadiness"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof runApprovalReadiness>>,
+    { approvalId: string }
+  > = (props) => {
+    const { approvalId } = props ?? {};
+
+    return runApprovalReadiness(approvalId, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type RunApprovalReadinessMutationResult = NonNullable<
+  Awaited<ReturnType<typeof runApprovalReadiness>>
+>;
+
+export type RunApprovalReadinessMutationError = ErrorType<void>;
+
+/**
+ * @summary AI-generated approval-readiness assessment. Same contract as the
+other modes; insight kind=ai_approval_readiness.
+
+ */
+export const useRunApprovalReadiness = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof runApprovalReadiness>>,
+    TError,
+    { approvalId: string },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof runApprovalReadiness>>,
+  TError,
+  { approvalId: string },
+  TContext
+> => {
+  return useMutation(getRunApprovalReadinessMutationOptions(options));
+};
+
+/**
+ * @summary AI-generated contract risk review. Same contract as the other modes;
+insight kind=ai_contract_risk.
+
+ */
+export const getRunContractRiskUrl = (contractId: string) => {
+  return `/api/v1/copilot/contract-risk/${contractId}`;
+};
+
+export const runContractRisk = async (
+  contractId: string,
+  options?: RequestInit,
+): Promise<ContractRiskEnvelope> => {
+  return customFetch<ContractRiskEnvelope>(getRunContractRiskUrl(contractId), {
+    ...options,
+    method: "POST",
+  });
+};
+
+export const getRunContractRiskMutationOptions = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof runContractRisk>>,
+    TError,
+    { contractId: string },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof runContractRisk>>,
+  TError,
+  { contractId: string },
+  TContext
+> => {
+  const mutationKey = ["runContractRisk"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof runContractRisk>>,
+    { contractId: string }
+  > = (props) => {
+    const { contractId } = props ?? {};
+
+    return runContractRisk(contractId, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type RunContractRiskMutationResult = NonNullable<
+  Awaited<ReturnType<typeof runContractRisk>>
+>;
+
+export type RunContractRiskMutationError = ErrorType<void>;
+
+/**
+ * @summary AI-generated contract risk review. Same contract as the other modes;
+insight kind=ai_contract_risk.
+
+ */
+export const useRunContractRisk = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof runContractRisk>>,
+    TError,
+    { contractId: string },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof runContractRisk>>,
+  TError,
+  { contractId: string },
+  TContext
+> => {
+  return useMutation(getRunContractRiskMutationOptions(options));
+};
 
 /**
  * @summary Cross-domain recent activity feed

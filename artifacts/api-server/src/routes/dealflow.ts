@@ -104,6 +104,17 @@ import {
 import { emitEvent, WEBHOOK_EVENTS, assertSafeWebhookUrl, assertSafeResolvedUrl } from '../lib/webhooks';
 import { parseAsOf, resolveSnapshot, isInvalidAsOf } from '../lib/asOf';
 import { runStructured, isAIConfigured, AIOrchestrationError } from '../lib/ai';
+import {
+  buildDealContext,
+  buildQuoteContext,
+  buildContractContext,
+  buildApprovalContext,
+  NotInScopeError,
+  type DealContext,
+  type QuoteContext,
+  type ContractContext,
+  type ApprovalContext,
+} from '../lib/ai/context';
 
 const router: IRouter = Router();
 
@@ -4239,6 +4250,358 @@ router.get('/copilot/diagnostics/ai-health', async (req, res) => {
       error: safeMessage,
       code,
     });
+  }
+});
+
+// ── COPILOT MODES (Phase 1 / Schritt 3) ──
+//
+// Vier produktive Endpoints für die ersten Modi der 10er-Spec:
+//   POST /copilot/deal-summary/:dealId
+//   POST /copilot/pricing-review/:quoteId
+//   POST /copilot/approval-readiness/:approvalId
+//   POST /copilot/contract-risk/:contractId
+//
+// Jede Route:
+//   1. baut den scope-validierten Domain-Context (NotInScopeError → 404/403)
+//   2. ruft runStructured() — der Orchestrator persistiert den Audit-Eintrag
+//      in ai_invocations und erzwingt das zod-Output-Schema
+//   3. spiegelt das Ergebnis als copilot_insight (kind='ai_<mode>') in die
+//      bestehende Inbox — re-runs werden via unique-index ersetzt
+//
+// Re-Run-Semantik: triggerType='ai_<mode>' + triggerEntityRef=entityId. Der
+// existierende uniqueIndex `copilot_insights_trigger_uniq` macht aus einem
+// erneuten Aufruf eine Aktualisierung statt eines Duplikats.
+
+interface CopilotInsightPayload {
+  kind: string;
+  title: string;
+  summary: string;
+  severity: string;
+  dealId: string;
+  triggerType: string;
+  triggerEntityRef: string;
+  actionType: string | null;
+  actionPayload: unknown;
+}
+
+async function persistAiInsight(
+  tenantId: string,
+  payload: CopilotInsightPayload,
+): Promise<string> {
+  const id = `ci_${randomUUID().slice(0, 8)}`;
+  const inserted = await db.insert(copilotInsightsTable)
+    .values({
+      id,
+      tenantId,
+      kind: payload.kind,
+      title: payload.title,
+      summary: payload.summary,
+      severity: payload.severity,
+      dealId: payload.dealId,
+      suggestedAction: null,
+      triggerType: payload.triggerType,
+      triggerEntityRef: payload.triggerEntityRef,
+      status: 'open',
+      actionType: payload.actionType,
+      actionPayload: (payload.actionPayload ?? null) as never,
+    })
+    .onConflictDoUpdate({
+      target: [
+        copilotInsightsTable.tenantId,
+        copilotInsightsTable.triggerType,
+        copilotInsightsTable.triggerEntityRef,
+      ],
+      set: {
+        kind: payload.kind,
+        title: payload.title,
+        summary: payload.summary,
+        severity: payload.severity,
+        actionType: payload.actionType,
+        actionPayload: (payload.actionPayload ?? null) as never,
+        status: 'open',
+        // Re-Run blendet eine vorher als acknowledged/resolved markierte
+        // Einsicht wieder als "open" ein und löscht die alten Timestamps,
+        // weil die AI-Aussage jetzt aktualisiert ist.
+        acknowledgedAt: null,
+        resolvedAt: null,
+        dismissedAt: null,
+      },
+    })
+    .returning({ id: copilotInsightsTable.id });
+  return inserted[0]?.id ?? id;
+}
+
+function severityToInsight(s: string): string {
+  // Mappt prompt-Risikoebenen auf die Copilot-Insight-Severity-Skala
+  // (info/low/medium/high/critical wird genauso übernommen, low|medium|high
+  // ebenfalls — alles andere fällt auf 'info' zurück).
+  if (['info', 'low', 'medium', 'high', 'critical'].includes(s)) return s;
+  return 'info';
+}
+
+function mapAiOrchestrationErrorToHttp(
+  err: AIOrchestrationError,
+  res: Response,
+  context: string,
+): void {
+  const code = err.code ?? 'unknown';
+  const status =
+    code === 'config_error' || code === 'audit_unavailable' ? 503 : 502;
+  const safeMessage =
+    code === 'config_error'
+      ? 'AI provider not configured'
+      : code === 'audit_unavailable'
+        ? 'AI audit subsystem unavailable'
+        : code === 'validation_error' || code === 'no_tool_call'
+          ? 'AI returned invalid structured output'
+          : 'AI provider call failed';
+  console.error(`[copilot/${context}]`, code, err.message);
+  res.status(status).json({ ok: false, error: safeMessage, code });
+}
+
+function handleScopeError(err: unknown, res: Response): boolean {
+  if (err instanceof NotInScopeError) {
+    res.status(err.status === 'missing' ? 404 : 403).json({
+      ok: false,
+      error: err.status === 'missing' ? 'not_found' : 'forbidden',
+    });
+    return true;
+  }
+  return false;
+}
+
+// ── 1. Deal Summary ──
+router.post('/copilot/deal-summary/:dealId', async (req, res) => {
+  const scope = getScope(req);
+  if (!isAIConfigured()) {
+    res.status(503).json({ ok: false, error: 'AI provider not configured', code: 'config_error' });
+    return;
+  }
+  const dealId = req.params['dealId'] ?? '';
+  let ctx: DealContext;
+  try {
+    ctx = await buildDealContext(req, dealId);
+  } catch (e) {
+    if (handleScopeError(e, res)) return;
+    throw e;
+  }
+  try {
+    const result = await runStructured<DealContext, {
+      headline: string; status: string; health: string;
+      keyFacts: string[]; blockers: string[]; nextSteps: string[];
+      recommendedAction: string;
+    }>({
+      promptKey: 'deal.summary',
+      input: ctx,
+      scope,
+      entityRef: { entityType: 'deal', entityId: dealId },
+    });
+    const insightId = await persistAiInsight(scope.tenantId, {
+      kind: 'ai_deal_summary',
+      title: result.output.headline,
+      summary: `${result.output.status} — ${result.output.keyFacts.slice(0, 2).join(' · ')}`,
+      severity: severityToInsight(result.output.health),
+      dealId,
+      triggerType: 'ai_deal_summary',
+      triggerEntityRef: dealId,
+      actionType: result.output.recommendedAction === 'none' ? null : result.output.recommendedAction,
+      actionPayload: { dealId },
+    });
+    res.json({
+      ok: true,
+      result: result.output,
+      invocationId: result.invocationId,
+      insightId,
+      model: result.model,
+      latencyMs: result.latencyMs,
+      status: 'open',
+    });
+  } catch (err) {
+    if (err instanceof AIOrchestrationError) {
+      mapAiOrchestrationErrorToHttp(err, res, 'deal-summary');
+      return;
+    }
+    throw err;
+  }
+});
+
+// ── 2. Pricing Review ──
+router.post('/copilot/pricing-review/:quoteId', async (req, res) => {
+  const scope = getScope(req);
+  if (!isAIConfigured()) {
+    res.status(503).json({ ok: false, error: 'AI provider not configured', code: 'config_error' });
+    return;
+  }
+  const quoteId = req.params['quoteId'] ?? '';
+  let ctx: QuoteContext;
+  try {
+    ctx = await buildQuoteContext(req, quoteId);
+  } catch (e) {
+    if (handleScopeError(e, res)) return;
+    throw e;
+  }
+  try {
+    const result = await runStructured<QuoteContext, {
+      summary: string; marginAssessment: string; discountAssessment: string;
+      policyFlags: Array<{ topic: string; severity: string; explanation: string }>;
+      approvalRelevance: string; recommendedAction: string;
+    }>({
+      promptKey: 'pricing.review',
+      input: ctx,
+      scope,
+      entityRef: { entityType: 'quote', entityId: quoteId },
+    });
+    // Schwerste Severity bestimmt die Insight-Severity (visuelles Routing
+    // im Approval-Hub).
+    const sevRank: Record<string, number> = { info: 0, low: 1, medium: 2, high: 3, critical: 4 };
+    const flagRank = result.output.policyFlags
+      .map((f) => sevRank[f.severity] ?? 0)
+      .reduce((a, b) => Math.max(a, b), 0);
+    const marginRank = sevRank[result.output.marginAssessment] ?? 0;
+    const finalSev =
+      Object.entries(sevRank).find(([, v]) => v === Math.max(flagRank, marginRank))?.[0] ?? 'info';
+
+    const insightId = await persistAiInsight(scope.tenantId, {
+      kind: 'ai_pricing_review',
+      title: `Pricing-Review für ${ctx.quote.number}`,
+      summary: result.output.summary,
+      severity: severityToInsight(finalSev),
+      dealId: ctx.deal.id,
+      triggerType: 'ai_pricing_review',
+      triggerEntityRef: quoteId,
+      actionType: result.output.recommendedAction === 'none' ? null : result.output.recommendedAction,
+      actionPayload: { quoteId, approvalRelevance: result.output.approvalRelevance },
+    });
+    res.json({
+      ok: true,
+      result: result.output,
+      invocationId: result.invocationId,
+      insightId,
+      model: result.model,
+      latencyMs: result.latencyMs,
+      status: 'open',
+    });
+  } catch (err) {
+    if (err instanceof AIOrchestrationError) {
+      mapAiOrchestrationErrorToHttp(err, res, 'pricing-review');
+      return;
+    }
+    throw err;
+  }
+});
+
+// ── 3. Approval Readiness ──
+router.post('/copilot/approval-readiness/:approvalId', async (req, res) => {
+  const scope = getScope(req);
+  if (!isAIConfigured()) {
+    res.status(503).json({ ok: false, error: 'AI provider not configured', code: 'config_error' });
+    return;
+  }
+  const approvalId = req.params['approvalId'] ?? '';
+  let ctx: ApprovalContext;
+  try {
+    ctx = await buildApprovalContext(req, approvalId);
+  } catch (e) {
+    if (handleScopeError(e, res)) return;
+    throw e;
+  }
+  try {
+    const result = await runStructured<ApprovalContext, {
+      decisionReady: boolean; recommendation: string; rationale: string;
+      missingInformation: string[];
+      keyDeviations: Array<{ topic: string; severity: string; note: string }>;
+      recommendedAction: string;
+    }>({
+      promptKey: 'approval.readiness',
+      input: ctx,
+      scope,
+      entityRef: { entityType: 'approval', entityId: approvalId },
+    });
+    const insightId = await persistAiInsight(scope.tenantId, {
+      kind: 'ai_approval_readiness',
+      title: `Approval-Empfehlung: ${result.output.recommendation}`,
+      summary: result.output.rationale,
+      severity: severityToInsight(result.output.decisionReady ? 'info' : 'medium'),
+      dealId: ctx.deal.id,
+      triggerType: 'ai_approval_readiness',
+      triggerEntityRef: approvalId,
+      actionType: result.output.recommendedAction === 'none' ? null : result.output.recommendedAction,
+      actionPayload: { approvalId, recommendation: result.output.recommendation },
+    });
+    res.json({
+      ok: true,
+      result: result.output,
+      invocationId: result.invocationId,
+      insightId,
+      model: result.model,
+      latencyMs: result.latencyMs,
+      status: 'open',
+    });
+  } catch (err) {
+    if (err instanceof AIOrchestrationError) {
+      mapAiOrchestrationErrorToHttp(err, res, 'approval-readiness');
+      return;
+    }
+    throw err;
+  }
+});
+
+// ── 4. Contract Risk Review ──
+router.post('/copilot/contract-risk/:contractId', async (req, res) => {
+  const scope = getScope(req);
+  if (!isAIConfigured()) {
+    res.status(503).json({ ok: false, error: 'AI provider not configured', code: 'config_error' });
+    return;
+  }
+  const contractId = req.params['contractId'] ?? '';
+  let ctx: ContractContext;
+  try {
+    ctx = await buildContractContext(req, contractId);
+  } catch (e) {
+    if (handleScopeError(e, res)) return;
+    throw e;
+  }
+  try {
+    const result = await runStructured<ContractContext, {
+      overallRisk: string; overallScore: number; summary: string;
+      riskSignals: Array<{ clause: string; severity: string; finding: string; recommendation: string }>;
+      approvalRelevant: boolean; recommendedAction: string;
+    }>({
+      promptKey: 'contract.risk',
+      input: ctx,
+      scope,
+      entityRef: { entityType: 'contract', entityId: contractId },
+    });
+    const insightId = await persistAiInsight(scope.tenantId, {
+      kind: 'ai_contract_risk',
+      title: `Vertragsrisiko: ${ctx.contract.title}`,
+      summary: result.output.summary,
+      severity: severityToInsight(result.output.overallRisk),
+      dealId: ctx.deal.id,
+      triggerType: 'ai_contract_risk',
+      triggerEntityRef: contractId,
+      actionType: result.output.recommendedAction === 'none' ? null : result.output.recommendedAction,
+      actionPayload: {
+        contractId,
+        overallScore: result.output.overallScore,
+        approvalRelevant: result.output.approvalRelevant,
+      },
+    });
+    res.json({
+      ok: true,
+      result: result.output,
+      invocationId: result.invocationId,
+      insightId,
+      model: result.model,
+      latencyMs: result.latencyMs,
+      status: 'open',
+    });
+  } catch (err) {
+    if (err instanceof AIOrchestrationError) {
+      mapAiOrchestrationErrorToHttp(err, res, 'contract-risk');
+      return;
+    }
+    throw err;
   }
 });
 

@@ -227,6 +227,86 @@ Schmaler, austauschbarer AI-Layer in `artifacts/api-server/src/lib/ai/`:
 Feldregel: Routen importieren AI-Funktionalität ausschließlich aus
 `../lib/ai` (Barrel) und rufen NIE direkt den Provider.
 
+### Phase 1 / Schritt 2 — Domain-Context-Builder
+
+`artifacts/api-server/src/lib/ai/context.ts` baut für die vier zentralen
+Entitäten einen scope-validierten, typisierten Kontext, den die Prompts als
+Input erhalten:
+
+- `buildDealContext(req, dealId)` → `DealContext`
+- `buildQuoteContext(req, quoteId)` → `QuoteContext` (inkl. Deal- und
+  Account-Roll-up)
+- `buildContractContext(req, contractId)` → `ContractContext` (inkl.
+  Vertragsklauseln + offene Approvals)
+- `buildApprovalContext(req, approvalId)` → `ApprovalContext` (inkl. Deal,
+  Account, aktuellem Quote)
+
+Jeder Builder ruft `entityScopeStatus()` und wirft `NotInScopeError`
+(`status: 'missing' | 'forbidden'`), die die HTTP-Routen auf 404/403
+mappen. Sekundärdaten (Account/Brand/Company) werden ausschließlich über
+die bereits scope-validierte Wurzel geladen — Cross-tenant-Bypass ist
+unmöglich.
+
+### Phase 1 / Schritt 3 — 10 Copilot-Modi
+
+`artifacts/api-server/src/lib/ai/prompts/dealflow.ts` registriert die zehn
+Modi der Spec mit deutschem System-Prompt, typisiertem `buildUser` und
+zod-Output-Schema. PROMPT_REGISTRY exportiert alle:
+
+| Key | Modell | Output-Form |
+| --- | --- | --- |
+| `deal.summary` | sonnet-4-6 | headline + status + health + keyFacts/blockers/nextSteps |
+| `negotiation.support` | sonnet-4-6 | customerStance + openTopics + draftReply |
+| `pricing.review` | sonnet-4-6 | summary + margin/discount-Assessment + policyFlags |
+| `approval.readiness` | sonnet-4-6 | decisionReady + recommendation + rationale + missingInfo |
+| `contract.draft` | sonnet-4-6 | recommendedTemplate + sections + clauses |
+| `contract.risk` | sonnet-4-6 | overallRisk + riskSignals (clause/finding/recommendation) |
+| `contract.redline` | sonnet-4-6 | redlines (added/removed/modified) + overallStance |
+| `price-increase.support` | sonnet-4-6 | tone + draftLetter + perSku rationale |
+| `executive.brief` | haiku-4-5 | headline + oneLiner + highlights/risks/asks |
+| `deal.health` | sonnet-4-6 | healthScore + drivers + recommendedActions |
+
+`structuredOutput.ts` wurde erweitert um `z.nullable` (Type-Array-Trick),
+`z.union` aus `z.literal` (→ JSON-Schema `enum`) und
+`z.array.min/max` (→ `minItems`/`maxItems`) — alle zehn Schemas erzeugen
+ein für Anthropic gültiges Tool-Input-Schema.
+
+### Phase 1 / Schritt 4 — Produktive HTTP-Endpoints
+
+In `artifacts/api-server/src/routes/dealflow.ts` sind vier Modi
+endpoint-aktiviert:
+
+- `POST /api/copilot/deal-summary/:dealId`
+- `POST /api/copilot/pricing-review/:quoteId`
+- `POST /api/copilot/approval-readiness/:approvalId`
+- `POST /api/copilot/contract-risk/:contractId`
+
+Jede Route: Context-Builder → `runStructured()` → Persistierung als
+`copilot_insight` (kind = `ai_<mode>`, triggerType + triggerEntityRef
+über `copilot_insights_trigger_uniq` für Re-Run-Idempotenz via
+`onConflictDoUpdate`). Antwort:
+`{ ok, result, invocationId, insightId, model, latencyMs }`.
+
+Fehlerklassifizierung:
+
+- `NotInScopeError 'missing'` → 404 `not_found`
+- `NotInScopeError 'forbidden'` → 403 `forbidden`
+- `AIOrchestrationError 'config_error' | 'audit_unavailable'` → 503
+- alle anderen `AIOrchestrationError` → 502 mit `code` (`validation_error`,
+  `no_tool_call`, `provider_error`)
+
+Jeder Versuch — auch fehlgeschlagene — schreibt einen Audit-Eintrag in
+`ai_invocations` (Schema-Konformitäts-Check ist bewusst strikt; bei
+sehr dichten Kontexten kann das Modell sporadisch off-schema antworten,
+was kontrolliert als 502 + Audit auftaucht).
+
+Die übrigen sechs Modi (`negotiation.support`, `contract.draft`,
+`contract.redline`, `price-increase.support`, `executive.brief`,
+`deal.health`) sind im Registry verdrahtet und werden in Phase 2
+zusammen mit der UI an HTTP-Endpoints gebunden — die Architektur ist
+dafür komplett vorbereitet (gleicher Routenpattern, gleicher
+Persistenz-Helper).
+
 ## GDPR & Governance
 
 Per-tenant data isolation, role + scope enforced at API layer, full audit

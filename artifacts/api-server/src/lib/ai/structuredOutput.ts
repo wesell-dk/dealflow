@@ -12,7 +12,7 @@
 import { z } from 'zod';
 
 interface JsonSchemaObject {
-  type: string;
+  type?: string | string[];
   properties?: Record<string, JsonSchemaObject>;
   required?: string[];
   additionalProperties?: boolean;
@@ -23,6 +23,8 @@ interface JsonSchemaObject {
   maximum?: number;
   minLength?: number;
   maxLength?: number;
+  minItems?: number;
+  maxItems?: number;
 }
 
 class UnsupportedZodTypeError extends Error {
@@ -38,6 +40,24 @@ class UnsupportedZodTypeError extends Error {
 function convert(schema: z.ZodTypeAny): JsonSchemaObject {
   const def = schema._def as { typeName?: string; description?: string };
   const description = def.description;
+
+  // z.nullable(X) — Anthropic's tool input schemas accept JSON Schema's
+  // type-as-array trick: wrap inner type and add "null" to the type list.
+  if (schema instanceof z.ZodNullable) {
+    const inner = convert((schema as z.ZodNullable<z.ZodTypeAny>).unwrap());
+    if (typeof inner.type === 'string') {
+      return {
+        ...inner,
+        type: [inner.type, 'null'],
+        ...(description ? { description } : {}),
+      };
+    }
+    // Fallback: object/array nullable — wrap with anyOf-ish semantics by
+    // simply allowing null via type union; provider tolerates this for
+    // top-level fields. We omit it here to keep schemas conservative —
+    // the validator (zod) is the source of truth on the response side.
+    return inner;
+  }
 
   if (schema instanceof z.ZodObject) {
     const shape = schema.shape as Record<string, z.ZodTypeAny>;
@@ -59,11 +79,44 @@ function convert(schema: z.ZodTypeAny): JsonSchemaObject {
   }
 
   if (schema instanceof z.ZodArray) {
-    return {
+    const arrDef = (schema as z.ZodArray<z.ZodTypeAny>)._def as {
+      minLength?: { value: number } | null;
+      maxLength?: { value: number } | null;
+    };
+    const out: JsonSchemaObject = {
       type: 'array',
       items: convert((schema as z.ZodArray<z.ZodTypeAny>).element),
       ...(description ? { description } : {}),
     };
+    if (arrDef.minLength?.value !== undefined) out.minItems = arrDef.minLength.value;
+    if (arrDef.maxLength?.value !== undefined) out.maxItems = arrDef.maxLength.value;
+    return out;
+  }
+
+  // z.union(...) — we only support unions of z.literal (string|number|boolean)
+  // and collapse them into a JSON Schema enum. This is the common case for
+  // discriminator fields like riskLevel: 'low'|'medium'|'high'.
+  if (schema instanceof z.ZodUnion) {
+    const opts = (schema as z.ZodUnion<readonly [z.ZodTypeAny, ...z.ZodTypeAny[]]>)
+      ._def.options as readonly z.ZodTypeAny[];
+    const literals: unknown[] = [];
+    let baseType: 'string' | 'number' | 'boolean' | null = null;
+    for (const o of opts) {
+      if (!(o instanceof z.ZodLiteral)) {
+        throw new UnsupportedZodTypeError('ZodUnion (only unions of z.literal are supported)');
+      }
+      const v = (o as z.ZodLiteral<unknown>).value;
+      const t = typeof v;
+      if (t !== 'string' && t !== 'number' && t !== 'boolean') {
+        throw new UnsupportedZodTypeError(`ZodLiteral of type ${t}`);
+      }
+      if (baseType && baseType !== t) {
+        throw new UnsupportedZodTypeError('ZodUnion (mixed literal types)');
+      }
+      baseType = t;
+      literals.push(v);
+    }
+    return { type: baseType ?? 'string', enum: literals, ...(description ? { description } : {}) };
   }
 
   if (schema instanceof z.ZodString) {

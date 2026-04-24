@@ -78,11 +78,15 @@ export const diagnosticPing: PromptDefinition<
   toolName: 'report_health',
 };
 
+// 10 Copilot-Modi der Spec — siehe ./prompts/dealflow.ts
+import { DEALFLOW_PROMPTS } from './prompts/dealflow.js';
+
 /**
  * Map aller Prompts. Wird vom Orchestrator über key gelookuped.
  */
 export const PROMPT_REGISTRY = {
   [diagnosticPing.key]: diagnosticPing,
+  ...DEALFLOW_PROMPTS,
 } as const;
 
 export type PromptKey = keyof typeof PROMPT_REGISTRY;

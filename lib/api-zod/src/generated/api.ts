@@ -2346,6 +2346,189 @@ export const GetAiHealthResponse = zod.object({
 });
 
 /**
+ * @summary AI-generated deal summary (10 modes / mode 1). Builds a tenant- and
+scope-validated DealContext, calls the LLM via the structured-output
+orchestrator, persists a copilot_insight (kind=ai_deal_summary), and
+writes one ai_invocations audit row.
+
+ */
+export const RunDealSummaryParams = zod.object({
+  dealId: zod.coerce.string(),
+});
+
+export const RunDealSummaryResponse = zod
+  .object({
+    insightId: zod.string(),
+    invocationId: zod.string(),
+    model: zod.string(),
+    latencyMs: zod.number(),
+    status: zod.enum(["open"]),
+  })
+  .and(
+    zod.object({
+      ok: zod.literal(true),
+      result: zod.object({
+        headline: zod.string(),
+        status: zod.string(),
+        health: zod.enum(["low", "medium", "high"]),
+        keyFacts: zod.array(zod.string()),
+        blockers: zod.array(zod.string()),
+        nextSteps: zod.array(zod.string()),
+        recommendedAction: zod.enum([
+          "none",
+          "open_quote",
+          "open_contract",
+          "open_approval",
+          "open_negotiation",
+          "open_price_increase",
+        ]),
+      }),
+    }),
+  );
+
+/**
+ * @summary AI-generated pricing review for a quote. Same persistence + audit
+contract as deal-summary; insight kind=ai_pricing_review.
+
+ */
+export const RunPricingReviewParams = zod.object({
+  quoteId: zod.coerce.string(),
+});
+
+export const RunPricingReviewResponse = zod
+  .object({
+    insightId: zod.string(),
+    invocationId: zod.string(),
+    model: zod.string(),
+    latencyMs: zod.number(),
+    status: zod.enum(["open"]),
+  })
+  .and(
+    zod.object({
+      ok: zod.literal(true),
+      result: zod.object({
+        summary: zod.string(),
+        marginAssessment: zod.enum(["low", "medium", "high"]),
+        discountAssessment: zod.enum(["low", "medium", "high"]),
+        policyFlags: zod.array(
+          zod.object({
+            topic: zod.string(),
+            severity: zod.enum(["info", "low", "medium", "high", "critical"]),
+            explanation: zod.string(),
+          }),
+        ),
+        approvalRelevance: zod.enum([
+          "not_required",
+          "recommended",
+          "required",
+        ]),
+        recommendedAction: zod.enum([
+          "none",
+          "open_quote",
+          "open_contract",
+          "open_approval",
+          "open_negotiation",
+          "open_price_increase",
+        ]),
+      }),
+    }),
+  );
+
+/**
+ * @summary AI-generated approval-readiness assessment. Same contract as the
+other modes; insight kind=ai_approval_readiness.
+
+ */
+export const RunApprovalReadinessParams = zod.object({
+  approvalId: zod.coerce.string(),
+});
+
+export const RunApprovalReadinessResponse = zod
+  .object({
+    insightId: zod.string(),
+    invocationId: zod.string(),
+    model: zod.string(),
+    latencyMs: zod.number(),
+    status: zod.enum(["open"]),
+  })
+  .and(
+    zod.object({
+      ok: zod.literal(true),
+      result: zod.object({
+        decisionReady: zod.boolean(),
+        recommendation: zod.enum([
+          "approve",
+          "approve_with_conditions",
+          "request_info",
+          "reject",
+        ]),
+        rationale: zod.string(),
+        missingInformation: zod.array(zod.string()),
+        keyDeviations: zod.array(
+          zod.object({
+            topic: zod.string(),
+            severity: zod.enum(["info", "low", "medium", "high", "critical"]),
+            note: zod.string(),
+          }),
+        ),
+        recommendedAction: zod.enum([
+          "none",
+          "open_quote",
+          "open_contract",
+          "open_approval",
+          "open_negotiation",
+          "open_price_increase",
+        ]),
+      }),
+    }),
+  );
+
+/**
+ * @summary AI-generated contract risk review. Same contract as the other modes;
+insight kind=ai_contract_risk.
+
+ */
+export const RunContractRiskParams = zod.object({
+  contractId: zod.coerce.string(),
+});
+
+export const RunContractRiskResponse = zod
+  .object({
+    insightId: zod.string(),
+    invocationId: zod.string(),
+    model: zod.string(),
+    latencyMs: zod.number(),
+    status: zod.enum(["open"]),
+  })
+  .and(
+    zod.object({
+      ok: zod.literal(true),
+      result: zod.object({
+        overallRisk: zod.enum(["low", "medium", "high"]),
+        overallScore: zod.number(),
+        summary: zod.string(),
+        riskSignals: zod.array(
+          zod.object({
+            clause: zod.string(),
+            severity: zod.enum(["info", "low", "medium", "high", "critical"]),
+            finding: zod.string(),
+            recommendation: zod.string(),
+          }),
+        ),
+        approvalRelevant: zod.boolean(),
+        recommendedAction: zod.enum([
+          "none",
+          "open_quote",
+          "open_contract",
+          "open_approval",
+          "open_negotiation",
+          "open_price_increase",
+        ]),
+      }),
+    }),
+  );
+
+/**
  * @summary Cross-domain recent activity feed
  */
 export const ListRecentActivityResponseItem = zod.object({

@@ -1692,6 +1692,100 @@ paths:
         "503":
           description: AI provider not configured.
 
+  /copilot/deal-summary/{dealId}:
+    post:
+      operationId: runDealSummary
+      tags: [copilot]
+      summary: |
+        AI-generated deal summary (10 modes / mode 1). Builds a tenant- and
+        scope-validated DealContext, calls the LLM via the structured-output
+        orchestrator, persists a copilot_insight (kind=ai_deal_summary), and
+        writes one ai_invocations audit row.
+      parameters:
+        - in: path
+          name: dealId
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Structured deal summary returned.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/DealSummaryEnvelope" }
+        "403": { description: Caller lacks scope on this deal. }
+        "404": { description: Deal does not exist for this tenant. }
+        "502": { description: AI provider failed or returned invalid output. }
+        "503": { description: AI provider not configured. }
+
+  /copilot/pricing-review/{quoteId}:
+    post:
+      operationId: runPricingReview
+      tags: [copilot]
+      summary: |
+        AI-generated pricing review for a quote. Same persistence + audit
+        contract as deal-summary; insight kind=ai_pricing_review.
+      parameters:
+        - in: path
+          name: quoteId
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Structured pricing review returned.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PricingReviewEnvelope" }
+        "403": { description: Caller lacks scope on this quote's deal. }
+        "404": { description: Quote does not exist for this tenant. }
+        "502": { description: AI provider failed or returned invalid output. }
+        "503": { description: AI provider not configured. }
+
+  /copilot/approval-readiness/{approvalId}:
+    post:
+      operationId: runApprovalReadiness
+      tags: [copilot]
+      summary: |
+        AI-generated approval-readiness assessment. Same contract as the
+        other modes; insight kind=ai_approval_readiness.
+      parameters:
+        - in: path
+          name: approvalId
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Structured approval-readiness assessment returned.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ApprovalReadinessEnvelope" }
+        "403": { description: Caller lacks scope on this approval's deal. }
+        "404": { description: Approval does not exist for this tenant. }
+        "502": { description: AI provider failed or returned invalid output. }
+        "503": { description: AI provider not configured. }
+
+  /copilot/contract-risk/{contractId}:
+    post:
+      operationId: runContractRisk
+      tags: [copilot]
+      summary: |
+        AI-generated contract risk review. Same contract as the other modes;
+        insight kind=ai_contract_risk.
+      parameters:
+        - in: path
+          name: contractId
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Structured contract risk review returned.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ContractRiskEnvelope" }
+        "403": { description: Caller lacks scope on this contract. }
+        "404": { description: Contract does not exist for this tenant. }
+        "502": { description: AI provider failed or returned invalid output. }
+        "503": { description: AI provider not configured. }
+
   /activity:
     get:
       operationId: listRecentActivity
@@ -3623,6 +3717,142 @@ components:
           properties:
             echoed: { type: string }
             note: { type: string }
+
+    CopilotAiInsightRef:
+      type: object
+      required: [insightId, invocationId, model, latencyMs, status]
+      properties:
+        insightId: { type: string }
+        invocationId: { type: string }
+        model: { type: string }
+        latencyMs: { type: integer }
+        status: { type: string, enum: [open] }
+
+    DealSummaryResult:
+      type: object
+      required: [headline, status, health, keyFacts, blockers, nextSteps, recommendedAction]
+      properties:
+        headline: { type: string }
+        status: { type: string }
+        health: { type: string, enum: [low, medium, high] }
+        keyFacts: { type: array, items: { type: string } }
+        blockers: { type: array, items: { type: string } }
+        nextSteps: { type: array, items: { type: string } }
+        recommendedAction:
+          type: string
+          enum: [none, open_quote, open_contract, open_approval, open_negotiation, open_price_increase]
+
+    DealSummaryEnvelope:
+      type: object
+      required: [ok, result, insightId, invocationId, model, latencyMs, status]
+      allOf:
+        - $ref: "#/components/schemas/CopilotAiInsightRef"
+        - type: object
+          required: [ok, result]
+          properties:
+            ok: { type: boolean, enum: [true] }
+            result: { $ref: "#/components/schemas/DealSummaryResult" }
+
+    PricingReviewResult:
+      type: object
+      required: [summary, marginAssessment, discountAssessment, policyFlags, approvalRelevance, recommendedAction]
+      properties:
+        summary: { type: string }
+        marginAssessment: { type: string, enum: [low, medium, high] }
+        discountAssessment: { type: string, enum: [low, medium, high] }
+        policyFlags:
+          type: array
+          items:
+            type: object
+            required: [topic, severity, explanation]
+            properties:
+              topic: { type: string }
+              severity: { type: string, enum: [info, low, medium, high, critical] }
+              explanation: { type: string }
+        approvalRelevance:
+          type: string
+          enum: [not_required, recommended, required]
+        recommendedAction:
+          type: string
+          enum: [none, open_quote, open_contract, open_approval, open_negotiation, open_price_increase]
+
+    PricingReviewEnvelope:
+      type: object
+      required: [ok, result, insightId, invocationId, model, latencyMs, status]
+      allOf:
+        - $ref: "#/components/schemas/CopilotAiInsightRef"
+        - type: object
+          required: [ok, result]
+          properties:
+            ok: { type: boolean, enum: [true] }
+            result: { $ref: "#/components/schemas/PricingReviewResult" }
+
+    ApprovalReadinessResult:
+      type: object
+      required: [decisionReady, recommendation, rationale, missingInformation, keyDeviations, recommendedAction]
+      properties:
+        decisionReady: { type: boolean }
+        recommendation:
+          type: string
+          enum: [approve, approve_with_conditions, request_info, reject]
+        rationale: { type: string }
+        missingInformation: { type: array, items: { type: string } }
+        keyDeviations:
+          type: array
+          items:
+            type: object
+            required: [topic, severity, note]
+            properties:
+              topic: { type: string }
+              severity: { type: string, enum: [info, low, medium, high, critical] }
+              note: { type: string }
+        recommendedAction:
+          type: string
+          enum: [none, open_quote, open_contract, open_approval, open_negotiation, open_price_increase]
+
+    ApprovalReadinessEnvelope:
+      type: object
+      required: [ok, result, insightId, invocationId, model, latencyMs, status]
+      allOf:
+        - $ref: "#/components/schemas/CopilotAiInsightRef"
+        - type: object
+          required: [ok, result]
+          properties:
+            ok: { type: boolean, enum: [true] }
+            result: { $ref: "#/components/schemas/ApprovalReadinessResult" }
+
+    ContractRiskResult:
+      type: object
+      required: [overallRisk, overallScore, summary, riskSignals, approvalRelevant, recommendedAction]
+      properties:
+        overallRisk: { type: string, enum: [low, medium, high] }
+        overallScore: { type: number }
+        summary: { type: string }
+        riskSignals:
+          type: array
+          items:
+            type: object
+            required: [clause, severity, finding, recommendation]
+            properties:
+              clause: { type: string }
+              severity: { type: string, enum: [info, low, medium, high, critical] }
+              finding: { type: string }
+              recommendation: { type: string }
+        approvalRelevant: { type: boolean }
+        recommendedAction:
+          type: string
+          enum: [none, open_quote, open_contract, open_approval, open_negotiation, open_price_increase]
+
+    ContractRiskEnvelope:
+      type: object
+      required: [ok, result, insightId, invocationId, model, latencyMs, status]
+      allOf:
+        - $ref: "#/components/schemas/CopilotAiInsightRef"
+        - type: object
+          required: [ok, result]
+          properties:
+            ok: { type: boolean, enum: [true] }
+            result: { $ref: "#/components/schemas/ContractRiskResult" }
 
     HelpBotInput:
       type: object

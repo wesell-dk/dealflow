@@ -558,8 +558,12 @@ export const copilotInsightsTable = pgTable("copilot_insights", {
   dismissedAt: timestamp("dismissed_at", { withTimezone: true }),
   createdAt: ts("created_at"),
 }, (t) => [
+  // Tenant-scoped uniqueness: a (triggerType, triggerEntityRef) pair must be
+  // unique within a single tenant, never globally — otherwise an AI insight
+  // re-run for tenant A could overwrite tenant B's insight if they shared the
+  // same entity ref convention. Required for cross-tenant data isolation.
   uniqueIndex("copilot_insights_trigger_uniq")
-    .on(t.triggerType, t.triggerEntityRef),
+    .on(t.tenantId, t.triggerType, t.triggerEntityRef),
 ]);
 
 export const copilotThreadsTable = pgTable("copilot_threads", {

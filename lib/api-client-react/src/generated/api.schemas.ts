@@ -1240,6 +1240,233 @@ export interface AiHealthOk {
   sample: AiHealthOkSample;
 }
 
+export type CopilotAiInsightRefStatus =
+  (typeof CopilotAiInsightRefStatus)[keyof typeof CopilotAiInsightRefStatus];
+
+export const CopilotAiInsightRefStatus = {
+  open: "open",
+} as const;
+
+export interface CopilotAiInsightRef {
+  insightId: string;
+  invocationId: string;
+  model: string;
+  latencyMs: number;
+  status: CopilotAiInsightRefStatus;
+}
+
+export type DealSummaryResultHealth =
+  (typeof DealSummaryResultHealth)[keyof typeof DealSummaryResultHealth];
+
+export const DealSummaryResultHealth = {
+  low: "low",
+  medium: "medium",
+  high: "high",
+} as const;
+
+export type DealSummaryResultRecommendedAction =
+  (typeof DealSummaryResultRecommendedAction)[keyof typeof DealSummaryResultRecommendedAction];
+
+export const DealSummaryResultRecommendedAction = {
+  none: "none",
+  open_quote: "open_quote",
+  open_contract: "open_contract",
+  open_approval: "open_approval",
+  open_negotiation: "open_negotiation",
+  open_price_increase: "open_price_increase",
+} as const;
+
+export interface DealSummaryResult {
+  headline: string;
+  status: string;
+  health: DealSummaryResultHealth;
+  keyFacts: string[];
+  blockers: string[];
+  nextSteps: string[];
+  recommendedAction: DealSummaryResultRecommendedAction;
+}
+
+export type DealSummaryEnvelope = CopilotAiInsightRef & {
+  ok: boolean;
+  result: DealSummaryResult;
+};
+
+export type PricingReviewResultMarginAssessment =
+  (typeof PricingReviewResultMarginAssessment)[keyof typeof PricingReviewResultMarginAssessment];
+
+export const PricingReviewResultMarginAssessment = {
+  low: "low",
+  medium: "medium",
+  high: "high",
+} as const;
+
+export type PricingReviewResultDiscountAssessment =
+  (typeof PricingReviewResultDiscountAssessment)[keyof typeof PricingReviewResultDiscountAssessment];
+
+export const PricingReviewResultDiscountAssessment = {
+  low: "low",
+  medium: "medium",
+  high: "high",
+} as const;
+
+export type PricingReviewResultPolicyFlagsItemSeverity =
+  (typeof PricingReviewResultPolicyFlagsItemSeverity)[keyof typeof PricingReviewResultPolicyFlagsItemSeverity];
+
+export const PricingReviewResultPolicyFlagsItemSeverity = {
+  info: "info",
+  low: "low",
+  medium: "medium",
+  high: "high",
+  critical: "critical",
+} as const;
+
+export type PricingReviewResultPolicyFlagsItem = {
+  topic: string;
+  severity: PricingReviewResultPolicyFlagsItemSeverity;
+  explanation: string;
+};
+
+export type PricingReviewResultApprovalRelevance =
+  (typeof PricingReviewResultApprovalRelevance)[keyof typeof PricingReviewResultApprovalRelevance];
+
+export const PricingReviewResultApprovalRelevance = {
+  not_required: "not_required",
+  recommended: "recommended",
+  required: "required",
+} as const;
+
+export type PricingReviewResultRecommendedAction =
+  (typeof PricingReviewResultRecommendedAction)[keyof typeof PricingReviewResultRecommendedAction];
+
+export const PricingReviewResultRecommendedAction = {
+  none: "none",
+  open_quote: "open_quote",
+  open_contract: "open_contract",
+  open_approval: "open_approval",
+  open_negotiation: "open_negotiation",
+  open_price_increase: "open_price_increase",
+} as const;
+
+export interface PricingReviewResult {
+  summary: string;
+  marginAssessment: PricingReviewResultMarginAssessment;
+  discountAssessment: PricingReviewResultDiscountAssessment;
+  policyFlags: PricingReviewResultPolicyFlagsItem[];
+  approvalRelevance: PricingReviewResultApprovalRelevance;
+  recommendedAction: PricingReviewResultRecommendedAction;
+}
+
+export type PricingReviewEnvelope = CopilotAiInsightRef & {
+  ok: boolean;
+  result: PricingReviewResult;
+};
+
+export type ApprovalReadinessResultRecommendation =
+  (typeof ApprovalReadinessResultRecommendation)[keyof typeof ApprovalReadinessResultRecommendation];
+
+export const ApprovalReadinessResultRecommendation = {
+  approve: "approve",
+  approve_with_conditions: "approve_with_conditions",
+  request_info: "request_info",
+  reject: "reject",
+} as const;
+
+export type ApprovalReadinessResultKeyDeviationsItemSeverity =
+  (typeof ApprovalReadinessResultKeyDeviationsItemSeverity)[keyof typeof ApprovalReadinessResultKeyDeviationsItemSeverity];
+
+export const ApprovalReadinessResultKeyDeviationsItemSeverity = {
+  info: "info",
+  low: "low",
+  medium: "medium",
+  high: "high",
+  critical: "critical",
+} as const;
+
+export type ApprovalReadinessResultKeyDeviationsItem = {
+  topic: string;
+  severity: ApprovalReadinessResultKeyDeviationsItemSeverity;
+  note: string;
+};
+
+export type ApprovalReadinessResultRecommendedAction =
+  (typeof ApprovalReadinessResultRecommendedAction)[keyof typeof ApprovalReadinessResultRecommendedAction];
+
+export const ApprovalReadinessResultRecommendedAction = {
+  none: "none",
+  open_quote: "open_quote",
+  open_contract: "open_contract",
+  open_approval: "open_approval",
+  open_negotiation: "open_negotiation",
+  open_price_increase: "open_price_increase",
+} as const;
+
+export interface ApprovalReadinessResult {
+  decisionReady: boolean;
+  recommendation: ApprovalReadinessResultRecommendation;
+  rationale: string;
+  missingInformation: string[];
+  keyDeviations: ApprovalReadinessResultKeyDeviationsItem[];
+  recommendedAction: ApprovalReadinessResultRecommendedAction;
+}
+
+export type ApprovalReadinessEnvelope = CopilotAiInsightRef & {
+  ok: boolean;
+  result: ApprovalReadinessResult;
+};
+
+export type ContractRiskResultOverallRisk =
+  (typeof ContractRiskResultOverallRisk)[keyof typeof ContractRiskResultOverallRisk];
+
+export const ContractRiskResultOverallRisk = {
+  low: "low",
+  medium: "medium",
+  high: "high",
+} as const;
+
+export type ContractRiskResultRiskSignalsItemSeverity =
+  (typeof ContractRiskResultRiskSignalsItemSeverity)[keyof typeof ContractRiskResultRiskSignalsItemSeverity];
+
+export const ContractRiskResultRiskSignalsItemSeverity = {
+  info: "info",
+  low: "low",
+  medium: "medium",
+  high: "high",
+  critical: "critical",
+} as const;
+
+export type ContractRiskResultRiskSignalsItem = {
+  clause: string;
+  severity: ContractRiskResultRiskSignalsItemSeverity;
+  finding: string;
+  recommendation: string;
+};
+
+export type ContractRiskResultRecommendedAction =
+  (typeof ContractRiskResultRecommendedAction)[keyof typeof ContractRiskResultRecommendedAction];
+
+export const ContractRiskResultRecommendedAction = {
+  none: "none",
+  open_quote: "open_quote",
+  open_contract: "open_contract",
+  open_approval: "open_approval",
+  open_negotiation: "open_negotiation",
+  open_price_increase: "open_price_increase",
+} as const;
+
+export interface ContractRiskResult {
+  overallRisk: ContractRiskResultOverallRisk;
+  overallScore: number;
+  summary: string;
+  riskSignals: ContractRiskResultRiskSignalsItem[];
+  approvalRelevant: boolean;
+  recommendedAction: ContractRiskResultRecommendedAction;
+}
+
+export type ContractRiskEnvelope = CopilotAiInsightRef & {
+  ok: boolean;
+  result: ContractRiskResult;
+};
+
 export type HelpBotInputHistoryItem = {
   role: string;
   content: string;

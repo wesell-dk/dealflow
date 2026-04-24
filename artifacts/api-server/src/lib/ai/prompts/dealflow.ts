@@ -1,0 +1,495 @@
+/**
+ * Prompt-Definitionen für die 10 Copilot-Modi der DealFlow.One-Spec:
+ *   1. Deal Summary
+ *   2. Negotiation Support
+ *   3. Pricing Review
+ *   4. Approval Readiness
+ *   5. Contract Drafting
+ *   6. Contract Risk Review
+ *   7. External Paper / Redline Analysis
+ *   8. Price Increase Support
+ *   9. Executive Briefing
+ *  10. Commercial Health Check
+ *
+ * Konventionen:
+ *   - System-Prompt ist deutsch und definiert Rolle, Sprache, Stil
+ *   - Tool-Schema (zod) erzwingt strukturierten Output für nachgelagerte
+ *     Verarbeitung (Persistenz als copilot_insight, UI-Rendering)
+ *   - buildUser bekommt das vollständige Domain-Context-Objekt aus
+ *     `context.ts` und serialisiert es kompakt (JSON.stringify) — die AI
+ *     antwortet ausschließlich über `tool_use`
+ *
+ * Modell-Auswahl:
+ *   - haiku-4-5  → kurze Zusammenfassungen, Briefings (kostengünstig)
+ *   - sonnet-4-6 → strukturierte Risiko-/Pricing-Analysen (qualitätsgetrieben)
+ */
+
+import { z } from "zod";
+import type { PromptDefinition } from "../promptRegistry.js";
+import type {
+  ApprovalContext,
+  ContractContext,
+  DealContext,
+  QuoteContext,
+} from "../context.js";
+
+const RISK = z.union([z.literal("low"), z.literal("medium"), z.literal("high")]);
+const PRIORITY = z.union([
+  z.literal("info"),
+  z.literal("low"),
+  z.literal("medium"),
+  z.literal("high"),
+  z.literal("critical"),
+]);
+
+// Gemeinsame Action-Empfehlung. Die strings entsprechen UI-Buttons im
+// existierenden Copilot-Insight-Card.
+const ACTION_TYPE = z.union([
+  z.literal("none"),
+  z.literal("open_quote"),
+  z.literal("open_contract"),
+  z.literal("open_approval"),
+  z.literal("open_negotiation"),
+  z.literal("open_price_increase"),
+]);
+
+const SAFE_GERMAN_HINT =
+  "Sprache: deutsch. Formuliere klar, faktisch, geschäftstauglich. Keine " +
+  "Marketing-Phrasen. Keine Emojis. Keine Halluzinationen — wenn der Kontext " +
+  "kein eindeutiges Signal enthält, vermerke das explizit.";
+
+// ───────────────────────── 1. Deal Summary ─────────────────────────
+
+const DealSummaryOutput = z.object({
+  headline: z.string().min(8).max(120),
+  status: z.string().min(2).max(400),
+  health: RISK,
+  keyFacts: z.array(z.string().min(2).max(160)).min(3).max(8),
+  blockers: z.array(z.string().min(2).max(200)).max(6),
+  nextSteps: z.array(z.string().min(2).max(200)).min(1).max(5),
+  recommendedAction: ACTION_TYPE,
+});
+
+export const dealSummary: PromptDefinition<
+  DealContext,
+  z.infer<typeof DealSummaryOutput>
+> = {
+  key: "deal.summary",
+  model: "claude-sonnet-4-6",
+  system:
+    "Du bist DealFlow-Copilot im Modus Deal Summary. Du erhältst einen " +
+    "vollständigen Deal-Kontext (Stammdaten, aktuelles Angebot, offene " +
+    "Approvals, Verträge, Timeline) und lieferst eine prägnante, faktenbasierte " +
+    "Übersicht für Sales/RevOps. " +
+    SAFE_GERMAN_HINT,
+  buildUser: (ctx) =>
+    `Erzeuge eine Deal-Zusammenfassung für folgenden Kontext (JSON):\n${JSON.stringify(ctx)}`,
+  outputSchema: DealSummaryOutput,
+  toolDescription:
+    "Liefert headline (1 Satz), status, health-Einschätzung, 3-8 keyFacts, " +
+    "blockers, 1-5 nextSteps und eine recommendedAction.",
+  toolName: "report_deal_summary",
+};
+
+// ───────────────────────── 2. Negotiation Support ─────────────────────────
+
+const NegotiationOutput = z.object({
+  customerStance: z.string().min(2).max(240),
+  openTopics: z
+    .array(
+      z.object({
+        topic: z.string().min(2).max(120),
+        category: z.union([
+          z.literal("price"),
+          z.literal("contract"),
+          z.literal("scope"),
+          z.literal("timeline"),
+          z.literal("other"),
+        ]),
+        impact: PRIORITY,
+        suggestion: z.string().min(2).max(600),
+      }),
+    )
+    .max(8),
+  draftReplyInternal: z.string().min(2).max(800),
+  draftReplyExternal: z.string().min(2).max(1200),
+  recommendedAction: ACTION_TYPE,
+});
+
+export const negotiationSupport: PromptDefinition<
+  DealContext,
+  z.infer<typeof NegotiationOutput>
+> = {
+  key: "negotiation.support",
+  model: "claude-sonnet-4-6",
+  system:
+    "Du bist DealFlow-Copilot im Modus Negotiation Support. Auf Basis des " +
+    "Deal-Kontextes (inkl. Timeline, Approvals, aktuelles Angebot) " +
+    "klassifizierst du die offenen Verhandlungsthemen, schätzt deren Impact " +
+    "und schlägst Antwortentwürfe (intern + extern) vor. " +
+    SAFE_GERMAN_HINT,
+  buildUser: (ctx) =>
+    `Analysiere die Verhandlungslage und antworte strukturiert. Kontext (JSON):\n${JSON.stringify(ctx)}`,
+  outputSchema: NegotiationOutput,
+  toolDescription:
+    "Liefert customerStance, klassifizierte openTopics mit Impact, einen " +
+    "internen und einen externen Antwortentwurf sowie eine recommendedAction.",
+  toolName: "report_negotiation",
+};
+
+// ───────────────────────── 3. Pricing Review ─────────────────────────
+
+const PricingReviewOutput = z.object({
+  summary: z.string().min(8).max(600),
+  marginAssessment: RISK,
+  discountAssessment: RISK,
+  policyFlags: z
+    .array(
+      z.object({
+        topic: z.string().min(2).max(120),
+        severity: PRIORITY,
+        explanation: z.string().min(2).max(600),
+      }),
+    )
+    .max(8),
+  approvalRelevance: z.union([
+    z.literal("not_required"),
+    z.literal("recommended"),
+    z.literal("required"),
+  ]),
+  recommendedAction: ACTION_TYPE,
+});
+
+export const pricingReview: PromptDefinition<
+  QuoteContext,
+  z.infer<typeof PricingReviewOutput>
+> = {
+  key: "pricing.review",
+  model: "claude-sonnet-4-6",
+  system:
+    "Du bist DealFlow-Copilot im Modus Pricing Review. Auf Basis von Quote, " +
+    "aktiver Version, Line-Items und der Brand-/Company-eigenen Preispositionen " +
+    "bewertest du Marge, Rabatt und Policy-Konformität. " +
+    SAFE_GERMAN_HINT,
+  buildUser: (ctx) =>
+    `Bewerte das Pricing dieses Angebots. Kontext (JSON):\n${JSON.stringify(ctx)}`,
+  outputSchema: PricingReviewOutput,
+  toolDescription:
+    "Liefert summary, marginAssessment, discountAssessment, policyFlags " +
+    "(severity-eingestuft), approvalRelevance und recommendedAction.",
+  toolName: "report_pricing",
+};
+
+// ───────────────────────── 4. Approval Readiness ─────────────────────────
+
+const ApprovalReadinessOutput = z.object({
+  decisionReady: z.boolean(),
+  recommendation: z.union([
+    z.literal("approve"),
+    z.literal("approve_with_conditions"),
+    z.literal("request_info"),
+    z.literal("reject"),
+  ]),
+  rationale: z.string().min(8).max(1200),
+  missingInformation: z.array(z.string().min(2).max(200)).max(8),
+  keyDeviations: z
+    .array(
+      z.object({
+        topic: z.string().min(2).max(120),
+        severity: PRIORITY,
+        note: z.string().min(2).max(600),
+      }),
+    )
+    .max(8),
+  recommendedAction: ACTION_TYPE,
+});
+
+export const approvalReadiness: PromptDefinition<
+  ApprovalContext,
+  z.infer<typeof ApprovalReadinessOutput>
+> = {
+  key: "approval.readiness",
+  model: "claude-sonnet-4-6",
+  system:
+    "Du bist DealFlow-Copilot im Modus Approval Readiness. Du bewertest, ob " +
+    "ein Approval-Fall entscheidungsreif ist, formulierst eine prägnante " +
+    "Entscheidungsempfehlung (approve / approve_with_conditions / request_info / " +
+    "reject), nennst fehlende Informationen und Schlüssel-Abweichungen. " +
+    SAFE_GERMAN_HINT,
+  buildUser: (ctx) =>
+    `Bewerte die Entscheidungsreife dieses Approval-Falls. Kontext (JSON):\n${JSON.stringify(ctx)}`,
+  outputSchema: ApprovalReadinessOutput,
+  toolDescription:
+    "Liefert decisionReady, recommendation, rationale, missingInformation, " +
+    "keyDeviations und eine recommendedAction.",
+  toolName: "report_approval_readiness",
+};
+
+// ───────────────────────── 5. Contract Drafting ─────────────────────────
+
+const ContractDraftOutput = z.object({
+  draftTitle: z.string().min(2).max(160),
+  recommendedTemplate: z.string().min(2).max(80),
+  prefillSuggestions: z
+    .array(
+      z.object({
+        field: z.string().min(2).max(80),
+        value: z.string().min(1).max(600),
+        source: z.string().min(2).max(200),
+      }),
+    )
+    .min(1)
+    .max(20),
+  clauseRecommendations: z
+    .array(
+      z.object({
+        family: z.string().min(2).max(80),
+        variant: z.union([
+          z.literal("soft"),
+          z.literal("standard"),
+          z.literal("hard"),
+        ]),
+        rationale: z.string().min(2).max(600),
+      }),
+    )
+    .max(20),
+  openQuestions: z.array(z.string().min(2).max(240)).max(8),
+});
+
+export const contractDrafting: PromptDefinition<
+  DealContext,
+  z.infer<typeof ContractDraftOutput>
+> = {
+  key: "contract.draft",
+  model: "claude-sonnet-4-6",
+  system:
+    "Du bist DealFlow-Copilot im Modus Contract Drafting. Du leitest aus dem " +
+    "kommerziellen Status (Deal, Brand, Quote, Account) eine Vorbelegung für " +
+    "einen Vertragsentwurf ab — Template-Empfehlung, Feld-Vorbelegung mit " +
+    "Quellen, sowie Klausel-Empfehlungen mit soft/standard/hard-Variante. " +
+    SAFE_GERMAN_HINT,
+  buildUser: (ctx) =>
+    `Schlage einen Vertragsentwurf für diesen Deal vor. Kontext (JSON):\n${JSON.stringify(ctx)}`,
+  outputSchema: ContractDraftOutput,
+  toolDescription:
+    "Liefert draftTitle, recommendedTemplate, prefillSuggestions mit Quelle, " +
+    "clauseRecommendations (soft/standard/hard) und openQuestions.",
+  toolName: "report_contract_draft",
+};
+
+// ───────────────────────── 6. Contract Risk Review ─────────────────────────
+
+const ContractRiskOutput = z.object({
+  overallRisk: RISK,
+  overallScore: z.number().min(0).max(100),
+  summary: z.string().min(8).max(1200),
+  riskSignals: z
+    .array(
+      z.object({
+        clause: z.string().min(2).max(120),
+        severity: PRIORITY,
+        finding: z.string().min(2).max(600),
+        recommendation: z.string().min(2).max(600),
+      }),
+    )
+    .max(15),
+  approvalRelevant: z.boolean(),
+  recommendedAction: ACTION_TYPE,
+});
+
+export const contractRisk: PromptDefinition<
+  ContractContext,
+  z.infer<typeof ContractRiskOutput>
+> = {
+  key: "contract.risk",
+  model: "claude-sonnet-4-6",
+  system:
+    "Du bist DealFlow-Copilot im Modus Contract Risk Review. Du analysierst " +
+    "die Klausel-Lage des Vertrages, vergleichst mit dem zugehörigen Deal/" +
+    "Quote-Kontext, und lieferst Risikosignale mit Klausel-Bezug, Schweregrad " +
+    "und konkreter Empfehlung. " +
+    SAFE_GERMAN_HINT,
+  buildUser: (ctx) =>
+    `Bewerte das Vertragsrisiko für folgenden Vertrag. Kontext (JSON):\n${JSON.stringify(ctx)}`,
+  outputSchema: ContractRiskOutput,
+  toolDescription:
+    "Liefert overallRisk, overallScore (0-100), summary, riskSignals mit " +
+    "Klausel/Severity/Finding/Recommendation, approvalRelevant, recommendedAction.",
+  toolName: "report_contract_risk",
+};
+
+// ───────────────────────── 7. External Paper / Redline ─────────────────────────
+
+const RedlineOutput = z.object({
+  documentSummary: z.string().min(8).max(400),
+  identifiedClauses: z
+    .array(
+      z.object({
+        family: z.string().min(2).max(80),
+        excerpt: z.string().min(2).max(400),
+        deviation: z.union([
+          z.literal("aligned"),
+          z.literal("minor"),
+          z.literal("material"),
+          z.literal("unknown"),
+        ]),
+        severity: PRIORITY,
+        comment: z.string().min(2).max(600),
+      }),
+    )
+    .max(20),
+  unknownTopics: z.array(z.string().min(2).max(200)).max(10),
+  recommendedReviewPath: z.union([
+    z.literal("sales_only"),
+    z.literal("legal_review"),
+    z.literal("finance_review"),
+    z.literal("legal_and_finance"),
+  ]),
+  executiveSummary: z.string().min(8).max(800),
+});
+
+// External-Paper-Input ist absichtlich anders strukturiert: rohtext +
+// Vertrags-/Deal-Bezug (für Scope-Anker).
+export interface RedlineInput {
+  contract: ContractContext;
+  externalText: string;
+}
+
+export const contractRedline: PromptDefinition<
+  RedlineInput,
+  z.infer<typeof RedlineOutput>
+> = {
+  key: "contract.redline",
+  model: "claude-sonnet-4-6",
+  system:
+    "Du bist DealFlow-Copilot im Modus External Paper / Redline Analysis. Du " +
+    "vergleichst ein extern geliefertes Vertragsdokument mit dem internen " +
+    "Vertrags-Stand, identifizierst bekannte Klauseln samt Abweichung, listest " +
+    "unbekannte Themen und schlägst einen Review-Pfad vor. " +
+    SAFE_GERMAN_HINT,
+  buildUser: (input) =>
+    `Vergleiche das folgende externe Dokument mit unserem Vertragsstand.\n\n` +
+    `Interner Kontext (JSON):\n${JSON.stringify(input.contract)}\n\n` +
+    `Externes Dokument (Rohtext):\n"""${input.externalText}"""`,
+  outputSchema: RedlineOutput,
+  toolDescription:
+    "Liefert documentSummary, identifiedClauses mit Abweichungs-Klassifikation, " +
+    "unknownTopics, recommendedReviewPath und executiveSummary.",
+  toolName: "report_redline_analysis",
+};
+
+// ───────────────────────── 8. Price Increase Support ─────────────────────────
+
+const PriceIncreaseOutput = z.object({
+  affectedPositions: z
+    .array(
+      z.object({
+        sku: z.string().min(1).max(80),
+        currentPrice: z.string().min(1).max(40),
+        proposedDelta: z.string().min(1).max(40),
+        rationale: z.string().min(2).max(600),
+      }),
+    )
+    .max(20),
+  letterDraft: z.string().min(8).max(2000),
+  churnRisk: RISK,
+  recommendedFollowUps: z.array(z.string().min(2).max(240)).max(6),
+  recommendedAction: ACTION_TYPE,
+});
+
+// Für Phase 1 nutzen wir den Deal-Kontext als Anker — die meisten Price-
+// Increase-Cases hängen an einem Bestandskunden-Deal.
+export const priceIncreaseSupport: PromptDefinition<
+  DealContext,
+  z.infer<typeof PriceIncreaseOutput>
+> = {
+  key: "price-increase.support",
+  model: "claude-sonnet-4-6",
+  system:
+    "Du bist DealFlow-Copilot im Modus Price Increase Support. Auf Basis des " +
+    "Deal-Kontextes (Account, Brand, aktuelles Angebot) entwirfst du ein " +
+    "Preisänderungsschreiben, schätzt das Churn-Risiko und schlägst Folge-" +
+    "Aktionen vor. " +
+    SAFE_GERMAN_HINT,
+  buildUser: (ctx) =>
+    `Bereite einen Price-Increase-Vorgang für diesen Deal vor. Kontext (JSON):\n${JSON.stringify(ctx)}`,
+  outputSchema: PriceIncreaseOutput,
+  toolDescription:
+    "Liefert affectedPositions, letterDraft, churnRisk, recommendedFollowUps " +
+    "und eine recommendedAction.",
+  toolName: "report_price_increase",
+};
+
+// ───────────────────────── 9. Executive Briefing ─────────────────────────
+
+const ExecutiveBriefOutput = z.object({
+  headline: z.string().min(8).max(160),
+  oneLiner: z.string().min(8).max(360),
+  highlights: z.array(z.string().min(2).max(200)).min(2).max(6),
+  risks: z.array(z.string().min(2).max(200)).max(6),
+  asks: z.array(z.string().min(2).max(200)).max(4),
+});
+
+export const executiveBrief: PromptDefinition<
+  DealContext,
+  z.infer<typeof ExecutiveBriefOutput>
+> = {
+  key: "executive.brief",
+  model: "claude-haiku-4-5",
+  system:
+    "Du bist DealFlow-Copilot im Modus Executive Briefing. Du fasst den Deal " +
+    "in einer Form zusammen, die in einem 60-Sekunden-Management-Briefing " +
+    "passt — präzise, ohne Fachjargon-Overload. " +
+    SAFE_GERMAN_HINT,
+  buildUser: (ctx) =>
+    `Erzeuge ein Executive Briefing zu diesem Deal. Kontext (JSON):\n${JSON.stringify(ctx)}`,
+  outputSchema: ExecutiveBriefOutput,
+  toolDescription:
+    "Liefert headline, oneLiner, 2-6 highlights, bis zu 6 risks und bis zu 4 asks.",
+  toolName: "report_executive_brief",
+};
+
+// ───────────────────────── 10. Commercial Health Check ─────────────────────────
+
+const HealthCheckOutput = z.object({
+  overallHealth: RISK,
+  pipelineSignals: z.array(z.string().min(2).max(200)).max(6),
+  riskSignals: z.array(z.string().min(2).max(200)).max(6),
+  bottlenecks: z.array(z.string().min(2).max(200)).max(6),
+  recommendedActions: z.array(z.string().min(2).max(200)).min(1).max(6),
+});
+
+export const commercialHealthCheck: PromptDefinition<
+  DealContext,
+  z.infer<typeof HealthCheckOutput>
+> = {
+  key: "deal.health",
+  model: "claude-sonnet-4-6",
+  system:
+    "Du bist DealFlow-Copilot im Modus Commercial Health Check. Du bewertest " +
+    "die kommerzielle Gesundheit des Deals (Pipeline, Risiko, Engpässe) und " +
+    "leitest konkrete nächste Schritte ab. " +
+    SAFE_GERMAN_HINT,
+  buildUser: (ctx) =>
+    `Bewerte die Commercial Health dieses Deals. Kontext (JSON):\n${JSON.stringify(ctx)}`,
+  outputSchema: HealthCheckOutput,
+  toolDescription:
+    "Liefert overallHealth, pipelineSignals, riskSignals, bottlenecks und " +
+    "recommendedActions.",
+  toolName: "report_health_check",
+};
+
+// ───────────────────────── Bundle ─────────────────────────
+
+export const DEALFLOW_PROMPTS = {
+  [dealSummary.key]: dealSummary,
+  [negotiationSupport.key]: negotiationSupport,
+  [pricingReview.key]: pricingReview,
+  [approvalReadiness.key]: approvalReadiness,
+  [contractDrafting.key]: contractDrafting,
+  [contractRisk.key]: contractRisk,
+  [contractRedline.key]: contractRedline,
+  [priceIncreaseSupport.key]: priceIncreaseSupport,
+  [executiveBrief.key]: executiveBrief,
+  [commercialHealthCheck.key]: commercialHealthCheck,
+} as const;
