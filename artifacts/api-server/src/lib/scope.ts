@@ -14,7 +14,7 @@ import {
   orderConfirmationsTable,
   pricePositionsTable,
   priceIncreaseLettersTable,
-  type usersTable,
+  usersTable,
 } from "@workspace/db";
 import type { Request } from "express";
 
@@ -191,6 +191,7 @@ export async function allowedDealIds(req: Request): Promise<Set<string>> {
 export async function allowedAccountIds(req: Request): Promise<Set<string>> {
   const r = req as Request & { _allowedAccountIds?: Set<string>; scope?: Scope };
   if (r._allowedAccountIds) return r._allowedAccountIds;
+  const scope = getScope(req);
   const dealIds = await allowedDealIds(req);
   const accIds = new Set<string>();
   if (dealIds.size > 0) {
@@ -199,6 +200,25 @@ export async function allowedAccountIds(req: Request): Promise<Set<string>> {
       .from(dealsTable)
       .where(inArray(dealsTable.id, [...dealIds]));
     for (const d of rows) accIds.add(d.accountId);
+  }
+  // Include accounts owned by users in the same tenant. Accounts have no
+  // direct tenantId / companyId; this allows freshly-created accounts (no
+  // deals yet) to remain visible to their tenant. For tenantWide users this
+  // surfaces all tenant accounts; for restricted users it surfaces only
+  // accounts they personally created (until a deal links them into scope).
+  if (scope.tenantWide) {
+    const owned = await db
+      .select({ id: accountsTable.id })
+      .from(accountsTable)
+      .innerJoin(usersTable, eq(usersTable.id, accountsTable.ownerId))
+      .where(eq(usersTable.tenantId, scope.tenantId));
+    for (const a of owned) accIds.add(a.id);
+  } else {
+    const owned = await db
+      .select({ id: accountsTable.id })
+      .from(accountsTable)
+      .where(eq(accountsTable.ownerId, scope.user.id));
+    for (const a of owned) accIds.add(a.id);
   }
   r._allowedAccountIds = accIds;
   return accIds;

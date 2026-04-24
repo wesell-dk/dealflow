@@ -1,15 +1,21 @@
+import { useState } from "react";
 import { useRoute } from "wouter";
 import { Link } from "wouter";
 import { useGetAccount } from "@workspace/api-client-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Building, Phone, Mail, UserCircle2 } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Building, Phone, Mail, UserCircle2, Pencil, Plus } from "lucide-react";
+import { AccountFormDialog } from "@/components/accounts/account-form-dialog";
+import { DealFormDialog } from "@/components/deals/deal-form-dialog";
 
 export default function Account() {
   const [, params] = useRoute("/accounts/:id");
   const id = params?.id || "";
-  
+  const [editOpen, setEditOpen] = useState(false);
+  const [dealOpen, setDealOpen] = useState(false);
+
   const { data: account, isLoading } = useGetAccount(id);
 
   if (isLoading) {
@@ -36,7 +42,15 @@ export default function Account() {
               <span>Owner: {account.ownerId || "Unassigned"}</span>
             </div>
           </div>
-          <div className="flex flex-col items-end gap-2">
+          <div className="flex flex-col items-end gap-3">
+            <div className="flex items-center gap-2">
+              <Button variant="outline" size="sm" onClick={() => setEditOpen(true)} data-testid="account-edit-button">
+                <Pencil className="h-4 w-4 mr-1" /> Bearbeiten
+              </Button>
+              <Button size="sm" onClick={() => setDealOpen(true)} data-testid="account-new-deal-button">
+                <Plus className="h-4 w-4 mr-1" /> Deal anlegen
+              </Button>
+            </div>
             <div className="text-sm font-medium text-muted-foreground">Health Score</div>
             <div className="flex items-center gap-3">
               <span className="text-2xl font-bold">{account.healthScore}</span>
@@ -120,6 +134,23 @@ export default function Account() {
           </CardContent>
         </Card>
       </div>
+
+      <AccountFormDialog
+        open={editOpen}
+        onOpenChange={setEditOpen}
+        account={{
+          id: account.id,
+          name: account.name,
+          industry: account.industry,
+          country: account.country,
+          healthScore: account.healthScore,
+        }}
+      />
+      <DealFormDialog
+        open={dealOpen}
+        onOpenChange={setDealOpen}
+        defaultAccountId={account.id}
+      />
     </div>
   );
 }

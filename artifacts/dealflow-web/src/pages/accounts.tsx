@@ -1,13 +1,17 @@
+import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Link } from "wouter";
 import { useListAccounts } from "@workspace/api-client-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Building } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Building, Plus } from "lucide-react";
+import { AccountFormDialog } from "@/components/accounts/account-form-dialog";
 
 export default function Accounts() {
   const { t } = useTranslation();
   const { data: accounts, isLoading } = useListAccounts();
+  const [createOpen, setCreateOpen] = useState(false);
 
   if (isLoading) {
     return <div className="p-8"><Skeleton className="h-64 w-full" /></div>;
@@ -15,18 +19,26 @@ export default function Accounts() {
 
   return (
     <div className="flex flex-col gap-6">
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between gap-4">
         <div>
           <h1 className="text-3xl font-bold tracking-tight">{t("pages.accounts.title")}</h1>
           <p className="text-muted-foreground mt-1">{t("pages.accounts.subtitle")}</p>
         </div>
+        <Button onClick={() => setCreateOpen(true)} data-testid="accounts-new-button">
+          <Plus className="h-4 w-4 mr-1" />
+          Kunde anlegen
+        </Button>
       </div>
 
       {!accounts?.length ? (
         <div className="flex flex-col items-center justify-center p-12 text-center border rounded-lg bg-muted/20">
           <Building className="h-10 w-10 text-muted-foreground mb-4" />
-          <h2 className="text-xl font-semibold">No accounts found</h2>
-          <p className="text-muted-foreground">{t("pages.accounts.empty")}</p>
+          <h2 className="text-xl font-semibold">Noch keine Kunden</h2>
+          <p className="text-muted-foreground mb-4">{t("pages.accounts.empty")}</p>
+          <Button onClick={() => setCreateOpen(true)} data-testid="accounts-empty-create">
+            <Plus className="h-4 w-4 mr-1" />
+            Ersten Kunden anlegen
+          </Button>
         </div>
       ) : (
         <div className="border rounded-md">
@@ -44,7 +56,6 @@ export default function Accounts() {
             <TableBody>
               {accounts.map((account) => {
                 const healthColor = account.healthScore < 60 ? "bg-red-500" : account.healthScore <= 75 ? "bg-amber-400" : "bg-green-500";
-                
                 return (
                   <TableRow key={account.id}>
                     <TableCell className="font-medium">
@@ -71,6 +82,8 @@ export default function Accounts() {
           </Table>
         </div>
       )}
+
+      <AccountFormDialog open={createOpen} onOpenChange={setCreateOpen} />
     </div>
   );
 }

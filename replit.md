@@ -2,328 +2,79 @@
 
 ## Overview
 
-**DealFlow One** is a best-in-class **Commercial Execution Platform** for B2B
-companies. It unifies the entire commercial closing process — from opportunity
-through quote, approval, contract, signature, order confirmation, price change
-and post-close handover — in a single, very clear and powerful application.
+**DealFlow One** is a Commercial Execution Platform for B2B companies, unifying the entire commercial closing process from opportunity to post-close handover in a single application. It aims to combine the simplicity of HubSpot, the rule-engine strength of Salesforce, the document quality of PandaDoc, and the automation of Zoho into one clear UI. DealFlow One is deal-centric, serving as the operative control center for the commercial close by transforming fragmented processes into a unified, intelligent, and steerable Commercial Flow.
 
-The product is positioned as the convergence of:
+Key capabilities include managing deals, accounts, contacts, and roles; versioned quotes with pricing intelligence; robust approval workflows; clause-based contracts with negotiation support; electronic signatures; order confirmations; price increase management; sales performance reporting; and an AI Copilot for orchestration. The platform's design principle is "simple on the surface, powerful underneath," offering a clear visual order while supporting multi-tenant, multi-company, multi-brand, scope-based RBAC, and comprehensive versioning.
 
-- the **simplicity of HubSpot**,
-- the **rule-engine strength of Salesforce**,
-- the **document quality of PandaDoc**, and
-- the **automation of Zoho**
+## User Preferences
 
-…all expressed in one extremely clear UI.
-
-DealFlow One is **deal-centric**. It is **not** an ERP, not an accounting
-package and not just a document generator. It is the operative control center
-for the **commercial close**.
-
-## Core Product Idea
-
-DealFlow One turns a fragmented, error-prone and intransparent closing process
-into a unified, intelligent and steerable **Commercial Flow**. In one place it
-combines:
-
-- Deals, Accounts, Contacts, Roles in commercial context
-- Quotes with full versioning and acceptance state
-- Price positions, price rules, price overrides, price validity
-- Approvals (margin, discount, contract deviations, brand exceptions)
-- Contracts with clause families and clause variants
-- Negotiations with structured counterproposals
-- Signatures and order confirmations
-- Price-increase letters as a first-class workflow
-- Sales performance reporting
-- AI Copilot as an orchestrating layer over the whole flow
-
-## Design Principle — Simple on the surface, powerful underneath
-
-- Surface: very clear visual order, few main areas, role-oriented, always shows
-  the next sensible step.
-- Underneath: multi-tenant, multi-company, multi-brand, scope-based RBAC,
-  price/validity logic, contract variants, audit trails, versioning, GDPR
-  capability, event/workflow orchestration and AI assistance across the full
-  process.
-
-## Organisational Core Model
-
-```
-Platform
-└── Tenant (Mandant)
-    └── Company (Firma)
-        └── Brand (Brand / Branding)
-            └── Users with Roles + Visibility Scope
-```
-
-- **Tenant**: top-level customer of the SaaS.
-- **Company**: legal/operative unit inside a tenant (holdings, country
-  subsidiaries, business units).
-- **Brand**: commercial expression inside a company (logos, templates,
-  pricebook overrides, clause variants, tone of voice).
-- **User**: belongs to exactly one tenant, has one or more roles and a
-  visibility scope on companies and brands.
-
-## Permission Model
-
-- **Role** = *what* a user may do (Sales Rep, Sales Manager, RevOps, Legal
-  Reviewer, Finance Approver, Tenant Admin, Read-Only Executive, Brand
-  Manager, Integration Admin, …).
-- **Scope** = *which* organisational units the user may see (entire tenant,
-  selected companies, selected brands inside selected companies, optionally
-  teams/deal types).
-
-## Core Domains
-
-- Organisation (Tenant / Company / Brand)
-- Identity & Permissions (User / Team / Role / Scope)
-- Customer & Relationship (Account / Contact / Contact Role)
-- Deal (commercial master object)
-- Quote & Pricing (Quote, QuoteVersion, LineItem, PricePosition, PriceRule)
-- Contract (ContractTemplate, ClauseFamily, ClauseVariant, ContractVersion)
-- Approvals (ApprovalCase, ApprovalStep, ApprovalReason)
-- Signature (SignaturePackage, Signer, SignatureStatus)
-- Order Confirmation & Handover
-- Price Increase Letters
-- Negotiation & Counterproposal
-- Reports & KPIs
-- AI Copilot Orchestration
-- Governance, Audit, GDPR
-- Integrations & API
-
-## Versioning as a First Principle
-
-Versioned objects: Quotes, Price Positions, Price Rules, Contracts, Contract
-Clauses, Approval States, Brandings/Templates, Price-Increase Letters,
-Customer Reactions. The platform distinguishes:
-
-- current working state
-- current approved/effective state
-- historic state (point-in-time queryable)
-
-## Key Screens
-
-DealFlow One is built around a small number of very clear top-level
-workspaces:
-
-1. **Home / Today** — role-filtered work queue and pipeline pulse.
-2. **Deal Workspace** — the one screen where a deal lives end-to-end.
-3. **Quote Studio** — versioned quote authoring with pricing intelligence.
-4. **Pricing Workspace** — price positions, rules, overrides, validity.
-5. **Approval Hub** — all open approvals with reason, impact, deadline.
-6. **Contract Workspace** — clause-based contracting with redlines & variants.
-7. **Negotiation & Counterproposal Workspace** — structured customer reactions
-   and impact-aware response.
-8. **Signature Center** — signature packages, signers, sequence, status.
-9. **Order Confirmation & Handover Center** — close → onboarding bridge.
-10. **Price Increase Center** — bulk price-uplift campaigns.
-11. **Reports & Performance Cockpit** — Win Rate, Cycle Time, Discount
-    Discipline, Approval Latency, Forecast Quality.
-12. **AI Copilot Workspace** — orchestrating, explanation-first AI surface.
-13. **Tenant Admin Console** — users, roles, scopes, brands, templates,
-    approval matrices, integrations, API.
-14. **Platform Admin Console** — operator-level tenant lifecycle.
-
-## Stack
-
-- **Monorepo**: pnpm workspaces (the workspace tooling enforces pnpm).
-- **Process supervisor (production)**: PM2 — the production deployment runs
-  the API server under PM2 (`pm2-runtime`). In dev the artifact workflows
-  manage the processes directly.
-- **Frontend**: React + Vite + TypeScript + TanStack Query + Tailwind +
-  shadcn/ui.
-- **Backend**: Express 5 (TypeScript, ESM, esbuild bundle).
-- **Database**: PostgreSQL via Drizzle ORM.
-- **Validation**: Zod (`zod/v4`) + drizzle-zod.
-- **API codegen**: Orval, from `lib/api-spec/openapi.yaml` → React Query hooks
-  (`@workspace/api-client-react`) and Zod schemas (`@workspace/api-zod`).
-- **Logging**: pino + pino-http.
-
-## Key Commands
-
-- `pnpm run typecheck` — full typecheck across all packages.
-- `pnpm run build` — typecheck + build everything (no DB needed).
-- `pnpm run test` — run tests across all artifacts (today: the cross-tenant
-  isolation suite *and* the negative-validation suite in
-  `artifacts/api-server/tests/`, both run with `node --test` + `tsx`).
-  Requires `DATABASE_URL` (see below).
-- `pnpm run test:isolation` — alias that runs just the API tenant-isolation +
-  negative-validation suites. Wired into the `ci` validation step so every
-  significant change is checked for cross-tenant leakage.
-- `pnpm run ci` — full CI gate: `build` followed by `test`. This is the
-  registered `ci` validation and is the merge gate. **Requires a reachable
-  `DATABASE_URL`.** It injects neutral `PORT=1` / `BASE_PATH=/` defaults for
-  the per-artifact vite configs, so it runs standalone outside of an artifact
-  workflow. Do not run this from `pnpm install` / dev workflows; it is meant
-  for CI / pre-merge. (Defaults: `PORT=1`, `BASE_PATH=/`. Override if you need
-  the build output to use a specific base.)
-- `pnpm --filter @workspace/api-spec run codegen` — regenerate hooks and Zod
-  schemas after editing the OpenAPI spec.
-- `pnpm --filter @workspace/db run push` — push DB schema changes (dev only).
-- `pnpm --filter @workspace/api-server run dev` — run the API server locally.
-- `pnpm --filter @workspace/api-server run start:pm2` — run the API server
-  through PM2 (`pm2-runtime`) for production-like execution.
-
-### Test prerequisites
-
-`pnpm run test` and `pnpm run ci` boot the API server in-process and execute
-real DB queries against the configured Postgres. They will throw immediately
-if `DATABASE_URL` is missing (see `lib/db/src/index.ts`). On Replit the
-workspace already provisions `DATABASE_URL`; in any other environment, export
-a Postgres connection string before invoking these scripts:
-
-```bash
-export DATABASE_URL=postgres://user:pass@host:5432/dbname
-pnpm run ci
-```
-
-There is intentionally **no** local fallback (e.g. an in-memory Postgres):
-the tenant-isolation tests must hit the real schema to be meaningful.
-
-## Artifacts
-
-- `artifacts/dealflow-web` — DealFlow One web app (React + Vite, served at
-  `/`).
-- `artifacts/api-server` — Express API server, served at `/api`.
-- `artifacts/mockup-sandbox` — design canvas (kept from scaffold).
-
-## API Surface (high level)
-
-Implemented in `lib/api-spec/openapi.yaml`. Domains:
-
-- `/orgs/*` — tenants, companies, brands, users
-- `/accounts`, `/contacts` — customer master
-- `/deals` — deal CRUD + per-deal sub-resources
-- `/quotes`, `/quotes/{id}/versions`, `/quotes/{id}/line-items`
-- `/price-positions`, `/price-rules`
-- `/approvals` — approval cases and decisions
-- `/contracts`, `/clauses`
-- `/negotiations` — counterproposals & rounds
-- `/signatures` — packages and signer status
-- `/price-increases` — campaigns and letters
-- `/reports/*` — KPI summaries
-- `/copilot/*` — AI summaries, suggestions, drafts
-- `/copilot/diagnostics/ai-health` — AI provider health probe (Tenant-Admin only)
-
-## AI-Layer (Phase 1)
-
-Schmaler, austauschbarer AI-Layer in `artifacts/api-server/src/lib/ai/`:
-
-- `provider.ts` — Anthropic-Adapter über die Replit AI Integration
-  (`AI_INTEGRATIONS_ANTHROPIC_BASE_URL` + `AI_INTEGRATIONS_ANTHROPIC_API_KEY`,
-  automatisch provisioniert — kein eigener API-Key). Lazy-Init, austauschbar
-  über das `AIProvider`-Interface.
-- `promptRegistry.ts` — typisierte Prompt-Registry mit stabilen Keys (z. B.
-  `diagnostic.ping`). Jeder Prompt kennt sein Modell, System-Prompt, einen
-  typisierten Input-Builder und ein zod-Output-Schema.
-- `structuredOutput.ts` — wandelt zod-Schemas in Anthropic-tool-input-Schemas
-  und validiert die zurückgelieferten tool-Inputs.
-- `orchestrator.ts` — zentrale `runStructured()`-Funktion: Provider-Aufruf,
-  Output-Validierung, Fehlerklassifizierung (config / provider / validation).
-- `auditLog.ts` + `ai_invocations`-Tabelle (`lib/db/src/schema/index.ts`) —
-  jeder Call schreibt actor, tenant, active-scope-Snapshot, prompt-Key,
-  Modell, Token-Usage, Latenz, Status. Audit ist Pflicht.
-
-Feldregel: Routen importieren AI-Funktionalität ausschließlich aus
-`../lib/ai` (Barrel) und rufen NIE direkt den Provider.
-
-### Phase 1 / Schritt 2 — Domain-Context-Builder
-
-`artifacts/api-server/src/lib/ai/context.ts` baut für die vier zentralen
-Entitäten einen scope-validierten, typisierten Kontext, den die Prompts als
-Input erhalten:
-
-- `buildDealContext(req, dealId)` → `DealContext`
-- `buildQuoteContext(req, quoteId)` → `QuoteContext` (inkl. Deal- und
-  Account-Roll-up)
-- `buildContractContext(req, contractId)` → `ContractContext` (inkl.
-  Vertragsklauseln + offene Approvals)
-- `buildApprovalContext(req, approvalId)` → `ApprovalContext` (inkl. Deal,
-  Account, aktuellem Quote)
-
-Jeder Builder ruft `entityScopeStatus()` und wirft `NotInScopeError`
-(`status: 'missing' | 'forbidden'`), die die HTTP-Routen auf 404/403
-mappen. Sekundärdaten (Account/Brand/Company) werden ausschließlich über
-die bereits scope-validierte Wurzel geladen — Cross-tenant-Bypass ist
-unmöglich.
-
-### Phase 1 / Schritt 3 — 10 Copilot-Modi
-
-`artifacts/api-server/src/lib/ai/prompts/dealflow.ts` registriert die zehn
-Modi der Spec mit deutschem System-Prompt, typisiertem `buildUser` und
-zod-Output-Schema. PROMPT_REGISTRY exportiert alle:
-
-| Key | Modell | Output-Form |
-| --- | --- | --- |
-| `deal.summary` | sonnet-4-6 | headline + status + health + keyFacts/blockers/nextSteps |
-| `negotiation.support` | sonnet-4-6 | customerStance + openTopics + draftReply |
-| `pricing.review` | sonnet-4-6 | summary + margin/discount-Assessment + policyFlags |
-| `approval.readiness` | sonnet-4-6 | decisionReady + recommendation + rationale + missingInfo |
-| `contract.draft` | sonnet-4-6 | recommendedTemplate + sections + clauses |
-| `contract.risk` | sonnet-4-6 | overallRisk + riskSignals (clause/finding/recommendation) |
-| `contract.redline` | sonnet-4-6 | redlines (added/removed/modified) + overallStance |
-| `price-increase.support` | sonnet-4-6 | tone + draftLetter + perSku rationale |
-| `executive.brief` | haiku-4-5 | headline + oneLiner + highlights/risks/asks |
-| `deal.health` | sonnet-4-6 | healthScore + drivers + recommendedActions |
-
-`structuredOutput.ts` wurde erweitert um `z.nullable` (Type-Array-Trick),
-`z.union` aus `z.literal` (→ JSON-Schema `enum`) und
-`z.array.min/max` (→ `minItems`/`maxItems`) — alle zehn Schemas erzeugen
-ein für Anthropic gültiges Tool-Input-Schema.
-
-### Phase 1 / Schritt 4 — Produktive HTTP-Endpoints
-
-In `artifacts/api-server/src/routes/dealflow.ts` sind vier Modi
-endpoint-aktiviert:
-
-- `POST /api/copilot/deal-summary/:dealId`
-- `POST /api/copilot/pricing-review/:quoteId`
-- `POST /api/copilot/approval-readiness/:approvalId`
-- `POST /api/copilot/contract-risk/:contractId`
-
-Jede Route: Context-Builder → `runStructured()` → Persistierung als
-`copilot_insight` (kind = `ai_<mode>`, triggerType + triggerEntityRef
-über `copilot_insights_trigger_uniq` für Re-Run-Idempotenz via
-`onConflictDoUpdate`). Antwort:
-`{ ok, result, invocationId, insightId, model, latencyMs }`.
-
-Fehlerklassifizierung:
-
-- `NotInScopeError 'missing'` → 404 `not_found`
-- `NotInScopeError 'forbidden'` → 403 `forbidden`
-- `AIOrchestrationError 'config_error' | 'audit_unavailable'` → 503
-- alle anderen `AIOrchestrationError` → 502 mit `code` (`validation_error`,
-  `no_tool_call`, `provider_error`)
-
-Jeder Versuch — auch fehlgeschlagene — schreibt einen Audit-Eintrag in
-`ai_invocations` (Schema-Konformitäts-Check ist bewusst strikt; bei
-sehr dichten Kontexten kann das Modell sporadisch off-schema antworten,
-was kontrolliert als 502 + Audit auftaucht).
-
-Die übrigen sechs Modi (`negotiation.support`, `contract.draft`,
-`contract.redline`, `price-increase.support`, `executive.brief`,
-`deal.health`) sind im Registry verdrahtet und werden in Phase 2
-zusammen mit der UI an HTTP-Endpoints gebunden — die Architektur ist
-dafür komplett vorbereitet (gleicher Routenpattern, gleicher
-Persistenz-Helper).
-
-## GDPR & Governance
-
-Per-tenant data isolation, role + scope enforced at API layer, full audit
-trail on commercial state changes, soft-delete + retention policy hooks,
-exportable user data, redacted secrets in logs.
-
-## Known limitations (demo scope)
-- No authentication: `/orgs/me` returns the seeded user `u_priya`. Production needs auth middleware + scope-based RBAC enforcement on every router.
-- Request bodies are cast, not Zod-validated, in handlers. Wire the generated Zod schemas through middleware before exposing publicly.
-
-## Spracheinstellung
 - Kommunikation mit dem Nutzer erfolgt **immer auf Deutsch**.
 
-## Konzept-Quelldokumente (verbindliche Spezifikation)
-Die fachliche Zielspezifikation liegt unter `docs/konzept/`:
-- `00_gesamtkonzeption.md` — Gesamtkonzept (Vision, Domänen, Prinzipien)
-- `01_datenmodell_rechte_api.md` — Datenmodell, Rechte, API-Zielbild, Screen-Start
-- `02_screens_teil2.md` — Screen-by-Screen Teil 2 (Negotiation, Signature, Order Confirmation, Price Increase, Reports, Copilot, Platform Admin)
+## System Architecture
 
-Diese Dokumente sind die Quelle der Wahrheit für jede Frage „ist Feature X im Konzept?". Vor größeren Änderungen immer dort nachlesen.
+**Design Principle:** Simple on the surface, powerful underneath.
+- **Surface:** Clear visual order, few main areas, role-oriented, always shows the next sensible step.
+- **Underneath:** Multi-tenant, multi-company, multi-brand, scope-based RBAC, price/validity logic, contract variants, audit trails, versioning, GDPR capability, event/workflow orchestration, and AI assistance.
+
+**Organisational Core Model:**
+- **Platform**: Top-level container.
+- **Tenant**: Top-level customer.
+- **Company**: Legal/operative unit within a tenant.
+- **Brand**: Commercial expression within a company (logos, templates, pricebook overrides).
+- **User**: Belongs to one tenant, has roles and visibility scope.
+
+**Permission Model:**
+- **Role**: Defines user capabilities (e.g., Sales Rep, Legal Reviewer).
+- **Scope**: Defines organisational units a user can access (e.g., entire tenant, selected companies/brands).
+
+**Core Domains:** Organisation, Identity & Permissions, Customer & Relationship, Deal, Quote & Pricing, Contract, Approvals, Signature, Order Confirmation & Handover, Price Increase Letters, Negotiation & Counterproposal, Reports & KPIs, AI Copilot Orchestration, Governance, Audit, GDPR, Integrations & API.
+
+**Versioning:** Critical objects (Quotes, Price Positions, Contracts, Approvals) are versioned, distinguishing current working, approved/effective, and historic states.
+
+**Key Workspaces:** The system is structured around 14 key workspaces: Home/Today, Deal Workspace, Quote Studio, Pricing Workspace, Approval Hub, Contract Workspace, Negotiation & Counterproposal, Signature Center, Order Confirmation & Handover, Price Increase Center, Reports & Performance Cockpit, AI Copilot Workspace, Tenant Admin Console, and Platform Admin Console.
+
+**Technical Stack:**
+- **Monorepo**: pnpm workspaces.
+- **Process supervisor (production)**: PM2.
+- **Frontend**: React, Vite, TypeScript, TanStack Query, Tailwind, shadcn/ui.
+- **Backend**: Express 5 (TypeScript, ESM, esbuild).
+- **Database**: PostgreSQL via Drizzle ORM.
+- **Validation**: Zod + drizzle-zod.
+- **API codegen**: Orval (from `openapi.yaml`) generates React Query hooks and Zod schemas.
+- **Logging**: pino + pino-http.
+
+**AI Layer (Phase 1):**
+- **Architecture**: A thin, interchangeable AI layer in `artifacts/api-server/src/lib/ai/`.
+- **Provider**: Anthropic adapter via Replit AI Integration.
+- **Prompt Registry**: Typed registry with stable keys, model specification, typed input builders, and Zod output schemas.
+- **Structured Output**: Converts Zod schemas to Anthropic tool-input schemas and validates responses.
+- **Orchestrator**: Central `runStructured()` function handles provider calls, output validation, and error classification.
+- **Audit Log**: Every AI call (successful or failed) is logged to `ai_invocations` table, capturing actor, tenant, scope, prompt key, model, token usage, latency, and status.
+- **Domain Context Builder**: `artifacts/api-server/src/lib/ai/context.ts` builds scope-validated, typed contexts for Deal, Quote, Contract, and Approval entities, ensuring cross-tenant isolation.
+- **Copilot Modes**: Ten modes are defined in `artifacts/api-server/src/lib/ai/prompts/dealflow.ts` (`deal.summary`, `negotiation.support`, `pricing.review`, `approval.readiness`, `contract.draft`, `contract.risk`, `contract.redline`, `price-increase.support`, `executive.brief`, `deal.health`), each with a German system prompt, typed user input, and Zod output schema.
+- **Productive HTTP Endpoints**: Four modes are currently endpoint-activated (`/api/copilot/deal-summary/:dealId`, `/api/copilot/pricing-review/:quoteId`, `/api/copilot/approval-readiness/:approvalId`, `/api/copilot/contract-risk/:contractId`), persisting insights as `copilot_insight`.
+
+**GDPR & Governance:** Per-tenant data isolation, role + scope enforced at API layer, full audit trail, soft-delete, retention policy hooks, exportable user data, redacted secrets in logs.
+
+**Onboarding & In-App Help (April 2026):**
+- **Welcome Tour**: First-visit modal (`components/onboarding/welcome-dialog.tsx`) introduces the 9-phase commercial workflow ("Roter Faden" — Account → Deal → Quote → Approval → Negotiation → Contract → Signature → Order → Renewal). Stored in `localStorage["dealflow.onboarding.v1"]`.
+- **Per-Page Help Drawer**: `components/onboarding/page-help.tsx` renders right-side drawer keyed by route, with purpose, step-by-step "So gehst du vor", a tip, and "next sensible step" suggestions. Content registry at `lib/help-content.ts` covers all 17 sidebar routes.
+- **Workflow Map Component**: `components/onboarding/workflow-map.tsx` shows 9 numbered phases with completion check-marks driven by `OnboardingContext.completedSteps`.
+- **Header Buttons**: `header-tour-button` re-opens welcome dialog; `header-help-button` opens page help drawer.
+- **Context Provider**: `contexts/onboarding-context.tsx` wraps the app and persists `seenWelcome`, `completedSteps`, `currentRoute`.
+
+**Frontend CRUD (April 2026):**
+- **Account Form**: `components/accounts/account-form-dialog.tsx` (create + edit, with health-score field on edit). New "Kunde anlegen" button on `/accounts` and empty-state CTA. "Bearbeiten" button on account detail.
+- **Deal Form**: `components/deals/deal-form-dialog.tsx` (create + edit). Create wires to `/deals` Plus button and account-detail "Deal anlegen" button. Edit wires to deal-detail "Bearbeiten" button.
+- **Cache Invalidation**: Deal mutations invalidate `getGetAccountQueryKey(accountId)` so the parent account's Deals card refreshes immediately after creating/editing a deal.
+- **Backend**: Added `PATCH /api/v1/accounts/:id` endpoint and `AccountPatch` OpenAPI schema. `PATCH /api/v1/deals/:id` already existed.
+- **Scope Fix**: `lib/scope.ts → allowedAccountIds()` now also includes accounts owned by the current user (and, for tenantWide users, all accounts owned by users in the same tenant). Previously, freshly-created accounts without deals were invisible even to their creator.
+
+## External Dependencies
+
+- **PostgreSQL**: Primary database for data persistence.
+- **Anthropic AI Integration**: Used for the AI Copilot functionality, accessed via Replit AI Integration (`AI_INTEGRATIONS_ANTHROPIC_BASE_URL` + `AI_INTEGRATIONS_ANTHROPIC_API_KEY`).
+- **HubSpot (conceptual)**: Referenced for simplicity benchmark.
+- **Salesforce (conceptual)**: Referenced for rule-engine strength benchmark.
+- **PandaDoc (conceptual)**: Referenced for document quality benchmark.
+- **Zoho (conceptual)**: Referenced for automation benchmark.

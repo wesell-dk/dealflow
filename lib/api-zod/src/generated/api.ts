@@ -423,6 +423,28 @@ export const GetAccountResponse = zod
     }),
   );
 
+export const UpdateAccountParams = zod.object({
+  id: zod.coerce.string(),
+});
+
+export const UpdateAccountBody = zod.object({
+  name: zod.string().optional(),
+  industry: zod.string().optional(),
+  country: zod.string().optional(),
+  healthScore: zod.number().optional(),
+});
+
+export const UpdateAccountResponse = zod.object({
+  id: zod.string(),
+  name: zod.string(),
+  industry: zod.string(),
+  country: zod.string(),
+  healthScore: zod.number(),
+  openDeals: zod.number(),
+  totalValue: zod.number(),
+  ownerId: zod.string().nullish(),
+});
+
 export const ListContactsQueryParams = zod.object({
   accountId: zod.coerce.string().optional(),
 });

@@ -22,6 +22,7 @@ import type {
   Account,
   AccountDetail,
   AccountInput,
+  AccountPatch,
   ActiveScopeUpdateResult,
   AdminUser,
   AdminUserCreate,
@@ -1833,6 +1834,87 @@ export function useGetAccount<
 
   return { ...query, queryKey: queryOptions.queryKey };
 }
+
+export const getUpdateAccountUrl = (id: string) => {
+  return `/api/v1/accounts/${id}`;
+};
+
+export const updateAccount = async (
+  id: string,
+  accountPatch: AccountPatch,
+  options?: RequestInit,
+): Promise<Account> => {
+  return customFetch<Account>(getUpdateAccountUrl(id), {
+    ...options,
+    method: "PATCH",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(accountPatch),
+  });
+};
+
+export const getUpdateAccountMutationOptions = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof updateAccount>>,
+    TError,
+    { id: string; data: BodyType<AccountPatch> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof updateAccount>>,
+  TError,
+  { id: string; data: BodyType<AccountPatch> },
+  TContext
+> => {
+  const mutationKey = ["updateAccount"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof updateAccount>>,
+    { id: string; data: BodyType<AccountPatch> }
+  > = (props) => {
+    const { id, data } = props ?? {};
+
+    return updateAccount(id, data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type UpdateAccountMutationResult = NonNullable<
+  Awaited<ReturnType<typeof updateAccount>>
+>;
+export type UpdateAccountMutationBody = BodyType<AccountPatch>;
+export type UpdateAccountMutationError = ErrorType<void>;
+
+export const useUpdateAccount = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof updateAccount>>,
+    TError,
+    { id: string; data: BodyType<AccountPatch> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof updateAccount>>,
+  TError,
+  { id: string; data: BodyType<AccountPatch> },
+  TContext
+> => {
+  return useMutation(getUpdateAccountMutationOptions(options));
+};
 
 export const getListContactsUrl = (params?: ListContactsParams) => {
   const normalizedParams = new URLSearchParams();

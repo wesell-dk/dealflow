@@ -277,6 +277,13 @@ export interface AccountInput {
   country: string;
 }
 
+export interface AccountPatch {
+  name?: string;
+  industry?: string;
+  country?: string;
+  healthScore?: number;
+}
+
 export interface DealInput {
   name: string;
   accountId: string;

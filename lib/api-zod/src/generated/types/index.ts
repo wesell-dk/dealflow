@@ -11,6 +11,7 @@ Multi-tenant, multi-company, multi-brand. Deal-centric.
 export * from "./account";
 export * from "./accountDetail";
 export * from "./accountInput";
+export * from "./accountPatch";
 export * from "./activeScope";
 export * from "./activeScopeUpdateResult";
 export * from "./adminUser";

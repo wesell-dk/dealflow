@@ -42,6 +42,10 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { setLanguage } from "@/lib/i18n";
 import { HelpBot } from "@/components/help-bot";
 import { ScopeSwitcher } from "@/components/scope-switcher";
+import { HelpCircle, Compass } from "lucide-react";
+import { useOnboarding } from "@/contexts/onboarding-context";
+import { WelcomeDialog } from "@/components/onboarding/welcome-dialog";
+import { PageHelpDrawer } from "@/components/onboarding/page-help";
 
 function useNavigation() {
   const { t } = useTranslation();
@@ -104,6 +108,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const { data: tenant } = useGetTenant();
   const { user, logout } = useAuth();
   const { t, i18n } = useTranslation();
+  const { openHelp, openWelcome } = useOnboarding();
 
   return (
     <div className="grid min-h-screen w-full md:grid-cols-[220px_1fr] lg:grid-cols-[280px_1fr]">
@@ -141,6 +146,28 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               {tenant?.region && <span className="text-xs bg-muted px-2 py-0.5 rounded-full">{tenant.region}</span>}
             </div>
             <ScopeSwitcher />
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-8 gap-1.5"
+              onClick={openWelcome}
+              data-testid="header-tour-button"
+              title="Workflow-Übersicht öffnen"
+            >
+              <Compass className="h-4 w-4" />
+              <span className="hidden lg:inline text-xs">Tour</span>
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-8 gap-1.5"
+              onClick={openHelp}
+              data-testid="header-help-button"
+              title="Hilfe zur aktuellen Seite (Was kann ich hier?)"
+            >
+              <HelpCircle className="h-4 w-4" />
+              <span className="hidden lg:inline text-xs">Hilfe</span>
+            </Button>
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button variant="outline" size="sm" className="h-8 gap-1.5">
@@ -195,6 +222,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         </main>
       </div>
       <HelpBot />
+      <WelcomeDialog />
+      <PageHelpDrawer />
     </div>
   );
 }

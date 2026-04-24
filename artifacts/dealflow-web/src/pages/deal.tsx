@@ -7,8 +7,9 @@ import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Plus } from "lucide-react";
+import { Plus, Pencil } from "lucide-react";
 import { QuoteWizard } from "@/components/quote-wizard";
+import { DealFormDialog } from "@/components/deals/deal-form-dialog";
 
 export default function Deal() {
   const params = useParams();
@@ -16,6 +17,7 @@ export default function Deal() {
   const id = params.id as string;
   const { data: deal, isLoading } = useGetDeal(id);
   const [wizardOpen, setWizardOpen] = useState(false);
+  const [editOpen, setEditOpen] = useState(false);
 
   if (isLoading) return <div className="p-8"><Skeleton className="h-64 w-full" /></div>;
   if (!deal) return <div className="p-8">Deal not found</div>;
@@ -26,6 +28,10 @@ export default function Deal() {
         <div className="flex items-center justify-between">
           <h1 className="text-3xl font-bold tracking-tight">{deal.name}</h1>
           <div className="flex items-center gap-2">
+            <Button variant="outline" onClick={() => setEditOpen(true)} data-testid="deal-edit-button">
+              <Pencil className="h-4 w-4 mr-1" />
+              Bearbeiten
+            </Button>
             <Button onClick={() => setWizardOpen(true)} data-testid="deal-new-quote-button">
               <Plus className="h-4 w-4 mr-1" />
               {t("pages.quotes.newQuote")}
@@ -86,6 +92,24 @@ export default function Deal() {
         open={wizardOpen}
         onOpenChange={setWizardOpen}
         initialDealId={id}
+      />
+      <DealFormDialog
+        open={editOpen}
+        onOpenChange={setEditOpen}
+        deal={{
+          id: deal.id,
+          name: deal.name,
+          accountId: deal.accountId,
+          value: deal.value,
+          stage: deal.stage,
+          brandId: deal.brandId,
+          companyId: deal.companyId,
+          ownerId: deal.ownerId,
+          expectedCloseDate: deal.expectedCloseDate,
+          probability: deal.probability,
+          riskLevel: deal.riskLevel,
+          nextStep: deal.nextStep ?? null,
+        }}
       />
     </div>
   );

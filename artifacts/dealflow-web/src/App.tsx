@@ -4,6 +4,7 @@ import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { AppShell } from "@/components/layout/AppShell";
 import { AuthProvider, useAuth } from "@/contexts/auth-context";
+import { OnboardingProvider } from "@/contexts/onboarding-context";
 import LoginPage from "@/pages/login";
 import { Loader2 } from "lucide-react";
 import NotFound from "@/pages/not-found";
@@ -53,8 +54,9 @@ function ProtectedRoutes() {
     return null;
   }
   return (
-    <AppShell>
-      <Switch>
+    <OnboardingProvider>
+      <AppShell>
+        <Switch>
         <Route path="/" component={Home} />
         <Route path="/deals" component={Deals} />
         <Route path="/deals/:id" component={DealDetail} />
@@ -83,8 +85,9 @@ function ProtectedRoutes() {
         <Route path="/templates" component={Templates} />
         <Route path="/attachments" component={Attachments} />
         <Route component={NotFound} />
-      </Switch>
-    </AppShell>
+        </Switch>
+      </AppShell>
+    </OnboardingProvider>
   );
 }
 

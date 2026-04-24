@@ -388,17 +388,19 @@ router.patch('/orgs/me/active-scope', async (req, res) => {
 // ── ACCOUNTS ──
 router.get('/accounts', async (req, res) => {
   // Tenant + scope-bound at the SQL level: only fetch accounts whose IDs
-  // appear in `allowedAccountIds` (which itself JOINs deals→companies on
-  // tenantId). A second tenant's accounts never leave the database.
+  // appear in `allowedAccountIds`. Deal aggregates are then re-filtered by
+  // `allowedDealIds` so a restricted user who owns an account cannot see or
+  // infer out-of-scope deal counts/values from cross-team activity.
   const accIds = await allowedAccountIds(req);
   if (accIds.size === 0) { res.json([]); return; }
   const accIdList = [...accIds];
+  const dealIds = await allowedDealIds(req);
   const accs = await db.select().from(accountsTable)
     .where(inArray(accountsTable.id, accIdList));
-  const accDeals = await db.select().from(dealsTable)
+  const accDeals = dealIds.size === 0 ? [] : await db.select().from(dealsTable)
     .where(inArray(dealsTable.accountId, accIdList));
   res.json(accs.map(a => {
-    const ds = accDeals.filter(d => d.accountId === a.id && d.stage !== 'won' && d.stage !== 'lost');
+    const ds = accDeals.filter(d => d.accountId === a.id && dealIds.has(d.id) && d.stage !== 'won' && d.stage !== 'lost');
     return {
       ...a,
       openDeals: ds.length,
@@ -425,7 +427,9 @@ router.get('/accounts/:id', async (req, res) => {
   const [a] = await db.select().from(accountsTable).where(eq(accountsTable.id, req.params.id));
   if (!a) { res.status(404).json({ error: 'not found' }); return; }
   const contacts = await db.select().from(contactsTable).where(eq(contactsTable.accountId, a.id));
-  const ds = await db.select().from(dealsTable).where(eq(dealsTable.accountId, a.id));
+  const dealIds = await allowedDealIds(req);
+  const allDs = await db.select().from(dealsTable).where(eq(dealsTable.accountId, a.id));
+  const ds = allDs.filter(d => dealIds.has(d.id));
   const ctx = await dealCtx();
   const openDeals = ds.filter(d => d.stage !== 'won' && d.stage !== 'lost');
   res.json({
@@ -434,6 +438,29 @@ router.get('/accounts/:id', async (req, res) => {
     totalValue: openDeals.reduce((s, d) => s + num(d.value), 0),
     contacts,
     deals: await Promise.all(ds.map(d => buildDeal(d, ctx))),
+  });
+});
+
+router.patch('/accounts/:id', async (req, res) => {
+  if (!validateInline(req, res, { params: Z.UpdateAccountParams, body: Z.UpdateAccountBody })) return;
+  if (!(await gateAccount(req, res, req.params.id))) return;
+  const b = req.body as { name?: string; industry?: string; country?: string; healthScore?: number };
+  const update: Record<string, unknown> = { updatedAt: new Date() };
+  if (b.name !== undefined) update.name = b.name;
+  if (b.industry !== undefined) update.industry = b.industry;
+  if (b.country !== undefined) update.country = b.country;
+  if (b.healthScore !== undefined) update.healthScore = b.healthScore;
+  await db.update(accountsTable).set(update).where(eq(accountsTable.id, req.params.id));
+  const [a] = await db.select().from(accountsTable).where(eq(accountsTable.id, req.params.id));
+  if (!a) { res.status(404).json({ error: 'not found' }); return; }
+  const dealIds = await allowedDealIds(req);
+  const allDs = await db.select().from(dealsTable).where(eq(dealsTable.accountId, a.id));
+  const ds = allDs.filter(d => dealIds.has(d.id));
+  const openDeals = ds.filter(d => d.stage !== 'won' && d.stage !== 'lost');
+  res.json({
+    ...a,
+    openDeals: openDeals.length,
+    totalValue: openDeals.reduce((s, d) => s + num(d.value), 0),
   });
 });
 

@@ -388,6 +388,27 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/AccountDetail" }
+    patch:
+      operationId: updateAccount
+      tags: [accounts]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/AccountPatch" }
+      responses:
+        "200":
+          description: updated
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Account" }
+        "403": { description: forbidden }
+        "404": { description: not found }
 
   /contacts:
     get:
@@ -2501,6 +2522,14 @@ components:
         name: { type: string }
         industry: { type: string }
         country: { type: string }
+
+    AccountPatch:
+      type: object
+      properties:
+        name: { type: string }
+        industry: { type: string }
+        country: { type: string }
+        healthScore: { type: integer }
 
     Contact:
       type: object
