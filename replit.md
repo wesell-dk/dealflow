@@ -61,6 +61,27 @@
 - **`<FieldHint>`-Komponente** (`components/ui/field-hint.tsx`): Wiederverwendbares kleines Info-Icon (Lucide HelpCircle) das einen Radix-Popover mit Titel + Erklärung öffnet. Akzeptiert entweder `term={{ group, value }}` (aus dem Glossar) oder `title`/`text` für Ad-hoc-Erklärungen.
 - **Anwendung**: Deal-Form (Wert, Phase, Marke, Company, Verantwortlich, Abschlussdatum, Wahrscheinlichkeit) zeigt jetzt Hint-Icons an Labels, und die Phase-Auswahl rendert Label + Beschreibung pro Option direkt in der Dropdown-Liste. Dasselbe Pattern in Tenant-Form (Plan, Region) und Anhang-Upload (Kategorie). Grids im Deal-Form sind jetzt responsiv (`grid-cols-1 sm:grid-cols-2`) und alle neu hinzugefügten Selects haben `htmlFor`/`id`-Verknüpfung für Screenreader.
 
+## Vertragswesen MVP Phase 1 (April 2026)
+
+Phase-1-Lücken aus `docs/konzept/03_vertragswesen.md` (Kap. 12) geschlossen:
+
+- **Schema-Additionen** (`lib/db/src/schema/index.ts`): `contract_types`, `contract_playbooks`, `clause_deviations`, `obligations` + Multi-Brand-/Lifecycle-Felder auf `contracts` (alle nullable, additiv).
+- **Engines** (`artifacts/api-server/src/routes/dealflow.ts`):
+  - `evaluateDeviations(contractId)` — vergleicht aktive Klauseln gegen ContractType-Pflichten/-Verbote und Playbook (`POST /contracts/:id/deviations/evaluate`).
+  - `deriveObligations(contractId)` — leitet Pflichten aus `clause_variants.obligation_templates` ab (`POST /contracts/:id/obligations/derive`).
+  - Auto-Hook beim Statuswechsel `signed`: `deriveObligations` + `evaluateDeviations` + Timeline-Event.
+- **Routes**: CRUD für ContractTypes, Playbooks, Obligations + `PATCH /clause-deviations/:id` (Resolve mit Note) + `GET /quotes/current?accountId=`.
+- **/reports/dashboard** erweitert um `openDeviationsCount`, `overdueObligationsCount`, `avgTimeToSignatureDays`, `avgApprovalDurationHours` (90-Tage-Rolling, mit Sanity-Filter).
+- **Frontend**:
+  - Neue Seite `/obligations` mit KPIs, Filter, Status-Aktionen (Sidebar `nav.obligations`).
+  - `pages/contract.tsx` zeigt `DeviationsSection` + `ObligationsSection` (Evaluieren / Ableiten / Resolve / Statusübergänge inline).
+  - `pages/admin.tsx`: `ContractTypesCard` und `ContractPlaybooksCard` für Tenant-Admins.
+  - `pages/reports.tsx`: 4 KPI-Kacheln für Vertragswesen.
+- **Seed**: 3 ContractTypes (NDA, MSA Subscription, Order Form), 2 Playbooks, 6 Klauselvarianten mit `obligationTemplates`, Backfill bestehender Verträge, Demo-Deviations + -Obligations.
+- **i18n**: `nav.obligations` in `de.json` (`Pflichten`) und `en.json` (`Obligations`).
+
+Validierung: Backend-Typecheck grün, dealflow-web Typecheck grün, alle Smoke-Endpunkte 200, e2e-Test (15 Schritte) grün.
+
 ## External Dependencies
 
 - **PostgreSQL**: Primary database.

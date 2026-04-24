@@ -28,6 +28,7 @@ import type {
   AdminUserCreate,
   AdminUserUpdate,
   AiHealthOk,
+  ApiError,
   ApprovalCase,
   ApprovalDecisionInput,
   ApprovalFromReactionInput,
@@ -44,6 +45,7 @@ import type {
   BulkOwnerInput,
   BulkStageInput,
   ClauseChangeResult,
+  ClauseDeviation,
   ClauseDiff,
   ClauseFamily,
   Company,
@@ -57,7 +59,13 @@ import type {
   ContractClausePatchInput,
   ContractDetail,
   ContractInput,
+  ContractPlaybook,
+  ContractPlaybookCreate,
+  ContractPlaybookUpdate,
   ContractRiskEnvelope,
+  ContractType,
+  ContractTypeCreate,
+  ContractTypeUpdate,
   CopilotChatReply,
   CopilotInsight,
   CopilotInsightStatusPatch,
@@ -68,6 +76,7 @@ import type {
   CounterproposalInput,
   CreateAmendmentInput,
   CreateVersionFromReaction201,
+  CurrentQuote,
   CustomerReaction,
   DashboardSummary,
   Deal,
@@ -78,6 +87,8 @@ import type {
   DealSummaryEnvelope,
   DeclineSignerInput,
   DeleteOrgConflict,
+  DeviationEvaluationResult,
+  DeviationResolveInput,
   EffectiveContractState,
   EntityVersion,
   EntityVersionInput,
@@ -93,6 +104,7 @@ import type {
   GdprRetentionPolicyResponse,
   GdprRetentionResult,
   GdprSubjectSearch,
+  GetCurrentQuoteParams,
   HealthStatus,
   HelpBotInput,
   HelpBotReply,
@@ -104,12 +116,14 @@ import type {
   ListBrandsParams,
   ListCompaniesParams,
   ListContactsParams,
+  ListContractPlaybooksParams,
   ListContractsParams,
   ListCopilotInsightsParams,
   ListCopilotInsightsResponse,
   ListDealsParams,
   ListGdprAccessLogParams,
   ListNegotiationsParams,
+  ListObligationsParams,
   ListOrderConfirmationsParams,
   ListQuoteTemplatesParams,
   ListQuotesParams,
@@ -119,6 +133,10 @@ import type {
   Negotiation,
   NegotiationDetail,
   NegotiationImpactResponse,
+  Obligation,
+  ObligationCreate,
+  ObligationDerivationResult,
+  ObligationUpdate,
   OrderConfirmation,
   OrderConfirmationDetail,
   OrderConfirmationHandoverInput,
@@ -11776,3 +11794,1312 @@ export const useBulkUpdateDealStage = <
 > => {
   return useMutation(getBulkUpdateDealStageMutationOptions(options));
 };
+
+export const getListContractTypesUrl = () => {
+  return `/api/v1/contract-types`;
+};
+
+export const listContractTypes = async (
+  options?: RequestInit,
+): Promise<ContractType[]> => {
+  return customFetch<ContractType[]>(getListContractTypesUrl(), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getListContractTypesQueryKey = () => {
+  return [`/api/v1/contract-types`] as const;
+};
+
+export const getListContractTypesQueryOptions = <
+  TData = Awaited<ReturnType<typeof listContractTypes>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof listContractTypes>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getListContractTypesQueryKey();
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof listContractTypes>>
+  > = ({ signal }) => listContractTypes({ signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof listContractTypes>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type ListContractTypesQueryResult = NonNullable<
+  Awaited<ReturnType<typeof listContractTypes>>
+>;
+export type ListContractTypesQueryError = ErrorType<unknown>;
+
+export function useListContractTypes<
+  TData = Awaited<ReturnType<typeof listContractTypes>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof listContractTypes>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getListContractTypesQueryOptions(options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+export const getCreateContractTypeUrl = () => {
+  return `/api/v1/contract-types`;
+};
+
+export const createContractType = async (
+  contractTypeCreate: ContractTypeCreate,
+  options?: RequestInit,
+): Promise<ContractType> => {
+  return customFetch<ContractType>(getCreateContractTypeUrl(), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(contractTypeCreate),
+  });
+};
+
+export const getCreateContractTypeMutationOptions = <
+  TError = ErrorType<ApiError>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof createContractType>>,
+    TError,
+    { data: BodyType<ContractTypeCreate> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof createContractType>>,
+  TError,
+  { data: BodyType<ContractTypeCreate> },
+  TContext
+> => {
+  const mutationKey = ["createContractType"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof createContractType>>,
+    { data: BodyType<ContractTypeCreate> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return createContractType(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type CreateContractTypeMutationResult = NonNullable<
+  Awaited<ReturnType<typeof createContractType>>
+>;
+export type CreateContractTypeMutationBody = BodyType<ContractTypeCreate>;
+export type CreateContractTypeMutationError = ErrorType<ApiError>;
+
+export const useCreateContractType = <
+  TError = ErrorType<ApiError>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof createContractType>>,
+    TError,
+    { data: BodyType<ContractTypeCreate> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof createContractType>>,
+  TError,
+  { data: BodyType<ContractTypeCreate> },
+  TContext
+> => {
+  return useMutation(getCreateContractTypeMutationOptions(options));
+};
+
+export const getUpdateContractTypeUrl = (id: string) => {
+  return `/api/v1/contract-types/${id}`;
+};
+
+export const updateContractType = async (
+  id: string,
+  contractTypeUpdate: ContractTypeUpdate,
+  options?: RequestInit,
+): Promise<ContractType> => {
+  return customFetch<ContractType>(getUpdateContractTypeUrl(id), {
+    ...options,
+    method: "PATCH",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(contractTypeUpdate),
+  });
+};
+
+export const getUpdateContractTypeMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof updateContractType>>,
+    TError,
+    { id: string; data: BodyType<ContractTypeUpdate> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof updateContractType>>,
+  TError,
+  { id: string; data: BodyType<ContractTypeUpdate> },
+  TContext
+> => {
+  const mutationKey = ["updateContractType"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof updateContractType>>,
+    { id: string; data: BodyType<ContractTypeUpdate> }
+  > = (props) => {
+    const { id, data } = props ?? {};
+
+    return updateContractType(id, data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type UpdateContractTypeMutationResult = NonNullable<
+  Awaited<ReturnType<typeof updateContractType>>
+>;
+export type UpdateContractTypeMutationBody = BodyType<ContractTypeUpdate>;
+export type UpdateContractTypeMutationError = ErrorType<unknown>;
+
+export const useUpdateContractType = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof updateContractType>>,
+    TError,
+    { id: string; data: BodyType<ContractTypeUpdate> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof updateContractType>>,
+  TError,
+  { id: string; data: BodyType<ContractTypeUpdate> },
+  TContext
+> => {
+  return useMutation(getUpdateContractTypeMutationOptions(options));
+};
+
+export const getDeleteContractTypeUrl = (id: string) => {
+  return `/api/v1/contract-types/${id}`;
+};
+
+export const deleteContractType = async (
+  id: string,
+  options?: RequestInit,
+): Promise<void> => {
+  return customFetch<void>(getDeleteContractTypeUrl(id), {
+    ...options,
+    method: "DELETE",
+  });
+};
+
+export const getDeleteContractTypeMutationOptions = <
+  TError = ErrorType<ApiError>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof deleteContractType>>,
+    TError,
+    { id: string },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof deleteContractType>>,
+  TError,
+  { id: string },
+  TContext
+> => {
+  const mutationKey = ["deleteContractType"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof deleteContractType>>,
+    { id: string }
+  > = (props) => {
+    const { id } = props ?? {};
+
+    return deleteContractType(id, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type DeleteContractTypeMutationResult = NonNullable<
+  Awaited<ReturnType<typeof deleteContractType>>
+>;
+
+export type DeleteContractTypeMutationError = ErrorType<ApiError>;
+
+export const useDeleteContractType = <
+  TError = ErrorType<ApiError>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof deleteContractType>>,
+    TError,
+    { id: string },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof deleteContractType>>,
+  TError,
+  { id: string },
+  TContext
+> => {
+  return useMutation(getDeleteContractTypeMutationOptions(options));
+};
+
+export const getListContractPlaybooksUrl = (
+  params?: ListContractPlaybooksParams,
+) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? "null" : value.toString());
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0
+    ? `/api/v1/contract-playbooks?${stringifiedParams}`
+    : `/api/v1/contract-playbooks`;
+};
+
+export const listContractPlaybooks = async (
+  params?: ListContractPlaybooksParams,
+  options?: RequestInit,
+): Promise<ContractPlaybook[]> => {
+  return customFetch<ContractPlaybook[]>(getListContractPlaybooksUrl(params), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getListContractPlaybooksQueryKey = (
+  params?: ListContractPlaybooksParams,
+) => {
+  return [`/api/v1/contract-playbooks`, ...(params ? [params] : [])] as const;
+};
+
+export const getListContractPlaybooksQueryOptions = <
+  TData = Awaited<ReturnType<typeof listContractPlaybooks>>,
+  TError = ErrorType<unknown>,
+>(
+  params?: ListContractPlaybooksParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof listContractPlaybooks>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey =
+    queryOptions?.queryKey ?? getListContractPlaybooksQueryKey(params);
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof listContractPlaybooks>>
+  > = ({ signal }) =>
+    listContractPlaybooks(params, { signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof listContractPlaybooks>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type ListContractPlaybooksQueryResult = NonNullable<
+  Awaited<ReturnType<typeof listContractPlaybooks>>
+>;
+export type ListContractPlaybooksQueryError = ErrorType<unknown>;
+
+export function useListContractPlaybooks<
+  TData = Awaited<ReturnType<typeof listContractPlaybooks>>,
+  TError = ErrorType<unknown>,
+>(
+  params?: ListContractPlaybooksParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof listContractPlaybooks>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getListContractPlaybooksQueryOptions(params, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+export const getCreateContractPlaybookUrl = () => {
+  return `/api/v1/contract-playbooks`;
+};
+
+export const createContractPlaybook = async (
+  contractPlaybookCreate: ContractPlaybookCreate,
+  options?: RequestInit,
+): Promise<ContractPlaybook> => {
+  return customFetch<ContractPlaybook>(getCreateContractPlaybookUrl(), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(contractPlaybookCreate),
+  });
+};
+
+export const getCreateContractPlaybookMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof createContractPlaybook>>,
+    TError,
+    { data: BodyType<ContractPlaybookCreate> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof createContractPlaybook>>,
+  TError,
+  { data: BodyType<ContractPlaybookCreate> },
+  TContext
+> => {
+  const mutationKey = ["createContractPlaybook"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof createContractPlaybook>>,
+    { data: BodyType<ContractPlaybookCreate> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return createContractPlaybook(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type CreateContractPlaybookMutationResult = NonNullable<
+  Awaited<ReturnType<typeof createContractPlaybook>>
+>;
+export type CreateContractPlaybookMutationBody =
+  BodyType<ContractPlaybookCreate>;
+export type CreateContractPlaybookMutationError = ErrorType<unknown>;
+
+export const useCreateContractPlaybook = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof createContractPlaybook>>,
+    TError,
+    { data: BodyType<ContractPlaybookCreate> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof createContractPlaybook>>,
+  TError,
+  { data: BodyType<ContractPlaybookCreate> },
+  TContext
+> => {
+  return useMutation(getCreateContractPlaybookMutationOptions(options));
+};
+
+export const getUpdateContractPlaybookUrl = (id: string) => {
+  return `/api/v1/contract-playbooks/${id}`;
+};
+
+export const updateContractPlaybook = async (
+  id: string,
+  contractPlaybookUpdate: ContractPlaybookUpdate,
+  options?: RequestInit,
+): Promise<ContractPlaybook> => {
+  return customFetch<ContractPlaybook>(getUpdateContractPlaybookUrl(id), {
+    ...options,
+    method: "PATCH",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(contractPlaybookUpdate),
+  });
+};
+
+export const getUpdateContractPlaybookMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof updateContractPlaybook>>,
+    TError,
+    { id: string; data: BodyType<ContractPlaybookUpdate> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof updateContractPlaybook>>,
+  TError,
+  { id: string; data: BodyType<ContractPlaybookUpdate> },
+  TContext
+> => {
+  const mutationKey = ["updateContractPlaybook"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof updateContractPlaybook>>,
+    { id: string; data: BodyType<ContractPlaybookUpdate> }
+  > = (props) => {
+    const { id, data } = props ?? {};
+
+    return updateContractPlaybook(id, data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type UpdateContractPlaybookMutationResult = NonNullable<
+  Awaited<ReturnType<typeof updateContractPlaybook>>
+>;
+export type UpdateContractPlaybookMutationBody =
+  BodyType<ContractPlaybookUpdate>;
+export type UpdateContractPlaybookMutationError = ErrorType<unknown>;
+
+export const useUpdateContractPlaybook = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof updateContractPlaybook>>,
+    TError,
+    { id: string; data: BodyType<ContractPlaybookUpdate> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof updateContractPlaybook>>,
+  TError,
+  { id: string; data: BodyType<ContractPlaybookUpdate> },
+  TContext
+> => {
+  return useMutation(getUpdateContractPlaybookMutationOptions(options));
+};
+
+export const getDeleteContractPlaybookUrl = (id: string) => {
+  return `/api/v1/contract-playbooks/${id}`;
+};
+
+export const deleteContractPlaybook = async (
+  id: string,
+  options?: RequestInit,
+): Promise<void> => {
+  return customFetch<void>(getDeleteContractPlaybookUrl(id), {
+    ...options,
+    method: "DELETE",
+  });
+};
+
+export const getDeleteContractPlaybookMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof deleteContractPlaybook>>,
+    TError,
+    { id: string },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof deleteContractPlaybook>>,
+  TError,
+  { id: string },
+  TContext
+> => {
+  const mutationKey = ["deleteContractPlaybook"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof deleteContractPlaybook>>,
+    { id: string }
+  > = (props) => {
+    const { id } = props ?? {};
+
+    return deleteContractPlaybook(id, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type DeleteContractPlaybookMutationResult = NonNullable<
+  Awaited<ReturnType<typeof deleteContractPlaybook>>
+>;
+
+export type DeleteContractPlaybookMutationError = ErrorType<unknown>;
+
+export const useDeleteContractPlaybook = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof deleteContractPlaybook>>,
+    TError,
+    { id: string },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof deleteContractPlaybook>>,
+  TError,
+  { id: string },
+  TContext
+> => {
+  return useMutation(getDeleteContractPlaybookMutationOptions(options));
+};
+
+export const getListContractDeviationsUrl = (id: string) => {
+  return `/api/v1/contracts/${id}/deviations`;
+};
+
+export const listContractDeviations = async (
+  id: string,
+  options?: RequestInit,
+): Promise<ClauseDeviation[]> => {
+  return customFetch<ClauseDeviation[]>(getListContractDeviationsUrl(id), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getListContractDeviationsQueryKey = (id: string) => {
+  return [`/api/v1/contracts/${id}/deviations`] as const;
+};
+
+export const getListContractDeviationsQueryOptions = <
+  TData = Awaited<ReturnType<typeof listContractDeviations>>,
+  TError = ErrorType<unknown>,
+>(
+  id: string,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof listContractDeviations>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey =
+    queryOptions?.queryKey ?? getListContractDeviationsQueryKey(id);
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof listContractDeviations>>
+  > = ({ signal }) => listContractDeviations(id, { signal, ...requestOptions });
+
+  return {
+    queryKey,
+    queryFn,
+    enabled: !!id,
+    ...queryOptions,
+  } as UseQueryOptions<
+    Awaited<ReturnType<typeof listContractDeviations>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type ListContractDeviationsQueryResult = NonNullable<
+  Awaited<ReturnType<typeof listContractDeviations>>
+>;
+export type ListContractDeviationsQueryError = ErrorType<unknown>;
+
+export function useListContractDeviations<
+  TData = Awaited<ReturnType<typeof listContractDeviations>>,
+  TError = ErrorType<unknown>,
+>(
+  id: string,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof listContractDeviations>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getListContractDeviationsQueryOptions(id, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * Re-runs the deviation engine for a contract and returns the current deviation list.
+ */
+export const getEvaluateContractDeviationsUrl = (id: string) => {
+  return `/api/v1/contracts/${id}/deviations`;
+};
+
+export const evaluateContractDeviations = async (
+  id: string,
+  options?: RequestInit,
+): Promise<DeviationEvaluationResult> => {
+  return customFetch<DeviationEvaluationResult>(
+    getEvaluateContractDeviationsUrl(id),
+    {
+      ...options,
+      method: "POST",
+    },
+  );
+};
+
+export const getEvaluateContractDeviationsMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof evaluateContractDeviations>>,
+    TError,
+    { id: string },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof evaluateContractDeviations>>,
+  TError,
+  { id: string },
+  TContext
+> => {
+  const mutationKey = ["evaluateContractDeviations"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof evaluateContractDeviations>>,
+    { id: string }
+  > = (props) => {
+    const { id } = props ?? {};
+
+    return evaluateContractDeviations(id, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type EvaluateContractDeviationsMutationResult = NonNullable<
+  Awaited<ReturnType<typeof evaluateContractDeviations>>
+>;
+
+export type EvaluateContractDeviationsMutationError = ErrorType<unknown>;
+
+export const useEvaluateContractDeviations = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof evaluateContractDeviations>>,
+    TError,
+    { id: string },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof evaluateContractDeviations>>,
+  TError,
+  { id: string },
+  TContext
+> => {
+  return useMutation(getEvaluateContractDeviationsMutationOptions(options));
+};
+
+export const getResolveDeviationUrl = (id: string) => {
+  return `/api/v1/clause-deviations/${id}`;
+};
+
+export const resolveDeviation = async (
+  id: string,
+  deviationResolveInput: DeviationResolveInput,
+  options?: RequestInit,
+): Promise<ClauseDeviation> => {
+  return customFetch<ClauseDeviation>(getResolveDeviationUrl(id), {
+    ...options,
+    method: "PATCH",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(deviationResolveInput),
+  });
+};
+
+export const getResolveDeviationMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof resolveDeviation>>,
+    TError,
+    { id: string; data: BodyType<DeviationResolveInput> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof resolveDeviation>>,
+  TError,
+  { id: string; data: BodyType<DeviationResolveInput> },
+  TContext
+> => {
+  const mutationKey = ["resolveDeviation"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof resolveDeviation>>,
+    { id: string; data: BodyType<DeviationResolveInput> }
+  > = (props) => {
+    const { id, data } = props ?? {};
+
+    return resolveDeviation(id, data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type ResolveDeviationMutationResult = NonNullable<
+  Awaited<ReturnType<typeof resolveDeviation>>
+>;
+export type ResolveDeviationMutationBody = BodyType<DeviationResolveInput>;
+export type ResolveDeviationMutationError = ErrorType<unknown>;
+
+export const useResolveDeviation = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof resolveDeviation>>,
+    TError,
+    { id: string; data: BodyType<DeviationResolveInput> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof resolveDeviation>>,
+  TError,
+  { id: string; data: BodyType<DeviationResolveInput> },
+  TContext
+> => {
+  return useMutation(getResolveDeviationMutationOptions(options));
+};
+
+export const getListObligationsUrl = (params?: ListObligationsParams) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? "null" : value.toString());
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0
+    ? `/api/v1/obligations?${stringifiedParams}`
+    : `/api/v1/obligations`;
+};
+
+export const listObligations = async (
+  params?: ListObligationsParams,
+  options?: RequestInit,
+): Promise<Obligation[]> => {
+  return customFetch<Obligation[]>(getListObligationsUrl(params), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getListObligationsQueryKey = (params?: ListObligationsParams) => {
+  return [`/api/v1/obligations`, ...(params ? [params] : [])] as const;
+};
+
+export const getListObligationsQueryOptions = <
+  TData = Awaited<ReturnType<typeof listObligations>>,
+  TError = ErrorType<unknown>,
+>(
+  params?: ListObligationsParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof listObligations>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getListObligationsQueryKey(params);
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof listObligations>>> = ({
+    signal,
+  }) => listObligations(params, { signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof listObligations>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type ListObligationsQueryResult = NonNullable<
+  Awaited<ReturnType<typeof listObligations>>
+>;
+export type ListObligationsQueryError = ErrorType<unknown>;
+
+export function useListObligations<
+  TData = Awaited<ReturnType<typeof listObligations>>,
+  TError = ErrorType<unknown>,
+>(
+  params?: ListObligationsParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof listObligations>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getListObligationsQueryOptions(params, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+export const getCreateObligationUrl = () => {
+  return `/api/v1/obligations`;
+};
+
+export const createObligation = async (
+  obligationCreate: ObligationCreate,
+  options?: RequestInit,
+): Promise<Obligation> => {
+  return customFetch<Obligation>(getCreateObligationUrl(), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(obligationCreate),
+  });
+};
+
+export const getCreateObligationMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof createObligation>>,
+    TError,
+    { data: BodyType<ObligationCreate> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof createObligation>>,
+  TError,
+  { data: BodyType<ObligationCreate> },
+  TContext
+> => {
+  const mutationKey = ["createObligation"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof createObligation>>,
+    { data: BodyType<ObligationCreate> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return createObligation(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type CreateObligationMutationResult = NonNullable<
+  Awaited<ReturnType<typeof createObligation>>
+>;
+export type CreateObligationMutationBody = BodyType<ObligationCreate>;
+export type CreateObligationMutationError = ErrorType<unknown>;
+
+export const useCreateObligation = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof createObligation>>,
+    TError,
+    { data: BodyType<ObligationCreate> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof createObligation>>,
+  TError,
+  { data: BodyType<ObligationCreate> },
+  TContext
+> => {
+  return useMutation(getCreateObligationMutationOptions(options));
+};
+
+export const getUpdateObligationUrl = (id: string) => {
+  return `/api/v1/obligations/${id}`;
+};
+
+export const updateObligation = async (
+  id: string,
+  obligationUpdate: ObligationUpdate,
+  options?: RequestInit,
+): Promise<Obligation> => {
+  return customFetch<Obligation>(getUpdateObligationUrl(id), {
+    ...options,
+    method: "PATCH",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(obligationUpdate),
+  });
+};
+
+export const getUpdateObligationMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof updateObligation>>,
+    TError,
+    { id: string; data: BodyType<ObligationUpdate> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof updateObligation>>,
+  TError,
+  { id: string; data: BodyType<ObligationUpdate> },
+  TContext
+> => {
+  const mutationKey = ["updateObligation"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof updateObligation>>,
+    { id: string; data: BodyType<ObligationUpdate> }
+  > = (props) => {
+    const { id, data } = props ?? {};
+
+    return updateObligation(id, data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type UpdateObligationMutationResult = NonNullable<
+  Awaited<ReturnType<typeof updateObligation>>
+>;
+export type UpdateObligationMutationBody = BodyType<ObligationUpdate>;
+export type UpdateObligationMutationError = ErrorType<unknown>;
+
+export const useUpdateObligation = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof updateObligation>>,
+    TError,
+    { id: string; data: BodyType<ObligationUpdate> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof updateObligation>>,
+  TError,
+  { id: string; data: BodyType<ObligationUpdate> },
+  TContext
+> => {
+  return useMutation(getUpdateObligationMutationOptions(options));
+};
+
+/**
+ * Derives obligations from clause obligationTemplates. Idempotent per (contract, clause).
+ */
+export const getDeriveContractObligationsUrl = (id: string) => {
+  return `/api/v1/contracts/${id}/obligations/derive`;
+};
+
+export const deriveContractObligations = async (
+  id: string,
+  options?: RequestInit,
+): Promise<ObligationDerivationResult> => {
+  return customFetch<ObligationDerivationResult>(
+    getDeriveContractObligationsUrl(id),
+    {
+      ...options,
+      method: "POST",
+    },
+  );
+};
+
+export const getDeriveContractObligationsMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof deriveContractObligations>>,
+    TError,
+    { id: string },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof deriveContractObligations>>,
+  TError,
+  { id: string },
+  TContext
+> => {
+  const mutationKey = ["deriveContractObligations"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof deriveContractObligations>>,
+    { id: string }
+  > = (props) => {
+    const { id } = props ?? {};
+
+    return deriveContractObligations(id, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type DeriveContractObligationsMutationResult = NonNullable<
+  Awaited<ReturnType<typeof deriveContractObligations>>
+>;
+
+export type DeriveContractObligationsMutationError = ErrorType<unknown>;
+
+export const useDeriveContractObligations = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof deriveContractObligations>>,
+    TError,
+    { id: string },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof deriveContractObligations>>,
+  TError,
+  { id: string },
+  TContext
+> => {
+  return useMutation(getDeriveContractObligationsMutationOptions(options));
+};
+
+/**
+ * Returns the current accepted quote version for an account, or 404 if none.
+ */
+export const getGetCurrentQuoteUrl = (params: GetCurrentQuoteParams) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? "null" : value.toString());
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0
+    ? `/api/v1/quotes/current?${stringifiedParams}`
+    : `/api/v1/quotes/current`;
+};
+
+export const getCurrentQuote = async (
+  params: GetCurrentQuoteParams,
+  options?: RequestInit,
+): Promise<CurrentQuote> => {
+  return customFetch<CurrentQuote>(getGetCurrentQuoteUrl(params), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getGetCurrentQuoteQueryKey = (params?: GetCurrentQuoteParams) => {
+  return [`/api/v1/quotes/current`, ...(params ? [params] : [])] as const;
+};
+
+export const getGetCurrentQuoteQueryOptions = <
+  TData = Awaited<ReturnType<typeof getCurrentQuote>>,
+  TError = ErrorType<ApiError>,
+>(
+  params: GetCurrentQuoteParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getCurrentQuote>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getGetCurrentQuoteQueryKey(params);
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof getCurrentQuote>>> = ({
+    signal,
+  }) => getCurrentQuote(params, { signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getCurrentQuote>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetCurrentQuoteQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getCurrentQuote>>
+>;
+export type GetCurrentQuoteQueryError = ErrorType<ApiError>;
+
+export function useGetCurrentQuote<
+  TData = Awaited<ReturnType<typeof getCurrentQuote>>,
+  TError = ErrorType<ApiError>,
+>(
+  params: GetCurrentQuoteParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getCurrentQuote>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetCurrentQuoteQueryOptions(params, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}

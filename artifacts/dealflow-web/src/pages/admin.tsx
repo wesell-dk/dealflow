@@ -29,6 +29,19 @@ import {
   useGetGdprRetentionPolicy,
   useUpdateGdprRetentionPolicy,
   useRunGdprRetention,
+  useListContractTypes,
+  useCreateContractType,
+  useUpdateContractType,
+  useDeleteContractType,
+  useListContractPlaybooks,
+  useCreateContractPlaybook,
+  useUpdateContractPlaybook,
+  useDeleteContractPlaybook,
+  useListClauseFamilies,
+  getListContractTypesQueryKey,
+  getListContractPlaybooksQueryKey,
+  type ContractType,
+  type ContractPlaybook,
 } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
@@ -379,6 +392,10 @@ export default function Admin() {
       <UserRolesCard />
 
       <RolesCard />
+
+      <ContractTypesCard />
+
+      <ContractPlaybooksCard />
 
       <WebhooksSection />
 
@@ -1471,6 +1488,472 @@ function WebhooksSection() {
           </Table>
         </div>
       </CardContent>
+    </Card>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Vertragswesen MVP Phase 1 — Contract Types & Playbooks (Tenant-Admin)
+// ─────────────────────────────────────────────────────────────────────────────
+
+function CsvTagInput({
+  value,
+  onChange,
+  placeholder,
+  testId,
+}: {
+  value: string[];
+  onChange: (v: string[]) => void;
+  placeholder?: string;
+  testId?: string;
+}) {
+  const [draft, setDraft] = useState(value.join(", "));
+  useEffect(() => { setDraft(value.join(", ")); }, [value]);
+  return (
+    <Input
+      value={draft}
+      onChange={e => setDraft(e.target.value)}
+      onBlur={() => {
+        const arr = draft.split(",").map(s => s.trim()).filter(Boolean);
+        onChange(arr);
+      }}
+      placeholder={placeholder}
+      data-testid={testId}
+    />
+  );
+}
+
+function ContractTypesCard() {
+  const { data: types, isLoading } = useListContractTypes();
+  const { data: families } = useListClauseFamilies();
+  const qc = useQueryClient();
+  const { toast } = useToast();
+  const create = useCreateContractType();
+  const update = useUpdateContractType();
+  const del = useDeleteContractType();
+
+  const [editing, setEditing] = useState<ContractType | null>(null);
+  const [open, setOpen] = useState(false);
+  const [code, setCode] = useState("");
+  const [name, setName] = useState("");
+  const [description, setDescription] = useState("");
+  const [mandatory, setMandatory] = useState<string[]>([]);
+  const [forbidden, setForbidden] = useState<string[]>([]);
+  const [active, setActive] = useState(true);
+
+  const reset = () => {
+    setEditing(null); setCode(""); setName(""); setDescription("");
+    setMandatory([]); setForbidden([]); setActive(true);
+  };
+
+  const openCreate = () => { reset(); setOpen(true); };
+  const openEdit = (ct: ContractType) => {
+    setEditing(ct);
+    setCode(ct.code);
+    setName(ct.name);
+    setDescription(ct.description ?? "");
+    setMandatory(ct.mandatoryClauseFamilyIds ?? []);
+    setForbidden(ct.forbiddenClauseFamilyIds ?? []);
+    setActive(ct.active);
+    setOpen(true);
+  };
+
+  const onSave = async () => {
+    try {
+      if (editing) {
+        await update.mutateAsync({
+          id: editing.id,
+          data: {
+            name,
+            description: description || null,
+            mandatoryClauseFamilyIds: mandatory,
+            forbiddenClauseFamilyIds: forbidden,
+            active,
+          },
+        });
+        toast({ title: "Vertragstyp aktualisiert" });
+      } else {
+        await create.mutateAsync({
+          data: {
+            code: code.trim(),
+            name: name.trim(),
+            description: description || undefined,
+            mandatoryClauseFamilyIds: mandatory,
+            forbiddenClauseFamilyIds: forbidden,
+            active,
+          },
+        });
+        toast({ title: "Vertragstyp angelegt" });
+      }
+      await qc.invalidateQueries({ queryKey: getListContractTypesQueryKey() });
+      setOpen(false); reset();
+    } catch (err: any) {
+      toast({ title: "Speichern fehlgeschlagen", description: err?.message, variant: "destructive" });
+    }
+  };
+
+  const onDelete = async (ct: ContractType) => {
+    try {
+      await del.mutateAsync({ id: ct.id });
+      await qc.invalidateQueries({ queryKey: getListContractTypesQueryKey() });
+      toast({ title: "Vertragstyp gelöscht" });
+    } catch (err: any) {
+      toast({ title: "Löschen fehlgeschlagen", description: err?.message, variant: "destructive" });
+    }
+  };
+
+  const familyName = (id: string) => families?.find(f => f.id === id)?.name ?? id;
+
+  return (
+    <Card data-testid="card-contract-types">
+      <CardHeader className="flex flex-row items-center justify-between gap-2">
+        <div className="flex items-center gap-2">
+          <Shield className="h-5 w-5 text-primary" />
+          <div>
+            <CardTitle>Vertragstypen</CardTitle>
+            <p className="text-sm text-muted-foreground mt-1">
+              Definiere Pflicht- und Verbots-Klauseln je Vertragsart (NDA, MSA, Order Form …).
+            </p>
+          </div>
+        </div>
+        <Button size="sm" onClick={openCreate} data-testid="button-new-contract-type">
+          <Plus className="h-4 w-4 mr-1" /> Neuer Typ
+        </Button>
+      </CardHeader>
+      <CardContent>
+        {isLoading ? (
+          <Skeleton className="h-24 w-full" />
+        ) : (types?.length ?? 0) === 0 ? (
+          <div className="p-6 text-center text-sm text-muted-foreground border rounded-md bg-muted/10">
+            Noch keine Vertragstypen angelegt.
+          </div>
+        ) : (
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Code</TableHead>
+                <TableHead>Name</TableHead>
+                <TableHead>Pflicht-Klauseln</TableHead>
+                <TableHead>Verboten</TableHead>
+                <TableHead>Aktiv</TableHead>
+                <TableHead className="text-right">Aktion</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {types!.map(ct => (
+                <TableRow key={ct.id} data-testid={`row-contract-type-${ct.id}`}>
+                  <TableCell className="font-mono text-xs">{ct.code}</TableCell>
+                  <TableCell className="font-medium">{ct.name}</TableCell>
+                  <TableCell className="text-xs text-muted-foreground">
+                    {ct.mandatoryClauseFamilyIds.length === 0 ? "—" : ct.mandatoryClauseFamilyIds.map(familyName).join(", ")}
+                  </TableCell>
+                  <TableCell className="text-xs text-muted-foreground">
+                    {ct.forbiddenClauseFamilyIds.length === 0 ? "—" : ct.forbiddenClauseFamilyIds.map(familyName).join(", ")}
+                  </TableCell>
+                  <TableCell>
+                    <Badge variant="outline" className={ct.active ? "border-emerald-300 text-emerald-700" : "border-slate-300 text-slate-500"}>
+                      {ct.active ? "ja" : "nein"}
+                    </Badge>
+                  </TableCell>
+                  <TableCell className="text-right">
+                    <div className="inline-flex gap-1.5">
+                      <Button size="sm" variant="outline" onClick={() => openEdit(ct)} data-testid={`button-edit-ct-${ct.id}`}>
+                        Bearbeiten
+                      </Button>
+                      <Button size="sm" variant="outline" onClick={() => onDelete(ct)} data-testid={`button-delete-ct-${ct.id}`}>
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </Button>
+                    </div>
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        )}
+      </CardContent>
+
+      <AlertDialog open={open} onOpenChange={setOpen}>
+        <AlertDialogContent className="max-w-2xl">
+          <AlertDialogHeader>
+            <AlertDialogTitle>{editing ? "Vertragstyp bearbeiten" : "Neuer Vertragstyp"}</AlertDialogTitle>
+            <AlertDialogDescription>
+              Pflicht- und Verbots-Klauseln werden in der Klausel-Prüfung gegen Verträge ausgewertet.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <div className="grid gap-3 py-2">
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <Label>Code</Label>
+                <Input
+                  value={code}
+                  onChange={e => setCode(e.target.value)}
+                  disabled={!!editing}
+                  placeholder="z.B. NDA, MSA_SUB"
+                  data-testid="input-ct-code"
+                />
+              </div>
+              <div>
+                <Label>Name</Label>
+                <Input value={name} onChange={e => setName(e.target.value)} data-testid="input-ct-name" />
+              </div>
+            </div>
+            <div>
+              <Label>Beschreibung</Label>
+              <Input value={description} onChange={e => setDescription(e.target.value)} data-testid="input-ct-description" />
+            </div>
+            <div>
+              <Label>Pflicht-Klauselfamilien (IDs, Komma-getrennt)</Label>
+              <CsvTagInput value={mandatory} onChange={setMandatory} placeholder="cf_xxx, cf_yyy" testId="input-ct-mandatory" />
+              {(families?.length ?? 0) > 0 && (
+                <p className="text-xs text-muted-foreground mt-1">Verfügbar: {families!.map(f => f.id).join(", ")}</p>
+              )}
+            </div>
+            <div>
+              <Label>Verbotene Klauselfamilien (IDs, Komma-getrennt)</Label>
+              <CsvTagInput value={forbidden} onChange={setForbidden} placeholder="cf_xxx" testId="input-ct-forbidden" />
+            </div>
+            <div className="flex items-center gap-2">
+              <input
+                id="ct-active"
+                type="checkbox"
+                checked={active}
+                onChange={e => setActive(e.target.checked)}
+                data-testid="checkbox-ct-active"
+              />
+              <Label htmlFor="ct-active">Aktiv</Label>
+            </div>
+          </div>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Abbrechen</AlertDialogCancel>
+            <AlertDialogAction onClick={onSave} disabled={!name.trim() || (!editing && !code.trim())} data-testid="button-save-ct">
+              Speichern
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </Card>
+  );
+}
+
+function ContractPlaybooksCard() {
+  const { data: playbooks, isLoading } = useListContractPlaybooks();
+  const { data: types } = useListContractTypes();
+  const qc = useQueryClient();
+  const { toast } = useToast();
+  const create = useCreateContractPlaybook();
+  const update = useUpdateContractPlaybook();
+  const del = useDeleteContractPlaybook();
+
+  const [editing, setEditing] = useState<ContractPlaybook | null>(null);
+  const [open, setOpen] = useState(false);
+  const [contractTypeId, setContractTypeId] = useState("");
+  const [name, setName] = useState("");
+  const [description, setDescription] = useState("");
+  const [brandIds, setBrandIds] = useState<string[]>([]);
+  const [allowed, setAllowed] = useState<string[]>([]);
+  const [defaults, setDefaults] = useState<string[]>([]);
+  const [active, setActive] = useState(true);
+
+  const reset = () => {
+    setEditing(null); setContractTypeId(""); setName(""); setDescription("");
+    setBrandIds([]); setAllowed([]); setDefaults([]); setActive(true);
+  };
+
+  const openCreate = () => { reset(); setOpen(true); };
+  const openEdit = (pb: ContractPlaybook) => {
+    setEditing(pb);
+    setContractTypeId(pb.contractTypeId);
+    setName(pb.name);
+    setDescription(pb.description ?? "");
+    setBrandIds(pb.brandIds ?? []);
+    setAllowed(pb.allowedClauseVariantIds ?? []);
+    setDefaults(pb.defaultClauseVariantIds ?? []);
+    setActive(pb.active);
+    setOpen(true);
+  };
+
+  const onSave = async () => {
+    try {
+      if (editing) {
+        await update.mutateAsync({
+          id: editing.id,
+          data: {
+            name,
+            description: description || null,
+            brandIds,
+            allowedClauseVariantIds: allowed,
+            defaultClauseVariantIds: defaults,
+            active,
+          },
+        });
+        toast({ title: "Playbook aktualisiert" });
+      } else {
+        await create.mutateAsync({
+          data: {
+            contractTypeId,
+            name: name.trim(),
+            description: description || undefined,
+            brandIds,
+            allowedClauseVariantIds: allowed,
+            defaultClauseVariantIds: defaults,
+          },
+        });
+        toast({ title: "Playbook angelegt" });
+      }
+      await qc.invalidateQueries({ queryKey: getListContractPlaybooksQueryKey() });
+      setOpen(false); reset();
+    } catch (err: any) {
+      toast({ title: "Speichern fehlgeschlagen", description: err?.message, variant: "destructive" });
+    }
+  };
+
+  const onDelete = async (pb: ContractPlaybook) => {
+    try {
+      await del.mutateAsync({ id: pb.id });
+      await qc.invalidateQueries({ queryKey: getListContractPlaybooksQueryKey() });
+      toast({ title: "Playbook gelöscht" });
+    } catch (err: any) {
+      toast({ title: "Löschen fehlgeschlagen", description: err?.message, variant: "destructive" });
+    }
+  };
+
+  const typeName = (id: string) => types?.find(t => t.id === id)?.name ?? id;
+
+  return (
+    <Card data-testid="card-contract-playbooks">
+      <CardHeader className="flex flex-row items-center justify-between gap-2">
+        <div className="flex items-center gap-2">
+          <Shield className="h-5 w-5 text-primary" />
+          <div>
+            <CardTitle>Vertrags-Playbooks</CardTitle>
+            <p className="text-sm text-muted-foreground mt-1">
+              Erlaubte und Default-Klauselvarianten je Vertragstyp und Brand.
+            </p>
+          </div>
+        </div>
+        <Button size="sm" onClick={openCreate} disabled={(types?.length ?? 0) === 0} data-testid="button-new-playbook">
+          <Plus className="h-4 w-4 mr-1" /> Neues Playbook
+        </Button>
+      </CardHeader>
+      <CardContent>
+        {isLoading ? (
+          <Skeleton className="h-24 w-full" />
+        ) : (playbooks?.length ?? 0) === 0 ? (
+          <div className="p-6 text-center text-sm text-muted-foreground border rounded-md bg-muted/10">
+            Noch keine Playbooks angelegt.
+          </div>
+        ) : (
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Name</TableHead>
+                <TableHead>Vertragstyp</TableHead>
+                <TableHead>Brands</TableHead>
+                <TableHead>Erlaubte Varianten</TableHead>
+                <TableHead>Defaults</TableHead>
+                <TableHead>Aktiv</TableHead>
+                <TableHead className="text-right">Aktion</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {playbooks!.map(pb => (
+                <TableRow key={pb.id} data-testid={`row-playbook-${pb.id}`}>
+                  <TableCell className="font-medium">{pb.name}</TableCell>
+                  <TableCell className="text-xs">{typeName(pb.contractTypeId)}</TableCell>
+                  <TableCell className="text-xs text-muted-foreground">
+                    {pb.brandIds.length === 0 ? "alle" : pb.brandIds.join(", ")}
+                  </TableCell>
+                  <TableCell className="text-xs text-muted-foreground">{pb.allowedClauseVariantIds.length}</TableCell>
+                  <TableCell className="text-xs text-muted-foreground">{pb.defaultClauseVariantIds.length}</TableCell>
+                  <TableCell>
+                    <Badge variant="outline" className={pb.active ? "border-emerald-300 text-emerald-700" : "border-slate-300 text-slate-500"}>
+                      {pb.active ? "ja" : "nein"}
+                    </Badge>
+                  </TableCell>
+                  <TableCell className="text-right">
+                    <div className="inline-flex gap-1.5">
+                      <Button size="sm" variant="outline" onClick={() => openEdit(pb)} data-testid={`button-edit-pb-${pb.id}`}>
+                        Bearbeiten
+                      </Button>
+                      <Button size="sm" variant="outline" onClick={() => onDelete(pb)} data-testid={`button-delete-pb-${pb.id}`}>
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </Button>
+                    </div>
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        )}
+      </CardContent>
+
+      <AlertDialog open={open} onOpenChange={setOpen}>
+        <AlertDialogContent className="max-w-2xl">
+          <AlertDialogHeader>
+            <AlertDialogTitle>{editing ? "Playbook bearbeiten" : "Neues Playbook"}</AlertDialogTitle>
+            <AlertDialogDescription>
+              Lege fest, welche Klauselvarianten für einen Vertragstyp erlaubt und welche Default sind.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <div className="grid gap-3 py-2">
+            <div>
+              <Label>Vertragstyp</Label>
+              <select
+                className="w-full px-3 py-2 border rounded-md text-sm bg-background"
+                value={contractTypeId}
+                onChange={e => setContractTypeId(e.target.value)}
+                disabled={!!editing}
+                data-testid="select-pb-type"
+              >
+                <option value="">— wählen —</option>
+                {(types ?? []).map(t => (
+                  <option key={t.id} value={t.id}>{t.name} ({t.code})</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <Label>Name</Label>
+              <Input value={name} onChange={e => setName(e.target.value)} data-testid="input-pb-name" />
+            </div>
+            <div>
+              <Label>Beschreibung</Label>
+              <Input value={description} onChange={e => setDescription(e.target.value)} data-testid="input-pb-description" />
+            </div>
+            <div>
+              <Label>Brand-IDs (leer = alle, Komma-getrennt)</Label>
+              <CsvTagInput value={brandIds} onChange={setBrandIds} placeholder="brd_xxx" testId="input-pb-brands" />
+            </div>
+            <div>
+              <Label>Erlaubte Klausel-Varianten (cv_*, Komma-getrennt)</Label>
+              <CsvTagInput value={allowed} onChange={setAllowed} placeholder="cv_xxx, cv_yyy" testId="input-pb-allowed" />
+            </div>
+            <div>
+              <Label>Default-Klausel-Varianten (Komma-getrennt)</Label>
+              <CsvTagInput value={defaults} onChange={setDefaults} placeholder="cv_xxx" testId="input-pb-defaults" />
+            </div>
+            <div className="flex items-center gap-2">
+              <input
+                id="pb-active"
+                type="checkbox"
+                checked={active}
+                onChange={e => setActive(e.target.checked)}
+                data-testid="checkbox-pb-active"
+              />
+              <Label htmlFor="pb-active">Aktiv</Label>
+            </div>
+          </div>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Abbrechen</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={onSave}
+              disabled={!name.trim() || (!editing && !contractTypeId)}
+              data-testid="button-save-pb"
+            >
+              Speichern
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </Card>
   );
 }

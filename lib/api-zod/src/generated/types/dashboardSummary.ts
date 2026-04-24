@@ -20,6 +20,14 @@ export interface DashboardSummary {
   openApprovals: number;
   signaturesPending: number;
   atRiskDeals: number;
+  /** Offene Klausel-Abweichungen im sichtbaren Scope */
+  openDeviationsCount?: number;
+  /** Überfällige Vertragspflichten */
+  overdueObligationsCount?: number;
+  /** ø Tage von Vertragserstellung bis Signatur (90d Rolling) */
+  avgTimeToSignatureDays?: number | null;
+  /** ø Stunden von Approval-Antrag bis Entscheidung */
+  avgApprovalDurationHours?: number | null;
   stageBreakdown: DashboardSummaryStageBreakdownItem[];
   recentEvents: TimelineEvent[];
 }

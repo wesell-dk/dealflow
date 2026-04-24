@@ -9,12 +9,22 @@ import {
   useListContractAmendments,
   useCreateContractAmendment,
   useGetContractEffectiveState,
+  useListContractDeviations,
+  useEvaluateContractDeviations,
+  useResolveDeviation,
+  useListObligations,
+  useUpdateObligation,
+  useDeriveContractObligations,
   getGetContractQueryKey,
   getListContractClausesQueryKey,
   getListContractAmendmentsQueryKey,
+  getListContractDeviationsQueryKey,
+  getListObligationsQueryKey,
   type ContractClause,
   type ClauseVariant,
   type ClauseFamily,
+  type ClauseDeviation,
+  type Obligation,
 } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -205,6 +215,10 @@ export default function Contract() {
       <AmendmentsSection contractId={id} contractStatus={contract.status} />
 
       <EffectiveStateSection contractId={id} contractStatus={contract.status} />
+
+      <DeviationsSection contractId={id} />
+
+      <ObligationsSection contractId={id} contractStatus={contract.status} />
 
       <div className="space-y-4">
         <div className="flex items-center gap-2 pb-2 border-b">
@@ -625,6 +639,325 @@ function AmendmentsSection({ contractId, contractStatus }: { contractId: string;
           </div>
         </DialogContent>
       </Dialog>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Vertragswesen MVP Phase 1 — Deviations & Obligations Sections
+// ─────────────────────────────────────────────────────────────────────────────
+
+function severityBadge(sev: string) {
+  const map: Record<string, string> = {
+    high: "border-red-300 text-red-700 bg-red-50",
+    medium: "border-amber-300 text-amber-700 bg-amber-50",
+    low: "border-slate-300 text-slate-700",
+  };
+  return map[sev] ?? "";
+}
+
+function deviationTypeLabel(t: string): string {
+  return ({
+    missing_required: "Pflicht-Klausel fehlt",
+    forbidden_used: "Verbotene Klausel verwendet",
+    variant_change: "Variante außerhalb Playbook",
+    text_edit: "Text-Edit (Redline)",
+    threshold_breach: "Schwellwert verletzt",
+  } as Record<string, string>)[t] ?? t;
+}
+
+function obligationTypeLabel(t: string): string {
+  return ({
+    delivery: "Lieferung",
+    reporting: "Reporting",
+    sla: "SLA",
+    payment: "Zahlung",
+    notice: "Mitteilung",
+    audit: "Audit",
+  } as Record<string, string>)[t] ?? t;
+}
+
+function obligationStatusBadge(s: string) {
+  const map: Record<string, string> = {
+    pending: "border-slate-300 text-slate-700",
+    in_progress: "border-amber-300 text-amber-700 bg-amber-50",
+    done: "border-emerald-300 text-emerald-700 bg-emerald-50",
+    missed: "border-red-300 text-red-700 bg-red-50",
+    waived: "border-slate-300 text-slate-500",
+  };
+  return map[s] ?? "";
+}
+
+function fmtDateShort(s: string | null | undefined): string {
+  return s ? new Date(s).toLocaleDateString("de-DE") : "—";
+}
+
+function DeviationsSection({ contractId }: { contractId: string }) {
+  const { data: deviations, isLoading } = useListContractDeviations(contractId);
+  const qc = useQueryClient();
+  const { toast } = useToast();
+  const evaluate = useEvaluateContractDeviations();
+  const resolve = useResolveDeviation();
+
+  const onEvaluate = async () => {
+    try {
+      const res = await evaluate.mutateAsync({ id: contractId });
+      await qc.invalidateQueries({ queryKey: getListContractDeviationsQueryKey(contractId) });
+      toast({
+        title: "Klausel-Prüfung abgeschlossen",
+        description: `Offen: ${res.summary.open} · Gesamt: ${res.summary.total}`,
+      });
+    } catch {
+      toast({ title: "Prüfung fehlgeschlagen", variant: "destructive" });
+    }
+  };
+
+  const onResolve = async (dev: ClauseDeviation, label: string) => {
+    const note = window.prompt(`Begründung für ${label}:`, label);
+    if (!note?.trim()) return;
+    try {
+      await resolve.mutateAsync({ id: dev.id, data: { resolutionNote: note.trim() } });
+      await qc.invalidateQueries({ queryKey: getListContractDeviationsQueryKey(contractId) });
+      toast({ title: "Abweichung aufgelöst" });
+    } catch {
+      toast({ title: "Aktion fehlgeschlagen", variant: "destructive" });
+    }
+  };
+
+  const open = (deviations ?? []).filter(d => !d.resolvedAt);
+  const resolved = (deviations ?? []).filter(d => !!d.resolvedAt);
+
+  return (
+    <div className="space-y-3" data-testid="section-deviations">
+      <div className="flex items-center justify-between gap-2 pb-2 border-b">
+        <div className="flex items-center gap-2">
+          <AlertTriangle className="h-5 w-5 text-muted-foreground" />
+          <h2 className="text-xl font-semibold">Klausel-Abweichungen</h2>
+          {open.length > 0 && (
+            <Badge variant="outline" className="border-amber-300 text-amber-700 bg-amber-50">
+              {open.length} offen
+            </Badge>
+          )}
+        </div>
+        <Button
+          size="sm"
+          variant="outline"
+          onClick={onEvaluate}
+          disabled={evaluate.isPending}
+          data-testid="button-evaluate-deviations"
+        >
+          {evaluate.isPending ? "Prüfe…" : "Gegen Playbook prüfen"}
+        </Button>
+      </div>
+
+      {isLoading ? (
+        <Skeleton className="h-24 w-full" />
+      ) : (deviations?.length ?? 0) === 0 ? (
+        <div className="p-6 text-center border rounded-md text-sm text-muted-foreground bg-muted/10">
+          Keine Abweichungen erfasst. Klick auf „Gegen Playbook prüfen", um zu evaluieren.
+        </div>
+      ) : (
+        <div className="space-y-2">
+          {[...open, ...resolved].map(dev => (
+            <div
+              key={dev.id}
+              className="border rounded-md p-3 bg-card"
+              data-testid={`deviation-row-${dev.id}`}
+            >
+              <div className="flex items-start justify-between gap-3 flex-wrap">
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <Badge variant="outline" className={severityBadge(dev.severity)}>
+                      {dev.severity}
+                    </Badge>
+                    <span className="text-sm font-medium">{deviationTypeLabel(dev.deviationType)}</span>
+                    {dev.familyName && (
+                      <span className="text-xs text-muted-foreground">· {dev.familyName}</span>
+                    )}
+                    <Badge variant="outline" className={!dev.resolvedAt ? "border-amber-300 text-amber-700" : "border-emerald-300 text-emerald-700"}>
+                      {!dev.resolvedAt ? "open" : "resolved"}
+                    </Badge>
+                    {dev.requiresApproval && !dev.resolvedAt && (
+                      <Badge variant="outline" className="border-red-300 text-red-700 bg-red-50">approval</Badge>
+                    )}
+                  </div>
+                  {dev.description && (
+                    <p className="text-sm text-muted-foreground mt-1">{dev.description}</p>
+                  )}
+                  {dev.resolutionNote && (
+                    <p className="text-xs text-muted-foreground mt-1 italic">→ {dev.resolutionNote}</p>
+                  )}
+                </div>
+                {!dev.resolvedAt && (
+                  <div className="flex gap-1.5 shrink-0">
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => onResolve(dev, "Approved")}
+                      disabled={resolve.isPending}
+                      data-testid={`button-approve-${dev.id}`}
+                    >
+                      Approved
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => onResolve(dev, "Waived")}
+                      disabled={resolve.isPending}
+                      data-testid={`button-waive-${dev.id}`}
+                    >
+                      Waived
+                    </Button>
+                  </div>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function ObligationsSection({ contractId, contractStatus }: { contractId: string; contractStatus: string }) {
+  const { data: obligations, isLoading } = useListObligations({ contractId });
+  const qc = useQueryClient();
+  const { toast } = useToast();
+  const derive = useDeriveContractObligations();
+  const update = useUpdateObligation();
+
+  const onDerive = async () => {
+    try {
+      const res = await derive.mutateAsync({ id: contractId });
+      await qc.invalidateQueries({ queryKey: getListObligationsQueryKey({ contractId }) });
+      toast({
+        title: "Pflichten abgeleitet",
+        description: `Neu: ${res.created} · Gesamt: ${res.total}`,
+      });
+    } catch {
+      toast({ title: "Ableitung fehlgeschlagen", variant: "destructive" });
+    }
+  };
+
+  const onAdvance = async (ob: Obligation, status: "in_progress" | "done" | "waived") => {
+    try {
+      await update.mutateAsync({ id: ob.id, data: { status } });
+      await qc.invalidateQueries({ queryKey: getListObligationsQueryKey({ contractId }) });
+      toast({ title: "Pflicht aktualisiert", description: `Status: ${status}` });
+    } catch {
+      toast({ title: "Aktion fehlgeschlagen", variant: "destructive" });
+    }
+  };
+
+  const items = obligations ?? [];
+  const overdueCount = items.filter(
+    o => o.dueAt && o.status !== "done" && o.status !== "waived" && new Date(o.dueAt) < new Date()
+  ).length;
+
+  return (
+    <div className="space-y-3" data-testid="section-obligations">
+      <div className="flex items-center justify-between gap-2 pb-2 border-b">
+        <div className="flex items-center gap-2">
+          <Activity className="h-5 w-5 text-muted-foreground" />
+          <h2 className="text-xl font-semibold">Vertragspflichten</h2>
+          {overdueCount > 0 && (
+            <Badge variant="outline" className="border-red-300 text-red-700 bg-red-50">
+              {overdueCount} überfällig
+            </Badge>
+          )}
+        </div>
+        <Button
+          size="sm"
+          variant="outline"
+          onClick={onDerive}
+          disabled={derive.isPending || contractStatus !== "signed"}
+          data-testid="button-derive-obligations"
+          title={contractStatus !== "signed" ? "Nur für signierte Verträge" : undefined}
+        >
+          {derive.isPending ? "Ableite…" : "Aus Klauseln ableiten"}
+        </Button>
+      </div>
+
+      {isLoading ? (
+        <Skeleton className="h-24 w-full" />
+      ) : items.length === 0 ? (
+        <div className="p-6 text-center border rounded-md text-sm text-muted-foreground bg-muted/10">
+          {contractStatus === "signed"
+            ? 'Noch keine Pflichten — klick auf „Aus Klauseln ableiten".'
+            : "Pflichten werden bei Signatur automatisch erzeugt."}
+        </div>
+      ) : (
+        <div className="border rounded-md overflow-hidden">
+          <table className="w-full text-sm">
+            <thead className="bg-muted/30 text-xs uppercase text-muted-foreground">
+              <tr>
+                <th className="text-left px-3 py-2">Titel</th>
+                <th className="text-left px-3 py-2">Typ</th>
+                <th className="text-left px-3 py-2">Fällig</th>
+                <th className="text-left px-3 py-2">Status</th>
+                <th className="text-right px-3 py-2">Aktion</th>
+              </tr>
+            </thead>
+            <tbody>
+              {items.map(ob => {
+                const overdue = ob.dueAt && ob.status !== "done" && ob.status !== "waived" && new Date(ob.dueAt) < new Date();
+                return (
+                  <tr key={ob.id} className="border-t" data-testid={`obligation-row-${ob.id}`}>
+                    <td className="px-3 py-2">
+                      <div className="font-medium">{ob.description}</div>
+                      {ob.ownerName && <div className="text-xs text-muted-foreground">Owner: {ob.ownerName}</div>}
+                    </td>
+                    <td className="px-3 py-2 text-xs">{obligationTypeLabel(ob.type)}</td>
+                    <td className={`px-3 py-2 text-xs ${overdue ? "text-red-700 font-medium" : ""}`}>
+                      {fmtDateShort(ob.dueAt)}
+                    </td>
+                    <td className="px-3 py-2">
+                      <Badge variant="outline" className={obligationStatusBadge(ob.status)}>
+                        {ob.status}
+                      </Badge>
+                    </td>
+                    <td className="px-3 py-2 text-right">
+                      {ob.status !== "done" && ob.status !== "waived" && (
+                        <div className="inline-flex gap-1">
+                          {ob.status === "pending" && (
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => onAdvance(ob, "in_progress")}
+                              disabled={update.isPending}
+                              data-testid={`button-start-${ob.id}`}
+                            >
+                              Start
+                            </Button>
+                          )}
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => onAdvance(ob, "done")}
+                            disabled={update.isPending}
+                            data-testid={`button-done-${ob.id}`}
+                          >
+                            Erledigt
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => onAdvance(ob, "waived")}
+                            disabled={update.isPending}
+                            data-testid={`button-waive-ob-${ob.id}`}
+                          >
+                            Verzicht
+                          </Button>
+                        </div>
+                      )}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
     </div>
   );
 }

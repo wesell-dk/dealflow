@@ -394,6 +394,58 @@ export const contractsTable = pgTable("contracts", {
   template: text("template").notNull(),
   validUntil: date("valid_until"),
   createdAt: ts("created_at"),
+  // MVP Phase 1: Multi-Brand/Lifecycle-Felder
+  tenantId: text("tenant_id"),
+  companyId: text("company_id"),
+  brandId: text("brand_id"),
+  accountId: text("account_id"),
+  contractTypeId: text("contract_type_id"),
+  playbookId: text("playbook_id"),
+  acceptedQuoteVersionId: text("accepted_quote_version_id"),
+  language: text("language"),
+  currency: text("currency"),
+  effectiveFrom: date("effective_from"),
+  effectiveTo: date("effective_to"),
+  autoRenewal: boolean("auto_renewal").default(false),
+  renewalNoticeDays: integer("renewal_notice_days"),
+  terminationNoticeDays: integer("termination_notice_days"),
+  governingLaw: text("governing_law"),
+  jurisdiction: text("jurisdiction"),
+  riskScore: integer("risk_score"),
+  valueAmount: numeric("value_amount", { precision: 18, scale: 2 }),
+  valueCurrency: text("value_currency"),
+  currentVersion: integer("current_version"),
+  openDeviationsCount: integer("open_deviations_count").default(0),
+  obligationsCount: integer("obligations_count").default(0),
+  signedAt: timestamp("signed_at", { withTimezone: true }),
+});
+
+export const contractTypesTable = pgTable("contract_types", {
+  id: id(),
+  tenantId: text("tenant_id").notNull(),
+  code: text("code").notNull(),
+  name: text("name").notNull(),
+  description: text("description"),
+  mandatoryClauseFamilyIds: jsonb("mandatory_clause_family_ids").$type<string[]>().notNull().default([]),
+  forbiddenClauseFamilyIds: jsonb("forbidden_clause_family_ids").$type<string[]>().notNull().default([]),
+  defaultPlaybookId: text("default_playbook_id"),
+  active: boolean("active").notNull().default(true),
+  createdAt: ts("created_at"),
+}, (t) => ({ codeIdx: uniqueIndex("contract_types_tenant_code").on(t.tenantId, t.code) }));
+
+export const contractPlaybooksTable = pgTable("contract_playbooks", {
+  id: id(),
+  tenantId: text("tenant_id").notNull(),
+  contractTypeId: text("contract_type_id").notNull(),
+  name: text("name").notNull(),
+  description: text("description"),
+  brandIds: jsonb("brand_ids").$type<string[]>().notNull().default([]),
+  companyIds: jsonb("company_ids").$type<string[]>().notNull().default([]),
+  allowedClauseVariantIds: jsonb("allowed_clause_variant_ids").$type<string[]>().notNull().default([]),
+  defaultClauseVariantIds: jsonb("default_clause_variant_ids").$type<string[]>().notNull().default([]),
+  approvalRules: jsonb("approval_rules").$type<Array<{ trigger: string; threshold?: number; approverRole: string }>>().notNull().default([]),
+  active: boolean("active").notNull().default(true),
+  createdAt: ts("created_at"),
 });
 
 export const clauseFamiliesTable = pgTable("clause_families", {
@@ -411,7 +463,62 @@ export const clauseVariantsTable = pgTable("clause_variants", {
   summary: text("summary").notNull(),
   body: text("body").notNull().default(""),
   tone: text("tone").notNull().default("standard"),
+  obligationTemplates: jsonb("obligation_templates").$type<Array<{
+    type: string;
+    description: string;
+    dueOffsetDays?: number;
+    recurrence?: "none" | "monthly" | "quarterly" | "annual";
+    ownerRole?: string;
+  }>>(),
 });
+
+export const clauseDeviationsTable = pgTable("clause_deviations", {
+  id: id(),
+  tenantId: text("tenant_id").notNull(),
+  contractId: text("contract_id").notNull(),
+  clauseId: text("clause_id").notNull(),
+  familyId: text("family_id").notNull(),
+  deviationType: text("deviation_type").notNull(),
+  severity: text("severity").notNull(),
+  description: text("description").notNull(),
+  evidence: jsonb("evidence").$type<Record<string, unknown>>(),
+  policyId: text("policy_id"),
+  requiresApproval: boolean("requires_approval").notNull().default(false),
+  approvalCaseId: text("approval_case_id"),
+  resolvedAt: timestamp("resolved_at", { withTimezone: true }),
+  resolvedBy: text("resolved_by"),
+  resolutionNote: text("resolution_note"),
+  createdAt: ts("created_at"),
+}, (t) => ({
+  contractIdx: index("clause_deviations_contract_idx").on(t.contractId),
+  tenantIdx: index("clause_deviations_tenant_idx").on(t.tenantId),
+}));
+
+export const obligationsTable = pgTable("obligations", {
+  id: id(),
+  tenantId: text("tenant_id").notNull(),
+  contractId: text("contract_id").notNull(),
+  brandId: text("brand_id"),
+  accountId: text("account_id"),
+  clauseId: text("clause_id"),
+  type: text("type").notNull(),
+  description: text("description").notNull(),
+  dueAt: timestamp("due_at", { withTimezone: true }),
+  recurrence: text("recurrence").notNull().default("none"),
+  ownerId: text("owner_id"),
+  ownerRole: text("owner_role"),
+  status: text("status").notNull().default("pending"),
+  source: text("source").notNull().default("derived"),
+  escalationDays: integer("escalation_days"),
+  completedAt: timestamp("completed_at", { withTimezone: true }),
+  completedBy: text("completed_by"),
+  createdAt: ts("created_at"),
+}, (t) => ({
+  contractIdx: index("obligations_contract_idx").on(t.contractId),
+  tenantIdx: index("obligations_tenant_idx").on(t.tenantId),
+  ownerIdx: index("obligations_owner_idx").on(t.ownerId),
+  statusIdx: index("obligations_status_idx").on(t.status),
+}));
 
 export const contractAmendmentsTable = pgTable("contract_amendments", {
   id: id(),

@@ -1,6 +1,6 @@
 import { useState, useMemo } from "react";
 import { useTranslation } from "react-i18next";
-import { useGetPerformanceReport, useGetForecast } from "@workspace/api-client-react";
+import { useGetPerformanceReport, useGetForecast, useGetDashboardSummary } from "@workspace/api-client-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -17,6 +17,7 @@ export default function Reports() {
   const { t } = useTranslation();
   const { data: performance, isLoading: isLoadingPerf } = useGetPerformanceReport();
   const { data: forecast, isLoading: isLoadingForecast } = useGetForecast();
+  const { data: dashboard } = useGetDashboardSummary();
   const [period, setPeriod] = useState<string>("12");
   const [ownerId, setOwnerId] = useState<string>("__all__");
 
@@ -108,6 +109,54 @@ export default function Reports() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">{performance.marginDisciplinePct}%</div>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Vertragswesen MVP — KPI-Kacheln */}
+      <div className="grid gap-4 md:grid-cols-4" data-testid="kpi-row-contracts">
+        <Card data-testid="kpi-time-to-signature">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium">Time-to-Signature</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">
+              {dashboard?.avgTimeToSignatureDays != null ? `${dashboard.avgTimeToSignatureDays} Tage` : "—"}
+            </div>
+            <div className="text-xs text-muted-foreground mt-1">ø der letzten 90 Tage</div>
+          </CardContent>
+        </Card>
+        <Card data-testid="kpi-open-deviations">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium">Offene Klausel-Abweichungen</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className={`text-2xl font-bold ${(dashboard?.openDeviationsCount ?? 0) > 0 ? "text-amber-600" : ""}`}>
+              {dashboard?.openDeviationsCount ?? 0}
+            </div>
+            <div className="text-xs text-muted-foreground mt-1">Im sichtbaren Scope</div>
+          </CardContent>
+        </Card>
+        <Card data-testid="kpi-overdue-obligations">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium">Überfällige Pflichten</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className={`text-2xl font-bold ${(dashboard?.overdueObligationsCount ?? 0) > 0 ? "text-red-600" : ""}`}>
+              {dashboard?.overdueObligationsCount ?? 0}
+            </div>
+            <div className="text-xs text-muted-foreground mt-1">aus signierten Verträgen</div>
+          </CardContent>
+        </Card>
+        <Card data-testid="kpi-approval-duration">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium">ø Approval-Dauer</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">
+              {dashboard?.avgApprovalDurationHours != null ? `${dashboard.avgApprovalDurationHours} h` : "—"}
+            </div>
+            <div className="text-xs text-muted-foreground mt-1">vom Antrag bis Entscheidung</div>
           </CardContent>
         </Card>
       </div>

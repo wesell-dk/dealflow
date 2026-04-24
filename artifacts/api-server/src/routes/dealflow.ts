@@ -75,6 +75,10 @@ import {
   entityVersionsTable,
   contractAmendmentsTable,
   amendmentClausesTable,
+  contractTypesTable,
+  contractPlaybooksTable,
+  obligationsTable,
+  clauseDeviationsTable,
   rolesTable,
   quoteTemplatesTable,
   quoteTemplateSectionsTable,
@@ -956,6 +960,40 @@ router.post('/quotes', async (req, res) => {
   });
   const [q] = await db.select().from(quotesTable).where(eq(quotesTable.id, id));
   res.status(201).json(await enrichQuote(q!, d.name));
+});
+
+router.get('/quotes/current', async (req, res) => {
+  const accountId = typeof req.query.accountId === 'string' ? req.query.accountId : null;
+  if (!accountId) { res.status(422).json({ error: 'accountId is required' }); return; }
+  const accIds = await allowedAccountIds(req);
+  if (!isAccountAllowed(accIds, accountId)) { res.status(404).json({ error: 'not found' }); return; }
+  // Deals des Accounts → Quotes mit Status accepted → neuste Version.
+  // WICHTIG: Schnittmenge mit allowedDealIds, sonst Datenleck für scope-restricted User.
+  const deals = await db.select().from(dealsTable).where(eq(dealsTable.accountId, accountId));
+  if (deals.length === 0) { res.status(404).json({ error: 'no accepted quote for account' }); return; }
+  const allowedSet = new Set(await allowedDealIds(req));
+  const dealIds = deals.map(d => d.id).filter(id => allowedSet.has(id));
+  if (dealIds.length === 0) { res.status(404).json({ error: 'no accepted quote for account' }); return; }
+  const quotes = await db.select().from(quotesTable)
+    .where(and(eq(quotesTable.status, 'accepted'), inArray(quotesTable.dealId, dealIds)))
+    .orderBy(desc(quotesTable.createdAt));
+  if (quotes.length === 0) { res.status(404).json({ error: 'no accepted quote for account' }); return; }
+  const q = quotes[0]!;
+  const versions = await db.select().from(quoteVersionsTable)
+    .where(eq(quoteVersionsTable.quoteId, q.id))
+    .orderBy(desc(quoteVersionsTable.version));
+  const v = versions[0];
+  if (!v) { res.status(404).json({ error: 'quote without versions' }); return; }
+  res.json({
+    accountId,
+    quoteId: q.id,
+    versionId: v.id,
+    version: v.version,
+    status: q.status,
+    total: num(v.totalAmount),
+    currency: q.currency ?? 'EUR',
+    acceptedAt: iso(q.createdAt),
+  });
 });
 
 router.get('/quotes/:id', async (req, res) => {
@@ -2570,6 +2608,663 @@ router.get('/contracts/:id/pdf', async (req, res) => {
   stream.pipe(res);
 });
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Vertragswesen MVP Phase 1 — ContractTypes / Playbooks / Deviations / Obligations
+// ─────────────────────────────────────────────────────────────────────────────
+
+const CONTRACT_TYPE_CODE_RE = /^[A-Z][A-Z0-9_]{1,31}$/;
+
+function mapContractType(t: typeof contractTypesTable.$inferSelect) {
+  return {
+    id: t.id,
+    tenantId: t.tenantId,
+    code: t.code,
+    name: t.name,
+    description: t.description ?? null,
+    mandatoryClauseFamilyIds: t.mandatoryClauseFamilyIds ?? [],
+    forbiddenClauseFamilyIds: t.forbiddenClauseFamilyIds ?? [],
+    defaultPlaybookId: t.defaultPlaybookId ?? null,
+    active: t.active,
+    createdAt: iso(t.createdAt)!,
+  };
+}
+
+function mapPlaybook(p: typeof contractPlaybooksTable.$inferSelect) {
+  return {
+    id: p.id,
+    tenantId: p.tenantId,
+    contractTypeId: p.contractTypeId,
+    name: p.name,
+    description: p.description ?? null,
+    brandIds: p.brandIds ?? [],
+    companyIds: p.companyIds ?? [],
+    allowedClauseVariantIds: p.allowedClauseVariantIds ?? [],
+    defaultClauseVariantIds: p.defaultClauseVariantIds ?? [],
+    approvalRules: p.approvalRules ?? [],
+    active: p.active,
+    createdAt: iso(p.createdAt)!,
+  };
+}
+
+router.get('/contract-types', async (req, res) => {
+  const scope = getScope(req);
+  const rows = await db.select().from(contractTypesTable)
+    .where(eq(contractTypesTable.tenantId, scope.tenantId))
+    .orderBy(asc(contractTypesTable.code));
+  res.json(rows.map(mapContractType));
+});
+
+router.post('/contract-types', async (req, res) => {
+  if (!requireAdmin(req, res)) return;
+  const scope = getScope(req);
+  const b = req.body as {
+    code?: string; name?: string; description?: string;
+    mandatoryClauseFamilyIds?: string[]; forbiddenClauseFamilyIds?: string[];
+    defaultPlaybookId?: string; active?: boolean;
+  } | undefined;
+  if (!b || typeof b.code !== 'string' || typeof b.name !== 'string') {
+    res.status(422).json({ error: 'code and name are required' }); return;
+  }
+  const code = b.code.trim().toUpperCase();
+  const name = b.name.trim();
+  if (!CONTRACT_TYPE_CODE_RE.test(code)) {
+    res.status(422).json({ error: 'code must be UPPER_SNAKE 2-32 chars (z. B. NDA, MSA, ORDER_FORM)' }); return;
+  }
+  if (!name) { res.status(422).json({ error: 'name must not be empty' }); return; }
+  const dup = await db.select().from(contractTypesTable)
+    .where(and(eq(contractTypesTable.tenantId, scope.tenantId), eq(contractTypesTable.code, code)));
+  if (dup.length) { res.status(409).json({ error: `contract type "${code}" already exists` }); return; }
+  const newId = `ct_${randomBytes(6).toString('hex')}`;
+  const row = {
+    id: newId,
+    tenantId: scope.tenantId,
+    code,
+    name,
+    description: b.description?.trim() || null,
+    mandatoryClauseFamilyIds: Array.isArray(b.mandatoryClauseFamilyIds) ? b.mandatoryClauseFamilyIds : [],
+    forbiddenClauseFamilyIds: Array.isArray(b.forbiddenClauseFamilyIds) ? b.forbiddenClauseFamilyIds : [],
+    defaultPlaybookId: b.defaultPlaybookId ?? null,
+    active: b.active !== false,
+  };
+  await db.insert(contractTypesTable).values(row);
+  const [saved] = await db.select().from(contractTypesTable).where(eq(contractTypesTable.id, newId));
+  await writeAuditFromReq(req, {
+    entityType: 'contract_type', entityId: newId, action: 'create',
+    summary: `Vertragsart "${code}" angelegt`, after: saved,
+  });
+  res.status(201).json(mapContractType(saved!));
+});
+
+router.patch('/contract-types/:id', async (req, res) => {
+  if (!requireAdmin(req, res)) return;
+  const scope = getScope(req);
+  const [existing] = await db.select().from(contractTypesTable).where(eq(contractTypesTable.id, req.params.id));
+  if (!existing || existing.tenantId !== scope.tenantId) { res.status(404).json({ error: 'not found' }); return; }
+  const b = (req.body ?? {}) as Partial<typeof existing>;
+  const patch: Partial<typeof contractTypesTable.$inferInsert> = {};
+  if (typeof b.name === 'string') {
+    const v = b.name.trim();
+    if (!v) { res.status(422).json({ error: 'name must not be empty' }); return; }
+    patch.name = v;
+  }
+  if (b.description !== undefined) patch.description = b.description == null ? null : String(b.description);
+  if (Array.isArray(b.mandatoryClauseFamilyIds)) patch.mandatoryClauseFamilyIds = b.mandatoryClauseFamilyIds as string[];
+  if (Array.isArray(b.forbiddenClauseFamilyIds)) patch.forbiddenClauseFamilyIds = b.forbiddenClauseFamilyIds as string[];
+  if (b.defaultPlaybookId !== undefined) patch.defaultPlaybookId = b.defaultPlaybookId == null ? null : String(b.defaultPlaybookId);
+  if (typeof b.active === 'boolean') patch.active = b.active;
+  if (Object.keys(patch).length) {
+    await db.update(contractTypesTable).set(patch).where(eq(contractTypesTable.id, existing.id));
+  }
+  const [updated] = await db.select().from(contractTypesTable).where(eq(contractTypesTable.id, existing.id));
+  await writeAuditFromReq(req, {
+    entityType: 'contract_type', entityId: existing.id, action: 'update',
+    summary: `Vertragsart "${existing.code}" aktualisiert`, before: existing, after: updated,
+  });
+  res.json(mapContractType(updated!));
+});
+
+router.delete('/contract-types/:id', async (req, res) => {
+  if (!requireAdmin(req, res)) return;
+  const scope = getScope(req);
+  const [existing] = await db.select().from(contractTypesTable).where(eq(contractTypesTable.id, req.params.id));
+  if (!existing || existing.tenantId !== scope.tenantId) { res.status(404).json({ error: 'not found' }); return; }
+  const [{ c: usedByContract } = { c: 0 }] = await db.select({ c: sql<number>`count(*)::int` })
+    .from(contractsTable).where(eq(contractsTable.contractTypeId, existing.id));
+  const [{ c: usedByPlaybook } = { c: 0 }] = await db.select({ c: sql<number>`count(*)::int` })
+    .from(contractPlaybooksTable).where(eq(contractPlaybooksTable.contractTypeId, existing.id));
+  if (usedByContract + usedByPlaybook > 0) {
+    res.status(409).json({ error: `contract type is in use by ${usedByContract} contract(s) and ${usedByPlaybook} playbook(s)` }); return;
+  }
+  await db.delete(contractTypesTable).where(eq(contractTypesTable.id, existing.id));
+  await writeAuditFromReq(req, {
+    entityType: 'contract_type', entityId: existing.id, action: 'delete',
+    summary: `Vertragsart "${existing.code}" gelöscht`, before: existing,
+  });
+  res.status(204).end();
+});
+
+router.get('/contract-playbooks', async (req, res) => {
+  const scope = getScope(req);
+  const filters = [eq(contractPlaybooksTable.tenantId, scope.tenantId)];
+  if (typeof req.query.contractTypeId === 'string') {
+    filters.push(eq(contractPlaybooksTable.contractTypeId, req.query.contractTypeId));
+  }
+  const rows = await db.select().from(contractPlaybooksTable).where(and(...filters)).orderBy(asc(contractPlaybooksTable.name));
+  res.json(rows.map(mapPlaybook));
+});
+
+router.post('/contract-playbooks', async (req, res) => {
+  if (!requireAdmin(req, res)) return;
+  const scope = getScope(req);
+  const b = req.body as {
+    contractTypeId?: string; name?: string; description?: string;
+    brandIds?: string[]; companyIds?: string[];
+    allowedClauseVariantIds?: string[]; defaultClauseVariantIds?: string[];
+    approvalRules?: Array<{ trigger: string; threshold?: number; approverRole: string }>;
+  } | undefined;
+  if (!b || typeof b.contractTypeId !== 'string' || typeof b.name !== 'string') {
+    res.status(422).json({ error: 'contractTypeId and name are required' }); return;
+  }
+  const [ctype] = await db.select().from(contractTypesTable)
+    .where(and(eq(contractTypesTable.id, b.contractTypeId), eq(contractTypesTable.tenantId, scope.tenantId)));
+  if (!ctype) { res.status(422).json({ error: 'contractTypeId not found' }); return; }
+  const newId = `pb_${randomBytes(6).toString('hex')}`;
+  const row = {
+    id: newId,
+    tenantId: scope.tenantId,
+    contractTypeId: ctype.id,
+    name: b.name.trim(),
+    description: b.description?.trim() || null,
+    brandIds: Array.isArray(b.brandIds) ? b.brandIds : [],
+    companyIds: Array.isArray(b.companyIds) ? b.companyIds : [],
+    allowedClauseVariantIds: Array.isArray(b.allowedClauseVariantIds) ? b.allowedClauseVariantIds : [],
+    defaultClauseVariantIds: Array.isArray(b.defaultClauseVariantIds) ? b.defaultClauseVariantIds : [],
+    approvalRules: Array.isArray(b.approvalRules) ? b.approvalRules : [],
+    active: true,
+  };
+  await db.insert(contractPlaybooksTable).values(row);
+  const [saved] = await db.select().from(contractPlaybooksTable).where(eq(contractPlaybooksTable.id, newId));
+  await writeAuditFromReq(req, {
+    entityType: 'contract_playbook', entityId: newId, action: 'create',
+    summary: `Playbook "${row.name}" angelegt`, after: saved,
+  });
+  res.status(201).json(mapPlaybook(saved!));
+});
+
+router.patch('/contract-playbooks/:id', async (req, res) => {
+  if (!requireAdmin(req, res)) return;
+  const scope = getScope(req);
+  const [existing] = await db.select().from(contractPlaybooksTable).where(eq(contractPlaybooksTable.id, req.params.id));
+  if (!existing || existing.tenantId !== scope.tenantId) { res.status(404).json({ error: 'not found' }); return; }
+  const b = (req.body ?? {}) as Partial<typeof existing> & { active?: boolean };
+  const patch: Partial<typeof contractPlaybooksTable.$inferInsert> = {};
+  if (typeof b.name === 'string') {
+    const v = b.name.trim();
+    if (!v) { res.status(422).json({ error: 'name must not be empty' }); return; }
+    patch.name = v;
+  }
+  if (b.description !== undefined) patch.description = b.description == null ? null : String(b.description);
+  if (Array.isArray(b.brandIds)) patch.brandIds = b.brandIds as string[];
+  if (Array.isArray(b.companyIds)) patch.companyIds = b.companyIds as string[];
+  if (Array.isArray(b.allowedClauseVariantIds)) patch.allowedClauseVariantIds = b.allowedClauseVariantIds as string[];
+  if (Array.isArray(b.defaultClauseVariantIds)) patch.defaultClauseVariantIds = b.defaultClauseVariantIds as string[];
+  if (Array.isArray(b.approvalRules)) patch.approvalRules = b.approvalRules as Array<{ trigger: string; threshold?: number; approverRole: string }>;
+  if (typeof b.active === 'boolean') patch.active = b.active;
+  if (Object.keys(patch).length) {
+    await db.update(contractPlaybooksTable).set(patch).where(eq(contractPlaybooksTable.id, existing.id));
+  }
+  const [updated] = await db.select().from(contractPlaybooksTable).where(eq(contractPlaybooksTable.id, existing.id));
+  await writeAuditFromReq(req, {
+    entityType: 'contract_playbook', entityId: existing.id, action: 'update',
+    summary: `Playbook "${existing.name}" aktualisiert`, before: existing, after: updated,
+  });
+  res.json(mapPlaybook(updated!));
+});
+
+router.delete('/contract-playbooks/:id', async (req, res) => {
+  if (!requireAdmin(req, res)) return;
+  const scope = getScope(req);
+  const [existing] = await db.select().from(contractPlaybooksTable).where(eq(contractPlaybooksTable.id, req.params.id));
+  if (!existing || existing.tenantId !== scope.tenantId) { res.status(404).json({ error: 'not found' }); return; }
+  const [{ c: used } = { c: 0 }] = await db.select({ c: sql<number>`count(*)::int` })
+    .from(contractsTable).where(eq(contractsTable.playbookId, existing.id));
+  if (used > 0) { res.status(409).json({ error: `playbook is referenced by ${used} contract(s)` }); return; }
+  await db.delete(contractPlaybooksTable).where(eq(contractPlaybooksTable.id, existing.id));
+  await writeAuditFromReq(req, {
+    entityType: 'contract_playbook', entityId: existing.id, action: 'delete',
+    summary: `Playbook "${existing.name}" gelöscht`, before: existing,
+  });
+  res.status(204).end();
+});
+
+// ── Engines ──────────────────────────────────────────────────────────────
+async function evaluateDeviations(contractId: string, tenantId: string): Promise<void> {
+  const [contract] = await db.select().from(contractsTable).where(eq(contractsTable.id, contractId));
+  if (!contract) return;
+  const playbookId = contract.playbookId;
+  const contractTypeId = contract.contractTypeId;
+  const clauses = await db.select().from(contractClausesTable).where(eq(contractClausesTable.contractId, contractId));
+  const familyIdsPresent = new Set(clauses.map(c => c.familyId).filter((x): x is string => !!x));
+
+  // Pflichtklauseln aus contract_type
+  const required: string[] = [];
+  if (contractTypeId) {
+    const [ct] = await db.select().from(contractTypesTable).where(eq(contractTypesTable.id, contractTypeId));
+    if (ct) {
+      for (const fid of ct.mandatoryClauseFamilyIds ?? []) {
+        if (!familyIdsPresent.has(fid)) required.push(fid);
+      }
+    }
+  }
+  // Erlaubte Varianten aus playbook
+  let allowedVariantIds: Set<string> | null = null;
+  if (playbookId) {
+    const [pb] = await db.select().from(contractPlaybooksTable).where(eq(contractPlaybooksTable.id, playbookId));
+    if (pb) allowedVariantIds = new Set(pb.allowedClauseVariantIds ?? []);
+  }
+
+  // Vorhandene Deviations holen, um Idempotenz zu wahren (per evidence-Heuristik)
+  const existing = await db.select().from(clauseDeviationsTable).where(eq(clauseDeviationsTable.contractId, contractId));
+  const existingKeys = new Set(existing.map(e => `${e.deviationType}:${e.clauseId}:${e.familyId}`));
+
+  const inserts: Array<typeof clauseDeviationsTable.$inferInsert> = [];
+
+  for (const fid of required) {
+    const key = `missing_required:_:${fid}`;
+    if (existingKeys.has(key)) continue;
+    inserts.push({
+      id: `dv_${randomBytes(6).toString('hex')}`,
+      tenantId, contractId, clauseId: clauses[0]?.id ?? '_',
+      familyId: fid,
+      deviationType: 'missing_required',
+      severity: 'high',
+      description: `Pflicht-Klauselfamilie ${fid} fehlt im Vertrag.`,
+      evidence: { mandatoryFamilyId: fid },
+      policyId: contractTypeId,
+      requiresApproval: true,
+    });
+    existingKeys.add(`missing_required:${clauses[0]?.id ?? '_'}:${fid}`);
+  }
+
+  if (allowedVariantIds) {
+    for (const cl of clauses) {
+      if (!cl.activeVariantId || !cl.familyId) continue;
+      if (allowedVariantIds.has(cl.activeVariantId)) continue;
+      const key = `variant_change:${cl.id}:${cl.familyId}`;
+      if (existingKeys.has(key)) continue;
+      inserts.push({
+        id: `dv_${randomBytes(6).toString('hex')}`,
+        tenantId, contractId, clauseId: cl.id,
+        familyId: cl.familyId,
+        deviationType: 'variant_change',
+        severity: cl.severity === 'high' ? 'high' : 'medium',
+        description: `Klausel-Variante ${cl.activeVariantId} liegt außerhalb des Playbooks.`,
+        evidence: { playbookId, actualVariantId: cl.activeVariantId },
+        policyId: playbookId,
+        requiresApproval: true,
+      });
+    }
+  }
+
+  if (inserts.length) {
+    await db.insert(clauseDeviationsTable).values(inserts);
+  }
+
+  // Counter aktualisieren (nur offene)
+  const [{ c: openCount } = { c: 0 }] = await db.select({ c: sql<number>`count(*)::int` })
+    .from(clauseDeviationsTable)
+    .where(and(eq(clauseDeviationsTable.contractId, contractId), sql`${clauseDeviationsTable.resolvedAt} IS NULL`));
+  await db.update(contractsTable).set({ openDeviationsCount: openCount }).where(eq(contractsTable.id, contractId));
+}
+
+async function deriveObligations(contractId: string, tenantId: string): Promise<{ created: number; total: number }> {
+  const [contract] = await db.select().from(contractsTable).where(eq(contractsTable.id, contractId));
+  if (!contract) return { created: 0, total: 0 };
+  const clauses = await db.select().from(contractClausesTable).where(eq(contractClausesTable.contractId, contractId));
+  if (clauses.length === 0) return { created: 0, total: 0 };
+  const variantIds = clauses.map(c => c.activeVariantId).filter((x): x is string => !!x);
+  if (variantIds.length === 0) return { created: 0, total: 0 };
+  const variants = await db.select().from(clauseVariantsTable).where(inArray(clauseVariantsTable.id, variantIds));
+  const variantById = new Map(variants.map(v => [v.id, v]));
+
+  const existing = await db.select().from(obligationsTable)
+    .where(and(eq(obligationsTable.contractId, contractId), eq(obligationsTable.source, 'derived')));
+  const existingKeys = new Set(existing.map(o => `${o.clauseId}:${o.type}:${o.description}`));
+
+  const inserts: Array<typeof obligationsTable.$inferInsert> = [];
+  const baseDate = contract.signedAt ?? contract.effectiveFrom ? new Date(contract.signedAt ?? `${contract.effectiveFrom}T00:00:00Z`) : new Date();
+
+  for (const cl of clauses) {
+    if (!cl.activeVariantId) continue;
+    const v = variantById.get(cl.activeVariantId);
+    if (!v?.obligationTemplates) continue;
+    for (const tpl of v.obligationTemplates) {
+      const key = `${cl.id}:${tpl.type}:${tpl.description}`;
+      if (existingKeys.has(key)) continue;
+      const dueAt = tpl.dueOffsetDays != null
+        ? new Date(baseDate.getTime() + tpl.dueOffsetDays * 86400000)
+        : null;
+      inserts.push({
+        id: `ob_${randomBytes(6).toString('hex')}`,
+        tenantId,
+        contractId,
+        brandId: contract.brandId ?? null,
+        accountId: contract.accountId ?? null,
+        clauseId: cl.id,
+        type: tpl.type,
+        description: tpl.description,
+        dueAt,
+        recurrence: tpl.recurrence ?? 'none',
+        ownerRole: tpl.ownerRole ?? null,
+        status: 'pending',
+        source: 'derived',
+        escalationDays: 7,
+      });
+    }
+  }
+
+  if (inserts.length) {
+    await db.insert(obligationsTable).values(inserts);
+  }
+  const [{ c: total } = { c: 0 }] = await db.select({ c: sql<number>`count(*)::int` })
+    .from(obligationsTable).where(eq(obligationsTable.contractId, contractId));
+  await db.update(contractsTable).set({ obligationsCount: total }).where(eq(contractsTable.id, contractId));
+  return { created: inserts.length, total };
+}
+
+function mapDeviation(d: typeof clauseDeviationsTable.$inferSelect, familyName: string | null) {
+  return {
+    id: d.id,
+    tenantId: d.tenantId,
+    contractId: d.contractId,
+    clauseId: d.clauseId,
+    familyId: d.familyId,
+    familyName,
+    deviationType: d.deviationType,
+    severity: d.severity,
+    description: d.description,
+    evidence: d.evidence ?? null,
+    policyId: d.policyId ?? null,
+    requiresApproval: d.requiresApproval,
+    approvalCaseId: d.approvalCaseId ?? null,
+    resolvedAt: iso(d.resolvedAt),
+    resolvedBy: d.resolvedBy ?? null,
+    resolutionNote: d.resolutionNote ?? null,
+    createdAt: iso(d.createdAt)!,
+  };
+}
+
+router.get('/contracts/:id/deviations', async (req, res) => {
+  const [c] = await db.select().from(contractsTable).where(eq(contractsTable.id, req.params.id));
+  if (!c) { res.status(404).json({ error: 'not found' }); return; }
+  if (!(await gateDeal(req, res, c.dealId))) return;
+  const rows = await db.select().from(clauseDeviationsTable)
+    .where(eq(clauseDeviationsTable.contractId, c.id))
+    .orderBy(desc(clauseDeviationsTable.createdAt));
+  const families = await db.select().from(clauseFamiliesTable);
+  const famName = new Map(families.map(f => [f.id, f.name]));
+  res.json(rows.map(d => mapDeviation(d, famName.get(d.familyId) ?? null)));
+});
+
+router.post('/contracts/:id/deviations', async (req, res) => {
+  const [c] = await db.select().from(contractsTable).where(eq(contractsTable.id, req.params.id));
+  if (!c) { res.status(404).json({ error: 'not found' }); return; }
+  if (!(await gateDeal(req, res, c.dealId))) return;
+  const tenantId = c.tenantId ?? getScope(req).tenantId;
+  await evaluateDeviations(c.id, tenantId);
+  const rows = await db.select().from(clauseDeviationsTable)
+    .where(eq(clauseDeviationsTable.contractId, c.id))
+    .orderBy(desc(clauseDeviationsTable.createdAt));
+  const families = await db.select().from(clauseFamiliesTable);
+  const famName = new Map(families.map(f => [f.id, f.name]));
+  const list = rows.map(d => mapDeviation(d, famName.get(d.familyId) ?? null));
+  const open = list.filter(d => !d.resolvedAt);
+  const requiresApproval = open.filter(d => d.requiresApproval).length;
+  const bySeverity: Record<string, number> = {};
+  for (const d of open) bySeverity[d.severity] = (bySeverity[d.severity] ?? 0) + 1;
+  await writeAuditFromReq(req, {
+    entityType: 'contract', entityId: c.id, action: 'evaluate_deviations',
+    summary: `Deviation-Engine: ${open.length} offen, ${requiresApproval} approval-pflichtig`,
+  });
+  res.json({ contractId: c.id, deviations: list, summary: { total: list.length, open: open.length, requiresApproval, bySeverity } });
+});
+
+router.patch('/clause-deviations/:id', async (req, res) => {
+  const [d] = await db.select().from(clauseDeviationsTable).where(eq(clauseDeviationsTable.id, req.params.id));
+  if (!d) { res.status(404).json({ error: 'not found' }); return; }
+  const [c] = await db.select().from(contractsTable).where(eq(contractsTable.id, d.contractId));
+  if (!c || !(await gateDeal(req, res, c.dealId))) {
+    if (!res.headersSent) res.status(404).json({ error: 'not found' });
+    return;
+  }
+  const b = req.body as { resolutionNote?: string } | undefined;
+  if (!b || typeof b.resolutionNote !== 'string' || !b.resolutionNote.trim()) {
+    res.status(422).json({ error: 'resolutionNote is required' }); return;
+  }
+  const scope = getScope(req);
+  await db.update(clauseDeviationsTable).set({
+    resolvedAt: new Date(),
+    resolvedBy: scope.user.name,
+    resolutionNote: b.resolutionNote.trim(),
+  }).where(eq(clauseDeviationsTable.id, d.id));
+  const [updated] = await db.select().from(clauseDeviationsTable).where(eq(clauseDeviationsTable.id, d.id));
+  // Counter aktualisieren
+  const [{ c: openCount } = { c: 0 }] = await db.select({ c: sql<number>`count(*)::int` })
+    .from(clauseDeviationsTable)
+    .where(and(eq(clauseDeviationsTable.contractId, c.id), sql`${clauseDeviationsTable.resolvedAt} IS NULL`));
+  await db.update(contractsTable).set({ openDeviationsCount: openCount }).where(eq(contractsTable.id, c.id));
+  await writeAuditFromReq(req, {
+    entityType: 'clause_deviation', entityId: d.id, action: 'resolve',
+    summary: `Deviation aufgelöst: ${b.resolutionNote.trim().slice(0, 80)}`,
+    before: d, after: updated,
+  });
+  const families = await db.select().from(clauseFamiliesTable);
+  const famName = new Map(families.map(f => [f.id, f.name]));
+  res.json(mapDeviation(updated!, famName.get(updated!.familyId) ?? null));
+});
+
+// ── Obligations ─────────────────────────────────────────────────────────
+async function userMapForTenant(tenantId: string): Promise<Map<string, { name: string; role: string }>> {
+  const users = await db.select().from(usersTable).where(eq(usersTable.tenantId, tenantId));
+  return new Map(users.map(u => [u.id, { name: u.name, role: u.role }]));
+}
+
+function mapObligation(o: typeof obligationsTable.$inferSelect, ctx: {
+  contractTitle: string | null;
+  accountName: string | null;
+  ownerName: string | null;
+}) {
+  return {
+    id: o.id,
+    tenantId: o.tenantId,
+    contractId: o.contractId,
+    contractTitle: ctx.contractTitle,
+    brandId: o.brandId ?? null,
+    accountId: o.accountId ?? null,
+    accountName: ctx.accountName,
+    clauseId: o.clauseId ?? null,
+    type: o.type,
+    description: o.description,
+    dueAt: iso(o.dueAt),
+    recurrence: o.recurrence,
+    ownerId: o.ownerId ?? null,
+    ownerName: ctx.ownerName,
+    ownerRole: o.ownerRole ?? null,
+    status: o.status,
+    source: o.source,
+    escalationDays: o.escalationDays ?? null,
+    completedAt: iso(o.completedAt),
+    completedBy: o.completedBy ?? null,
+    createdAt: iso(o.createdAt)!,
+  };
+}
+
+router.get('/obligations', async (req, res) => {
+  const scope = getScope(req);
+  const filters = [eq(obligationsTable.tenantId, scope.tenantId)];
+  if (typeof req.query.contractId === 'string') filters.push(eq(obligationsTable.contractId, req.query.contractId));
+  if (typeof req.query.status === 'string') filters.push(eq(obligationsTable.status, req.query.status));
+  if (typeof req.query.ownerId === 'string') filters.push(eq(obligationsTable.ownerId, req.query.ownerId));
+  if (typeof req.query.dueBefore === 'string') {
+    const d = new Date(req.query.dueBefore);
+    if (!Number.isNaN(d.getTime())) filters.push(sql`${obligationsTable.dueAt} <= ${d.toISOString()}`);
+  }
+  if (req.query.overdueOnly === 'true') {
+    filters.push(sql`${obligationsTable.dueAt} < now()`);
+    filters.push(sql`${obligationsTable.status} NOT IN ('done','waived')`);
+  }
+  const rows = await db.select().from(obligationsTable).where(and(...filters)).orderBy(asc(obligationsTable.dueAt));
+  // Scope-Filter über Vertrag→Deal (für non-tenantWide)
+  const dealIds = await allowedDealIds(req);
+  const contractIds = [...new Set(rows.map(r => r.contractId))];
+  const contracts = contractIds.length
+    ? await db.select().from(contractsTable).where(inArray(contractsTable.id, contractIds))
+    : [];
+  const contractById = new Map(contracts.map(c => [c.id, c]));
+  const visibleRows = scope.tenantWide && !hasActiveScopeFilter(scope)
+    ? rows
+    : rows.filter(r => {
+        const c = contractById.get(r.contractId);
+        return c && dealIds.has(c.dealId);
+      });
+  const accountIds = [...new Set(visibleRows.map(r => r.accountId).filter((x): x is string => !!x))];
+  const accounts = accountIds.length
+    ? await db.select().from(accountsTable).where(inArray(accountsTable.id, accountIds))
+    : [];
+  const accountById = new Map(accounts.map(a => [a.id, a.name]));
+  const userMap = await userMapForTenant(scope.tenantId);
+  res.json(visibleRows.map(o => mapObligation(o, {
+    contractTitle: contractById.get(o.contractId)?.title ?? null,
+    accountName: o.accountId ? accountById.get(o.accountId) ?? null : null,
+    ownerName: o.ownerId ? userMap.get(o.ownerId)?.name ?? null : null,
+  })));
+});
+
+router.post('/obligations', async (req, res) => {
+  const b = req.body as {
+    contractId?: string; clauseId?: string; type?: string; description?: string;
+    dueAt?: string; recurrence?: string; ownerId?: string; ownerRole?: string;
+    escalationDays?: number;
+  } | undefined;
+  if (!b || typeof b.contractId !== 'string' || typeof b.type !== 'string' || typeof b.description !== 'string' || !b.description.trim()) {
+    res.status(422).json({ error: 'contractId, type, description are required' }); return;
+  }
+  const [c] = await db.select().from(contractsTable).where(eq(contractsTable.id, b.contractId));
+  if (!c) { res.status(404).json({ error: 'contract not found' }); return; }
+  if (!(await gateDeal(req, res, c.dealId))) return;
+  const allowedTypes = new Set(['delivery', 'reporting', 'sla', 'payment', 'notice', 'audit']);
+  if (!allowedTypes.has(b.type)) { res.status(422).json({ error: `type must be one of ${[...allowedTypes].join(',')}` }); return; }
+  const allowedRecurrences = new Set(['none', 'monthly', 'quarterly', 'annual']);
+  const recurrence = b.recurrence ?? 'none';
+  if (!allowedRecurrences.has(recurrence)) { res.status(422).json({ error: 'invalid recurrence' }); return; }
+  const newId = `ob_${randomBytes(6).toString('hex')}`;
+  const tenantId = c.tenantId ?? getScope(req).tenantId;
+  const dueAt = b.dueAt ? new Date(b.dueAt) : null;
+  if (dueAt && Number.isNaN(dueAt.getTime())) { res.status(422).json({ error: 'dueAt invalid ISO date' }); return; }
+  await db.insert(obligationsTable).values({
+    id: newId,
+    tenantId,
+    contractId: c.id,
+    brandId: c.brandId ?? null,
+    accountId: c.accountId ?? null,
+    clauseId: b.clauseId ?? null,
+    type: b.type,
+    description: b.description.trim(),
+    dueAt,
+    recurrence,
+    ownerId: b.ownerId ?? null,
+    ownerRole: b.ownerRole ?? null,
+    status: 'pending',
+    source: 'manual',
+    escalationDays: b.escalationDays ?? null,
+  });
+  const [{ c: total } = { c: 0 }] = await db.select({ c: sql<number>`count(*)::int` })
+    .from(obligationsTable).where(eq(obligationsTable.contractId, c.id));
+  await db.update(contractsTable).set({ obligationsCount: total }).where(eq(contractsTable.id, c.id));
+  await writeAuditFromReq(req, {
+    entityType: 'obligation', entityId: newId, action: 'create',
+    summary: `Pflicht angelegt: ${b.description.trim().slice(0, 80)}`,
+  });
+  const [saved] = await db.select().from(obligationsTable).where(eq(obligationsTable.id, newId));
+  const userMap = await userMapForTenant(tenantId);
+  res.status(201).json(mapObligation(saved!, {
+    contractTitle: c.title,
+    accountName: null,
+    ownerName: saved!.ownerId ? userMap.get(saved!.ownerId)?.name ?? null : null,
+  }));
+});
+
+router.patch('/obligations/:id', async (req, res) => {
+  const [o] = await db.select().from(obligationsTable).where(eq(obligationsTable.id, req.params.id));
+  if (!o) { res.status(404).json({ error: 'not found' }); return; }
+  const [c] = await db.select().from(contractsTable).where(eq(contractsTable.id, o.contractId));
+  if (!c || !(await gateDeal(req, res, c.dealId))) {
+    if (!res.headersSent) res.status(404).json({ error: 'not found' });
+    return;
+  }
+  const b = req.body as {
+    description?: string; dueAt?: string | null; ownerId?: string | null;
+    ownerRole?: string | null; status?: string; escalationDays?: number | null;
+  } | undefined;
+  const patch: Partial<typeof obligationsTable.$inferInsert> = {};
+  if (b?.description !== undefined) {
+    const v = String(b.description).trim();
+    if (!v) { res.status(422).json({ error: 'description must not be empty' }); return; }
+    patch.description = v;
+  }
+  if (b?.dueAt !== undefined) {
+    if (b.dueAt === null) patch.dueAt = null;
+    else {
+      const d = new Date(b.dueAt);
+      if (Number.isNaN(d.getTime())) { res.status(422).json({ error: 'dueAt invalid' }); return; }
+      patch.dueAt = d;
+    }
+  }
+  if (b?.ownerId !== undefined) patch.ownerId = b.ownerId;
+  if (b?.ownerRole !== undefined) patch.ownerRole = b.ownerRole;
+  if (b?.escalationDays !== undefined) patch.escalationDays = b.escalationDays;
+  if (b?.status !== undefined) {
+    const allowed = new Set(['pending', 'in_progress', 'done', 'missed', 'waived']);
+    if (!allowed.has(b.status)) { res.status(422).json({ error: 'invalid status' }); return; }
+    patch.status = b.status;
+    if (b.status === 'done') {
+      patch.completedAt = new Date();
+      patch.completedBy = getScope(req).user.name;
+    }
+  }
+  if (Object.keys(patch).length) {
+    await db.update(obligationsTable).set(patch).where(eq(obligationsTable.id, o.id));
+  }
+  const [updated] = await db.select().from(obligationsTable).where(eq(obligationsTable.id, o.id));
+  await writeAuditFromReq(req, {
+    entityType: 'obligation', entityId: o.id, action: 'update',
+    summary: `Pflicht aktualisiert${patch.status ? ` → ${patch.status}` : ''}`,
+    before: o, after: updated,
+  });
+  const userMap = await userMapForTenant(updated!.tenantId);
+  res.json(mapObligation(updated!, {
+    contractTitle: c.title,
+    accountName: null,
+    ownerName: updated!.ownerId ? userMap.get(updated!.ownerId)?.name ?? null : null,
+  }));
+});
+
+router.post('/contracts/:id/obligations/derive', async (req, res) => {
+  const [c] = await db.select().from(contractsTable).where(eq(contractsTable.id, req.params.id));
+  if (!c) { res.status(404).json({ error: 'not found' }); return; }
+  if (!(await gateDeal(req, res, c.dealId))) return;
+  const tenantId = c.tenantId ?? getScope(req).tenantId;
+  const result = await deriveObligations(c.id, tenantId);
+  await writeAuditFromReq(req, {
+    entityType: 'contract', entityId: c.id, action: 'derive_obligations',
+    summary: `Obligation-Engine: ${result.created} neu, ${result.total} gesamt`,
+  });
+  res.json({ contractId: c.id, ...result });
+});
+
+// ── Quotes/current — aktuell akzeptiertes Angebot je Account ────────────
+// (Moved to before /quotes/:id to avoid path-param shadowing.)
+
 router.get('/clause-families', async (_req, res) => {
   const families = await db.select().from(clauseFamiliesTable);
   const variants = await db.select().from(clauseVariantsTable);
@@ -3160,6 +3855,50 @@ async function maybeCompletePackageAndCreateOC(req: Request, pkg: PackageRow, si
   if (deal2) {
     const [co] = await db.select().from(companiesTable).where(eq(companiesTable.id, deal2.companyId));
     if (co) void emitEvent(co.tenantId, 'contract.signed', { signaturePackageId: pkg.id, dealId: pkg.dealId, orderConfirmationId: ocId });
+    // MVP Phase 1: Bei Signatur Vertragsstatus auf signed setzen + Obligations
+    // automatisch ableiten und Deviations re-evaluieren.
+    // WICHTIG: Nur Verträge signieren, die tatsächlich zu diesem Paket gehören.
+    // - Amendment-Pakete: Vertrag = amendment.originalContractId
+    // - Initial-Pakete (kein amendmentId): Fallback auf den einzigen Vertrag des Deals
+    //   (mehrdeutige Fälle werden bewusst übersprungen, um Fehl-Signaturen zu vermeiden).
+    let targetContractIds: string[] = [];
+    if (pkg.amendmentId) {
+      const [amend] = await db.select().from(contractAmendmentsTable)
+        .where(eq(contractAmendmentsTable.id, pkg.amendmentId));
+      if (amend?.originalContractId) targetContractIds = [amend.originalContractId];
+    } else {
+      const dealContracts = await db.select().from(contractsTable).where(eq(contractsTable.dealId, pkg.dealId));
+      if (dealContracts.length === 1) targetContractIds = [dealContracts[0]!.id];
+    }
+    const targetContracts = targetContractIds.length
+      ? await db.select().from(contractsTable).where(inArray(contractsTable.id, targetContractIds))
+      : [];
+    for (const ctr of targetContracts) {
+      if (ctr.status === 'signed') continue;
+      const tenantIdForCtr = ctr.tenantId ?? co?.tenantId ?? getScope(req).tenantId;
+      await db.update(contractsTable).set({
+        status: 'signed',
+        signedAt: new Date(),
+        tenantId: tenantIdForCtr,
+      }).where(eq(contractsTable.id, ctr.id));
+      try {
+        await deriveObligations(ctr.id, tenantIdForCtr);
+        await evaluateDeviations(ctr.id, tenantIdForCtr);
+        await db.insert(timelineEventsTable).values({
+          id: `tl_${randomUUID().slice(0, 8)}`,
+          tenantId: tenantIdForCtr,
+          type: 'contract',
+          title: 'Vertrag signiert',
+          description: `${ctr.title}: Obligations automatisch abgeleitet, Deviations evaluiert.`,
+          actor: 'System',
+          dealId: pkg.dealId,
+        });
+      } catch (err) {
+        // Engines sollen den Signatur-Abschluss nicht blockieren.
+        // Fehler werden ignoriert — Audit-Log enthält den eigentlichen Abschluss.
+        void err;
+      }
+    }
   }
 }
 
@@ -3413,6 +4152,50 @@ router.get('/reports/dashboard', async (req, res) => {
     : tlAll.filter(t => t.dealId === null || dealIdSet.has(t.dealId))
   ).slice(0, 8);
   const dealMap = await getDealMap();
+  // MVP Phase 1 — Vertragswesen-KPIs
+  const tenantContracts = await db.select().from(contractsTable)
+    .where(eq(contractsTable.tenantId, scope.tenantId));
+  const visibleContracts = (scope.tenantWide && !hasActiveScopeFilter(scope))
+    ? tenantContracts
+    : tenantContracts.filter(c => dealIdSet.has(c.dealId));
+  const visibleContractIds = visibleContracts.map(c => c.id);
+  const openDeviationsCount = visibleContractIds.length === 0 ? 0 :
+    (await db.select({ c: sql<number>`count(*)::int` }).from(clauseDeviationsTable)
+      .where(and(
+        inArray(clauseDeviationsTable.contractId, visibleContractIds),
+        sql`${clauseDeviationsTable.resolvedAt} IS NULL`,
+      ))).at(0)?.c ?? 0;
+  const overdueObligationsCount = visibleContractIds.length === 0 ? 0 :
+    (await db.select({ c: sql<number>`count(*)::int` }).from(obligationsTable)
+      .where(and(
+        inArray(obligationsTable.contractId, visibleContractIds),
+        sql`${obligationsTable.dueAt} < now()`,
+        sql`${obligationsTable.status} NOT IN ('done','waived')`,
+      ))).at(0)?.c ?? 0;
+  // Time-to-Signature: Tage zwischen contract.createdAt und signedAt (ø der letzten 90 Tage)
+  const __nowDash = new Date();
+  const recentSigned = visibleContracts.filter(c => c.signedAt && c.createdAt
+    && (__nowDash.getTime() - new Date(c.signedAt).getTime()) < 90 * 86400000);
+  const ttsValues = recentSigned
+    .map(c => (new Date(c.signedAt!).getTime() - new Date(c.createdAt!).getTime()) / 86400000)
+    .filter(d => d > 0 && d < 365);
+  const avgTimeToSignatureDays = ttsValues.length
+    ? Math.round((ttsValues.reduce((s, d) => s + d, 0) / ttsValues.length) * 10) / 10
+    : null;
+  // Approval-Duration ø über entschiedene Approvals
+  const decided = await db.select().from(approvalsTable)
+    .where(and(
+      inArray(approvalsTable.status, ['approved', 'rejected']),
+      ...(dealIds.length ? [inArray(approvalsTable.dealId, dealIds)] : []),
+    ));
+  const apprDurations = decided
+    .filter(a => a.decidedAt && a.createdAt)
+    .map(a => (new Date(a.decidedAt!).getTime() - new Date(a.createdAt!).getTime()) / 36e5)
+    .filter(h => h >= 0 && h < 24 * 30);
+  const avgApprovalDurationHours = apprDurations.length
+    ? Math.round((apprDurations.reduce((s, h) => s + h, 0) / apprDurations.length) * 10) / 10
+    : null;
+
   res.json({
     openDealsCount: open.length,
     openDealsValue: open.reduce((s, d) => s + num(d.value), 0),
@@ -3423,6 +4206,10 @@ router.get('/reports/dashboard', async (req, res) => {
     openApprovals,
     signaturesPending: sigsPending,
     atRiskDeals: open.filter(d => d.riskLevel === 'high').length,
+    openDeviationsCount,
+    overdueObligationsCount,
+    avgTimeToSignatureDays,
+    avgApprovalDurationHours,
     stageBreakdown,
     recentEvents: tl.map(t => ({
       id: t.id, type: t.type, title: t.title, description: t.description,

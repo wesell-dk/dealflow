@@ -1293,6 +1293,14 @@ export interface DashboardSummary {
   openApprovals: number;
   signaturesPending: number;
   atRiskDeals: number;
+  /** Offene Klausel-Abweichungen im sichtbaren Scope */
+  openDeviationsCount?: number;
+  /** Überfällige Vertragspflichten */
+  overdueObligationsCount?: number;
+  /** ø Tage von Vertragserstellung bis Signatur (90d Rolling) */
+  avgTimeToSignatureDays?: number | null;
+  /** ø Stunden von Approval-Antrag bis Entscheidung */
+  avgApprovalDurationHours?: number | null;
   stageBreakdown: DashboardSummaryStageBreakdownItem[];
   recentEvents: TimelineEvent[];
 }
@@ -2145,6 +2153,337 @@ export interface PriceBundleItemsReplace {
   items: PriceBundleItemInput[];
 }
 
+export type ApiErrorIssuesItem = {
+  path?: string;
+  message?: string;
+};
+
+export interface ApiError {
+  error: string;
+  issues?: ApiErrorIssuesItem[];
+}
+
+export interface ContractType {
+  id: string;
+  tenantId: string;
+  code: string;
+  name: string;
+  /** @nullable */
+  description?: string | null;
+  mandatoryClauseFamilyIds: string[];
+  forbiddenClauseFamilyIds: string[];
+  /** @nullable */
+  defaultPlaybookId?: string | null;
+  active: boolean;
+  createdAt: string;
+}
+
+export interface ContractTypeCreate {
+  /**
+   * @minLength 2
+   * @maxLength 32
+   */
+  code: string;
+  /** @minLength 1 */
+  name: string;
+  description?: string;
+  mandatoryClauseFamilyIds?: string[];
+  forbiddenClauseFamilyIds?: string[];
+  defaultPlaybookId?: string;
+  active?: boolean;
+}
+
+export interface ContractTypeUpdate {
+  /** @minLength 1 */
+  name?: string;
+  /** @nullable */
+  description?: string | null;
+  mandatoryClauseFamilyIds?: string[];
+  forbiddenClauseFamilyIds?: string[];
+  /** @nullable */
+  defaultPlaybookId?: string | null;
+  active?: boolean;
+}
+
+export interface ApprovalRule {
+  /** z.B. discount_pct_above, payment_terms_above_days, liability_cap_above_eur */
+  trigger: string;
+  threshold?: number;
+  approverRole: string;
+}
+
+export interface ContractPlaybook {
+  id: string;
+  tenantId: string;
+  contractTypeId: string;
+  name: string;
+  /** @nullable */
+  description?: string | null;
+  brandIds: string[];
+  companyIds: string[];
+  allowedClauseVariantIds: string[];
+  defaultClauseVariantIds: string[];
+  approvalRules: ApprovalRule[];
+  active: boolean;
+  createdAt: string;
+}
+
+export interface ContractPlaybookCreate {
+  contractTypeId: string;
+  /** @minLength 1 */
+  name: string;
+  description?: string;
+  brandIds?: string[];
+  companyIds?: string[];
+  allowedClauseVariantIds?: string[];
+  defaultClauseVariantIds?: string[];
+  approvalRules?: ApprovalRule[];
+}
+
+export interface ContractPlaybookUpdate {
+  /** @minLength 1 */
+  name?: string;
+  /** @nullable */
+  description?: string | null;
+  brandIds?: string[];
+  companyIds?: string[];
+  allowedClauseVariantIds?: string[];
+  defaultClauseVariantIds?: string[];
+  approvalRules?: ApprovalRule[];
+  active?: boolean;
+}
+
+export type ClauseDeviationDeviationType =
+  (typeof ClauseDeviationDeviationType)[keyof typeof ClauseDeviationDeviationType];
+
+export const ClauseDeviationDeviationType = {
+  variant_change: "variant_change",
+  text_edit: "text_edit",
+  missing_required: "missing_required",
+  forbidden_used: "forbidden_used",
+  threshold_breach: "threshold_breach",
+} as const;
+
+export type ClauseDeviationSeverity =
+  (typeof ClauseDeviationSeverity)[keyof typeof ClauseDeviationSeverity];
+
+export const ClauseDeviationSeverity = {
+  low: "low",
+  medium: "medium",
+  high: "high",
+  critical: "critical",
+} as const;
+
+/**
+ * @nullable
+ */
+export type ClauseDeviationEvidence = { [key: string]: unknown } | null;
+
+export interface ClauseDeviation {
+  id: string;
+  tenantId: string;
+  contractId: string;
+  clauseId: string;
+  familyId: string;
+  /** @nullable */
+  familyName?: string | null;
+  deviationType: ClauseDeviationDeviationType;
+  severity: ClauseDeviationSeverity;
+  description: string;
+  /** @nullable */
+  evidence?: ClauseDeviationEvidence;
+  /** @nullable */
+  policyId?: string | null;
+  requiresApproval: boolean;
+  /** @nullable */
+  approvalCaseId?: string | null;
+  /** @nullable */
+  resolvedAt?: string | null;
+  /** @nullable */
+  resolvedBy?: string | null;
+  /** @nullable */
+  resolutionNote?: string | null;
+  createdAt: string;
+}
+
+export interface DeviationResolveInput {
+  /** @minLength 1 */
+  resolutionNote: string;
+}
+
+export type DeviationEvaluationResultSummaryBySeverity = {
+  [key: string]: number;
+};
+
+export type DeviationEvaluationResultSummary = {
+  total: number;
+  open: number;
+  requiresApproval: number;
+  bySeverity: DeviationEvaluationResultSummaryBySeverity;
+};
+
+export interface DeviationEvaluationResult {
+  contractId: string;
+  deviations: ClauseDeviation[];
+  summary: DeviationEvaluationResultSummary;
+}
+
+export type ObligationType =
+  (typeof ObligationType)[keyof typeof ObligationType];
+
+export const ObligationType = {
+  delivery: "delivery",
+  reporting: "reporting",
+  sla: "sla",
+  payment: "payment",
+  notice: "notice",
+  audit: "audit",
+} as const;
+
+export type ObligationRecurrence =
+  (typeof ObligationRecurrence)[keyof typeof ObligationRecurrence];
+
+export const ObligationRecurrence = {
+  none: "none",
+  monthly: "monthly",
+  quarterly: "quarterly",
+  annual: "annual",
+} as const;
+
+export type ObligationStatus =
+  (typeof ObligationStatus)[keyof typeof ObligationStatus];
+
+export const ObligationStatus = {
+  pending: "pending",
+  in_progress: "in_progress",
+  done: "done",
+  missed: "missed",
+  waived: "waived",
+} as const;
+
+export type ObligationSource =
+  (typeof ObligationSource)[keyof typeof ObligationSource];
+
+export const ObligationSource = {
+  derived: "derived",
+  manual: "manual",
+} as const;
+
+export interface Obligation {
+  id: string;
+  tenantId: string;
+  contractId: string;
+  /** @nullable */
+  contractTitle?: string | null;
+  /** @nullable */
+  brandId?: string | null;
+  /** @nullable */
+  accountId?: string | null;
+  /** @nullable */
+  accountName?: string | null;
+  /** @nullable */
+  clauseId?: string | null;
+  type: ObligationType;
+  description: string;
+  /** @nullable */
+  dueAt?: string | null;
+  recurrence: ObligationRecurrence;
+  /** @nullable */
+  ownerId?: string | null;
+  /** @nullable */
+  ownerName?: string | null;
+  /** @nullable */
+  ownerRole?: string | null;
+  status: ObligationStatus;
+  source: ObligationSource;
+  /** @nullable */
+  escalationDays?: number | null;
+  /** @nullable */
+  completedAt?: string | null;
+  /** @nullable */
+  completedBy?: string | null;
+  createdAt: string;
+}
+
+export type ObligationCreateType =
+  (typeof ObligationCreateType)[keyof typeof ObligationCreateType];
+
+export const ObligationCreateType = {
+  delivery: "delivery",
+  reporting: "reporting",
+  sla: "sla",
+  payment: "payment",
+  notice: "notice",
+  audit: "audit",
+} as const;
+
+export type ObligationCreateRecurrence =
+  (typeof ObligationCreateRecurrence)[keyof typeof ObligationCreateRecurrence];
+
+export const ObligationCreateRecurrence = {
+  none: "none",
+  monthly: "monthly",
+  quarterly: "quarterly",
+  annual: "annual",
+} as const;
+
+export interface ObligationCreate {
+  contractId: string;
+  clauseId?: string;
+  type: ObligationCreateType;
+  /** @minLength 1 */
+  description: string;
+  dueAt?: string;
+  recurrence?: ObligationCreateRecurrence;
+  ownerId?: string;
+  ownerRole?: string;
+  /** @minimum 0 */
+  escalationDays?: number;
+}
+
+export type ObligationUpdateStatus =
+  (typeof ObligationUpdateStatus)[keyof typeof ObligationUpdateStatus];
+
+export const ObligationUpdateStatus = {
+  pending: "pending",
+  in_progress: "in_progress",
+  done: "done",
+  missed: "missed",
+  waived: "waived",
+} as const;
+
+export interface ObligationUpdate {
+  /** @minLength 1 */
+  description?: string;
+  /** @nullable */
+  dueAt?: string | null;
+  /** @nullable */
+  ownerId?: string | null;
+  /** @nullable */
+  ownerRole?: string | null;
+  status?: ObligationUpdateStatus;
+  /** @nullable */
+  escalationDays?: number | null;
+}
+
+export interface ObligationDerivationResult {
+  contractId: string;
+  created: number;
+  total: number;
+}
+
+export interface CurrentQuote {
+  accountId: string;
+  quoteId: string;
+  versionId: string;
+  version: number;
+  status: string;
+  total: number;
+  currency: string;
+  /** @nullable */
+  acceptedAt: string | null;
+}
+
 export type ListCompaniesParams = {
   /**
  * If true, returns the FULL permitted set (ignoring active scope filter).
@@ -2306,3 +2645,19 @@ export const ListSavedViewsEntityType = {
   account: "account",
   deal: "deal",
 } as const;
+
+export type ListContractPlaybooksParams = {
+  contractTypeId?: string;
+};
+
+export type ListObligationsParams = {
+  contractId?: string;
+  status?: string;
+  ownerId?: string;
+  dueBefore?: string;
+  overdueOnly?: boolean;
+};
+
+export type GetCurrentQuoteParams = {
+  accountId: string;
+};

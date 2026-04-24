@@ -24,6 +24,7 @@ import {
   FileStack,
   Paperclip,
   Building2,
+  ClipboardList,
   User as UserIcon,
 } from "lucide-react";
 import { useGetTenant } from "@workspace/api-client-react";
@@ -63,6 +64,7 @@ function useNavigation() {
     { name: t("nav.pricing"), href: "/pricing", icon: BadgeDollarSign },
     { name: t("nav.approvals"), href: "/approvals", icon: CheckSquare },
     { name: t("nav.contracts"), href: "/contracts", icon: FileSignature },
+    { name: t("nav.obligations"), href: "/obligations", icon: ClipboardList },
     { name: t("nav.negotiations"), href: "/negotiations", icon: Handshake },
     { name: t("nav.signatures"), href: "/signatures", icon: PenTool },
     { name: t("nav.priceIncreases"), href: "/price-increases", icon: TrendingUp },

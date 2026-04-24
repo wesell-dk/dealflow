@@ -4,6 +4,7 @@ import {
   seedIfEmpty,
   seedQuoteTemplatesIdempotent,
   seedPlaceholderObjectsIdempotent,
+  seedContractMvpAugmentationIdempotent,
 } from "./lib/seed";
 import { pruneExpiredSessions } from "./lib/auth";
 import { runAllGenerators } from "./insights/generators";
@@ -19,6 +20,10 @@ await seedQuoteTemplatesIdempotent().catch((err) => {
 
 await seedPlaceholderObjectsIdempotent().catch((err) => {
   logger.error({ err }, "Placeholder-attachments seed failed");
+});
+
+await seedContractMvpAugmentationIdempotent().catch((err) => {
+  logger.error({ err }, "Contract MVP augmentation seed failed");
 });
 
 await runAllGenerators().catch((err) => {

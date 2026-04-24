@@ -41,6 +41,10 @@ import {
   industryProfilesTable,
   pricePositionBundlesTable,
   pricePositionBundleItemsTable,
+  contractTypesTable,
+  contractPlaybooksTable,
+  obligationsTable,
+  clauseDeviationsTable,
 } from "@workspace/db";
 import { hashPassword } from "./auth";
 import { logger } from "./logger";
@@ -970,4 +974,299 @@ export async function seedPlaceholderObjectsIdempotent(): Promise<void> {
   if (uploaded > 0) {
     logger.info({ uploaded, skipped }, "Seeded placeholder attachments");
   }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Vertragswesen MVP Phase 1 — idempotente Augmentation:
+//  • ContractTypes (NDA, MSA, OF) + Playbooks (Standard, Strategic)
+//  • obligationTemplates auf ausgewählten Klauselvarianten
+//  • Backfill der neuen contract-Felder (tenant/company/brand/account)
+//  • Demo Deviations (für ctr_001, ctr_004) und Obligations (für ctr_003)
+// Läuft auf jedem Boot; bestehende Reihen werden nicht doppelt eingefügt.
+// ─────────────────────────────────────────────────────────────────────────────
+export async function seedContractMvpAugmentationIdempotent(): Promise<void> {
+  // Skip wenn noch keine Tenant-Daten vorhanden sind (Schema-only DB).
+  const [{ c: tenantCount } = { c: 0 }] = await db
+    .select({ c: sql<number>`count(*)::int` })
+    .from(tenantsTable);
+  if (tenantCount === 0) return;
+
+  // 1) ContractTypes ───────────────────────────────────────────────────────
+  await db.insert(contractTypesTable).values([
+    {
+      id: "ct_nda",
+      tenantId: "tn_root",
+      code: "NDA",
+      name: "Geheimhaltungsvereinbarung (NDA)",
+      description: "Beidseitige Vertraulichkeitsvereinbarung vor Pre-Sales-Phase.",
+      mandatoryClauseFamilyIds: ["cf_data"],
+      forbiddenClauseFamilyIds: [],
+      defaultPlaybookId: null,
+      active: true,
+    },
+    {
+      id: "ct_msa",
+      tenantId: "tn_root",
+      code: "MSA",
+      name: "Master Services Agreement",
+      description: "Rahmenvertrag mit Klauselsteuerung über Playbook.",
+      mandatoryClauseFamilyIds: ["cf_liab", "cf_term", "cf_data", "cf_pay"],
+      forbiddenClauseFamilyIds: [],
+      defaultPlaybookId: "pb_msa_std",
+      active: true,
+    },
+    {
+      id: "ct_of",
+      tenantId: "tn_root",
+      code: "OF",
+      name: "Order Form",
+      description: "Bestellschein als Anhang zum MSA.",
+      mandatoryClauseFamilyIds: ["cf_pay"],
+      forbiddenClauseFamilyIds: [],
+      defaultPlaybookId: null,
+      active: true,
+    },
+  ]).onConflictDoNothing();
+
+  // 2) Playbooks ──────────────────────────────────────────────────────────
+  await db.insert(contractPlaybooksTable).values([
+    {
+      id: "pb_msa_std",
+      tenantId: "tn_root",
+      contractTypeId: "ct_msa",
+      name: "MSA Standard",
+      description: "Sales-Selbstbedienung, Standard-Klauseln, einfache Approvals.",
+      brandIds: [],
+      companyIds: [],
+      allowedClauseVariantIds: [
+        "cv_liab_3", "cv_liab_4",
+        "cv_term_2", "cv_term_3", "cv_term_4",
+        "cv_data_3", "cv_data_4",
+        "cv_pay_2", "cv_pay_3", "cv_pay_4",
+        "cv_sla_2", "cv_sla_3",
+        "cv_ip_3", "cv_ip_4",
+      ],
+      defaultClauseVariantIds: ["cv_liab_3", "cv_term_3", "cv_data_3", "cv_pay_3", "cv_sla_3", "cv_ip_3"],
+      approvalRules: [
+        { trigger: "discount_pct_above", threshold: 10, approverRole: "Sales Manager" },
+        { trigger: "payment_terms_above_days", threshold: 45, approverRole: "Finance" },
+        { trigger: "liability_cap_above_eur", threshold: 1000000, approverRole: "Legal" },
+      ],
+      active: true,
+    },
+    {
+      id: "pb_msa_strategic",
+      tenantId: "tn_root",
+      contractTypeId: "ct_msa",
+      name: "MSA Strategic Account",
+      description: "Strategische Großkunden, Legal-First, alle Varianten zulässig.",
+      brandIds: [],
+      companyIds: [],
+      allowedClauseVariantIds: [
+        "cv_liab_1", "cv_liab_2", "cv_liab_3", "cv_liab_4",
+        "cv_term_2", "cv_term_3", "cv_term_4", "cv_term_5",
+        "cv_data_3", "cv_data_4", "cv_data_5",
+        "cv_pay_1", "cv_pay_2", "cv_pay_3",
+        "cv_sla_1", "cv_sla_2", "cv_sla_3",
+        "cv_ip_2", "cv_ip_3", "cv_ip_4",
+      ],
+      defaultClauseVariantIds: ["cv_liab_2", "cv_term_3", "cv_data_4", "cv_pay_2", "cv_sla_2", "cv_ip_2"],
+      approvalRules: [
+        { trigger: "discount_pct_above", threshold: 15, approverRole: "VP Sales" },
+        { trigger: "liability_cap_above_eur", threshold: 5000000, approverRole: "General Counsel" },
+      ],
+      active: true,
+    },
+  ]).onConflictDoNothing();
+
+  // 3) obligationTemplates auf ausgewählten Klauselvarianten ─────────────
+  // Werden nur gesetzt, wenn das Feld noch leer (NULL) ist — überschreibt nichts.
+  const obligationTemplateUpdates: Array<{ id: string; templates: Array<{ type: string; description: string; dueOffsetDays?: number; recurrence?: "none" | "monthly" | "quarterly" | "annual"; ownerRole?: string }> }> = [
+    { id: "cv_data_3", templates: [{ type: "audit", description: "Jährliches DPA-Audit durchführen und Bericht ablegen.", dueOffsetDays: 365, recurrence: "annual", ownerRole: "DPO" }] },
+    { id: "cv_data_4", templates: [
+      { type: "audit", description: "Jährliches DPA-Audit + Subprozessoren-Liste prüfen.", dueOffsetDays: 365, recurrence: "annual", ownerRole: "DPO" },
+      { type: "notice", description: "Subprozessor-Wechsel mind. 30 Tage vorab anzeigen.", dueOffsetDays: 30, recurrence: "none", ownerRole: "Legal" },
+    ]},
+    { id: "cv_sla_2", templates: [{ type: "reporting", description: "Monatlicher SLA-Report (Verfügbarkeit, Incidents) an Kunden.", dueOffsetDays: 30, recurrence: "monthly", ownerRole: "Customer Success" }] },
+    { id: "cv_sla_3", templates: [{ type: "reporting", description: "Quartalsbericht zur Verfügbarkeit (99,9% Ziel).", dueOffsetDays: 90, recurrence: "quarterly", ownerRole: "Customer Success" }] },
+    { id: "cv_term_4", templates: [{ type: "notice", description: "Auto-Renewal: Kündigungsfrist 90 Tage vor Ablauf prüfen.", dueOffsetDays: 270, recurrence: "annual", ownerRole: "Account Manager" }] },
+    { id: "cv_pay_3", templates: [{ type: "payment", description: "Erste Rechnung 30 Tage nach Vertragsbeginn fällig.", dueOffsetDays: 30, recurrence: "none", ownerRole: "Finance" }] },
+  ];
+  for (const upd of obligationTemplateUpdates) {
+    await db.update(clauseVariantsTable)
+      .set({ obligationTemplates: upd.templates })
+      .where(and(eq(clauseVariantsTable.id, upd.id), sql`${clauseVariantsTable.obligationTemplates} IS NULL`));
+  }
+
+  // 4) Backfill neue contract-Felder aus deal→company→brand-Kette ─────────
+  const allContracts = await db.select().from(contractsTable);
+  const allDeals = await db.select().from(dealsTable);
+  const dealById = new Map(allDeals.map(d => [d.id, d]));
+  for (const c of allContracts) {
+    if (c.tenantId && c.companyId) continue; // schon gefüllt
+    const d = dealById.get(c.dealId);
+    if (!d) continue;
+    const [co] = await db.select().from(companiesTable).where(eq(companiesTable.id, d.companyId));
+    if (!co) continue;
+    const valueCurrency = d.currency ?? co.currency ?? "EUR";
+    const valueAmountStr = d.value != null ? String(d.value) : null;
+    const isMsa = c.template?.toLowerCase().includes("master services");
+    const isOf = c.template?.toLowerCase().includes("order form");
+    const contractTypeId = isMsa ? "ct_msa" : isOf ? "ct_of" : null;
+    const playbookId = contractTypeId === "ct_msa" ? "pb_msa_std" : null;
+    const isSigned = c.status === "signed" || c.status === "active";
+    const effectiveFrom = isSigned ? isoDate(daysFromNow(-30)) : null;
+    const effectiveTo = isSigned ? isoDate(daysFromNow(335)) : null;
+    await db.update(contractsTable).set({
+      tenantId: co.tenantId,
+      companyId: d.companyId,
+      brandId: d.brandId ?? null,
+      accountId: d.accountId ?? null,
+      contractTypeId,
+      playbookId,
+      language: "de",
+      currency: valueCurrency,
+      valueAmount: valueAmountStr,
+      valueCurrency,
+      effectiveFrom,
+      effectiveTo,
+      autoRenewal: isMsa ? true : false,
+      renewalNoticeDays: isMsa ? 90 : null,
+      terminationNoticeDays: isMsa ? 90 : 30,
+      governingLaw: co.country === "DE" ? "Deutsches Recht" : co.country === "CH" ? "Schweizer Recht" : co.country === "AT" ? "Österreichisches Recht" : "Local law",
+      jurisdiction: co.country === "DE" ? "Hamburg" : co.country === "CH" ? "Zürich" : co.country === "AT" ? "Wien" : "Local courts",
+      currentVersion: c.version,
+      signedAt: isSigned ? daysFromNow(-30) : null,
+    }).where(eq(contractsTable.id, c.id));
+  }
+
+  // 5) Demo-Obligations für signierten Vertrag ctr_003 (Fjord MSA) ───────
+  const [ctr003] = await db.select().from(contractsTable).where(eq(contractsTable.id, "ctr_003"));
+  if (ctr003) {
+    const obligationSeed = [
+      { id: "ob_ctr003_001", contractId: "ctr_003", type: "reporting",  description: "Monatlicher SLA-Report (Verfügbarkeit, Incidents) an Fjord.",                  dueAt: daysFromNow(7),    recurrence: "monthly",   ownerRole: "Customer Success", source: "derived",  status: "in_progress", clauseId: "cc_008", escalationDays: 3 },
+      { id: "ob_ctr003_002", contractId: "ctr_003", type: "audit",      description: "Jährliches DPA-Audit für Fjord durchführen und Bericht ablegen.",            dueAt: daysFromNow(180),  recurrence: "annual",    ownerRole: "DPO",              source: "derived",  status: "pending",     clauseId: "cc_007", escalationDays: 14 },
+      { id: "ob_ctr003_003", contractId: "ctr_003", type: "delivery",   description: "Vessel-Telemetry-Module Tranche 2 (12 Schiffe) bis Q2 ausliefern.",           dueAt: daysFromNow(45),   recurrence: "none",      ownerRole: "Project Lead",     source: "manual",   status: "in_progress", clauseId: null, escalationDays: 7 },
+      { id: "ob_ctr003_004", contractId: "ctr_003", type: "notice",     description: "Auto-Renewal: Kündigungsfrist 90 Tage vor Ablauf an Fjord erinnern.",         dueAt: daysFromNow(245),  recurrence: "annual",    ownerRole: "Account Manager",  source: "derived",  status: "pending",     clauseId: null, escalationDays: 5 },
+      { id: "ob_ctr003_005", contractId: "ctr_003", type: "reporting",  description: "Quartalsmeeting Service-Review mit Erik Lindahl (CFO) terminieren.",          dueAt: daysFromNow(60),   recurrence: "quarterly", ownerRole: "Account Manager",  source: "manual",   status: "pending",     clauseId: null, escalationDays: 3 },
+      { id: "ob_ctr003_006", contractId: "ctr_003", type: "payment",    description: "Index-Anpassung +4,5% (Amendment am_001) zur nächsten Abrechnung.",            dueAt: daysFromNow(-2),   recurrence: "none",      ownerRole: "Finance",          source: "manual",   status: "pending",     clauseId: null, escalationDays: 1 },
+      { id: "ob_ctr003_007", contractId: "ctr_003", type: "delivery",   description: "Onboarding der zwei neuen Schiffe (Sirius, Polaris) durchführen.",            dueAt: daysFromNow(-5),   recurrence: "none",      ownerRole: "Customer Success", source: "manual",   status: "missed",      clauseId: null, escalationDays: 2 },
+    ];
+    await db.insert(obligationsTable).values(obligationSeed.map(o => ({
+      id: o.id,
+      tenantId: ctr003.tenantId ?? "tn_root",
+      contractId: o.contractId,
+      brandId: ctr003.brandId ?? null,
+      accountId: ctr003.accountId ?? null,
+      clauseId: o.clauseId,
+      type: o.type,
+      description: o.description,
+      dueAt: o.dueAt,
+      recurrence: o.recurrence,
+      ownerRole: o.ownerRole,
+      status: o.status,
+      source: o.source,
+      escalationDays: o.escalationDays,
+    }))).onConflictDoNothing();
+
+    // Counter aktualisieren
+    const [{ c: obCount } = { c: 0 }] = await db
+      .select({ c: sql<number>`count(*)::int` })
+      .from(obligationsTable)
+      .where(eq(obligationsTable.contractId, "ctr_003"));
+    await db.update(contractsTable).set({ obligationsCount: obCount }).where(eq(contractsTable.id, "ctr_003"));
+  }
+
+  // 6) Demo-Deviations für ctr_001 (Nordstern MSA, in_review) ───────────
+  const [ctr001] = await db.select().from(contractsTable).where(eq(contractsTable.id, "ctr_001"));
+  if (ctr001) {
+    await db.insert(clauseDeviationsTable).values([
+      {
+        id: "dv_ctr001_001",
+        tenantId: ctr001.tenantId ?? "tn_root",
+        contractId: "ctr_001",
+        clauseId: "cc_001",
+        familyId: "cf_liab",
+        deviationType: "variant_change",
+        severity: "high",
+        description: "Haftung 'Unbegrenzt bei IP-Verletzung' (cv_liab_1) liegt außerhalb des MSA-Standard-Playbooks (Standard wäre cv_liab_3 oder cv_liab_4).",
+        evidence: { playbookId: "pb_msa_std", actualVariantId: "cv_liab_1", allowedVariantIds: ["cv_liab_3", "cv_liab_4"] },
+        policyId: "pb_msa_std",
+        requiresApproval: true,
+      },
+      {
+        id: "dv_ctr001_002",
+        tenantId: ctr001.tenantId ?? "tn_root",
+        contractId: "ctr_001",
+        clauseId: "cc_002",
+        familyId: "cf_term",
+        deviationType: "variant_change",
+        severity: "medium",
+        description: "Auto-Renewal-Klausel (cv_term_4) verlangt 90 Tage Kündigungsfrist — Kunde fordert 60.",
+        evidence: { playbookId: "pb_msa_std", actualVariantId: "cv_term_4" },
+        policyId: "pb_msa_std",
+        requiresApproval: true,
+      },
+      {
+        id: "dv_ctr001_003",
+        tenantId: ctr001.tenantId ?? "tn_root",
+        contractId: "ctr_001",
+        clauseId: "cc_004",
+        familyId: "cf_pay",
+        deviationType: "threshold_breach",
+        severity: "low",
+        description: "Zahlungsziel Netto 60 (cv_pay_2) überschreitet Standard-Schwellwert 45 Tage.",
+        evidence: { rule: "payment_terms_above_days", threshold: 45, actual: 60 },
+        policyId: "pb_msa_std",
+        requiresApproval: false,
+      },
+    ]).onConflictDoNothing();
+
+    const [{ c: dvCount } = { c: 0 }] = await db
+      .select({ c: sql<number>`count(*)::int` })
+      .from(clauseDeviationsTable)
+      .where(and(eq(clauseDeviationsTable.contractId, "ctr_001"), sql`${clauseDeviationsTable.resolvedAt} IS NULL`));
+    await db.update(contractsTable).set({ openDeviationsCount: dvCount }).where(eq(contractsTable.id, "ctr_001"));
+  }
+
+  // Demo-Deviations für ctr_004 (BlueRiver SOW, in_review) ───────────
+  const [ctr004] = await db.select().from(contractsTable).where(eq(contractsTable.id, "ctr_004"));
+  if (ctr004) {
+    await db.insert(clauseDeviationsTable).values([
+      {
+        id: "dv_ctr004_001",
+        tenantId: ctr004.tenantId ?? "tn_root",
+        contractId: "ctr_004",
+        clauseId: "cc_009",
+        familyId: "cf_data",
+        deviationType: "text_edit",
+        severity: "medium",
+        description: "Text-Bearbeitung in Data-Klausel (cv_data_3): Kunden-Redline beim Audit-Recht.",
+        evidence: { kind: "text_edit", clauseVariantId: "cv_data_3" },
+        policyId: null,
+        requiresApproval: true,
+      },
+      {
+        id: "dv_ctr004_002",
+        tenantId: ctr004.tenantId ?? "tn_root",
+        contractId: "ctr_004",
+        clauseId: "cc_009",
+        familyId: "cf_liab",
+        deviationType: "missing_required",
+        severity: "high",
+        description: "Pflicht-Klausel 'Liability' fehlt im SOW (Pflicht laut MSA-Standard).",
+        evidence: { mandatoryFamilyId: "cf_liab" },
+        policyId: "pb_msa_std",
+        requiresApproval: true,
+      },
+    ]).onConflictDoNothing();
+
+    const [{ c: dv4Count } = { c: 0 }] = await db
+      .select({ c: sql<number>`count(*)::int` })
+      .from(clauseDeviationsTable)
+      .where(and(eq(clauseDeviationsTable.contractId, "ctr_004"), sql`${clauseDeviationsTable.resolvedAt} IS NULL`));
+    await db.update(contractsTable).set({ openDeviationsCount: dv4Count }).where(eq(contractsTable.id, "ctr_004"));
+  }
+
+  logger.info("Contract MVP augmentation completed");
 }

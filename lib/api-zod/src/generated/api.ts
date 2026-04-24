@@ -2293,6 +2293,22 @@ export const GetDashboardSummaryResponse = zod.object({
   openApprovals: zod.number(),
   signaturesPending: zod.number(),
   atRiskDeals: zod.number(),
+  openDeviationsCount: zod
+    .number()
+    .optional()
+    .describe("Offene Klausel-Abweichungen im sichtbaren Scope"),
+  overdueObligationsCount: zod
+    .number()
+    .optional()
+    .describe("Überfällige Vertragspflichten"),
+  avgTimeToSignatureDays: zod
+    .number()
+    .nullish()
+    .describe("ø Tage von Vertragserstellung bis Signatur (90d Rolling)"),
+  avgApprovalDurationHours: zod
+    .number()
+    .nullish()
+    .describe("ø Stunden von Approval-Antrag bis Entscheidung"),
   stageBreakdown: zod.array(
     zod.object({
       stage: zod.string(),
@@ -3535,4 +3551,429 @@ export const BulkUpdateDealStageResponse = zod.object({
   updated: zod.number(),
   skipped: zod.number(),
   skippedIds: zod.array(zod.string()).optional(),
+});
+
+export const ListContractTypesResponseItem = zod.object({
+  id: zod.string(),
+  tenantId: zod.string(),
+  code: zod.string(),
+  name: zod.string(),
+  description: zod.string().nullish(),
+  mandatoryClauseFamilyIds: zod.array(zod.string()),
+  forbiddenClauseFamilyIds: zod.array(zod.string()),
+  defaultPlaybookId: zod.string().nullish(),
+  active: zod.boolean(),
+  createdAt: zod.coerce.date(),
+});
+export const ListContractTypesResponse = zod.array(
+  ListContractTypesResponseItem,
+);
+
+export const createContractTypeBodyCodeMin = 2;
+export const createContractTypeBodyCodeMax = 32;
+
+export const CreateContractTypeBody = zod.object({
+  code: zod
+    .string()
+    .min(createContractTypeBodyCodeMin)
+    .max(createContractTypeBodyCodeMax),
+  name: zod.string().min(1),
+  description: zod.string().optional(),
+  mandatoryClauseFamilyIds: zod.array(zod.string()).optional(),
+  forbiddenClauseFamilyIds: zod.array(zod.string()).optional(),
+  defaultPlaybookId: zod.string().optional(),
+  active: zod.boolean().optional(),
+});
+
+export const UpdateContractTypeParams = zod.object({
+  id: zod.coerce.string(),
+});
+
+export const UpdateContractTypeBody = zod.object({
+  name: zod.string().min(1).optional(),
+  description: zod.string().nullish(),
+  mandatoryClauseFamilyIds: zod.array(zod.string()).optional(),
+  forbiddenClauseFamilyIds: zod.array(zod.string()).optional(),
+  defaultPlaybookId: zod.string().nullish(),
+  active: zod.boolean().optional(),
+});
+
+export const UpdateContractTypeResponse = zod.object({
+  id: zod.string(),
+  tenantId: zod.string(),
+  code: zod.string(),
+  name: zod.string(),
+  description: zod.string().nullish(),
+  mandatoryClauseFamilyIds: zod.array(zod.string()),
+  forbiddenClauseFamilyIds: zod.array(zod.string()),
+  defaultPlaybookId: zod.string().nullish(),
+  active: zod.boolean(),
+  createdAt: zod.coerce.date(),
+});
+
+export const DeleteContractTypeParams = zod.object({
+  id: zod.coerce.string(),
+});
+
+export const ListContractPlaybooksQueryParams = zod.object({
+  contractTypeId: zod.coerce.string().optional(),
+});
+
+export const ListContractPlaybooksResponseItem = zod.object({
+  id: zod.string(),
+  tenantId: zod.string(),
+  contractTypeId: zod.string(),
+  name: zod.string(),
+  description: zod.string().nullish(),
+  brandIds: zod.array(zod.string()),
+  companyIds: zod.array(zod.string()),
+  allowedClauseVariantIds: zod.array(zod.string()),
+  defaultClauseVariantIds: zod.array(zod.string()),
+  approvalRules: zod.array(
+    zod.object({
+      trigger: zod
+        .string()
+        .describe(
+          "z.B. discount_pct_above, payment_terms_above_days, liability_cap_above_eur",
+        ),
+      threshold: zod.number().optional(),
+      approverRole: zod.string(),
+    }),
+  ),
+  active: zod.boolean(),
+  createdAt: zod.coerce.date(),
+});
+export const ListContractPlaybooksResponse = zod.array(
+  ListContractPlaybooksResponseItem,
+);
+
+export const CreateContractPlaybookBody = zod.object({
+  contractTypeId: zod.string(),
+  name: zod.string().min(1),
+  description: zod.string().optional(),
+  brandIds: zod.array(zod.string()).optional(),
+  companyIds: zod.array(zod.string()).optional(),
+  allowedClauseVariantIds: zod.array(zod.string()).optional(),
+  defaultClauseVariantIds: zod.array(zod.string()).optional(),
+  approvalRules: zod
+    .array(
+      zod.object({
+        trigger: zod
+          .string()
+          .describe(
+            "z.B. discount_pct_above, payment_terms_above_days, liability_cap_above_eur",
+          ),
+        threshold: zod.number().optional(),
+        approverRole: zod.string(),
+      }),
+    )
+    .optional(),
+});
+
+export const UpdateContractPlaybookParams = zod.object({
+  id: zod.coerce.string(),
+});
+
+export const UpdateContractPlaybookBody = zod.object({
+  name: zod.string().min(1).optional(),
+  description: zod.string().nullish(),
+  brandIds: zod.array(zod.string()).optional(),
+  companyIds: zod.array(zod.string()).optional(),
+  allowedClauseVariantIds: zod.array(zod.string()).optional(),
+  defaultClauseVariantIds: zod.array(zod.string()).optional(),
+  approvalRules: zod
+    .array(
+      zod.object({
+        trigger: zod
+          .string()
+          .describe(
+            "z.B. discount_pct_above, payment_terms_above_days, liability_cap_above_eur",
+          ),
+        threshold: zod.number().optional(),
+        approverRole: zod.string(),
+      }),
+    )
+    .optional(),
+  active: zod.boolean().optional(),
+});
+
+export const UpdateContractPlaybookResponse = zod.object({
+  id: zod.string(),
+  tenantId: zod.string(),
+  contractTypeId: zod.string(),
+  name: zod.string(),
+  description: zod.string().nullish(),
+  brandIds: zod.array(zod.string()),
+  companyIds: zod.array(zod.string()),
+  allowedClauseVariantIds: zod.array(zod.string()),
+  defaultClauseVariantIds: zod.array(zod.string()),
+  approvalRules: zod.array(
+    zod.object({
+      trigger: zod
+        .string()
+        .describe(
+          "z.B. discount_pct_above, payment_terms_above_days, liability_cap_above_eur",
+        ),
+      threshold: zod.number().optional(),
+      approverRole: zod.string(),
+    }),
+  ),
+  active: zod.boolean(),
+  createdAt: zod.coerce.date(),
+});
+
+export const DeleteContractPlaybookParams = zod.object({
+  id: zod.coerce.string(),
+});
+
+export const ListContractDeviationsParams = zod.object({
+  id: zod.coerce.string(),
+});
+
+export const ListContractDeviationsResponseItem = zod.object({
+  id: zod.string(),
+  tenantId: zod.string(),
+  contractId: zod.string(),
+  clauseId: zod.string(),
+  familyId: zod.string(),
+  familyName: zod.string().nullish(),
+  deviationType: zod.enum([
+    "variant_change",
+    "text_edit",
+    "missing_required",
+    "forbidden_used",
+    "threshold_breach",
+  ]),
+  severity: zod.enum(["low", "medium", "high", "critical"]),
+  description: zod.string(),
+  evidence: zod.record(zod.string(), zod.unknown()).nullish(),
+  policyId: zod.string().nullish(),
+  requiresApproval: zod.boolean(),
+  approvalCaseId: zod.string().nullish(),
+  resolvedAt: zod.coerce.date().nullish(),
+  resolvedBy: zod.string().nullish(),
+  resolutionNote: zod.string().nullish(),
+  createdAt: zod.coerce.date(),
+});
+export const ListContractDeviationsResponse = zod.array(
+  ListContractDeviationsResponseItem,
+);
+
+/**
+ * Re-runs the deviation engine for a contract and returns the current deviation list.
+ */
+export const EvaluateContractDeviationsParams = zod.object({
+  id: zod.coerce.string(),
+});
+
+export const EvaluateContractDeviationsResponse = zod.object({
+  contractId: zod.string(),
+  deviations: zod.array(
+    zod.object({
+      id: zod.string(),
+      tenantId: zod.string(),
+      contractId: zod.string(),
+      clauseId: zod.string(),
+      familyId: zod.string(),
+      familyName: zod.string().nullish(),
+      deviationType: zod.enum([
+        "variant_change",
+        "text_edit",
+        "missing_required",
+        "forbidden_used",
+        "threshold_breach",
+      ]),
+      severity: zod.enum(["low", "medium", "high", "critical"]),
+      description: zod.string(),
+      evidence: zod.record(zod.string(), zod.unknown()).nullish(),
+      policyId: zod.string().nullish(),
+      requiresApproval: zod.boolean(),
+      approvalCaseId: zod.string().nullish(),
+      resolvedAt: zod.coerce.date().nullish(),
+      resolvedBy: zod.string().nullish(),
+      resolutionNote: zod.string().nullish(),
+      createdAt: zod.coerce.date(),
+    }),
+  ),
+  summary: zod.object({
+    total: zod.number(),
+    open: zod.number(),
+    requiresApproval: zod.number(),
+    bySeverity: zod.record(zod.string(), zod.number()),
+  }),
+});
+
+export const ResolveDeviationParams = zod.object({
+  id: zod.coerce.string(),
+});
+
+export const ResolveDeviationBody = zod.object({
+  resolutionNote: zod.string().min(1),
+});
+
+export const ResolveDeviationResponse = zod.object({
+  id: zod.string(),
+  tenantId: zod.string(),
+  contractId: zod.string(),
+  clauseId: zod.string(),
+  familyId: zod.string(),
+  familyName: zod.string().nullish(),
+  deviationType: zod.enum([
+    "variant_change",
+    "text_edit",
+    "missing_required",
+    "forbidden_used",
+    "threshold_breach",
+  ]),
+  severity: zod.enum(["low", "medium", "high", "critical"]),
+  description: zod.string(),
+  evidence: zod.record(zod.string(), zod.unknown()).nullish(),
+  policyId: zod.string().nullish(),
+  requiresApproval: zod.boolean(),
+  approvalCaseId: zod.string().nullish(),
+  resolvedAt: zod.coerce.date().nullish(),
+  resolvedBy: zod.string().nullish(),
+  resolutionNote: zod.string().nullish(),
+  createdAt: zod.coerce.date(),
+});
+
+export const ListObligationsQueryParams = zod.object({
+  contractId: zod.coerce.string().optional(),
+  status: zod.coerce.string().optional(),
+  ownerId: zod.coerce.string().optional(),
+  dueBefore: zod.date().optional(),
+  overdueOnly: zod.coerce.boolean().optional(),
+});
+
+export const ListObligationsResponseItem = zod.object({
+  id: zod.string(),
+  tenantId: zod.string(),
+  contractId: zod.string(),
+  contractTitle: zod.string().nullish(),
+  brandId: zod.string().nullish(),
+  accountId: zod.string().nullish(),
+  accountName: zod.string().nullish(),
+  clauseId: zod.string().nullish(),
+  type: zod.enum([
+    "delivery",
+    "reporting",
+    "sla",
+    "payment",
+    "notice",
+    "audit",
+  ]),
+  description: zod.string(),
+  dueAt: zod.coerce.date().nullish(),
+  recurrence: zod.enum(["none", "monthly", "quarterly", "annual"]),
+  ownerId: zod.string().nullish(),
+  ownerName: zod.string().nullish(),
+  ownerRole: zod.string().nullish(),
+  status: zod.enum(["pending", "in_progress", "done", "missed", "waived"]),
+  source: zod.enum(["derived", "manual"]),
+  escalationDays: zod.number().nullish(),
+  completedAt: zod.coerce.date().nullish(),
+  completedBy: zod.string().nullish(),
+  createdAt: zod.coerce.date(),
+});
+export const ListObligationsResponse = zod.array(ListObligationsResponseItem);
+
+export const createObligationBodyEscalationDaysMin = 0;
+
+export const CreateObligationBody = zod.object({
+  contractId: zod.string(),
+  clauseId: zod.string().optional(),
+  type: zod.enum([
+    "delivery",
+    "reporting",
+    "sla",
+    "payment",
+    "notice",
+    "audit",
+  ]),
+  description: zod.string().min(1),
+  dueAt: zod.coerce.date().optional(),
+  recurrence: zod.enum(["none", "monthly", "quarterly", "annual"]).optional(),
+  ownerId: zod.string().optional(),
+  ownerRole: zod.string().optional(),
+  escalationDays: zod
+    .number()
+    .min(createObligationBodyEscalationDaysMin)
+    .optional(),
+});
+
+export const UpdateObligationParams = zod.object({
+  id: zod.coerce.string(),
+});
+
+export const UpdateObligationBody = zod.object({
+  description: zod.string().min(1).optional(),
+  dueAt: zod.coerce.date().nullish(),
+  ownerId: zod.string().nullish(),
+  ownerRole: zod.string().nullish(),
+  status: zod
+    .enum(["pending", "in_progress", "done", "missed", "waived"])
+    .optional(),
+  escalationDays: zod.number().nullish(),
+});
+
+export const UpdateObligationResponse = zod.object({
+  id: zod.string(),
+  tenantId: zod.string(),
+  contractId: zod.string(),
+  contractTitle: zod.string().nullish(),
+  brandId: zod.string().nullish(),
+  accountId: zod.string().nullish(),
+  accountName: zod.string().nullish(),
+  clauseId: zod.string().nullish(),
+  type: zod.enum([
+    "delivery",
+    "reporting",
+    "sla",
+    "payment",
+    "notice",
+    "audit",
+  ]),
+  description: zod.string(),
+  dueAt: zod.coerce.date().nullish(),
+  recurrence: zod.enum(["none", "monthly", "quarterly", "annual"]),
+  ownerId: zod.string().nullish(),
+  ownerName: zod.string().nullish(),
+  ownerRole: zod.string().nullish(),
+  status: zod.enum(["pending", "in_progress", "done", "missed", "waived"]),
+  source: zod.enum(["derived", "manual"]),
+  escalationDays: zod.number().nullish(),
+  completedAt: zod.coerce.date().nullish(),
+  completedBy: zod.string().nullish(),
+  createdAt: zod.coerce.date(),
+});
+
+/**
+ * Derives obligations from clause obligationTemplates. Idempotent per (contract, clause).
+ */
+export const DeriveContractObligationsParams = zod.object({
+  id: zod.coerce.string(),
+});
+
+export const DeriveContractObligationsResponse = zod.object({
+  contractId: zod.string(),
+  created: zod.number(),
+  total: zod.number(),
+});
+
+/**
+ * Returns the current accepted quote version for an account, or 404 if none.
+ */
+export const GetCurrentQuoteQueryParams = zod.object({
+  accountId: zod.coerce.string(),
+});
+
+export const GetCurrentQuoteResponse = zod.object({
+  accountId: zod.string(),
+  quoteId: zod.string(),
+  versionId: zod.string(),
+  version: zod.number(),
+  status: zod.string(),
+  total: zod.number(),
+  currency: zod.string(),
+  acceptedAt: zod.coerce.date().nullable(),
 });
