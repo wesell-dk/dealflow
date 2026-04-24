@@ -15,8 +15,9 @@ import {
   quotesTable,
   dealsTable,
   companiesTable,
+  uploadedObjectsTable,
 } from "@workspace/db";
-import { eq, inArray, or, like, and } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 
 const router: IRouter = Router();
 const objectStorageService = new ObjectStorageService();
@@ -111,6 +112,19 @@ router.post("/storage/uploads/request-url", async (req: Request, res: Response) 
     const uploadURL = await objectStorageService.getObjectEntityUploadURL();
     const objectPath = objectStorageService.normalizeObjectEntityPath(uploadURL);
 
+    const scope = (req as AuthedRequest).scope!;
+    await db
+      .insert(uploadedObjectsTable)
+      .values({
+        objectPath,
+        tenantId: scope.tenantId,
+        userId: scope.user?.id ?? null,
+        kind,
+        contentType,
+        size,
+      })
+      .onConflictDoNothing();
+
     res.json(
       RequestUploadUrlResponse.parse({
         uploadURL,
@@ -173,16 +187,11 @@ router.get("/storage/objects/*path", async (req: Request, res: Response) => {
     const wildcardPath = Array.isArray(raw) ? raw.join("/") : raw;
     const objectPath = `/objects/${wildcardPath}`;
 
-    const suffix = `/storage/objects/${wildcardPath}`;
     const brandRows = await db
-      .select({ id: brandsTable.id })
+      .select({ id: brandsTable.id, tenantId: companiesTable.tenantId })
       .from(brandsTable)
-      .where(
-        or(
-          like(brandsTable.logoUrl, `%${suffix}`),
-          like(brandsTable.logoUrl, `%/objects/${wildcardPath}`),
-        ),
-      );
+      .innerJoin(companiesTable, eq(companiesTable.id, brandsTable.companyId))
+      .where(eq(brandsTable.logoUrl, objectPath));
 
     const libRows = await db
       .select({
@@ -214,7 +223,9 @@ router.get("/storage/objects/*path", async (req: Request, res: Response) => {
       return;
     }
 
-    const brandAllowed = brandRows.length > 0 && (scope.tenantWide || brandRows.some((r) => scope.brandIds.includes(r.id)));
+    const brandAllowed = brandRows.some(
+      (r) => r.tenantId === scope.tenantId && (scope.tenantWide || scope.brandIds.includes(r.id)),
+    );
     const libAllowed = libRows.some((r) =>
       r.tenantId === scope.tenantId && (
         scope.tenantWide ||

@@ -204,6 +204,18 @@ export function QuoteDocument({ data }: { data: QuotePdfData }) {
   const customSections = sections.filter(s => !['cover', 'intro', 'scope', 'terms', 'appendix'].includes(s.kind));
   const attachments = data.attachments ?? [];
 
+  // Build a TOC of section labels. Page numbers depend on actual layout
+  // and are not statically computable here (sections may wrap), so we
+  // omit page labels and just list the entries.
+  const toc: { title: string }[] = [];
+  toc.push({ title: 'Angebot & Positionen' });
+  if (intro) toc.push({ title: intro.title || 'Einleitung' });
+  if (scopeSection) toc.push({ title: scopeSection.title || 'Leistungsumfang' });
+  if (termsSection) toc.push({ title: termsSection.title || 'Konditionen' });
+  for (const s of customSections) toc.push({ title: s.title });
+  if (appendixSection) toc.push({ title: appendixSection.title || 'Anhang' });
+  if (attachments.length > 0) toc.push({ title: `Anlagen (${attachments.length})` });
+
   return (
     <Document title={`Angebot ${data.number}`}>
       {cover ? (
@@ -252,6 +264,50 @@ export function QuoteDocument({ data }: { data: QuotePdfData }) {
 
           <Text style={styles.coverFooter} fixed>
             {data.brand?.legalEntityName ?? 'DealFlow One'} · {data.brand?.addressLine ?? ''}
+          </Text>
+        </Page>
+      ) : null}
+
+      {toc.length > 1 ? (
+        <Page size="A4" style={styles.page}>
+          <View style={styles.headerBar}>
+            <View>
+              {data.brand?.logoUrl ? (
+                // eslint-disable-next-line jsx-a11y/alt-text
+                <Image src={data.brand.logoUrl} style={styles.logo} />
+              ) : (
+                <Text style={styles.brandName}>{data.brand?.name ?? 'DealFlow One'}</Text>
+              )}
+            </View>
+            <View>
+              <Text style={styles.brandName}>{data.brand?.legalEntityName ?? 'DealFlow One'}</Text>
+              <Text style={{ fontSize: 8, color: '#6b7280' }}>{data.brand?.addressLine ?? ''}</Text>
+            </View>
+          </View>
+          <Text style={styles.h1}>Inhaltsverzeichnis</Text>
+          <View style={{ marginTop: 12 }}>
+            {toc.map((t, i) => (
+              <View
+                key={`toc-${i}`}
+                style={{
+                  flexDirection: 'row',
+                  justifyContent: 'space-between',
+                  paddingVertical: 4,
+                  borderBottomColor: '#e5e7eb',
+                  borderBottomWidth: 1,
+                }}
+              >
+                <Text style={{ fontSize: 11, color: '#111827' }}>{t.title}</Text>
+                <Text
+                  style={{ fontSize: 10, color: '#6b7280' }}
+                  render={({ pageNumber }) => `Seite ${pageNumber + 1}`}
+                  fixed
+                />
+              </View>
+            ))}
+          </View>
+          <Text style={styles.footer} fixed>
+            {data.brand?.legalEntityName ?? 'DealFlow One'} · Angebot {data.number} · v{data.version}
           </Text>
         </Page>
       ) : null}

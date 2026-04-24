@@ -270,6 +270,21 @@ export const quoteAttachmentsTable = pgTable("quote_attachments", {
   createdAt: ts("created_at"),
 });
 
+// Registry of every object minted via the upload flow, used to verify
+// that a client-supplied objectPath was issued to *this* tenant before
+// linking it from attachment_library or quote_attachments. Without this
+// check, a caller could attach an arbitrary object path (or one leaked
+// from another tenant) and gain read access via /storage/objects/*.
+export const uploadedObjectsTable = pgTable("uploaded_objects", {
+  objectPath: text("object_path").primaryKey(),
+  tenantId: text("tenant_id").notNull(),
+  userId: text("user_id"),
+  kind: text("kind").notNull(),
+  contentType: text("content_type").notNull(),
+  size: integer("size").notNull(),
+  createdAt: ts("created_at"),
+});
+
 // Industry profile defaults: clause variants + suggested template & attachments
 export const industryProfilesTable = pgTable("industry_profiles", {
   id: id(),

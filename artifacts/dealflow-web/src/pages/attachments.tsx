@@ -31,7 +31,8 @@ import { Textarea } from "@/components/ui/textarea";
 import { Paperclip, Upload, Trash2, Search, Loader2, Plus } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
-const CATEGORIES = ["all", "terms", "marketing", "technical", "legal", "other"];
+const CATEGORIES = ["all", "datasheet", "terms", "reference", "certificate", "other"];
+const UPLOAD_CATEGORIES = ["datasheet", "terms", "reference", "certificate", "other"] as const;
 
 export default function Attachments() {
   const { t } = useTranslation();

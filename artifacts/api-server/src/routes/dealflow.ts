@@ -73,6 +73,7 @@ import {
   attachmentLibraryTable,
   quoteAttachmentsTable,
   industryProfilesTable,
+  uploadedObjectsTable,
 } from '@workspace/db';
 import {
   generatePriceRejectionForReaction,
@@ -880,6 +881,28 @@ router.delete('/quote-templates/:id', async (req, res) => {
 });
 
 // ── ATTACHMENT LIBRARY ──
+async function assertOwnedObjectPath(
+  req: Request, res: Response, scope: ReturnType<typeof getScope>, objectPath: string,
+): Promise<boolean> {
+  if (!objectPath || !objectPath.startsWith('/objects/')) {
+    res.status(400).json({ error: 'objectPath must start with /objects/' });
+    return false;
+  }
+  const [row] = await db
+    .select()
+    .from(uploadedObjectsTable)
+    .where(eq(uploadedObjectsTable.objectPath, objectPath));
+  if (!row) {
+    res.status(400).json({ error: 'objectPath not registered (use /storage/uploads/request-url first)' });
+    return false;
+  }
+  if (row.tenantId !== scope.tenantId) {
+    res.status(403).json({ error: 'objectPath not owned by tenant' });
+    return false;
+  }
+  return true;
+}
+
 function mapAttachmentLibraryItem(a: typeof attachmentLibraryTable.$inferSelect) {
   return {
     id: a.id, tenantId: a.tenantId,
@@ -933,6 +956,7 @@ router.post('/attachment-library', async (req, res) => {
   if (b.companyId && !scope.tenantWide && !scope.companyIds.includes(b.companyId)) {
     res.status(403).json({ error: 'company not in scope' }); return;
   }
+  if (!(await assertOwnedObjectPath(req, res, scope, b.objectPath))) return;
   const id = `att_${randomUUID().slice(0, 8)}`;
   await db.insert(attachmentLibraryTable).values({
     id, tenantId: scope.tenantId,
@@ -1229,6 +1253,7 @@ router.post('/quote-versions/:id/attachments', async (req, res) => {
       res.status(400).json({ error: 'name, mimeType, size, objectPath required for ad-hoc attachment' });
       return;
     }
+    if (!(await assertOwnedObjectPath(req, res, scope, b.objectPath))) return;
     payload = {
       id: `qatt_${randomUUID().slice(0, 8)}`,
       quoteVersionId: qv.id, libraryAssetId: null,
@@ -1566,6 +1591,17 @@ router.patch('/brands/:id', async (req, res) => {
         const okHttps = lower.startsWith('https://');
         if (!(okStored || okData || okHttps)) {
           res.status(400).json({ error: 'logoUrl must be https://, data:image/*, or a stored object path' }); return;
+        }
+        if (okHttps && /\/(?:api\/)?(?:storage\/)?objects\//i.test(v)) {
+          res.status(400).json({ error: 'logoUrl must not embed an /objects/ path inside an HTTPS URL' }); return;
+        }
+        if (okStored) {
+          const m = v.match(/^(?:\/api)?\/storage\/objects\/(.+)$/) ?? v.match(/^\/objects\/(.+)$/);
+          if (!m) { res.status(400).json({ error: 'logoUrl: malformed stored path' }); return; }
+          const objectPath = `/objects/${m[1]}`;
+          if (!(await assertOwnedObjectPath(req, res, scope, objectPath))) return;
+          (patch as Record<string, unknown>)[k] = objectPath;
+          continue;
         }
       }
     }
