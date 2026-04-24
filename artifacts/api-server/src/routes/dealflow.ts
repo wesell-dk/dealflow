@@ -1,6 +1,6 @@
 import { Router, type IRouter, type Request, type Response } from 'express';
 import { and, asc, desc, eq, inArray, sql } from 'drizzle-orm';
-import { randomUUID } from 'node:crypto';
+import { randomUUID, randomBytes } from 'node:crypto';
 import { ObjectStorageService } from '../lib/objectStorage';
 import { validateInline } from '../middlewares/validate';
 import * as Z from '@workspace/api-zod';
@@ -278,6 +278,227 @@ router.get('/orgs/brands', async (req, res) => {
   }
   res.json(visible.map(mapBrand));
 });
+// ── Companies & Brands: CRUD (Tenant-Admin) ──
+// Country/Currency-Codes konsequent normalisieren (ISO-Standard ist Großbuchstaben).
+function normCountry(c: string): string { return c.trim().toUpperCase(); }
+function normCurrency(c: string): string { return c.trim().toUpperCase(); }
+const HEX_RE = /^#[0-9a-fA-F]{6}$/;
+
+router.post('/orgs/companies', async (req, res) => {
+  if (!validateInline(req, res, { body: Z.CreateCompanyBody })) return;
+  if (!requireAdmin(req, res)) return;
+  const scope = getScope(req);
+  const b = req.body as { name: string; legalName: string; country: string; currency: string };
+  const name = b.name.trim();
+  const country = normCountry(b.country);
+  const currency = normCurrency(b.currency);
+  if (!/^[A-Z]{2}$/.test(country)) { res.status(422).json({ error: 'country must be ISO-3166 alpha-2 (DE, CH, AT, …)' }); return; }
+  if (!/^[A-Z]{3}$/.test(currency)) { res.status(422).json({ error: 'currency must be ISO-4217 (EUR, CHF, USD, …)' }); return; }
+  // Eindeutigkeit pro Tenant.
+  const existing = await db.select().from(companiesTable)
+    .where(and(eq(companiesTable.tenantId, scope.tenantId), eq(companiesTable.name, name)));
+  if (existing.length) { res.status(409).json({ error: `company "${name}" already exists in this tenant` }); return; }
+  const newId = `co_${randomBytes(6).toString('hex')}`;
+  const row = {
+    id: newId,
+    tenantId: scope.tenantId,
+    name,
+    legalName: b.legalName.trim(),
+    country,
+    currency,
+  };
+  await db.insert(companiesTable).values(row);
+  await writeAuditFromReq(req, {
+    entityType: 'company',
+    entityId: newId,
+    action: 'create',
+    actor: scope.user.name,
+    summary: `Gesellschaft "${name}" angelegt`,
+    after: row,
+  });
+  res.status(201).json(row);
+});
+
+router.patch('/orgs/companies/:id', async (req, res) => {
+  if (!validateInline(req, res, { params: Z.UpdateCompanyParams, body: Z.UpdateCompanyBody })) return;
+  if (!requireAdmin(req, res)) return;
+  const scope = getScope(req);
+  const [existing] = await db.select().from(companiesTable).where(eq(companiesTable.id, req.params.id));
+  if (!existing) { res.status(404).json({ error: 'not found' }); return; }
+  if (existing.tenantId !== scope.tenantId) { res.status(403).json({ error: 'forbidden' }); return; }
+  const body = req.body as Partial<{ name: string; legalName: string; country: string; currency: string }>;
+  const patch: Partial<typeof companiesTable.$inferInsert> = {};
+  if (typeof body.name === 'string') {
+    const v = body.name.trim();
+    if (!v) { res.status(422).json({ error: 'name must not be empty' }); return; }
+    if (v !== existing.name) {
+      const dup = await db.select().from(companiesTable)
+        .where(and(eq(companiesTable.tenantId, scope.tenantId), eq(companiesTable.name, v)));
+      if (dup.length) { res.status(409).json({ error: `company "${v}" already exists in this tenant` }); return; }
+    }
+    patch.name = v;
+  }
+  if (typeof body.legalName === 'string') {
+    const v = body.legalName.trim();
+    if (!v) { res.status(422).json({ error: 'legalName must not be empty' }); return; }
+    patch.legalName = v;
+  }
+  if (typeof body.country === 'string') {
+    const v = normCountry(body.country);
+    if (!/^[A-Z]{2}$/.test(v)) { res.status(422).json({ error: 'country must be ISO-3166 alpha-2' }); return; }
+    patch.country = v;
+  }
+  if (typeof body.currency === 'string') {
+    const v = normCurrency(body.currency);
+    if (!/^[A-Z]{3}$/.test(v)) { res.status(422).json({ error: 'currency must be ISO-4217' }); return; }
+    patch.currency = v;
+  }
+  if (Object.keys(patch).length) {
+    await db.update(companiesTable).set(patch).where(eq(companiesTable.id, existing.id));
+  }
+  const [updated] = await db.select().from(companiesTable).where(eq(companiesTable.id, existing.id));
+  await writeAuditFromReq(req, {
+    entityType: 'company',
+    entityId: existing.id,
+    action: 'update',
+    actor: scope.user.name,
+    summary: `Gesellschaft "${existing.name}" aktualisiert`,
+    before: existing,
+    after: updated,
+  });
+  res.json(updated);
+});
+
+router.delete('/orgs/companies/:id', async (req, res) => {
+  if (!validateInline(req, res, { params: Z.DeleteCompanyParams })) return;
+  if (!requireAdmin(req, res)) return;
+  const scope = getScope(req);
+  const [existing] = await db.select().from(companiesTable).where(eq(companiesTable.id, req.params.id));
+  if (!existing) { res.status(404).json({ error: 'not found' }); return; }
+  if (existing.tenantId !== scope.tenantId) { res.status(403).json({ error: 'forbidden' }); return; }
+  // Blocker prüfen — Hard-Delete mit Cascade wäre Datenverlust; wir verlangen explizites Aufräumen.
+  // quotes/contracts haben keinen direkten companyId-FK — sie hängen über deals.
+  // Daher genügt es, brands/deals/pricePositions zu zählen; ein nicht-leeres deals
+  // impliziert noch lebende Quotes/Contracts.
+  const [brandsCount, dealsCount, ppCount] = await Promise.all([
+    db.$count(brandsTable, eq(brandsTable.companyId, existing.id)),
+    db.$count(dealsTable, eq(dealsTable.companyId, existing.id)),
+    db.$count(pricePositionsTable, eq(pricePositionsTable.companyId, existing.id)),
+  ]);
+  if (brandsCount + dealsCount + ppCount > 0) {
+    res.status(409).json({
+      error: 'in use',
+      blockers: {
+        brands: brandsCount,
+        deals: dealsCount,
+        pricePositions: ppCount,
+      },
+    });
+    return;
+  }
+  await db.delete(companiesTable).where(eq(companiesTable.id, existing.id));
+  await writeAuditFromReq(req, {
+    entityType: 'company',
+    entityId: existing.id,
+    action: 'delete',
+    actor: scope.user.name,
+    summary: `Gesellschaft "${existing.name}" gelöscht`,
+    before: existing,
+  });
+  res.status(204).send();
+});
+
+router.post('/orgs/brands', async (req, res) => {
+  if (!validateInline(req, res, { body: Z.CreateBrandBody })) return;
+  if (!requireAdmin(req, res)) return;
+  const scope = getScope(req);
+  const b = req.body as {
+    companyId: string; name: string;
+    color?: string | null; voice?: string | null;
+    logoUrl?: string | null; primaryColor?: string | null; secondaryColor?: string | null;
+    tone?: string | null; legalEntityName?: string | null; addressLine?: string | null;
+  };
+  const [company] = await db.select().from(companiesTable).where(eq(companiesTable.id, b.companyId));
+  if (!company) { res.status(404).json({ error: 'company not found' }); return; }
+  if (company.tenantId !== scope.tenantId) { res.status(403).json({ error: 'forbidden' }); return; }
+  const name = b.name.trim();
+  if (!name) { res.status(422).json({ error: 'name must not be empty' }); return; }
+  const dup = await db.select().from(brandsTable)
+    .where(and(eq(brandsTable.companyId, b.companyId), eq(brandsTable.name, name)));
+  if (dup.length) { res.status(409).json({ error: `brand "${name}" already exists for this company` }); return; }
+  // Defaults & Hex-Validierung.
+  const color = (b.color ?? b.primaryColor ?? '#2D6CDF').trim();
+  if (!HEX_RE.test(color)) { res.status(422).json({ error: 'color must be #RRGGBB hex' }); return; }
+  const primaryColor = b.primaryColor ? b.primaryColor.trim() : color;
+  if (primaryColor && !HEX_RE.test(primaryColor)) { res.status(422).json({ error: 'primaryColor must be #RRGGBB hex' }); return; }
+  if (b.secondaryColor && b.secondaryColor !== '' && !HEX_RE.test(b.secondaryColor.trim())) {
+    res.status(422).json({ error: 'secondaryColor must be #RRGGBB hex' }); return;
+  }
+  const newId = `br_${randomBytes(6).toString('hex')}`;
+  const row: typeof brandsTable.$inferInsert = {
+    id: newId,
+    companyId: b.companyId,
+    name,
+    color,
+    voice: (b.voice ?? b.tone ?? 'precise').trim() || 'precise',
+    defaultClauseVariants: {},
+    logoUrl: b.logoUrl?.trim() || null,
+    primaryColor,
+    secondaryColor: b.secondaryColor?.trim() || null,
+    tone: b.tone?.trim() || (b.voice?.trim() || null),
+    legalEntityName: b.legalEntityName?.trim() || null,
+    addressLine: b.addressLine?.trim() || null,
+  };
+  await db.insert(brandsTable).values(row);
+  const [inserted] = await db.select().from(brandsTable).where(eq(brandsTable.id, newId));
+  await writeAuditFromReq(req, {
+    entityType: 'brand',
+    entityId: newId,
+    action: 'create',
+    actor: scope.user.name,
+    summary: `Brand "${name}" für Gesellschaft "${company.name}" angelegt`,
+    after: inserted,
+  });
+  res.status(201).json(mapBrand(inserted!));
+});
+
+router.delete('/orgs/brands/:id', async (req, res) => {
+  if (!validateInline(req, res, { params: Z.DeleteBrandParams })) return;
+  if (!requireAdmin(req, res)) return;
+  const scope = getScope(req);
+  const [existing] = await db.select().from(brandsTable).where(eq(brandsTable.id, req.params.id));
+  if (!existing) { res.status(404).json({ error: 'not found' }); return; }
+  const [company] = await db.select().from(companiesTable).where(eq(companiesTable.id, existing.companyId));
+  if (!company || company.tenantId !== scope.tenantId) {
+    res.status(403).json({ error: 'forbidden' }); return;
+  }
+  // quotes/contracts hängen über deals → keine direkten brandId-FKs nötig.
+  const [dealsCount, ppCount] = await Promise.all([
+    db.$count(dealsTable, eq(dealsTable.brandId, existing.id)),
+    db.$count(pricePositionsTable, eq(pricePositionsTable.brandId, existing.id)),
+  ]);
+  if (dealsCount + ppCount > 0) {
+    res.status(409).json({
+      error: 'in use',
+      blockers: {
+        deals: dealsCount,
+        pricePositions: ppCount,
+      },
+    });
+    return;
+  }
+  await db.delete(brandsTable).where(eq(brandsTable.id, existing.id));
+  await writeAuditFromReq(req, {
+    entityType: 'brand',
+    entityId: existing.id,
+    action: 'delete',
+    actor: scope.user.name,
+    summary: `Brand "${existing.name}" gelöscht`,
+    before: existing,
+  });
+  res.status(204).send();
+});
+
 router.get('/orgs/users', async (req, res) => {
   const scope = getScope(req);
   const rows = await db.select().from(usersTable).where(eq(usersTable.tenantId, scope.tenantId));

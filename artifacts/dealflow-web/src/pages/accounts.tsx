@@ -301,6 +301,11 @@ export default function Accounts() {
               { key: "industry", label: "Branche", required: true },
               { key: "country", label: "Land", required: true },
             ]}
+            templateExample={[
+              { name: "Helix Logistics GmbH", industry: "Logistik", country: "DE" },
+              { name: "Nova Retail AG", industry: "Handel", country: "CH" },
+            ]}
+            templateFilename="accounts-vorlage.csv"
             buildRow={(m): AccountInput | null => {
               if (!m.name?.trim()) return null;
               return {

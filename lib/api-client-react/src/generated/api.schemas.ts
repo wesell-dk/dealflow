@@ -93,6 +93,90 @@ export interface BrandUpdate {
   addressLine?: string | null;
 }
 
+export interface CompanyCreate {
+  /**
+   * @minLength 1
+   * @maxLength 200
+   */
+  name: string;
+  /**
+   * @minLength 1
+   * @maxLength 200
+   */
+  legalName: string;
+  /**
+   * ISO-3166 Alpha-2 (z. B. DE, CH, AT)
+   * @minLength 2
+   * @maxLength 2
+   */
+  country: string;
+  /**
+   * ISO-4217 (z. B. EUR, CHF, USD)
+   * @minLength 3
+   * @maxLength 3
+   */
+  currency: string;
+}
+
+export interface CompanyUpdate {
+  /**
+   * @minLength 1
+   * @maxLength 200
+   */
+  name?: string;
+  /**
+   * @minLength 1
+   * @maxLength 200
+   */
+  legalName?: string;
+  /**
+   * @minLength 2
+   * @maxLength 2
+   */
+  country?: string;
+  /**
+   * @minLength 3
+   * @maxLength 3
+   */
+  currency?: string;
+}
+
+export interface BrandCreate {
+  companyId: string;
+  /**
+   * @minLength 1
+   * @maxLength 200
+   */
+  name: string;
+  /** Primärfarbe als */
+  color?: string;
+  /** Tonalität (precise | premium | concise | bold). Default precise. */
+  voice?: string;
+  logoUrl?: string | null;
+  primaryColor?: string | null;
+  secondaryColor?: string | null;
+  tone?: string | null;
+  legalEntityName?: string | null;
+  addressLine?: string | null;
+}
+
+/**
+ * Anzahl blockierender Datensätze pro Entitätstyp.
+ */
+export type DeleteOrgConflictBlockers = {
+  brands?: number;
+  deals?: number;
+  quotes?: number;
+  contracts?: number;
+  pricePositions?: number;
+};
+
+export interface DeleteOrgConflict {
+  error: string;
+  /** Anzahl blockierender Datensätze pro Entitätstyp. */
+  blockers: DeleteOrgConflictBlockers;
+}
+
 export type BrandDefaultsInputDefaults = { [key: string]: string };
 
 export interface BrandDefaultsInput {

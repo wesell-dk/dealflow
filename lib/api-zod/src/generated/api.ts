@@ -73,6 +73,82 @@ export const ListCompaniesResponseItem = zod.object({
 });
 export const ListCompaniesResponse = zod.array(ListCompaniesResponseItem);
 
+/**
+ * @summary Neue Gesellschaft (legal entity) im Tenant anlegen
+ */
+export const createCompanyBodyNameMax = 200;
+
+export const createCompanyBodyLegalNameMax = 200;
+
+export const createCompanyBodyCountryMin = 2;
+export const createCompanyBodyCountryMax = 2;
+
+export const createCompanyBodyCurrencyMin = 3;
+export const createCompanyBodyCurrencyMax = 3;
+
+export const CreateCompanyBody = zod.object({
+  name: zod.string().min(1).max(createCompanyBodyNameMax),
+  legalName: zod.string().min(1).max(createCompanyBodyLegalNameMax),
+  country: zod
+    .string()
+    .min(createCompanyBodyCountryMin)
+    .max(createCompanyBodyCountryMax)
+    .describe("ISO-3166 Alpha-2 (z. B. DE, CH, AT)"),
+  currency: zod
+    .string()
+    .min(createCompanyBodyCurrencyMin)
+    .max(createCompanyBodyCurrencyMax)
+    .describe("ISO-4217 (z. B. EUR, CHF, USD)"),
+});
+
+/**
+ * @summary Stammdaten einer Gesellschaft ändern
+ */
+export const UpdateCompanyParams = zod.object({
+  id: zod.coerce.string(),
+});
+
+export const updateCompanyBodyNameMax = 200;
+
+export const updateCompanyBodyLegalNameMax = 200;
+
+export const updateCompanyBodyCountryMin = 2;
+export const updateCompanyBodyCountryMax = 2;
+
+export const updateCompanyBodyCurrencyMin = 3;
+export const updateCompanyBodyCurrencyMax = 3;
+
+export const UpdateCompanyBody = zod.object({
+  name: zod.string().min(1).max(updateCompanyBodyNameMax).optional(),
+  legalName: zod.string().min(1).max(updateCompanyBodyLegalNameMax).optional(),
+  country: zod
+    .string()
+    .min(updateCompanyBodyCountryMin)
+    .max(updateCompanyBodyCountryMax)
+    .optional(),
+  currency: zod
+    .string()
+    .min(updateCompanyBodyCurrencyMin)
+    .max(updateCompanyBodyCurrencyMax)
+    .optional(),
+});
+
+export const UpdateCompanyResponse = zod.object({
+  id: zod.string(),
+  tenantId: zod.string(),
+  name: zod.string(),
+  legalName: zod.string(),
+  country: zod.string(),
+  currency: zod.string(),
+});
+
+/**
+ * @summary Gesellschaft entfernen (nur wenn keine Brands/Deals/Verträge anhängen)
+ */
+export const DeleteCompanyParams = zod.object({
+  id: zod.coerce.string(),
+});
+
 export const ListBrandsQueryParams = zod.object({
   permitted: zod.coerce
     .boolean()
@@ -100,6 +176,36 @@ export const ListBrandsResponseItem = zod.object({
   addressLine: zod.string().nullish(),
 });
 export const ListBrandsResponse = zod.array(ListBrandsResponseItem);
+
+/**
+ * @summary Neuen Brand zu einer Gesellschaft hinzufügen
+ */
+export const createBrandBodyNameMax = 200;
+
+export const CreateBrandBody = zod.object({
+  companyId: zod.string(),
+  name: zod.string().min(1).max(createBrandBodyNameMax),
+  color: zod.string().optional().describe("Primärfarbe als"),
+  voice: zod
+    .string()
+    .optional()
+    .describe(
+      "Tonalität (precise | premium | concise | bold). Default precise.",
+    ),
+  logoUrl: zod.string().nullish(),
+  primaryColor: zod.string().nullish(),
+  secondaryColor: zod.string().nullish(),
+  tone: zod.string().nullish(),
+  legalEntityName: zod.string().nullish(),
+  addressLine: zod.string().nullish(),
+});
+
+/**
+ * @summary Brand entfernen (nur wenn keine Deals/Verträge/Angebote anhängen)
+ */
+export const DeleteBrandParams = zod.object({
+  id: zod.coerce.string(),
+});
 
 export const ListBrandsWithDefaultsResponseItem = zod.object({
   id: zod.string(),

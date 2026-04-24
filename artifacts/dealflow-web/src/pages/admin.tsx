@@ -5,6 +5,10 @@ import {
   useListCompanies,
   useListBrands,
   useUpdateBrand,
+  useDeleteCompany,
+  useDeleteBrand,
+  getListCompaniesQueryKey,
+  getListBrandsQueryKey,
   useListUsers,
   useListAdminUsers,
   useCreateAdminUser,
@@ -16,6 +20,7 @@ import {
   useGetScopeTree,
   type Brand,
   type BrandUpdate,
+  type Company,
   type AdminUser,
   useSearchGdprSubjects,
   useForgetGdprSubject,
@@ -25,6 +30,14 @@ import {
   useUpdateGdprRetentionPolicy,
   useRunGdprRetention,
 } from "@workspace/api-client-react";
+import { useQueryClient } from "@tanstack/react-query";
+import { useToast } from "@/hooks/use-toast";
+import { CompanyFormDialog } from "@/components/admin/company-form-dialog";
+import { BrandFormDialog } from "@/components/admin/brand-form-dialog";
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -33,7 +46,8 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Settings, Shield, Building2, Users, Download, Trash2, Eye, Play, ShieldAlert, Webhook, Plus, RefreshCw } from "lucide-react";
+import { Settings, Shield, Building2, Users, Download, Trash2, Eye, Play, ShieldAlert, Webhook, Plus, RefreshCw, Lock } from "lucide-react";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { useEffect } from "react";
 
 function fmtDate(v: string | null | undefined): string {
@@ -66,6 +80,36 @@ export default function Admin() {
   const runSweep = useRunGdprRetention();
 
   const [policyDraft, setPolicyDraft] = useState<Record<string, string>>({});
+
+  // Companies CRUD
+  const qc = useQueryClient();
+  const { toast } = useToast();
+  const [companyDialogOpen, setCompanyDialogOpen] = useState(false);
+  const [companyToEdit, setCompanyToEdit] = useState<Company | null>(null);
+  const [companyToDelete, setCompanyToDelete] = useState<Company | null>(null);
+  const [deleteConflict, setDeleteConflict] = useState<{ kind: "company" | "brand"; name: string; blockers: Record<string, number> } | null>(null);
+  const deleteCompanyMut = useDeleteCompany();
+  const onDeleteCompanyConfirm = async () => {
+    if (!companyToDelete) return;
+    try {
+      await deleteCompanyMut.mutateAsync({ id: companyToDelete.id });
+      await qc.invalidateQueries({ queryKey: getListCompaniesQueryKey() });
+      toast({ title: "Gesellschaft gelöscht", description: companyToDelete.name });
+      setCompanyToDelete(null);
+    } catch (e: unknown) {
+      const status = (e as { response?: { status?: number } })?.response?.status;
+      const body = (e as { response?: { data?: { error?: string; blockers?: Record<string, number> } } })?.response?.data;
+      if (status === 409 && body?.blockers) {
+        setDeleteConflict({ kind: "company", name: companyToDelete.name, blockers: body.blockers });
+        setCompanyToDelete(null);
+      } else {
+        toast({ title: "Löschen fehlgeschlagen", description: body?.error ?? "Unbekannt", variant: "destructive" });
+      }
+    }
+  };
+
+  // Brands CRUD
+  const [brandDialogOpen, setBrandDialogOpen] = useState(false);
 
   const isLoading = isLoadingTenant || isLoadingCompanies || isLoadingBrands || isLoadingUsers;
 
@@ -140,33 +184,65 @@ export default function Admin() {
             <CardTitle>{t("pages.admin.tenantConfig")}</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-2">
-              <div>
-                <div className="text-sm text-muted-foreground">Tenant Name</div>
-                <div className="font-medium text-lg">{tenant.name}</div>
+            <TooltipProvider delayDuration={150}>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-2">
+                <div>
+                  <div className="text-sm text-muted-foreground">Tenant Name</div>
+                  <div className="font-medium text-lg" data-testid="tenant-config-name">{tenant.name}</div>
+                </div>
+                <div>
+                  <div className="text-sm text-muted-foreground flex items-center gap-1">
+                    Plan
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Lock className="h-3 w-3 text-muted-foreground cursor-help" aria-label="Plattform-verwaltet" />
+                      </TooltipTrigger>
+                      <TooltipContent side="top">
+                        Plattform-verwaltet — nur Plattform-Administratoren ändern den Tarif.
+                      </TooltipContent>
+                    </Tooltip>
+                  </div>
+                  <div className="font-medium"><Badge variant="outline">{tenant.plan}</Badge></div>
+                </div>
+                <div>
+                  <div className="text-sm text-muted-foreground flex items-center gap-1">
+                    Region
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Lock className="h-3 w-3 text-muted-foreground cursor-help" aria-label="Plattform-verwaltet" />
+                      </TooltipTrigger>
+                      <TooltipContent side="top">
+                        Plattform-verwaltet — Datenresidenz wird nach dem Anlegen nicht mehr geändert.
+                      </TooltipContent>
+                    </Tooltip>
+                  </div>
+                  <div className="font-medium">{tenant.region}</div>
+                </div>
+                <div>
+                  <div className="text-sm text-muted-foreground">Created</div>
+                  <div className="font-medium">{new Date(tenant.createdAt).toLocaleDateString()}</div>
+                </div>
               </div>
-              <div>
-                <div className="text-sm text-muted-foreground">Plan</div>
-                <div className="font-medium"><Badge variant="outline">{tenant.plan}</Badge></div>
-              </div>
-              <div>
-                <div className="text-sm text-muted-foreground">Region</div>
-                <div className="font-medium">{tenant.region}</div>
-              </div>
-              <div>
-                <div className="text-sm text-muted-foreground">Created</div>
-                <div className="font-medium">{new Date(tenant.createdAt).toLocaleDateString()}</div>
-              </div>
-            </div>
+            </TooltipProvider>
+            <p className="mt-3 text-xs text-muted-foreground flex items-center gap-1">
+              <Lock className="h-3 w-3" />
+              Plan und Region werden zentral durch Plattform-Administratoren gepflegt. Tenant-Stammdaten wie Name, Gesellschaften, Brands, Benutzer und Webhooks bleiben in deiner Verantwortung.
+            </p>
           </CardContent>
         </Card>
       )}
 
       <div className="grid lg:grid-cols-2 gap-6">
         <Card>
-          <CardHeader className="flex flex-row items-center gap-2">
-            <Building2 className="h-5 w-5 text-primary" />
-            <CardTitle>{t("pages.admin.companies")}</CardTitle>
+          <CardHeader className="flex flex-row items-center justify-between gap-2">
+            <div className="flex flex-row items-center gap-2">
+              <Building2 className="h-5 w-5 text-primary" />
+              <CardTitle>{t("pages.admin.companies")}</CardTitle>
+            </div>
+            <Button size="sm" onClick={() => { setCompanyToEdit(null); setCompanyDialogOpen(true); }} data-testid="button-new-company">
+              <Plus className="h-4 w-4 mr-1" />
+              Neue Gesellschaft
+            </Button>
           </CardHeader>
           <CardContent>
             <div className="border rounded-md">
@@ -177,19 +253,30 @@ export default function Admin() {
                     <TableHead>{t("pages.admin.legalEntity")}</TableHead>
                     <TableHead>{t("common.country")}</TableHead>
                     <TableHead>{t("common.currency")}</TableHead>
+                    <TableHead className="text-right">Aktionen</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {companies?.map(company => (
-                    <TableRow key={company.id}>
+                    <TableRow key={company.id} data-testid={`row-company-${company.id}`}>
                       <TableCell className="font-medium">{company.name}</TableCell>
                       <TableCell className="text-muted-foreground">{company.legalName}</TableCell>
                       <TableCell>{company.country}</TableCell>
                       <TableCell>{company.currency}</TableCell>
+                      <TableCell className="text-right">
+                        <div className="flex justify-end gap-1">
+                          <Button size="sm" variant="ghost" onClick={() => { setCompanyToEdit(company); setCompanyDialogOpen(true); }} data-testid={`button-edit-company-${company.id}`}>
+                            Bearbeiten
+                          </Button>
+                          <Button size="sm" variant="ghost" className="text-destructive hover:text-destructive" onClick={() => setCompanyToDelete(company)} data-testid={`button-delete-company-${company.id}`}>
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      </TableCell>
                     </TableRow>
                   ))}
                   {!companies?.length && (
-                    <TableRow><TableCell colSpan={4} className="text-center h-16">No companies configured</TableCell></TableRow>
+                    <TableRow><TableCell colSpan={5} className="text-center h-16">No companies configured</TableCell></TableRow>
                   )}
                 </TableBody>
               </Table>
@@ -198,12 +285,18 @@ export default function Admin() {
         </Card>
 
         <Card>
-          <CardHeader className="flex flex-row items-center gap-2">
-            <div className="flex space-x-[-8px]">
-              <div className="h-5 w-5 rounded-full bg-blue-500 ring-2 ring-background"></div>
-              <div className="h-5 w-5 rounded-full bg-red-500 ring-2 ring-background"></div>
+          <CardHeader className="flex flex-row items-center justify-between gap-2">
+            <div className="flex flex-row items-center gap-2">
+              <div className="flex space-x-[-8px]">
+                <div className="h-5 w-5 rounded-full bg-blue-500 ring-2 ring-background"></div>
+                <div className="h-5 w-5 rounded-full bg-red-500 ring-2 ring-background"></div>
+              </div>
+              <CardTitle>Brands</CardTitle>
             </div>
-            <CardTitle>Brands</CardTitle>
+            <Button size="sm" onClick={() => setBrandDialogOpen(true)} disabled={!companies?.length} data-testid="button-new-brand">
+              <Plus className="h-4 w-4 mr-1" />
+              Neuer Brand
+            </Button>
           </CardHeader>
           <CardContent>
             <div className="border rounded-md">
@@ -228,6 +321,60 @@ export default function Admin() {
           </CardContent>
         </Card>
       </div>
+
+      <CompanyFormDialog
+        open={companyDialogOpen}
+        onOpenChange={(v) => { setCompanyDialogOpen(v); if (!v) setCompanyToEdit(null); }}
+        company={companyToEdit}
+      />
+      <BrandFormDialog
+        open={brandDialogOpen}
+        onOpenChange={setBrandDialogOpen}
+        companies={companies ?? []}
+      />
+
+      <AlertDialog open={!!companyToDelete} onOpenChange={(v) => { if (!v) setCompanyToDelete(null); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Gesellschaft löschen?</AlertDialogTitle>
+            <AlertDialogDescription>
+              <span className="font-medium text-foreground">{companyToDelete?.name}</span> wird unwiderruflich entfernt.
+              Falls Brands, Deals oder Preispositionen daran hängen, blockiert die Plattform die Löschung — bitte zuerst aufräumen.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={deleteCompanyMut.isPending}>Abbrechen</AlertDialogCancel>
+            <AlertDialogAction onClick={onDeleteCompanyConfirm} disabled={deleteCompanyMut.isPending} className="bg-destructive text-destructive-foreground hover:bg-destructive/90" data-testid="button-confirm-delete-company">
+              Löschen
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog open={!!deleteConflict} onOpenChange={(v) => { if (!v) setDeleteConflict(null); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Löschen blockiert</AlertDialogTitle>
+            <AlertDialogDescription asChild>
+              <div className="space-y-2">
+                <p>
+                  {deleteConflict?.kind === "company" ? "Gesellschaft" : "Brand"}{" "}
+                  <span className="font-medium text-foreground">{deleteConflict?.name}</span> hat noch verknüpfte Datensätze:
+                </p>
+                <ul className="list-disc pl-5 text-sm">
+                  {deleteConflict && Object.entries(deleteConflict.blockers).filter(([, n]) => n > 0).map(([k, n]) => (
+                    <li key={k}><span className="font-medium">{n}</span> {k}</li>
+                  ))}
+                </ul>
+                <p className="text-sm">Bitte diese Datensätze zuerst archivieren oder neu zuordnen.</p>
+              </div>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogAction onClick={() => setDeleteConflict(null)}>Verstanden</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       <UserRolesCard />
 
@@ -421,7 +568,11 @@ export default function Admin() {
 }
 
 function BrandRow({ brand }: { brand: Brand }) {
+  const qc = useQueryClient();
+  const { toast } = useToast();
   const [editing, setEditing] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [conflict, setConflict] = useState<Record<string, number> | null>(null);
   const [draft, setDraft] = useState<Required<Omit<BrandUpdate, "name" | "color" | "voice">>>({
     logoUrl: brand.logoUrl ?? "",
     primaryColor: brand.primaryColor ?? brand.color ?? "#2D6CDF",
@@ -431,6 +582,24 @@ function BrandRow({ brand }: { brand: Brand }) {
     addressLine: brand.addressLine ?? "",
   });
   const update = useUpdateBrand();
+  const del = useDeleteBrand();
+  const onDelete = async () => {
+    try {
+      await del.mutateAsync({ id: brand.id });
+      await qc.invalidateQueries({ queryKey: getListBrandsQueryKey() });
+      toast({ title: "Brand gelöscht", description: brand.name });
+      setConfirmDelete(false);
+    } catch (e: unknown) {
+      const status = (e as { response?: { status?: number } })?.response?.status;
+      const body = (e as { response?: { data?: { error?: string; blockers?: Record<string, number> } } })?.response?.data;
+      if (status === 409 && body?.blockers) {
+        setConfirmDelete(false);
+        setConflict(body.blockers);
+      } else {
+        toast({ title: "Löschen fehlgeschlagen", description: body?.error ?? "Unbekannt", variant: "destructive" });
+      }
+    }
+  };
   const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
   const save = async () => {
@@ -473,6 +642,9 @@ function BrandRow({ brand }: { brand: Brand }) {
             <Badge variant="secondary">{brand.tone ?? brand.voice}</Badge>
             <Button size="sm" variant="ghost" onClick={() => setEditing(v => !v)}>
               {editing ? "Schließen" : "Bearbeiten"}
+            </Button>
+            <Button size="sm" variant="ghost" className="text-destructive hover:text-destructive" onClick={() => setConfirmDelete(true)} data-testid={`button-delete-brand-${brand.id}`}>
+              <Trash2 className="h-4 w-4" />
             </Button>
           </div>
         </TableCell>
@@ -525,6 +697,44 @@ function BrandRow({ brand }: { brand: Brand }) {
           </TableCell>
         </TableRow>
       )}
+      <AlertDialog open={confirmDelete} onOpenChange={setConfirmDelete}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Brand löschen?</AlertDialogTitle>
+            <AlertDialogDescription>
+              <span className="font-medium text-foreground">{brand.name}</span> wird unwiderruflich entfernt.
+              Falls Deals oder Preispositionen daran hängen, blockiert die Plattform die Löschung.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={del.isPending}>Abbrechen</AlertDialogCancel>
+            <AlertDialogAction onClick={onDelete} disabled={del.isPending} className="bg-destructive text-destructive-foreground hover:bg-destructive/90" data-testid={`button-confirm-delete-brand-${brand.id}`}>
+              Löschen
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+      <AlertDialog open={!!conflict} onOpenChange={(v) => { if (!v) setConflict(null); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Löschen blockiert</AlertDialogTitle>
+            <AlertDialogDescription asChild>
+              <div className="space-y-2">
+                <p>Brand <span className="font-medium text-foreground">{brand.name}</span> hat noch verknüpfte Datensätze:</p>
+                <ul className="list-disc pl-5 text-sm">
+                  {conflict && Object.entries(conflict).filter(([, n]) => n > 0).map(([k, n]) => (
+                    <li key={k}><span className="font-medium">{n}</span> {k}</li>
+                  ))}
+                </ul>
+                <p className="text-sm">Bitte zuerst archivieren oder neu zuordnen.</p>
+              </div>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogAction onClick={() => setConflict(null)}>Verstanden</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </>
   );
 }

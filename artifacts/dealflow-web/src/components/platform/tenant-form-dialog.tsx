@@ -113,10 +113,12 @@ export function TenantFormDialog({ open, onOpenChange }: Props) {
                 />
               </div>
               <Select value={plan} onValueChange={(v) => setPlan(v as Plan)}>
-                <SelectTrigger id="tenant-plan" data-testid="select-tenant-plan"><SelectValue /></SelectTrigger>
+                <SelectTrigger id="tenant-plan" data-testid="select-tenant-plan">
+                  <SelectValue>{TENANT_PLANS[plan]?.label ?? plan}</SelectValue>
+                </SelectTrigger>
                 <SelectContent>
                   {PLAN_OPTIONS.map(p => (
-                    <SelectItem key={p} value={p} className="py-2">
+                    <SelectItem key={p} value={p} className="py-2" textValue={TENANT_PLANS[p].label}>
                       <div className="flex flex-col">
                         <span>{TENANT_PLANS[p].label}</span>
                         <span className="text-[11px] leading-snug text-muted-foreground">{TENANT_PLANS[p].short}</span>
@@ -135,10 +137,12 @@ export function TenantFormDialog({ open, onOpenChange }: Props) {
                 />
               </div>
               <Select value={region} onValueChange={(v) => setRegion(v as Region)}>
-                <SelectTrigger id="tenant-region" data-testid="select-tenant-region"><SelectValue /></SelectTrigger>
+                <SelectTrigger id="tenant-region" data-testid="select-tenant-region">
+                  <SelectValue>{TENANT_REGIONS[region]?.label ?? region}</SelectValue>
+                </SelectTrigger>
                 <SelectContent>
                   {REGION_OPTIONS.map(r => (
-                    <SelectItem key={r} value={r} className="py-2">
+                    <SelectItem key={r} value={r} className="py-2" textValue={TENANT_REGIONS[r].label}>
                       <div className="flex flex-col">
                         <span>{TENANT_REGIONS[r].label}</span>
                         <span className="text-[11px] leading-snug text-muted-foreground">{TENANT_REGIONS[r].short}</span>

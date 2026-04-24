@@ -101,6 +101,69 @@ paths:
               schema:
                 type: array
                 items: { $ref: "#/components/schemas/Company" }
+    post:
+      operationId: createCompany
+      tags: [orgs]
+      summary: Neue Gesellschaft (legal entity) im Tenant anlegen
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CompanyCreate" }
+      responses:
+        "201":
+          description: created
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Company" }
+        "403":
+          description: tenant admin rights required
+        "409":
+          description: name already exists in tenant
+
+  /orgs/companies/{id}:
+    patch:
+      operationId: updateCompany
+      tags: [orgs]
+      summary: Stammdaten einer Gesellschaft ändern
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CompanyUpdate" }
+      responses:
+        "200":
+          description: ok
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Company" }
+        "403": { description: forbidden }
+        "404": { description: not found }
+    delete:
+      operationId: deleteCompany
+      tags: [orgs]
+      summary: Gesellschaft entfernen (nur wenn keine Brands/Deals/Verträge anhängen)
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        "204": { description: deleted }
+        "403": { description: forbidden }
+        "404": { description: not found }
+        "409":
+          description: |
+            Konflikt — Gesellschaft hat noch verknüpfte Datensätze (Brands, Deals
+            oder Verträge). Die Antwort enthält die jeweiligen Anzahlen.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/DeleteOrgConflict" }
 
   /orgs/brands:
     get:
@@ -122,6 +185,44 @@ paths:
               schema:
                 type: array
                 items: { $ref: "#/components/schemas/Brand" }
+    post:
+      operationId: createBrand
+      tags: [orgs]
+      summary: Neuen Brand zu einer Gesellschaft hinzufügen
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/BrandCreate" }
+      responses:
+        "201":
+          description: created
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Brand" }
+        "403": { description: forbidden }
+        "404": { description: company not found }
+        "409": { description: name already exists for company }
+
+  /orgs/brands/{id}:
+    delete:
+      operationId: deleteBrand
+      tags: [orgs]
+      summary: Brand entfernen (nur wenn keine Deals/Verträge/Angebote anhängen)
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        "204": { description: deleted }
+        "403": { description: forbidden }
+        "404": { description: not found }
+        "409":
+          description: Konflikt — Brand hat noch verknüpfte Datensätze.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/DeleteOrgConflict" }
 
   /brands:
     get:
@@ -2573,6 +2674,65 @@ components:
         tone: { type: string, nullable: true }
         legalEntityName: { type: string, nullable: true }
         addressLine: { type: string, nullable: true }
+
+    CompanyCreate:
+      type: object
+      required: [name, legalName, country, currency]
+      properties:
+        name: { type: string, minLength: 1, maxLength: 200 }
+        legalName: { type: string, minLength: 1, maxLength: 200 }
+        country:
+          type: string
+          minLength: 2
+          maxLength: 2
+          description: ISO-3166 Alpha-2 (z. B. DE, CH, AT)
+        currency:
+          type: string
+          minLength: 3
+          maxLength: 3
+          description: ISO-4217 (z. B. EUR, CHF, USD)
+
+    CompanyUpdate:
+      type: object
+      properties:
+        name: { type: string, minLength: 1, maxLength: 200 }
+        legalName: { type: string, minLength: 1, maxLength: 200 }
+        country: { type: string, minLength: 2, maxLength: 2 }
+        currency: { type: string, minLength: 3, maxLength: 3 }
+
+    BrandCreate:
+      type: object
+      required: [companyId, name]
+      properties:
+        companyId: { type: string }
+        name: { type: string, minLength: 1, maxLength: 200 }
+        color:
+          type: string
+          description: Primärfarbe als #RRGGBB (Default #2D6CDF wenn leer).
+        voice:
+          type: string
+          description: Tonalität (precise | premium | concise | bold). Default precise.
+        logoUrl: { type: string, nullable: true }
+        primaryColor: { type: string, nullable: true }
+        secondaryColor: { type: string, nullable: true }
+        tone: { type: string, nullable: true }
+        legalEntityName: { type: string, nullable: true }
+        addressLine: { type: string, nullable: true }
+
+    DeleteOrgConflict:
+      type: object
+      required: [error, blockers]
+      properties:
+        error: { type: string, example: "in use" }
+        blockers:
+          type: object
+          description: Anzahl blockierender Datensätze pro Entitätstyp.
+          properties:
+            brands: { type: integer, format: int32 }
+            deals: { type: integer, format: int32 }
+            quotes: { type: integer, format: int32 }
+            contracts: { type: integer, format: int32 }
+            pricePositions: { type: integer, format: int32 }
 
     BrandDefaultsInput:
       type: object

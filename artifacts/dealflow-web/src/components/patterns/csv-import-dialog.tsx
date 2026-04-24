@@ -1,5 +1,5 @@
 import { useState, useRef, type ChangeEvent } from "react";
-import { Upload, FileText, AlertCircle, CheckCircle2 } from "lucide-react";
+import { Upload, FileText, AlertCircle, CheckCircle2, Download } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -26,6 +26,48 @@ export interface CSVImportDialogProps<TInput> {
   buildRow: (mapped: Record<string, string>) => TInput | null;
   onImport: (row: TInput) => Promise<unknown>;
   testId?: string;
+  /**
+   * Wird ein Beispieldatensatz übergeben, zeigt der Dialog einen
+   * "Beispiel-Vorlage herunterladen"-Link. Spaltennamen werden aus
+   * `fields[].label` erzeugt (gleiche Reihenfolge wie übergeben).
+   * Jede Zeile = Map<fieldKey, Wert>.
+   */
+  templateExample?: Array<Record<string, string>>;
+  /** Dateiname für den Vorlagen-Download (Default: "vorlage.csv"). */
+  templateFilename?: string;
+}
+
+/** CSV-Feld escapen: bei Komma/Semikolon/Quote/Newline → in Quotes mit doppelten Quotes. */
+function escapeCSV(v: string): string {
+  if (/[",;\r\n]/.test(v)) return `"${v.replace(/"/g, '""')}"`;
+  return v;
+}
+
+function buildTemplateCSV(
+  fields: CSVImportField[],
+  exampleRows: Array<Record<string, string>>,
+): string {
+  const header = fields.map((f) => escapeCSV(f.label)).join(",");
+  const lines = exampleRows.map((row) =>
+    fields.map((f) => escapeCSV(row[f.key] ?? "")).join(","),
+  );
+  return [header, ...lines].join("\r\n") + "\r\n";
+}
+
+function downloadCSVTemplate(
+  fields: CSVImportField[],
+  exampleRows: Array<Record<string, string>>,
+  filename: string,
+) {
+  const csv = buildTemplateCSV(fields, exampleRows);
+  // BOM für Excel-Kompatibilität bei Umlauten.
+  const blob = new Blob(["\uFEFF" + csv], { type: "text/csv;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(url);
 }
 
 function parseCSV(text: string): { header: string[]; rows: string[][] } {
@@ -66,6 +108,8 @@ export function CSVImportDialog<TInput>({
   buildRow,
   onImport,
   testId,
+  templateExample,
+  templateFilename = "vorlage.csv",
 }: CSVImportDialogProps<TInput>) {
   const { toast } = useToast();
   const [open, setOpen] = useState(false);
@@ -163,30 +207,56 @@ export function CSVImportDialog<TInput>({
           </DialogHeader>
 
           {!parsed && (
-            <div
-              className="flex flex-col items-center justify-center border-2 border-dashed rounded-lg p-10 cursor-pointer hover:bg-muted/50 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
-              onClick={() => inputRef.current?.click()}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" || e.key === " ") {
-                  e.preventDefault();
-                  inputRef.current?.click();
-                }
-              }}
-              role="button"
-              tabIndex={0}
-              aria-label="CSV-Datei wählen"
-            >
-              <FileText className="h-10 w-10 text-muted-foreground mb-3" />
-              <p className="text-sm font-medium">CSV-Datei wählen</p>
-              <p className="text-xs text-muted-foreground mt-1">oder hierher ziehen</p>
-              <input
-                ref={inputRef}
-                type="file"
-                accept=".csv,text/csv"
-                onChange={onFile}
-                className="hidden"
-                data-testid={testId ? `${testId}-file` : undefined}
-              />
+            <div className="space-y-3">
+              <div
+                className="flex flex-col items-center justify-center border-2 border-dashed rounded-lg p-10 cursor-pointer hover:bg-muted/50 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
+                onClick={() => inputRef.current?.click()}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" || e.key === " ") {
+                    e.preventDefault();
+                    inputRef.current?.click();
+                  }
+                }}
+                role="button"
+                tabIndex={0}
+                aria-label="CSV-Datei wählen"
+              >
+                <FileText className="h-10 w-10 text-muted-foreground mb-3" />
+                <p className="text-sm font-medium">CSV-Datei wählen</p>
+                <p className="text-xs text-muted-foreground mt-1">oder hierher ziehen</p>
+                <input
+                  ref={inputRef}
+                  type="file"
+                  accept=".csv,text/csv"
+                  onChange={onFile}
+                  className="hidden"
+                  data-testid={testId ? `${testId}-file` : undefined}
+                />
+              </div>
+              {templateExample && templateExample.length > 0 && (
+                <div className="flex items-center justify-between rounded-md bg-muted/40 px-3 py-2 text-xs">
+                  <div className="flex flex-col">
+                    <span className="font-medium text-foreground">Unsicher, wie die Datei aussehen muss?</span>
+                    <span className="text-muted-foreground">
+                      Lade dir eine Beispiel-Vorlage mit den richtigen Spalten und einer Beispielzeile herunter.
+                    </span>
+                  </div>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="gap-1.5 shrink-0"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      downloadCSVTemplate(fields, templateExample, templateFilename);
+                    }}
+                    data-testid={testId ? `${testId}-template` : undefined}
+                  >
+                    <Download className="h-3.5 w-3.5" />
+                    Vorlage herunterladen
+                  </Button>
+                </div>
+              )}
             </div>
           )}
 

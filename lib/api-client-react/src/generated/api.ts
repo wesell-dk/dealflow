@@ -36,6 +36,7 @@ import type {
   AttachmentLibraryItem,
   AuditEntry,
   Brand,
+  BrandCreate,
   BrandDefaultsInput,
   BrandUpdate,
   BulkActionResult,
@@ -46,6 +47,8 @@ import type {
   ClauseDiff,
   ClauseFamily,
   Company,
+  CompanyCreate,
+  CompanyUpdate,
   Contact,
   Contract,
   ContractAmendment,
@@ -74,6 +77,7 @@ import type {
   DealPipeline,
   DealSummaryEnvelope,
   DeclineSignerInput,
+  DeleteOrgConflict,
   EffectiveContractState,
   EntityVersion,
   EntityVersionInput,
@@ -492,6 +496,263 @@ export function useListCompanies<
   return { ...query, queryKey: queryOptions.queryKey };
 }
 
+/**
+ * @summary Neue Gesellschaft (legal entity) im Tenant anlegen
+ */
+export const getCreateCompanyUrl = () => {
+  return `/api/v1/orgs/companies`;
+};
+
+export const createCompany = async (
+  companyCreate: CompanyCreate,
+  options?: RequestInit,
+): Promise<Company> => {
+  return customFetch<Company>(getCreateCompanyUrl(), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(companyCreate),
+  });
+};
+
+export const getCreateCompanyMutationOptions = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof createCompany>>,
+    TError,
+    { data: BodyType<CompanyCreate> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof createCompany>>,
+  TError,
+  { data: BodyType<CompanyCreate> },
+  TContext
+> => {
+  const mutationKey = ["createCompany"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof createCompany>>,
+    { data: BodyType<CompanyCreate> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return createCompany(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type CreateCompanyMutationResult = NonNullable<
+  Awaited<ReturnType<typeof createCompany>>
+>;
+export type CreateCompanyMutationBody = BodyType<CompanyCreate>;
+export type CreateCompanyMutationError = ErrorType<void>;
+
+/**
+ * @summary Neue Gesellschaft (legal entity) im Tenant anlegen
+ */
+export const useCreateCompany = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof createCompany>>,
+    TError,
+    { data: BodyType<CompanyCreate> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof createCompany>>,
+  TError,
+  { data: BodyType<CompanyCreate> },
+  TContext
+> => {
+  return useMutation(getCreateCompanyMutationOptions(options));
+};
+
+/**
+ * @summary Stammdaten einer Gesellschaft ändern
+ */
+export const getUpdateCompanyUrl = (id: string) => {
+  return `/api/v1/orgs/companies/${id}`;
+};
+
+export const updateCompany = async (
+  id: string,
+  companyUpdate: CompanyUpdate,
+  options?: RequestInit,
+): Promise<Company> => {
+  return customFetch<Company>(getUpdateCompanyUrl(id), {
+    ...options,
+    method: "PATCH",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(companyUpdate),
+  });
+};
+
+export const getUpdateCompanyMutationOptions = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof updateCompany>>,
+    TError,
+    { id: string; data: BodyType<CompanyUpdate> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof updateCompany>>,
+  TError,
+  { id: string; data: BodyType<CompanyUpdate> },
+  TContext
+> => {
+  const mutationKey = ["updateCompany"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof updateCompany>>,
+    { id: string; data: BodyType<CompanyUpdate> }
+  > = (props) => {
+    const { id, data } = props ?? {};
+
+    return updateCompany(id, data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type UpdateCompanyMutationResult = NonNullable<
+  Awaited<ReturnType<typeof updateCompany>>
+>;
+export type UpdateCompanyMutationBody = BodyType<CompanyUpdate>;
+export type UpdateCompanyMutationError = ErrorType<void>;
+
+/**
+ * @summary Stammdaten einer Gesellschaft ändern
+ */
+export const useUpdateCompany = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof updateCompany>>,
+    TError,
+    { id: string; data: BodyType<CompanyUpdate> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof updateCompany>>,
+  TError,
+  { id: string; data: BodyType<CompanyUpdate> },
+  TContext
+> => {
+  return useMutation(getUpdateCompanyMutationOptions(options));
+};
+
+/**
+ * @summary Gesellschaft entfernen (nur wenn keine Brands/Deals/Verträge anhängen)
+ */
+export const getDeleteCompanyUrl = (id: string) => {
+  return `/api/v1/orgs/companies/${id}`;
+};
+
+export const deleteCompany = async (
+  id: string,
+  options?: RequestInit,
+): Promise<void> => {
+  return customFetch<void>(getDeleteCompanyUrl(id), {
+    ...options,
+    method: "DELETE",
+  });
+};
+
+export const getDeleteCompanyMutationOptions = <
+  TError = ErrorType<void | DeleteOrgConflict>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof deleteCompany>>,
+    TError,
+    { id: string },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof deleteCompany>>,
+  TError,
+  { id: string },
+  TContext
+> => {
+  const mutationKey = ["deleteCompany"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof deleteCompany>>,
+    { id: string }
+  > = (props) => {
+    const { id } = props ?? {};
+
+    return deleteCompany(id, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type DeleteCompanyMutationResult = NonNullable<
+  Awaited<ReturnType<typeof deleteCompany>>
+>;
+
+export type DeleteCompanyMutationError = ErrorType<void | DeleteOrgConflict>;
+
+/**
+ * @summary Gesellschaft entfernen (nur wenn keine Brands/Deals/Verträge anhängen)
+ */
+export const useDeleteCompany = <
+  TError = ErrorType<void | DeleteOrgConflict>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof deleteCompany>>,
+    TError,
+    { id: string },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof deleteCompany>>,
+  TError,
+  { id: string },
+  TContext
+> => {
+  return useMutation(getDeleteCompanyMutationOptions(options));
+};
+
 export const getListBrandsUrl = (params?: ListBrandsParams) => {
   const normalizedParams = new URLSearchParams();
 
@@ -578,6 +839,176 @@ export function useListBrands<
 
   return { ...query, queryKey: queryOptions.queryKey };
 }
+
+/**
+ * @summary Neuen Brand zu einer Gesellschaft hinzufügen
+ */
+export const getCreateBrandUrl = () => {
+  return `/api/v1/orgs/brands`;
+};
+
+export const createBrand = async (
+  brandCreate: BrandCreate,
+  options?: RequestInit,
+): Promise<Brand> => {
+  return customFetch<Brand>(getCreateBrandUrl(), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(brandCreate),
+  });
+};
+
+export const getCreateBrandMutationOptions = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof createBrand>>,
+    TError,
+    { data: BodyType<BrandCreate> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof createBrand>>,
+  TError,
+  { data: BodyType<BrandCreate> },
+  TContext
+> => {
+  const mutationKey = ["createBrand"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof createBrand>>,
+    { data: BodyType<BrandCreate> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return createBrand(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type CreateBrandMutationResult = NonNullable<
+  Awaited<ReturnType<typeof createBrand>>
+>;
+export type CreateBrandMutationBody = BodyType<BrandCreate>;
+export type CreateBrandMutationError = ErrorType<void>;
+
+/**
+ * @summary Neuen Brand zu einer Gesellschaft hinzufügen
+ */
+export const useCreateBrand = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof createBrand>>,
+    TError,
+    { data: BodyType<BrandCreate> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof createBrand>>,
+  TError,
+  { data: BodyType<BrandCreate> },
+  TContext
+> => {
+  return useMutation(getCreateBrandMutationOptions(options));
+};
+
+/**
+ * @summary Brand entfernen (nur wenn keine Deals/Verträge/Angebote anhängen)
+ */
+export const getDeleteBrandUrl = (id: string) => {
+  return `/api/v1/orgs/brands/${id}`;
+};
+
+export const deleteBrand = async (
+  id: string,
+  options?: RequestInit,
+): Promise<void> => {
+  return customFetch<void>(getDeleteBrandUrl(id), {
+    ...options,
+    method: "DELETE",
+  });
+};
+
+export const getDeleteBrandMutationOptions = <
+  TError = ErrorType<void | DeleteOrgConflict>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof deleteBrand>>,
+    TError,
+    { id: string },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof deleteBrand>>,
+  TError,
+  { id: string },
+  TContext
+> => {
+  const mutationKey = ["deleteBrand"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof deleteBrand>>,
+    { id: string }
+  > = (props) => {
+    const { id } = props ?? {};
+
+    return deleteBrand(id, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type DeleteBrandMutationResult = NonNullable<
+  Awaited<ReturnType<typeof deleteBrand>>
+>;
+
+export type DeleteBrandMutationError = ErrorType<void | DeleteOrgConflict>;
+
+/**
+ * @summary Brand entfernen (nur wenn keine Deals/Verträge/Angebote anhängen)
+ */
+export const useDeleteBrand = <
+  TError = ErrorType<void | DeleteOrgConflict>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof deleteBrand>>,
+    TError,
+    { id: string },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof deleteBrand>>,
+  TError,
+  { id: string },
+  TContext
+> => {
+  return useMutation(getDeleteBrandMutationOptions(options));
+};
 
 export const getListBrandsWithDefaultsUrl = () => {
   return `/api/v1/brands`;
