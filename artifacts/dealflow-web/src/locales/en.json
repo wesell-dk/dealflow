@@ -14,7 +14,9 @@
     "reports": "Reports",
     "audit": "Audit Log",
     "copilot": "Copilot",
-    "admin": "Admin"
+    "admin": "Admin",
+    "templates": "Templates",
+    "attachments": "Attachments"
   },
   "common": {
     "search": "Search deals, accounts, quotes…",
@@ -71,7 +73,9 @@
     "discount": "Discount",
     "total": "Total",
     "number": "Number",
-    "industry": "Industry"
+    "industry": "Industry",
+    "quote": "Quote",
+    "error": "Error"
   },
   "pages": {
     "home": {
@@ -107,7 +111,43 @@
     },
     "quotes": {
       "title": "Quotes",
-      "subtitle": "All quotes across your deals."
+      "subtitle": "All quotes across your deals.",
+      "newQuote": "New Quote"
+    },
+    "quote": {
+      "lineItems": "Line Items",
+      "summary": "Summary",
+      "margin": "Margin",
+      "openPdf": "Open PDF",
+      "attachments": "Attachments",
+      "noAttachments": "No attachments on this version."
+    },
+    "templates": {
+      "title": "Quote Templates",
+      "subtitle": "Industry templates with sections, line items and terms.",
+      "searchPlaceholder": "Search templates…",
+      "empty": "No templates found.",
+      "sections": "sections",
+      "sectionsTitle": "Sections",
+      "lineItemsTitle": "Default Line Items",
+      "deleted": "Template deleted"
+    },
+    "attachments": {
+      "title": "Attachment Library",
+      "subtitle": "Reusable attachments such as DPA, SLA, datasheets.",
+      "searchPlaceholder": "Search attachments…",
+      "empty": "No attachments found.",
+      "upload": "Upload",
+      "uploadTitle": "Upload Attachment",
+      "uploaded": "Attachment uploaded",
+      "deleted": "Attachment deleted",
+      "uploadFailed": "Upload failed",
+      "missingFields": "Please choose a name and a file",
+      "description": "Description",
+      "category": "Category",
+      "tags": "Tags (comma separated)",
+      "file": "File",
+      "formatHint": "Allowed: PDF, DOCX, XLSX, MD, CSV, TXT (max 25 MB)"
     },
     "approvals": {
       "title": "Approvals",
@@ -317,6 +357,51 @@
         "colStatus": "Status"
       }
     }
+  },
+  "quoteWizard": {
+    "title": "New Quote",
+    "subtitle": "Choose a template, adjust line items and add attachments.",
+    "steps": {
+      "context": "Context",
+      "template": "Template",
+      "lineItems": "Line Items",
+      "terms": "Terms",
+      "attachments": "Attachments",
+      "preview": "Preview"
+    },
+    "selectDeal": "Select deal…",
+    "selectIndustry": "Select industry…",
+    "industries": {
+      "saas": "Software / SaaS",
+      "consulting": "Consulting / Professional Services",
+      "manufacturing": "Manufacturing",
+      "services": "Services",
+      "other": "Other"
+    },
+    "notes": "Notes",
+    "notesPlaceholder": "Internal notes or hints for the customer…",
+    "noTemplates": "No templates for this industry.",
+    "system": "System",
+    "positions": "positions",
+    "validityDays": "{{days}} days valid",
+    "validityDaysLabel": "Validity (days)",
+    "qty": "Qty",
+    "listPrice": "List Price",
+    "unitPrice": "Unit Price",
+    "lineDescription": "Description",
+    "addLine": "Add line item",
+    "sectionsPreview": "Sections from template",
+    "attachmentsHint": "Choose attachments from the library to bundle with this quote.",
+    "next": "Next",
+    "create": "Create Quote",
+    "created": "Quote created",
+    "createFailed": "Create failed",
+    "successTitle": "Quote created successfully",
+    "successDescription": "Quote {{number}} has been created.",
+    "openPdf": "Open PDF",
+    "openQuote": "Go to quote",
+    "defaultDiscount": "Default discount",
+    "defaultMargin": "Default margin"
   },
   "helpBot": {
     "title": "Help Assistant",

@@ -7,10 +7,23 @@ Multi-tenant, multi-company, multi-brand. Deal-centric.
 
  * OpenAPI spec version: 0.1.0
  */
+/**
+ * logo (admin only, 2MB images) or document (any user, 25MB docs+images). Default: logo for backward compatibility.
+ */
+export type UploadUrlRequestKind =
+  (typeof UploadUrlRequestKind)[keyof typeof UploadUrlRequestKind];
+
+export const UploadUrlRequestKind = {
+  logo: "logo",
+  document: "document",
+} as const;
+
 export interface UploadUrlRequest {
   name: string;
   size: number;
   contentType: string;
+  /** logo (admin only, 2MB images) or document (any user, 25MB docs+images). Default: logo for backward compatibility. */
+  kind?: UploadUrlRequestKind;
 }
 
 export type UploadUrlResponseMetadata = {
@@ -415,6 +428,167 @@ export type QuoteDetail = Quote & {
 export interface QuoteVersionInput {
   discountPct: number;
   notes?: string;
+}
+
+export interface LineItemInput {
+  name: string;
+  description?: string;
+  quantity: number;
+  unitPrice: number;
+  listPrice: number;
+  discountPct: number;
+}
+
+export interface QuoteFromTemplateInput {
+  dealId: string;
+  templateId: string;
+  validUntil?: string;
+  notes?: string;
+  attachmentLibraryIds?: string[];
+}
+
+export interface QuoteAttachment {
+  id: string;
+  quoteVersionId: string;
+  /** @nullable */
+  libraryAssetId?: string | null;
+  name: string;
+  /** @nullable */
+  label?: string | null;
+  mimeType: string;
+  size: number;
+  objectPath: string;
+  order: number;
+  createdAt?: string;
+}
+
+export interface QuoteAttachmentInput {
+  libraryAssetId?: string;
+  name?: string;
+  label?: string;
+  mimeType?: string;
+  size?: number;
+  objectPath?: string;
+  order?: number;
+}
+
+export interface QuoteTemplateSection {
+  id: string;
+  /** cover|intro|scope|terms|appendix|custom */
+  kind: string;
+  title: string;
+  body: string;
+  order: number;
+}
+
+export interface QuoteTemplateSectionInput {
+  kind: string;
+  title: string;
+  body?: string;
+  order?: number;
+}
+
+export interface QuoteTemplateLineItem {
+  name: string;
+  description?: string;
+  quantity: number;
+  unitPrice: number;
+  listPrice: number;
+  discountPct: number;
+}
+
+export interface QuoteTemplate {
+  id: string;
+  tenantId: string;
+  /** @nullable */
+  companyId?: string | null;
+  /** @nullable */
+  brandId?: string | null;
+  name: string;
+  description: string;
+  industry: string;
+  isSystem: boolean;
+  defaultDiscountPct: number;
+  defaultMarginPct: number;
+  defaultValidityDays: number;
+  defaultLineItems: QuoteTemplateLineItem[];
+  defaultAttachmentLibraryIds: string[];
+  sections: QuoteTemplateSection[];
+  createdAt: string;
+}
+
+export interface QuoteTemplateInput {
+  name: string;
+  description?: string;
+  industry: string;
+  companyId?: string;
+  brandId?: string;
+  defaultDiscountPct?: number;
+  defaultMarginPct?: number;
+  defaultValidityDays?: number;
+  defaultLineItems?: QuoteTemplateLineItem[];
+  defaultAttachmentLibraryIds?: string[];
+  sections?: QuoteTemplateSectionInput[];
+}
+
+export interface AttachmentLibraryItem {
+  id: string;
+  tenantId: string;
+  /** @nullable */
+  companyId?: string | null;
+  /** @nullable */
+  brandId?: string | null;
+  name: string;
+  description: string;
+  category: string;
+  tags: string[];
+  mimeType: string;
+  size: number;
+  objectPath: string;
+  version: number;
+  /** @nullable */
+  createdBy?: string | null;
+  createdAt: string;
+}
+
+export interface AttachmentLibraryInput {
+  name: string;
+  description?: string;
+  category: string;
+  tags?: string[];
+  mimeType: string;
+  size: number;
+  objectPath: string;
+  companyId?: string;
+  brandId?: string;
+}
+
+export type IndustryProfileDefaultClauseVariants = { [key: string]: string };
+
+export interface IndustryProfile {
+  id: string;
+  tenantId: string;
+  industry: string;
+  label: string;
+  description: string;
+  defaultClauseVariants: IndustryProfileDefaultClauseVariants;
+  /** @nullable */
+  suggestedTemplateId?: string | null;
+  suggestedAttachmentLibraryIds: string[];
+  createdAt: string;
+}
+
+export type IndustryProfileInputDefaultClauseVariants = {
+  [key: string]: string;
+};
+
+export interface IndustryProfileInput {
+  industry: string;
+  label: string;
+  description?: string;
+  defaultClauseVariants?: IndustryProfileInputDefaultClauseVariants;
+  suggestedTemplateId?: string;
+  suggestedAttachmentLibraryIds?: string[];
 }
 
 export interface PricePosition {
@@ -1255,6 +1429,24 @@ export type ListDealsParams = {
 export type ListQuotesParams = {
   dealId?: string;
   status?: string;
+};
+
+export type ReplaceQuoteLineItemsBody = {
+  items: LineItemInput[];
+};
+
+export type ReplaceQuoteLineItems200 = {
+  items: LineItem[];
+  totalAmount: number;
+};
+
+export type ListQuoteTemplatesParams = {
+  industry?: string;
+};
+
+export type ListAttachmentLibraryParams = {
+  category?: string;
+  tag?: string;
 };
 
 export type ListApprovalsParams = {

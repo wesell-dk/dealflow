@@ -20,6 +20,8 @@ import {
   Languages,
   ClipboardCheck,
   History,
+  FileStack,
+  Paperclip,
   User as UserIcon,
 } from "lucide-react";
 import { useGetTenant } from "@workspace/api-client-react";
@@ -47,6 +49,8 @@ function useNavigation() {
     { name: t("nav.accounts"), href: "/accounts", icon: Users },
     { name: t("nav.deals"), href: "/deals", icon: Briefcase },
     { name: t("nav.quotes"), href: "/quotes", icon: FileText },
+    { name: t("nav.templates"), href: "/templates", icon: FileStack },
+    { name: t("nav.attachments"), href: "/attachments", icon: Paperclip },
     { name: t("nav.pricing"), href: "/pricing", icon: BadgeDollarSign },
     { name: t("nav.approvals"), href: "/approvals", icon: CheckSquare },
     { name: t("nav.contracts"), href: "/contracts", icon: FileSignature },

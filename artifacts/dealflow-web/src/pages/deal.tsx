@@ -1,14 +1,21 @@
+import { useState } from "react";
 import { useParams } from "wouter";
+import { useTranslation } from "react-i18next";
 import { useGetDeal } from "@workspace/api-client-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Plus } from "lucide-react";
+import { QuoteWizard } from "@/components/quote-wizard";
 
 export default function Deal() {
   const params = useParams();
+  const { t } = useTranslation();
   const id = params.id as string;
   const { data: deal, isLoading } = useGetDeal(id);
+  const [wizardOpen, setWizardOpen] = useState(false);
 
   if (isLoading) return <div className="p-8"><Skeleton className="h-64 w-full" /></div>;
   if (!deal) return <div className="p-8">Deal not found</div>;
@@ -18,9 +25,15 @@ export default function Deal() {
       <div className="flex flex-col gap-2 border-b pb-4">
         <div className="flex items-center justify-between">
           <h1 className="text-3xl font-bold tracking-tight">{deal.name}</h1>
-          <Badge variant={deal.riskLevel === 'high' ? 'destructive' : 'secondary'}>
-            Risk: {deal.riskLevel}
-          </Badge>
+          <div className="flex items-center gap-2">
+            <Button onClick={() => setWizardOpen(true)} data-testid="deal-new-quote-button">
+              <Plus className="h-4 w-4 mr-1" />
+              {t("pages.quotes.newQuote")}
+            </Button>
+            <Badge variant={deal.riskLevel === 'high' ? 'destructive' : 'secondary'}>
+              Risk: {deal.riskLevel}
+            </Badge>
+          </div>
         </div>
         <div className="flex items-center gap-4 text-muted-foreground">
           <span>{deal.accountName}</span>
@@ -68,6 +81,12 @@ export default function Deal() {
           </Card>
         </TabsContent>
       </Tabs>
+
+      <QuoteWizard
+        open={wizardOpen}
+        onOpenChange={setWizardOpen}
+        initialDealId={id}
+      />
     </div>
   );
 }

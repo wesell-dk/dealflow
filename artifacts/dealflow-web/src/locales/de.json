@@ -14,7 +14,9 @@
     "reports": "Berichte",
     "audit": "Audit-Log",
     "copilot": "Copilot",
-    "admin": "Verwaltung"
+    "admin": "Verwaltung",
+    "templates": "Vorlagen",
+    "attachments": "Anhänge"
   },
   "common": {
     "search": "Deals, Kunden, Angebote suchen…",
@@ -71,7 +73,9 @@
     "discount": "Rabatt",
     "total": "Summe",
     "number": "Nummer",
-    "industry": "Branche"
+    "industry": "Branche",
+    "quote": "Angebot",
+    "error": "Fehler"
   },
   "pages": {
     "home": {
@@ -107,7 +111,43 @@
     },
     "quotes": {
       "title": "Angebote",
-      "subtitle": "Alle Angebote über deine Deals hinweg."
+      "subtitle": "Alle Angebote über deine Deals hinweg.",
+      "newQuote": "Neues Angebot"
+    },
+    "quote": {
+      "lineItems": "Positionen",
+      "summary": "Zusammenfassung",
+      "margin": "Marge",
+      "openPdf": "PDF anzeigen",
+      "attachments": "Anhänge",
+      "noAttachments": "Keine Anhänge an diese Version gehängt."
+    },
+    "templates": {
+      "title": "Angebots-Vorlagen",
+      "subtitle": "Branchen-Vorlagen mit Sektionen, Positionen und Konditionen.",
+      "searchPlaceholder": "Vorlagen durchsuchen…",
+      "empty": "Keine Vorlagen vorhanden.",
+      "sections": "Sektionen",
+      "sectionsTitle": "Sektionen",
+      "lineItemsTitle": "Standard-Positionen",
+      "deleted": "Vorlage gelöscht"
+    },
+    "attachments": {
+      "title": "Anhang-Bibliothek",
+      "subtitle": "Wiederverwendbare Anhänge wie DPA, SLA, Datenblätter.",
+      "searchPlaceholder": "Anhänge durchsuchen…",
+      "empty": "Keine Anhänge vorhanden.",
+      "upload": "Hochladen",
+      "uploadTitle": "Anhang hochladen",
+      "uploaded": "Anhang hochgeladen",
+      "deleted": "Anhang gelöscht",
+      "uploadFailed": "Upload fehlgeschlagen",
+      "missingFields": "Bitte Name und Datei wählen",
+      "description": "Beschreibung",
+      "category": "Kategorie",
+      "tags": "Tags (kommagetrennt)",
+      "file": "Datei",
+      "formatHint": "Erlaubt: PDF, DOCX, XLSX, MD, CSV, TXT (max. 25 MB)"
     },
     "approvals": {
       "title": "Freigaben",
@@ -317,6 +357,51 @@
         "colStatus": "Status"
       }
     }
+  },
+  "quoteWizard": {
+    "title": "Neues Angebot",
+    "subtitle": "Vorlage wählen, Positionen anpassen und Anhänge hinzufügen.",
+    "steps": {
+      "context": "Kontext",
+      "template": "Vorlage",
+      "lineItems": "Positionen",
+      "terms": "Konditionen",
+      "attachments": "Anhänge",
+      "preview": "Vorschau"
+    },
+    "selectDeal": "Deal auswählen…",
+    "selectIndustry": "Branche wählen…",
+    "industries": {
+      "saas": "Software / SaaS",
+      "consulting": "Beratung / Professional Services",
+      "manufacturing": "Industrie / Maschinenbau",
+      "services": "Dienstleistungen",
+      "other": "Sonstige"
+    },
+    "notes": "Anmerkungen",
+    "notesPlaceholder": "Interne Notizen oder Kundenhinweise…",
+    "noTemplates": "Keine Vorlagen für diese Branche.",
+    "system": "System",
+    "positions": "Positionen",
+    "validityDays": "{{days}} Tage gültig",
+    "validityDaysLabel": "Gültigkeit (Tage)",
+    "qty": "Menge",
+    "listPrice": "Listenpreis",
+    "unitPrice": "Verkaufspreis",
+    "lineDescription": "Beschreibung",
+    "addLine": "Position hinzufügen",
+    "sectionsPreview": "Sektionen aus Vorlage",
+    "attachmentsHint": "Wähle Anhänge aus der Bibliothek, die diesem Angebot beigelegt werden.",
+    "next": "Weiter",
+    "create": "Angebot erstellen",
+    "created": "Angebot erstellt",
+    "createFailed": "Anlegen fehlgeschlagen",
+    "successTitle": "Angebot erfolgreich erstellt",
+    "successDescription": "Angebot {{number}} wurde angelegt.",
+    "openPdf": "PDF öffnen",
+    "openQuote": "Zum Angebot",
+    "defaultDiscount": "Standard-Rabatt",
+    "defaultMargin": "Standard-Marge"
   },
   "helpBot": {
     "title": "Hilfe-Assistent",

@@ -35,6 +35,10 @@ import {
   orderConfirmationChecksTable,
   entityVersionsTable,
   rolesTable,
+  quoteTemplatesTable,
+  quoteTemplateSectionsTable,
+  attachmentLibraryTable,
+  industryProfilesTable,
 } from "@workspace/db";
 import { hashPassword } from "./auth";
 import { logger } from "./logger";
@@ -642,5 +646,201 @@ export async function seedIfEmpty(): Promise<void> {
     { id: "ev_009", entityType: "quote",          entityId: "qt_001",  version: 2, label: "Discounted",    snapshot: '{"discount":8}', actor: "Anna Brandt",    comment: "Increased discount after negotiation.",         createdAt: daysFromNow(-4) },
   ]);
 
+  await seedQuoteTemplatesIdempotent();
+
   logger.info("Seed complete.");
+}
+
+/**
+ * Idempotent seed for quote templates, attachment library, and industry profiles.
+ * Safe to run on every boot — uses onConflictDoNothing on primary key.
+ */
+export async function seedQuoteTemplatesIdempotent(): Promise<void> {
+  // ─── Quote Templates (3 system templates: SaaS, Consulting, Manufacturing) ───
+  await db.insert(quoteTemplatesTable).values([
+    {
+      id: "qtpl_saas",
+      tenantId: "tn_root",
+      companyId: null,
+      brandId: null,
+      name: "SaaS Subscription (System)",
+      description: "Standardvorlage für SaaS-Subscriptions mit MRR-orientierter Preisgestaltung.",
+      industry: "saas",
+      isSystem: true,
+      defaultDiscountPct: "8",
+      defaultMarginPct: "70",
+      defaultValidityDays: 30,
+      defaultLineItems: [
+        { name: "Platform Subscription (Annual)", description: "Pro-User-Lizenz, jährlich abrechenbar.", quantity: 50, unitPrice: 480, listPrice: 480, discountPct: 0 },
+        { name: "Professional Onboarding", description: "Implementierung, Datenmigration, Schulung (Remote).", quantity: 1, unitPrice: 8500, listPrice: 9500, discountPct: 10 },
+        { name: "Premium Support (Gold SLA)", description: "24/7-Support, < 1 h Reaktionszeit für P1.", quantity: 1, unitPrice: 4800, listPrice: 4800, discountPct: 0 },
+      ],
+      defaultAttachmentLibraryIds: ["att_dpa", "att_sla_gold", "att_security_overview"],
+    },
+    {
+      id: "qtpl_consulting",
+      tenantId: "tn_root",
+      companyId: null,
+      brandId: null,
+      name: "Beratung Festpreis (System)",
+      description: "Vorlage für T&M-orientierte Beratungs-Engagements mit Phasen und Meilensteinen.",
+      industry: "consulting",
+      isSystem: true,
+      defaultDiscountPct: "5",
+      defaultMarginPct: "45",
+      defaultValidityDays: 21,
+      defaultLineItems: [
+        { name: "Discovery & Assessment", description: "2 Wochen, Senior Consultant + Solution Architect.", quantity: 80, unitPrice: 180, listPrice: 200, discountPct: 10 },
+        { name: "Design & Konzeption", description: "Lösungsdesign, Architekturentscheidungen, Roadmap.", quantity: 120, unitPrice: 180, listPrice: 200, discountPct: 10 },
+        { name: "Implementierung", description: "Build-Phase, agil, 2-Wochen-Sprints.", quantity: 240, unitPrice: 165, listPrice: 180, discountPct: 8 },
+        { name: "Hypercare (4 Wochen)", description: "Stabilisierung nach Go-Live.", quantity: 1, unitPrice: 12000, listPrice: 14000, discountPct: 14 },
+      ],
+      defaultAttachmentLibraryIds: ["att_company_profile", "att_case_studies", "att_team_cv"],
+    },
+    {
+      id: "qtpl_manufacturing",
+      tenantId: "tn_root",
+      companyId: null,
+      brandId: null,
+      name: "Industrie Komplettangebot (System)",
+      description: "Vorlage für Anlagen/Komponenten + Service-Vertrag mit INCOTERMS und Gewährleistung.",
+      industry: "manufacturing",
+      isSystem: true,
+      defaultDiscountPct: "4",
+      defaultMarginPct: "32",
+      defaultValidityDays: 45,
+      defaultLineItems: [
+        { name: "Anlage Typ A-Serie", description: "Inkl. Montage, Inbetriebnahme, FAT.", quantity: 1, unitPrice: 145000, listPrice: 158000, discountPct: 8 },
+        { name: "Ersatzteilpaket Erstausstattung", description: "Verschleißteile für 12 Monate Betrieb.", quantity: 1, unitPrice: 18500, listPrice: 19800, discountPct: 7 },
+        { name: "Service-Vertrag Gold (24 Monate)", description: "2 Wartungseinsätze/Jahr, < 24 h Vor-Ort-Reaktion.", quantity: 1, unitPrice: 22400, listPrice: 24000, discountPct: 7 },
+        { name: "Schulung Bedienpersonal", description: "3 Tage vor Ort, max. 6 Teilnehmer.", quantity: 1, unitPrice: 4800, listPrice: 5200, discountPct: 8 },
+      ],
+      defaultAttachmentLibraryIds: ["att_datasheet_typeA", "att_warranty_terms", "att_incoterms_dap"],
+    },
+  ]).onConflictDoNothing();
+
+  await db.insert(quoteTemplateSectionsTable).values([
+    // SaaS
+    { id: "qtsec_saas_cover",  templateId: "qtpl_saas",  kind: "cover",  title: "Kommerzielles Angebot",
+      body: "Vielen Dank für Ihr Interesse an unserer Plattform. Dieses Angebot fasst Lizenzen, Onboarding und Support für Ihre Organisation zusammen.", order: 0 },
+    { id: "qtsec_saas_intro",  templateId: "qtpl_saas",  kind: "intro",  title: "Einleitung",
+      body: "Mit dieser Subscription erhalten Sie Zugang zur vollständigen Plattform inklusive aller Standard-Module. Die Lizenzierung erfolgt pro aktiven User auf Jahresbasis.", order: 1 },
+    { id: "qtsec_saas_scope",  templateId: "qtpl_saas",  kind: "scope",  title: "Leistungsumfang",
+      body: "Im Lieferumfang enthalten: Plattform-Lizenz, technisches Onboarding (8 Wochen), Datenmigration aus bestehenden Systemen, Schulung der Key-User sowie Premium-Support gemäß SLA Gold.", order: 2 },
+    { id: "qtsec_saas_terms",  templateId: "qtpl_saas",  kind: "terms",  title: "Vertragskonditionen",
+      body: "Laufzeit 36 Monate, jährliche Abrechnung im Voraus. Zahlungsziel 30 Tage netto. Preisanpassung jährlich gemäß VPI, max. 4 %. Kündigung 90 Tage zum Ende der Vertragslaufzeit.", order: 3 },
+    { id: "qtsec_saas_appx",   templateId: "qtpl_saas",  kind: "appendix", title: "Anhänge",
+      body: "Auftragsverarbeitungsvertrag (DPA), SLA Gold, Security Overview sowie technisches Datenblatt sind Bestandteil dieses Angebots.", order: 4 },
+
+    // Consulting
+    { id: "qtsec_cons_cover",  templateId: "qtpl_consulting",  kind: "cover",  title: "Beratungsangebot",
+      body: "Wir freuen uns, Ihnen unser Angebot für die Begleitung Ihres Vorhabens zu unterbreiten. Schwerpunkte: Discovery, Design und schrittweise Implementierung.", order: 0 },
+    { id: "qtsec_cons_intro",  templateId: "qtpl_consulting",  kind: "intro",  title: "Vorgehen",
+      body: "Wir arbeiten in vier Phasen: Discovery (2 Wochen) → Design (3 Wochen) → Implementierung (12 Wochen, agil) → Hypercare (4 Wochen). Sie erhalten wöchentlich Status-Updates.", order: 1 },
+    { id: "qtsec_cons_scope",  templateId: "qtpl_consulting",  kind: "scope",  title: "Leistungsumfang",
+      body: "Senior Consultant + Solution Architect über die gesamte Laufzeit, ergänzt um 2 Implementierungs-Engineers in der Build-Phase. Aufwandsbasierte Abrechnung pro Phase nach Festpreis-Korridor (+/- 10 %).", order: 2 },
+    { id: "qtsec_cons_terms",  templateId: "qtpl_consulting",  kind: "terms",  title: "Konditionen",
+      body: "Reisekosten nach Aufwand. Zahlungsziel 21 Tage netto. Storno-Regelung: bis 14 Tage vor Sprint-Start kostenfrei. Geistige Eigentumsrechte am Ergebnis gehen mit Bezahlung an Sie über.", order: 3 },
+
+    // Manufacturing
+    { id: "qtsec_mfg_cover",   templateId: "qtpl_manufacturing", kind: "cover",  title: "Industrielles Angebot",
+      body: "Komplettangebot für Lieferung, Montage, Inbetriebnahme und Service Ihrer Anlage. Inklusive Schulung und Erstausstattung Ersatzteile.", order: 0 },
+    { id: "qtsec_mfg_intro",   templateId: "qtpl_manufacturing", kind: "intro",  title: "Anlage und Konfiguration",
+      body: "Die angebotene Anlage entspricht der Konfiguration aus unserem gemeinsamen Workshop. Lieferzeit ab Werk: 12-14 Wochen ab schriftlicher Auftragsbestätigung.", order: 1 },
+    { id: "qtsec_mfg_scope",   templateId: "qtpl_manufacturing", kind: "scope",  title: "Leistungsumfang",
+      body: "Anlage A-Serie (1 Stück), Werks-FAT, Verpackung exportgerecht, Lieferung DAP, Montage und Inbetriebnahme vor Ort, FAT-Protokoll, Schulung des Bedienpersonals (3 Tage).", order: 2 },
+    { id: "qtsec_mfg_terms",   templateId: "qtpl_manufacturing", kind: "terms",  title: "Konditionen und Gewährleistung",
+      body: "INCOTERMS 2020 DAP. Zahlungsplan 30/60/10 (Bestellung/Lieferung/Abnahme). Gewährleistung 24 Monate ab Inbetriebnahme. Eigentumsvorbehalt bis vollständiger Bezahlung. Haftung gemäß BGB / HGB.", order: 3 },
+    { id: "qtsec_mfg_appx",    templateId: "qtpl_manufacturing", kind: "appendix", title: "Beigefügte Unterlagen",
+      body: "Technisches Datenblatt Typ A, Gewährleistungsbedingungen, INCOTERMS-Erläuterung DAP. Ergänzend stellen wir auf Anfrage Konformitätserklärungen und Zertifikate zur Verfügung.", order: 4 },
+  ]).onConflictDoNothing();
+
+  // ─── Attachment Library ───
+  await db.insert(attachmentLibraryTable).values([
+    { id: "att_dpa",                tenantId: "tn_root", companyId: null, brandId: null,
+      name: "Auftragsverarbeitungsvertrag (DPA) v3.2",
+      description: "Standard-DPA gemäß Art. 28 DSGVO. Stand 03/2026.",
+      category: "terms", tags: ["dsgvo", "dpa", "datenschutz"],
+      mimeType: "application/pdf", size: 184320,
+      objectPath: "/objects/uploads/seed-dpa-v3-2.pdf",
+      version: 3, createdBy: "user_priya" },
+    { id: "att_sla_gold",           tenantId: "tn_root", companyId: null, brandId: null,
+      name: "SLA Gold (24/7, < 1 h P1)",
+      description: "Service Level Agreement Gold-Stufe für Premium-Support.",
+      category: "terms", tags: ["sla", "support", "gold"],
+      mimeType: "application/pdf", size: 97280,
+      objectPath: "/objects/uploads/seed-sla-gold.pdf",
+      version: 2, createdBy: "user_priya" },
+    { id: "att_security_overview",  tenantId: "tn_root", companyId: null, brandId: null,
+      name: "Security & Compliance Overview",
+      description: "Übersicht ISO 27001, SOC 2 Type II, Verschlüsselung, Backups.",
+      category: "datasheet", tags: ["security", "iso27001", "soc2"],
+      mimeType: "application/pdf", size: 412672,
+      objectPath: "/objects/uploads/seed-security-overview.pdf",
+      version: 4, createdBy: "user_priya" },
+    { id: "att_company_profile",    tenantId: "tn_root", companyId: null, brandId: null,
+      name: "Helix Company Profile 2026",
+      description: "Unternehmensvorstellung, Referenzen, Zertifizierungen.",
+      category: "reference", tags: ["company", "referenzen"],
+      mimeType: "application/pdf", size: 1485312,
+      objectPath: "/objects/uploads/seed-company-profile.pdf",
+      version: 5, createdBy: "user_priya" },
+    { id: "att_case_studies",       tenantId: "tn_root", companyId: null, brandId: null,
+      name: "Case Studies Beratung (DACH)",
+      description: "5 ausgewählte Beratungs-Case-Studies aus dem DACH-Raum.",
+      category: "reference", tags: ["case-study", "beratung"],
+      mimeType: "application/pdf", size: 968704,
+      objectPath: "/objects/uploads/seed-case-studies.pdf",
+      version: 2, createdBy: "user_anna" },
+    { id: "att_team_cv",            tenantId: "tn_root", companyId: null, brandId: null,
+      name: "Team-Lebensläufe Senior Consulting",
+      description: "Anonymisierte CVs der Senior-Consultants und Architekten.",
+      category: "reference", tags: ["team", "cv", "beratung"],
+      mimeType: "application/pdf", size: 524288,
+      objectPath: "/objects/uploads/seed-team-cv.pdf",
+      version: 1, createdBy: "user_anna" },
+    { id: "att_datasheet_typeA",    tenantId: "tn_root", companyId: null, brandId: null,
+      name: "Technisches Datenblatt Anlage Typ A",
+      description: "Technische Spezifikation, Schnittstellen, Aufstellplan.",
+      category: "datasheet", tags: ["technik", "anlage", "typ-a"],
+      mimeType: "application/pdf", size: 716800,
+      objectPath: "/objects/uploads/seed-datasheet-typeA.pdf",
+      version: 6, createdBy: "user_priya" },
+    { id: "att_warranty_terms",     tenantId: "tn_root", companyId: null, brandId: null,
+      name: "Gewährleistungsbedingungen 2026",
+      description: "Standard-Gewährleistung 24 Monate ab IBN.",
+      category: "terms", tags: ["gewaehrleistung", "warranty"],
+      mimeType: "application/pdf", size: 102400,
+      objectPath: "/objects/uploads/seed-warranty.pdf",
+      version: 3, createdBy: "user_priya" },
+    { id: "att_incoterms_dap",      tenantId: "tn_root", companyId: null, brandId: null,
+      name: "INCOTERMS 2020 - DAP Erläuterung",
+      description: "Erläuterung der DAP-Klausel und Pflichtenverteilung.",
+      category: "terms", tags: ["incoterms", "dap", "logistik"],
+      mimeType: "application/pdf", size: 88064,
+      objectPath: "/objects/uploads/seed-incoterms-dap.pdf",
+      version: 1, createdBy: "user_priya" },
+  ]).onConflictDoNothing();
+
+  // ─── Industry Profiles ───
+  await db.insert(industryProfilesTable).values([
+    { id: "iprof_saas",          tenantId: "tn_root", industry: "saas",
+      label: "Software / SaaS",
+      description: "Subscription-zentrierte Vorlage mit DPA, SLA und Security-Overview.",
+      defaultClauseVariants: { liability: "cap_12m_fees", payment_terms: "net_30", auto_renewal: "12m_with_90d_notice" },
+      suggestedTemplateId: "qtpl_saas",
+      suggestedAttachmentLibraryIds: ["att_dpa", "att_sla_gold", "att_security_overview"] },
+    { id: "iprof_consulting",    tenantId: "tn_root", industry: "consulting",
+      label: "Beratung / Professional Services",
+      description: "T&M- und Festpreis-Mischmodell mit Reisekosten- und Storno-Regelung.",
+      defaultClauseVariants: { liability: "cap_2x_fees", payment_terms: "net_21", ip_ownership: "client_on_payment" },
+      suggestedTemplateId: "qtpl_consulting",
+      suggestedAttachmentLibraryIds: ["att_company_profile", "att_case_studies", "att_team_cv"] },
+    { id: "iprof_manufacturing", tenantId: "tn_root", industry: "manufacturing",
+      label: "Industrie / Maschinenbau",
+      description: "Anlagen-Komplettangebote mit INCOTERMS, Gewährleistung und Service.",
+      defaultClauseVariants: { liability: "cap_contract_value", payment_terms: "30_60_10", warranty: "24m_from_ibn" },
+      suggestedTemplateId: "qtpl_manufacturing",
+      suggestedAttachmentLibraryIds: ["att_datasheet_typeA", "att_warranty_terms", "att_incoterms_dap"] },
+  ]).onConflictDoNothing();
 }

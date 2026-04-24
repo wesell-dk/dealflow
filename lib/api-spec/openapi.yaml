@@ -589,6 +589,289 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/Quote" }
 
+  /quotes/from-template:
+    post:
+      operationId: createQuoteFromTemplate
+      tags: [quotes]
+      summary: Create a quote from a template (Wizard backend)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/QuoteFromTemplateInput" }
+      responses:
+        "201":
+          description: created
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/QuoteDetail" }
+
+  /quote-versions/{id}/line-items:
+    put:
+      operationId: replaceQuoteLineItems
+      tags: [quotes]
+      summary: Replace all line items of a draft quote version
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [items]
+              properties:
+                items:
+                  type: array
+                  items: { $ref: "#/components/schemas/LineItemInput" }
+      responses:
+        "200":
+          description: ok
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items, totalAmount]
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: "#/components/schemas/LineItem" }
+                  totalAmount: { type: number }
+
+  /quote-versions/{id}/attachments:
+    get:
+      operationId: listQuoteAttachments
+      tags: [quotes]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: ok
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/QuoteAttachment" }
+    post:
+      operationId: addQuoteAttachment
+      tags: [quotes]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/QuoteAttachmentInput" }
+      responses:
+        "201":
+          description: created
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/QuoteAttachment" }
+
+  /quote-attachments/{id}:
+    delete:
+      operationId: removeQuoteAttachment
+      tags: [quotes]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        "204":
+          description: removed
+
+  # ───────────── QUOTE TEMPLATES ─────────────
+
+  /quote-templates:
+    get:
+      operationId: listQuoteTemplates
+      tags: [quotes]
+      parameters:
+        - in: query
+          name: industry
+          required: false
+          schema: { type: string }
+      responses:
+        "200":
+          description: ok
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/QuoteTemplate" }
+    post:
+      operationId: createQuoteTemplate
+      tags: [quotes]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/QuoteTemplateInput" }
+      responses:
+        "201":
+          description: created
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/QuoteTemplate" }
+
+  /quote-templates/{id}:
+    get:
+      operationId: getQuoteTemplate
+      tags: [quotes]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: ok
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/QuoteTemplate" }
+    patch:
+      operationId: updateQuoteTemplate
+      tags: [quotes]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/QuoteTemplateInput" }
+      responses:
+        "200":
+          description: ok
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/QuoteTemplate" }
+    delete:
+      operationId: deleteQuoteTemplate
+      tags: [quotes]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        "204":
+          description: removed
+
+  # ───────────── ATTACHMENT LIBRARY ─────────────
+
+  /attachment-library:
+    get:
+      operationId: listAttachmentLibrary
+      tags: [quotes]
+      parameters:
+        - in: query
+          name: category
+          required: false
+          schema: { type: string }
+        - in: query
+          name: tag
+          required: false
+          schema: { type: string }
+      responses:
+        "200":
+          description: ok
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/AttachmentLibraryItem" }
+    post:
+      operationId: createAttachmentLibraryItem
+      tags: [quotes]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/AttachmentLibraryInput" }
+      responses:
+        "201":
+          description: created
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AttachmentLibraryItem" }
+
+  /attachment-library/{id}:
+    delete:
+      operationId: deleteAttachmentLibraryItem
+      tags: [quotes]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        "204":
+          description: removed
+
+  # ───────────── INDUSTRY PROFILES ─────────────
+
+  /industry-profiles:
+    get:
+      operationId: listIndustryProfiles
+      tags: [quotes]
+      responses:
+        "200":
+          description: ok
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/IndustryProfile" }
+    post:
+      operationId: createIndustryProfile
+      tags: [quotes]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/IndustryProfileInput" }
+      responses:
+        "201":
+          description: created
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/IndustryProfile" }
+
+  /industry-profiles/{id}:
+    patch:
+      operationId: updateIndustryProfile
+      tags: [quotes]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/IndustryProfileInput" }
+      responses:
+        "200":
+          description: ok
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/IndustryProfile" }
+
   # ───────────── PRICING ─────────────
 
   /price-positions:
@@ -1770,6 +2053,10 @@ components:
         name: { type: string }
         size: { type: integer }
         contentType: { type: string }
+        kind:
+          type: string
+          enum: [logo, document]
+          description: "logo (admin only, 2MB images) or document (any user, 25MB docs+images). Default: logo for backward compatibility."
 
     UploadUrlResponse:
       type: object
@@ -2200,6 +2487,224 @@ components:
       properties:
         discountPct: { type: number }
         notes: { type: string }
+
+    LineItemInput:
+      type: object
+      required: [name, quantity, unitPrice, listPrice, discountPct]
+      properties:
+        name: { type: string }
+        description: { type: string }
+        quantity: { type: number }
+        unitPrice: { type: number }
+        listPrice: { type: number }
+        discountPct: { type: number }
+
+    QuoteFromTemplateInput:
+      type: object
+      required: [dealId, templateId]
+      properties:
+        dealId: { type: string }
+        templateId: { type: string }
+        validUntil: { type: string, format: date }
+        notes: { type: string }
+        attachmentLibraryIds:
+          type: array
+          items: { type: string }
+
+    QuoteAttachment:
+      type: object
+      required: [id, quoteVersionId, name, mimeType, size, objectPath, order]
+      properties:
+        id: { type: string }
+        quoteVersionId: { type: string }
+        libraryAssetId:
+          type: ["string", "null"]
+        name: { type: string }
+        label:
+          type: ["string", "null"]
+        mimeType: { type: string }
+        size: { type: integer }
+        objectPath: { type: string }
+        order: { type: integer }
+        createdAt: { type: string, format: date-time }
+
+    QuoteAttachmentInput:
+      type: object
+      properties:
+        libraryAssetId: { type: string }
+        name: { type: string }
+        label: { type: string }
+        mimeType: { type: string }
+        size: { type: integer }
+        objectPath: { type: string }
+        order: { type: integer }
+
+    QuoteTemplateSection:
+      type: object
+      required: [id, kind, title, body, order]
+      properties:
+        id: { type: string }
+        kind: { type: string, description: "cover|intro|scope|terms|appendix|custom" }
+        title: { type: string }
+        body: { type: string }
+        order: { type: integer }
+
+    QuoteTemplateSectionInput:
+      type: object
+      required: [kind, title]
+      properties:
+        kind: { type: string }
+        title: { type: string }
+        body: { type: string }
+        order: { type: integer }
+
+    QuoteTemplateLineItem:
+      type: object
+      required: [name, quantity, unitPrice, listPrice, discountPct]
+      properties:
+        name: { type: string }
+        description: { type: string }
+        quantity: { type: number }
+        unitPrice: { type: number }
+        listPrice: { type: number }
+        discountPct: { type: number }
+
+    QuoteTemplate:
+      type: object
+      required:
+        [
+          id, tenantId, name, description, industry, isSystem,
+          defaultDiscountPct, defaultMarginPct, defaultValidityDays,
+          defaultLineItems, defaultAttachmentLibraryIds, sections, createdAt
+        ]
+      properties:
+        id: { type: string }
+        tenantId: { type: string }
+        companyId:
+          type: ["string", "null"]
+        brandId:
+          type: ["string", "null"]
+        name: { type: string }
+        description: { type: string }
+        industry: { type: string }
+        isSystem: { type: boolean }
+        defaultDiscountPct: { type: number }
+        defaultMarginPct: { type: number }
+        defaultValidityDays: { type: integer }
+        defaultLineItems:
+          type: array
+          items: { $ref: "#/components/schemas/QuoteTemplateLineItem" }
+        defaultAttachmentLibraryIds:
+          type: array
+          items: { type: string }
+        sections:
+          type: array
+          items: { $ref: "#/components/schemas/QuoteTemplateSection" }
+        createdAt: { type: string, format: date-time }
+
+    QuoteTemplateInput:
+      type: object
+      required: [name, industry]
+      properties:
+        name: { type: string }
+        description: { type: string }
+        industry: { type: string }
+        companyId: { type: string }
+        brandId: { type: string }
+        defaultDiscountPct: { type: number }
+        defaultMarginPct: { type: number }
+        defaultValidityDays: { type: integer }
+        defaultLineItems:
+          type: array
+          items: { $ref: "#/components/schemas/QuoteTemplateLineItem" }
+        defaultAttachmentLibraryIds:
+          type: array
+          items: { type: string }
+        sections:
+          type: array
+          items: { $ref: "#/components/schemas/QuoteTemplateSectionInput" }
+
+    AttachmentLibraryItem:
+      type: object
+      required:
+        [
+          id, tenantId, name, description, category, tags, mimeType,
+          size, objectPath, version, createdAt
+        ]
+      properties:
+        id: { type: string }
+        tenantId: { type: string }
+        companyId:
+          type: ["string", "null"]
+        brandId:
+          type: ["string", "null"]
+        name: { type: string }
+        description: { type: string }
+        category: { type: string }
+        tags:
+          type: array
+          items: { type: string }
+        mimeType: { type: string }
+        size: { type: integer }
+        objectPath: { type: string }
+        version: { type: integer }
+        createdBy:
+          type: ["string", "null"]
+        createdAt: { type: string, format: date-time }
+
+    AttachmentLibraryInput:
+      type: object
+      required: [name, category, mimeType, size, objectPath]
+      properties:
+        name: { type: string }
+        description: { type: string }
+        category: { type: string }
+        tags:
+          type: array
+          items: { type: string }
+        mimeType: { type: string }
+        size: { type: integer }
+        objectPath: { type: string }
+        companyId: { type: string }
+        brandId: { type: string }
+
+    IndustryProfile:
+      type: object
+      required:
+        [
+          id, tenantId, industry, label, description, defaultClauseVariants,
+          suggestedAttachmentLibraryIds, createdAt
+        ]
+      properties:
+        id: { type: string }
+        tenantId: { type: string }
+        industry: { type: string }
+        label: { type: string }
+        description: { type: string }
+        defaultClauseVariants:
+          type: object
+          additionalProperties: { type: string }
+        suggestedTemplateId:
+          type: ["string", "null"]
+        suggestedAttachmentLibraryIds:
+          type: array
+          items: { type: string }
+        createdAt: { type: string, format: date-time }
+
+    IndustryProfileInput:
+      type: object
+      required: [industry, label]
+      properties:
+        industry: { type: string }
+        label: { type: string }
+        description: { type: string }
+        defaultClauseVariants:
+          type: object
+          additionalProperties: { type: string }
+        suggestedTemplateId: { type: string }
+        suggestedAttachmentLibraryIds:
+          type: array
+          items: { type: string }
 
     # ── Pricing ──
     PricePosition:

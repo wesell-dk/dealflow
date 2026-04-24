@@ -68,6 +68,11 @@ import {
   contractAmendmentsTable,
   amendmentClausesTable,
   rolesTable,
+  quoteTemplatesTable,
+  quoteTemplateSectionsTable,
+  attachmentLibraryTable,
+  quoteAttachmentsTable,
+  industryProfilesTable,
 } from '@workspace/db';
 import {
   generatePriceRejectionForReaction,
@@ -605,6 +610,11 @@ router.get('/quotes/:id/pdf', async (req, res) => {
   const lines = current
     ? await db.select().from(lineItemsTable).where(eq(lineItemsTable.quoteVersionId, current.id))
     : [];
+  const attachments = current
+    ? await db.select().from(quoteAttachmentsTable)
+        .where(eq(quoteAttachmentsTable.quoteVersionId, current.id))
+        .orderBy(asc(quoteAttachmentsTable.order))
+    : [];
   let brand: typeof brandsTable.$inferSelect | undefined;
   if (d?.brandId) {
     const [b] = await db.select().from(brandsTable).where(eq(brandsTable.id, d.brandId));
@@ -640,6 +650,13 @@ router.get('/quotes/:id/pdf', async (req, res) => {
       addressLine: brand.addressLine ?? null,
       tone: brand.tone ?? null,
     } : null,
+    sections: (current?.sectionsSnapshot ?? []) as Array<{ kind: string; title: string; body: string; order: number }>,
+    attachments: attachments.map(a => ({
+      name: a.name,
+      label: a.label,
+      mimeType: a.mimeType,
+      size: a.size,
+    })),
   });
   res.setHeader('Content-Type', 'application/pdf');
   res.setHeader('Content-Disposition', `inline; filename="quote-${q.number}.pdf"`);
@@ -686,6 +703,556 @@ router.post('/quotes/:id/accept', async (req, res) => {
   const [d] = await db.select().from(dealsTable).where(eq(dealsTable.id, q.dealId));
   void emitEvent(getScope(req).tenantId, 'quote.accepted', { quoteId: q.id, dealId: q.dealId });
   res.json(await enrichQuote(q, d?.name ?? 'Unknown'));
+});
+
+// ── QUOTE TEMPLATES ──
+type QuoteTemplateRow = typeof quoteTemplatesTable.$inferSelect;
+type QuoteTemplateSectionRow = typeof quoteTemplateSectionsTable.$inferSelect;
+
+function scopedRowVisible(
+  scope: ReturnType<typeof getScope>,
+  row: { tenantId: string; companyId?: string | null; brandId?: string | null },
+): boolean {
+  if (row.tenantId !== scope.tenantId) return false;
+  if (scope.tenantWide) return true;
+  if (!row.companyId && !row.brandId) return true;
+  if (row.companyId && scope.companyIds.includes(row.companyId)) return true;
+  if (row.brandId && scope.brandIds.includes(row.brandId)) return true;
+  return false;
+}
+
+function mapQuoteTemplate(t: QuoteTemplateRow, sections: QuoteTemplateSectionRow[]) {
+  return {
+    id: t.id,
+    tenantId: t.tenantId,
+    companyId: t.companyId,
+    brandId: t.brandId,
+    name: t.name,
+    description: t.description,
+    industry: t.industry,
+    isSystem: t.isSystem,
+    defaultDiscountPct: num(t.defaultDiscountPct),
+    defaultMarginPct: num(t.defaultMarginPct),
+    defaultValidityDays: t.defaultValidityDays,
+    defaultLineItems: t.defaultLineItems ?? [],
+    defaultAttachmentLibraryIds: t.defaultAttachmentLibraryIds ?? [],
+    sections: sections
+      .filter(s => s.templateId === t.id)
+      .sort((a, b) => a.order - b.order)
+      .map(s => ({ id: s.id, kind: s.kind, title: s.title, body: s.body, order: s.order })),
+    createdAt: iso(t.createdAt)!,
+  };
+}
+
+router.get('/quote-templates', async (req, res) => {
+  const scope = getScope(req);
+  const filters = [eq(quoteTemplatesTable.tenantId, scope.tenantId)];
+  if (req.query.industry) filters.push(eq(quoteTemplatesTable.industry, String(req.query.industry)));
+  const rows = await db.select().from(quoteTemplatesTable)
+    .where(and(...filters))
+    .orderBy(asc(quoteTemplatesTable.name));
+  const visible = scope.tenantWide ? rows : rows.filter(t =>
+    !t.companyId && !t.brandId
+    || (t.companyId && scope.companyIds.includes(t.companyId))
+    || (t.brandId && scope.brandIds.includes(t.brandId)),
+  );
+  const ids = visible.map(t => t.id);
+  const sections = ids.length
+    ? await db.select().from(quoteTemplateSectionsTable).where(inArray(quoteTemplateSectionsTable.templateId, ids))
+    : [];
+  res.json(visible.map(t => mapQuoteTemplate(t, sections)));
+});
+
+router.get('/quote-templates/:id', async (req, res) => {
+  const scope = getScope(req);
+  const [t] = await db.select().from(quoteTemplatesTable).where(eq(quoteTemplatesTable.id, req.params.id));
+  if (!t || !scopedRowVisible(scope, t)) { res.status(404).json({ error: 'not found' }); return; }
+  const sections = await db.select().from(quoteTemplateSectionsTable)
+    .where(eq(quoteTemplateSectionsTable.templateId, t.id));
+  res.json(mapQuoteTemplate(t, sections));
+});
+
+const QuoteTemplateSectionInput = z.object({
+  kind: z.string().min(1).max(40),
+  title: z.string().min(1).max(200),
+  body: z.string().max(20000).optional().default(''),
+  order: z.number().int().optional(),
+});
+const QuoteTemplateLineItemInput = z.object({
+  name: z.string().min(1).max(200),
+  description: z.string().max(2000).optional(),
+  quantity: z.number().nonnegative(),
+  unitPrice: z.number().nonnegative(),
+  listPrice: z.number().nonnegative(),
+  discountPct: z.number().min(0).max(100),
+});
+const QuoteTemplateBody = z.object({
+  name: z.string().min(1).max(200),
+  description: z.string().max(2000).optional().default(''),
+  industry: z.string().min(1).max(60),
+  companyId: z.string().optional().nullable(),
+  brandId: z.string().optional().nullable(),
+  defaultDiscountPct: z.number().min(0).max(100).optional().default(0),
+  defaultMarginPct: z.number().min(0).max(100).optional().default(30),
+  defaultValidityDays: z.number().int().min(1).max(365).optional().default(30),
+  defaultLineItems: z.array(QuoteTemplateLineItemInput).optional().default([]),
+  defaultAttachmentLibraryIds: z.array(z.string()).optional().default([]),
+  sections: z.array(QuoteTemplateSectionInput).optional().default([]),
+});
+
+router.post('/quote-templates', async (req, res) => {
+  if (!validateInline(req, res, { body: QuoteTemplateBody })) return;
+  const scope = getScope(req);
+  const b = req.body as z.infer<typeof QuoteTemplateBody>;
+  if (b.brandId) {
+    const [bb] = await db.select().from(brandsTable).where(eq(brandsTable.id, b.brandId));
+    if (!bb || !(await brandVisible(req, bb))) { res.status(403).json({ error: 'brand not in scope' }); return; }
+  }
+  if (b.companyId && !scope.tenantWide && !scope.companyIds.includes(b.companyId)) {
+    res.status(403).json({ error: 'company not in scope' }); return;
+  }
+  const id = `qtpl_${randomUUID().slice(0, 8)}`;
+  await db.insert(quoteTemplatesTable).values({
+    id, tenantId: scope.tenantId,
+    companyId: b.companyId ?? null, brandId: b.brandId ?? null,
+    name: b.name, description: b.description ?? '', industry: b.industry,
+    isSystem: false,
+    defaultDiscountPct: String(b.defaultDiscountPct ?? 0),
+    defaultMarginPct: String(b.defaultMarginPct ?? 30),
+    defaultValidityDays: b.defaultValidityDays ?? 30,
+    defaultLineItems: b.defaultLineItems ?? [],
+    defaultAttachmentLibraryIds: b.defaultAttachmentLibraryIds ?? [],
+  });
+  if (b.sections?.length) {
+    await db.insert(quoteTemplateSectionsTable).values(
+      b.sections.map((s, i) => ({
+        id: `qtsec_${randomUUID().slice(0, 8)}`,
+        templateId: id, kind: s.kind, title: s.title,
+        body: s.body ?? '', order: s.order ?? i,
+      })),
+    );
+  }
+  const [t] = await db.select().from(quoteTemplatesTable).where(eq(quoteTemplatesTable.id, id));
+  const sections = await db.select().from(quoteTemplateSectionsTable).where(eq(quoteTemplateSectionsTable.templateId, id));
+  res.status(201).json(mapQuoteTemplate(t!, sections));
+});
+
+router.patch('/quote-templates/:id', async (req, res) => {
+  if (!validateInline(req, res, { body: QuoteTemplateBody })) return;
+  const scope = getScope(req);
+  const [existing] = await db.select().from(quoteTemplatesTable).where(eq(quoteTemplatesTable.id, req.params.id));
+  if (!existing || !scopedRowVisible(scope, existing)) { res.status(404).json({ error: 'not found' }); return; }
+  if (existing.isSystem && !scope.tenantWide) { res.status(403).json({ error: 'cannot edit system template' }); return; }
+  const b = req.body as z.infer<typeof QuoteTemplateBody>;
+  await db.update(quoteTemplatesTable).set({
+    name: b.name, description: b.description ?? '', industry: b.industry,
+    companyId: b.companyId ?? null, brandId: b.brandId ?? null,
+    defaultDiscountPct: String(b.defaultDiscountPct ?? 0),
+    defaultMarginPct: String(b.defaultMarginPct ?? 30),
+    defaultValidityDays: b.defaultValidityDays ?? 30,
+    defaultLineItems: b.defaultLineItems ?? [],
+    defaultAttachmentLibraryIds: b.defaultAttachmentLibraryIds ?? [],
+  }).where(eq(quoteTemplatesTable.id, req.params.id));
+  // Replace sections (idempotent)
+  await db.delete(quoteTemplateSectionsTable).where(eq(quoteTemplateSectionsTable.templateId, req.params.id));
+  if (b.sections?.length) {
+    await db.insert(quoteTemplateSectionsTable).values(
+      b.sections.map((s, i) => ({
+        id: `qtsec_${randomUUID().slice(0, 8)}`,
+        templateId: req.params.id, kind: s.kind, title: s.title,
+        body: s.body ?? '', order: s.order ?? i,
+      })),
+    );
+  }
+  const [t] = await db.select().from(quoteTemplatesTable).where(eq(quoteTemplatesTable.id, req.params.id));
+  const sections = await db.select().from(quoteTemplateSectionsTable).where(eq(quoteTemplateSectionsTable.templateId, req.params.id));
+  res.json(mapQuoteTemplate(t!, sections));
+});
+
+router.delete('/quote-templates/:id', async (req, res) => {
+  const scope = getScope(req);
+  const [existing] = await db.select().from(quoteTemplatesTable).where(eq(quoteTemplatesTable.id, req.params.id));
+  if (!existing || !scopedRowVisible(scope, existing)) { res.status(404).json({ error: 'not found' }); return; }
+  if (existing.isSystem) { res.status(403).json({ error: 'cannot delete system template' }); return; }
+  await db.delete(quoteTemplateSectionsTable).where(eq(quoteTemplateSectionsTable.templateId, req.params.id));
+  await db.delete(quoteTemplatesTable).where(eq(quoteTemplatesTable.id, req.params.id));
+  res.status(204).end();
+});
+
+// ── ATTACHMENT LIBRARY ──
+function mapAttachmentLibraryItem(a: typeof attachmentLibraryTable.$inferSelect) {
+  return {
+    id: a.id, tenantId: a.tenantId,
+    companyId: a.companyId, brandId: a.brandId,
+    name: a.name, description: a.description, category: a.category,
+    tags: a.tags ?? [], mimeType: a.mimeType, size: a.size,
+    objectPath: a.objectPath, version: a.version,
+    createdBy: a.createdBy, createdAt: iso(a.createdAt)!,
+  };
+}
+
+const AttachmentLibraryBody = z.object({
+  name: z.string().min(1).max(200),
+  description: z.string().max(2000).optional().default(''),
+  category: z.enum(['datasheet', 'terms', 'reference', 'certificate', 'other']),
+  tags: z.array(z.string()).optional().default([]),
+  mimeType: z.string().min(1).max(120),
+  size: z.number().int().nonnegative(),
+  objectPath: z.string().min(1).max(500),
+  companyId: z.string().optional().nullable(),
+  brandId: z.string().optional().nullable(),
+});
+
+router.get('/attachment-library', async (req, res) => {
+  const scope = getScope(req);
+  const filters = [eq(attachmentLibraryTable.tenantId, scope.tenantId)];
+  if (req.query.category) filters.push(eq(attachmentLibraryTable.category, String(req.query.category)));
+  let rows = await db.select().from(attachmentLibraryTable).where(and(...filters)).orderBy(desc(attachmentLibraryTable.createdAt));
+  if (!scope.tenantWide) {
+    rows = rows.filter(a =>
+      (!a.companyId && !a.brandId)
+      || (a.companyId && scope.companyIds.includes(a.companyId))
+      || (a.brandId && scope.brandIds.includes(a.brandId)),
+    );
+  }
+  if (req.query.tag) {
+    const tag = String(req.query.tag).toLowerCase();
+    rows = rows.filter(a => (a.tags ?? []).some(t => t.toLowerCase() === tag));
+  }
+  res.json(rows.map(mapAttachmentLibraryItem));
+});
+
+router.post('/attachment-library', async (req, res) => {
+  if (!validateInline(req, res, { body: AttachmentLibraryBody })) return;
+  const scope = getScope(req);
+  const b = req.body as z.infer<typeof AttachmentLibraryBody>;
+  if (b.brandId) {
+    const [bb] = await db.select().from(brandsTable).where(eq(brandsTable.id, b.brandId));
+    if (!bb || !(await brandVisible(req, bb))) { res.status(403).json({ error: 'brand not in scope' }); return; }
+  }
+  if (b.companyId && !scope.tenantWide && !scope.companyIds.includes(b.companyId)) {
+    res.status(403).json({ error: 'company not in scope' }); return;
+  }
+  const id = `att_${randomUUID().slice(0, 8)}`;
+  await db.insert(attachmentLibraryTable).values({
+    id, tenantId: scope.tenantId,
+    companyId: b.companyId ?? null, brandId: b.brandId ?? null,
+    name: b.name, description: b.description ?? '', category: b.category,
+    tags: b.tags ?? [], mimeType: b.mimeType, size: b.size,
+    objectPath: b.objectPath, version: 1,
+    createdBy: scope.user.id,
+  });
+  const [a] = await db.select().from(attachmentLibraryTable).where(eq(attachmentLibraryTable.id, id));
+  res.status(201).json(mapAttachmentLibraryItem(a!));
+});
+
+router.delete('/attachment-library/:id', async (req, res) => {
+  const scope = getScope(req);
+  const [a] = await db.select().from(attachmentLibraryTable).where(eq(attachmentLibraryTable.id, req.params.id));
+  if (!a || !scopedRowVisible(scope, a)) { res.status(404).json({ error: 'not found' }); return; }
+  await db.delete(attachmentLibraryTable).where(eq(attachmentLibraryTable.id, req.params.id));
+  res.status(204).end();
+});
+
+// ── INDUSTRY PROFILES ──
+function mapIndustryProfile(p: typeof industryProfilesTable.$inferSelect) {
+  return {
+    id: p.id, tenantId: p.tenantId, industry: p.industry, label: p.label,
+    description: p.description, defaultClauseVariants: p.defaultClauseVariants ?? {},
+    suggestedTemplateId: p.suggestedTemplateId,
+    suggestedAttachmentLibraryIds: p.suggestedAttachmentLibraryIds ?? [],
+    createdAt: iso(p.createdAt)!,
+  };
+}
+
+const IndustryProfileBody = z.object({
+  industry: z.string().min(1).max(60),
+  label: z.string().min(1).max(120),
+  description: z.string().max(2000).optional().default(''),
+  defaultClauseVariants: z.record(z.string(), z.string()).optional().default({}),
+  suggestedTemplateId: z.string().optional().nullable(),
+  suggestedAttachmentLibraryIds: z.array(z.string()).optional().default([]),
+});
+
+router.get('/industry-profiles', async (req, res) => {
+  const scope = getScope(req);
+  const rows = await db.select().from(industryProfilesTable)
+    .where(eq(industryProfilesTable.tenantId, scope.tenantId))
+    .orderBy(asc(industryProfilesTable.label));
+  res.json(rows.map(mapIndustryProfile));
+});
+
+router.post('/industry-profiles', async (req, res) => {
+  if (!validateInline(req, res, { body: IndustryProfileBody })) return;
+  const scope = getScope(req);
+  const b = req.body as z.infer<typeof IndustryProfileBody>;
+  const id = `iprof_${randomUUID().slice(0, 8)}`;
+  await db.insert(industryProfilesTable).values({
+    id, tenantId: scope.tenantId, industry: b.industry, label: b.label,
+    description: b.description ?? '',
+    defaultClauseVariants: b.defaultClauseVariants ?? {},
+    suggestedTemplateId: b.suggestedTemplateId ?? null,
+    suggestedAttachmentLibraryIds: b.suggestedAttachmentLibraryIds ?? [],
+  });
+  const [p] = await db.select().from(industryProfilesTable).where(eq(industryProfilesTable.id, id));
+  res.status(201).json(mapIndustryProfile(p!));
+});
+
+router.patch('/industry-profiles/:id', async (req, res) => {
+  if (!validateInline(req, res, { body: IndustryProfileBody })) return;
+  const scope = getScope(req);
+  const [existing] = await db.select().from(industryProfilesTable).where(eq(industryProfilesTable.id, req.params.id));
+  if (!existing || existing.tenantId !== scope.tenantId) { res.status(404).json({ error: 'not found' }); return; }
+  const b = req.body as z.infer<typeof IndustryProfileBody>;
+  await db.update(industryProfilesTable).set({
+    industry: b.industry, label: b.label, description: b.description ?? '',
+    defaultClauseVariants: b.defaultClauseVariants ?? {},
+    suggestedTemplateId: b.suggestedTemplateId ?? null,
+    suggestedAttachmentLibraryIds: b.suggestedAttachmentLibraryIds ?? [],
+  }).where(eq(industryProfilesTable.id, req.params.id));
+  const [p] = await db.select().from(industryProfilesTable).where(eq(industryProfilesTable.id, req.params.id));
+  res.json(mapIndustryProfile(p!));
+});
+
+// ── QUOTE FROM TEMPLATE / LINE ITEMS / ATTACHMENTS ──
+function calcLineTotal(item: { quantity: number; unitPrice: number; discountPct: number }) {
+  return Math.round(item.quantity * item.unitPrice * (1 - item.discountPct / 100));
+}
+
+const QuoteFromTemplateBody = z.object({
+  dealId: z.string().min(1),
+  templateId: z.string().min(1),
+  validUntil: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+  notes: z.string().max(4000).optional(),
+  attachmentLibraryIds: z.array(z.string()).optional(),
+});
+
+router.post('/quotes/from-template', async (req, res) => {
+  if (!validateInline(req, res, { body: QuoteFromTemplateBody })) return;
+  const scope = getScope(req);
+  const b = req.body as z.infer<typeof QuoteFromTemplateBody>;
+  if (!(await gateDeal(req, res, b.dealId))) return;
+  const [d] = await db.select().from(dealsTable).where(eq(dealsTable.id, b.dealId));
+  if (!d) { res.status(404).json({ error: 'deal not found' }); return; }
+  const [tpl] = await db.select().from(quoteTemplatesTable).where(eq(quoteTemplatesTable.id, b.templateId));
+  if (!tpl || !scopedRowVisible(scope, tpl)) { res.status(404).json({ error: 'template not found' }); return; }
+
+  const validUntil = b.validUntil ?? new Date(Date.now() + tpl.defaultValidityDays * 86400000).toISOString().slice(0, 10);
+  const id = `qt_${randomUUID().slice(0, 8)}`;
+  const number = `Q-2026-${Math.floor(Math.random() * 9000) + 1000}`;
+  await db.insert(quotesTable).values({
+    id, dealId: d.id, number, status: 'draft', currentVersion: 1,
+    currency: d.currency, validUntil,
+  });
+  const qvId = `qv_${randomUUID().slice(0, 8)}`;
+  const tplLines = tpl.defaultLineItems ?? [];
+  const lineRows = tplLines.map(li => {
+    const total = calcLineTotal(li);
+    return {
+      id: `li_${randomUUID().slice(0, 8)}`,
+      quoteVersionId: qvId, name: li.name, description: li.description ?? null,
+      quantity: String(li.quantity), unitPrice: String(li.unitPrice),
+      listPrice: String(li.listPrice), discountPct: String(li.discountPct),
+      total: String(total),
+    };
+  });
+  const totalAmount = lineRows.reduce((s, l) => s + Number(l.total), 0);
+  const tplSections = await db.select().from(quoteTemplateSectionsTable)
+    .where(eq(quoteTemplateSectionsTable.templateId, tpl.id))
+    .orderBy(asc(quoteTemplateSectionsTable.order));
+  const sectionsSnapshot = tplSections.map(s => ({
+    kind: s.kind, title: s.title, body: s.body, order: s.order,
+  }));
+  await db.insert(quoteVersionsTable).values({
+    id: qvId, quoteId: id, version: 1,
+    totalAmount: String(totalAmount),
+    discountPct: String(tpl.defaultDiscountPct ?? 0),
+    marginPct: String(tpl.defaultMarginPct ?? 30),
+    status: 'draft',
+    notes: b.notes ?? `Created from template "${tpl.name}"`,
+    templateId: tpl.id,
+    sectionsSnapshot,
+  });
+  if (lineRows.length) {
+    await db.insert(lineItemsTable).values(lineRows);
+  }
+
+  // Attach library items: combine template defaults + explicit override
+  const attIds = Array.from(new Set([
+    ...(tpl.defaultAttachmentLibraryIds ?? []),
+    ...(b.attachmentLibraryIds ?? []),
+  ]));
+  if (attIds.length) {
+    const libsAll = await db.select().from(attachmentLibraryTable)
+      .where(and(eq(attachmentLibraryTable.tenantId, scope.tenantId), inArray(attachmentLibraryTable.id, attIds)));
+    const libs = libsAll.filter(a => scopedRowVisible(scope, a));
+    if (libs.length) {
+      await db.insert(quoteAttachmentsTable).values(libs.map((a, i) => ({
+        id: `qatt_${randomUUID().slice(0, 8)}`,
+        quoteVersionId: qvId, libraryAssetId: a.id,
+        name: a.name, mimeType: a.mimeType, size: a.size,
+        objectPath: a.objectPath, label: a.description || null,
+        order: i,
+      })));
+    }
+  }
+
+  // Return enriched quote detail (re-uses /quotes/:id logic shape)
+  const [q] = await db.select().from(quotesTable).where(eq(quotesTable.id, id));
+  const versions = await db.select().from(quoteVersionsTable).where(eq(quoteVersionsTable.quoteId, id));
+  const lines = await db.select().from(lineItemsTable).where(eq(lineItemsTable.quoteVersionId, qvId));
+  const base = await enrichQuote(q!, d.name);
+  res.status(201).json({
+    ...base,
+    versions: versions.map(v => ({
+      id: v.id, quoteId: v.quoteId, version: v.version,
+      totalAmount: num(v.totalAmount), discountPct: num(v.discountPct),
+      marginPct: num(v.marginPct), status: v.status, notes: v.notes,
+      createdAt: iso(v.createdAt)!,
+    })),
+    lineItems: lines.map(l => ({
+      id: l.id, quoteVersionId: l.quoteVersionId, name: l.name,
+      description: l.description, quantity: num(l.quantity),
+      unitPrice: num(l.unitPrice), listPrice: num(l.listPrice),
+      discountPct: num(l.discountPct), total: num(l.total),
+    })),
+    meta: {
+      source: 'live', validFrom: iso(q!.createdAt), validTo: null,
+      generatedAt: new Date().toISOString(), version: 1,
+    },
+  });
+});
+
+const ReplaceLineItemsBody = z.object({
+  items: z.array(z.object({
+    name: z.string().min(1).max(200),
+    description: z.string().max(2000).optional(),
+    quantity: z.number().nonnegative(),
+    unitPrice: z.number().nonnegative(),
+    listPrice: z.number().nonnegative(),
+    discountPct: z.number().min(0).max(100),
+  })),
+});
+
+router.put('/quote-versions/:id/line-items', async (req, res) => {
+  if (!validateInline(req, res, { body: ReplaceLineItemsBody })) return;
+  const [qv] = await db.select().from(quoteVersionsTable).where(eq(quoteVersionsTable.id, req.params.id));
+  if (!qv) { res.status(404).json({ error: 'version not found' }); return; }
+  const [q] = await db.select().from(quotesTable).where(eq(quotesTable.id, qv.quoteId));
+  if (!q) { res.status(404).json({ error: 'quote not found' }); return; }
+  if (!(await gateDeal(req, res, q.dealId))) return;
+  if (qv.status !== 'draft') { res.status(409).json({ error: 'version not draft' }); return; }
+  const b = req.body as z.infer<typeof ReplaceLineItemsBody>;
+  await db.delete(lineItemsTable).where(eq(lineItemsTable.quoteVersionId, qv.id));
+  const rows = b.items.map(li => {
+    const total = calcLineTotal(li);
+    return {
+      id: `li_${randomUUID().slice(0, 8)}`,
+      quoteVersionId: qv.id, name: li.name,
+      description: li.description ?? null,
+      quantity: String(li.quantity), unitPrice: String(li.unitPrice),
+      listPrice: String(li.listPrice), discountPct: String(li.discountPct),
+      total: String(total),
+    };
+  });
+  if (rows.length) await db.insert(lineItemsTable).values(rows);
+  const totalAmount = rows.reduce((s, r) => s + Number(r.total), 0);
+  await db.update(quoteVersionsTable)
+    .set({ totalAmount: String(totalAmount) })
+    .where(eq(quoteVersionsTable.id, qv.id));
+  res.json({
+    items: rows.map(r => ({
+      id: r.id, quoteVersionId: r.quoteVersionId, name: r.name,
+      description: r.description, quantity: Number(r.quantity),
+      unitPrice: Number(r.unitPrice), listPrice: Number(r.listPrice),
+      discountPct: Number(r.discountPct), total: Number(r.total),
+    })),
+    totalAmount,
+  });
+});
+
+function mapQuoteAttachment(a: typeof quoteAttachmentsTable.$inferSelect) {
+  return {
+    id: a.id, quoteVersionId: a.quoteVersionId,
+    libraryAssetId: a.libraryAssetId, name: a.name, label: a.label,
+    mimeType: a.mimeType, size: a.size, objectPath: a.objectPath,
+    order: a.order, createdAt: iso(a.createdAt)!,
+  };
+}
+
+router.get('/quote-versions/:id/attachments', async (req, res) => {
+  const [qv] = await db.select().from(quoteVersionsTable).where(eq(quoteVersionsTable.id, req.params.id));
+  if (!qv) { res.status(404).json({ error: 'version not found' }); return; }
+  const [q] = await db.select().from(quotesTable).where(eq(quotesTable.id, qv.quoteId));
+  if (!q) { res.status(404).json({ error: 'quote not found' }); return; }
+  if (!(await gateDeal(req, res, q.dealId))) return;
+  const rows = await db.select().from(quoteAttachmentsTable)
+    .where(eq(quoteAttachmentsTable.quoteVersionId, qv.id))
+    .orderBy(asc(quoteAttachmentsTable.order));
+  res.json(rows.map(mapQuoteAttachment));
+});
+
+const QuoteAttachmentBody = z.object({
+  libraryAssetId: z.string().optional(),
+  name: z.string().max(200).optional(),
+  label: z.string().max(200).optional(),
+  mimeType: z.string().max(120).optional(),
+  size: z.number().int().nonnegative().optional(),
+  objectPath: z.string().max(500).optional(),
+  order: z.number().int().optional(),
+});
+
+router.post('/quote-versions/:id/attachments', async (req, res) => {
+  if (!validateInline(req, res, { body: QuoteAttachmentBody })) return;
+  const scope = getScope(req);
+  const [qv] = await db.select().from(quoteVersionsTable).where(eq(quoteVersionsTable.id, req.params.id));
+  if (!qv) { res.status(404).json({ error: 'version not found' }); return; }
+  const [q] = await db.select().from(quotesTable).where(eq(quotesTable.id, qv.quoteId));
+  if (!q) { res.status(404).json({ error: 'quote not found' }); return; }
+  if (!(await gateDeal(req, res, q.dealId))) return;
+  if (qv.status !== 'draft') { res.status(409).json({ error: 'version not draft' }); return; }
+  const b = req.body as z.infer<typeof QuoteAttachmentBody>;
+
+  let payload: typeof quoteAttachmentsTable.$inferInsert;
+  if (b.libraryAssetId) {
+    const [a] = await db.select().from(attachmentLibraryTable).where(eq(attachmentLibraryTable.id, b.libraryAssetId));
+    if (!a || !scopedRowVisible(scope, a)) { res.status(404).json({ error: 'library asset not found' }); return; }
+    payload = {
+      id: `qatt_${randomUUID().slice(0, 8)}`,
+      quoteVersionId: qv.id, libraryAssetId: a.id,
+      name: b.name ?? a.name, mimeType: a.mimeType, size: a.size,
+      objectPath: a.objectPath, label: b.label ?? a.description ?? null,
+      order: b.order ?? 0,
+    };
+  } else {
+    if (!b.name || !b.mimeType || b.size == null || !b.objectPath) {
+      res.status(400).json({ error: 'name, mimeType, size, objectPath required for ad-hoc attachment' });
+      return;
+    }
+    payload = {
+      id: `qatt_${randomUUID().slice(0, 8)}`,
+      quoteVersionId: qv.id, libraryAssetId: null,
+      name: b.name, mimeType: b.mimeType, size: b.size,
+      objectPath: b.objectPath, label: b.label ?? null,
+      order: b.order ?? 0,
+    };
+  }
+  await db.insert(quoteAttachmentsTable).values(payload);
+  const [created] = await db.select().from(quoteAttachmentsTable).where(eq(quoteAttachmentsTable.id, payload.id));
+  res.status(201).json(mapQuoteAttachment(created!));
+});
+
+router.delete('/quote-attachments/:id', async (req, res) => {
+  const [a] = await db.select().from(quoteAttachmentsTable).where(eq(quoteAttachmentsTable.id, req.params.id));
+  if (!a) { res.status(404).json({ error: 'not found' }); return; }
+  const [qv] = await db.select().from(quoteVersionsTable).where(eq(quoteVersionsTable.id, a.quoteVersionId));
+  if (!qv) { res.status(404).json({ error: 'version not found' }); return; }
+  const [q] = await db.select().from(quotesTable).where(eq(quotesTable.id, qv.quoteId));
+  if (!q) { res.status(404).json({ error: 'quote not found' }); return; }
+  if (!(await gateDeal(req, res, q.dealId))) return;
+  if (qv.status !== 'draft') { res.status(409).json({ error: 'version not draft' }); return; }
+  await db.delete(quoteAttachmentsTable).where(eq(quoteAttachmentsTable.id, req.params.id));
+  res.status(204).end();
 });
 
 // ── PRICING ──

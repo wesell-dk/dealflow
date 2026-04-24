@@ -29,6 +29,20 @@ export interface QuotePdfLine {
   total: number;
 }
 
+export interface QuotePdfSection {
+  kind: string;
+  title: string;
+  body: string;
+  order: number;
+}
+
+export interface QuotePdfAttachment {
+  name: string;
+  label?: string | null;
+  mimeType: string;
+  size: number;
+}
+
 export interface QuotePdfData {
   number: string;
   currency: string;
@@ -42,10 +56,18 @@ export interface QuotePdfData {
   notes: string | null;
   lines: QuotePdfLine[];
   brand: QuotePdfBrand | null;
+  sections?: QuotePdfSection[];
+  attachments?: QuotePdfAttachment[];
 }
 
 const fmt = (n: number, cur: string) =>
   new Intl.NumberFormat('de-DE', { style: 'currency', currency: cur }).format(n);
+
+const formatBytes = (n: number) => {
+  if (n < 1024) return `${n} B`;
+  if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`;
+  return `${(n / 1024 / 1024).toFixed(1)} MB`;
+};
 
 export function QuoteDocument({ data }: { data: QuotePdfData }) {
   const primary = data.brand?.primaryColor || '#0b5fff';
@@ -53,6 +75,49 @@ export function QuoteDocument({ data }: { data: QuotePdfData }) {
 
   const styles = StyleSheet.create({
     page: { padding: 36, fontSize: 10, fontFamily: 'Helvetica', color: '#111827' },
+    coverPage: { padding: 36, fontFamily: 'Helvetica', color: '#111827' },
+    coverTop: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'flex-start',
+      borderBottomColor: primary,
+      borderBottomWidth: 4,
+      paddingBottom: 12,
+    },
+    coverLogo: { width: 160, height: 48, objectFit: 'contain' },
+    coverHeroBlock: {
+      marginTop: 80,
+      paddingVertical: 32,
+      paddingHorizontal: 28,
+      backgroundColor: primary,
+      color: '#ffffff',
+    },
+    coverEyebrow: { fontSize: 11, opacity: 0.85, marginBottom: 6 },
+    coverTitle: { fontSize: 30, fontWeight: 'bold', marginBottom: 14 },
+    coverFor: { fontSize: 13 },
+    coverBlocks: {
+      flexDirection: 'row',
+      marginTop: 36,
+      gap: 12,
+    },
+    coverBlock: {
+      flex: 1,
+      backgroundColor: '#f3f4f6',
+      padding: 14,
+    },
+    coverBlockLabel: { color: '#6b7280', fontSize: 9, marginBottom: 2 },
+    coverBlockValue: { fontSize: 13, fontWeight: 'bold' },
+    coverFooter: {
+      position: 'absolute',
+      bottom: 36,
+      left: 36,
+      right: 36,
+      borderTopColor: primary,
+      borderTopWidth: 1,
+      paddingTop: 8,
+      fontSize: 9,
+      color: '#6b7280',
+    },
     headerBar: {
       flexDirection: 'row',
       alignItems: 'center',
@@ -66,6 +131,7 @@ export function QuoteDocument({ data }: { data: QuotePdfData }) {
     brandName: { fontSize: 14, fontWeight: 'bold', color: primary },
     h1: { fontSize: 22, fontWeight: 'bold', color: secondary, marginBottom: 4 },
     h2: { fontSize: 13, fontWeight: 'bold', color: primary, marginTop: 14, marginBottom: 6 },
+    sectionBody: { fontSize: 10, color: '#374151', lineHeight: 1.5, marginBottom: 8 },
     meta: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 10 },
     metaCol: { flexDirection: 'column' },
     metaLabel: { color: '#6b7280', fontSize: 9 },
@@ -104,6 +170,15 @@ export function QuoteDocument({ data }: { data: QuotePdfData }) {
       color: primary,
     },
     notes: { marginTop: 16, padding: 8, backgroundColor: '#f9fafb', fontSize: 9, color: '#374151' },
+    attachmentRow: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      paddingVertical: 6,
+      borderBottomColor: '#e5e7eb',
+      borderBottomWidth: 1,
+    },
+    attachmentName: { fontSize: 10 },
+    attachmentMeta: { fontSize: 9, color: '#6b7280' },
     footer: {
       position: 'absolute',
       bottom: 24,
@@ -120,9 +195,67 @@ export function QuoteDocument({ data }: { data: QuotePdfData }) {
 
   const subtotal = data.lines.reduce((s, l) => s + l.listPrice * l.quantity, 0);
   const discount = subtotal - data.totalAmount;
+  const sections = (data.sections ?? []).slice().sort((a, b) => a.order - b.order);
+  const cover = sections.find(s => s.kind === 'cover');
+  const intro = sections.find(s => s.kind === 'intro');
+  const scopeSection = sections.find(s => s.kind === 'scope');
+  const termsSection = sections.find(s => s.kind === 'terms');
+  const appendixSection = sections.find(s => s.kind === 'appendix');
+  const customSections = sections.filter(s => !['cover', 'intro', 'scope', 'terms', 'appendix'].includes(s.kind));
+  const attachments = data.attachments ?? [];
 
   return (
     <Document title={`Angebot ${data.number}`}>
+      {cover ? (
+        <Page size="A4" style={styles.coverPage}>
+          <View style={styles.coverTop}>
+            {data.brand?.logoUrl ? (
+              // eslint-disable-next-line jsx-a11y/alt-text
+              <Image src={data.brand.logoUrl} style={styles.coverLogo} />
+            ) : (
+              <Text style={styles.brandName}>{data.brand?.name ?? 'DealFlow One'}</Text>
+            )}
+            <View>
+              <Text style={{ fontSize: 11, fontWeight: 'bold', color: secondary }}>
+                {data.brand?.legalEntityName ?? 'DealFlow One'}
+              </Text>
+              <Text style={{ fontSize: 9, color: '#6b7280' }}>{data.brand?.addressLine ?? ''}</Text>
+            </View>
+          </View>
+
+          <View style={styles.coverHeroBlock}>
+            <Text style={styles.coverEyebrow}>{cover.title || 'Kommerzielles Angebot'}</Text>
+            <Text style={styles.coverTitle}>Angebot {data.number}</Text>
+            <Text style={styles.coverFor}>Für: {data.dealName}</Text>
+          </View>
+
+          {cover.body ? (
+            <Text style={{ marginTop: 24, fontSize: 11, lineHeight: 1.5, color: '#374151' }}>
+              {cover.body}
+            </Text>
+          ) : null}
+
+          <View style={styles.coverBlocks}>
+            <View style={styles.coverBlock}>
+              <Text style={styles.coverBlockLabel}>Version</Text>
+              <Text style={styles.coverBlockValue}>v{data.version}</Text>
+            </View>
+            <View style={styles.coverBlock}>
+              <Text style={styles.coverBlockLabel}>Gültig bis</Text>
+              <Text style={styles.coverBlockValue}>{data.validUntil}</Text>
+            </View>
+            <View style={styles.coverBlock}>
+              <Text style={styles.coverBlockLabel}>Gesamtsumme</Text>
+              <Text style={styles.coverBlockValue}>{fmt(data.totalAmount, data.currency)}</Text>
+            </View>
+          </View>
+
+          <Text style={styles.coverFooter} fixed>
+            {data.brand?.legalEntityName ?? 'DealFlow One'} · {data.brand?.addressLine ?? ''}
+          </Text>
+        </Page>
+      ) : null}
+
       <Page size="A4" style={styles.page}>
         <View style={styles.headerBar}>
           <View>
@@ -163,6 +296,20 @@ export function QuoteDocument({ data }: { data: QuotePdfData }) {
           </View>
         </View>
 
+        {intro ? (
+          <View wrap={false}>
+            <Text style={styles.h2}>{intro.title || 'Einleitung'}</Text>
+            <Text style={styles.sectionBody}>{intro.body}</Text>
+          </View>
+        ) : null}
+
+        {scopeSection ? (
+          <View wrap={false}>
+            <Text style={styles.h2}>{scopeSection.title || 'Leistungsumfang'}</Text>
+            <Text style={styles.sectionBody}>{scopeSection.body}</Text>
+          </View>
+        ) : null}
+
         <Text style={styles.h2}>Positionen</Text>
         <View style={styles.tableHeader}>
           <Text style={styles.colName}>Bezeichnung</Text>
@@ -202,6 +349,46 @@ export function QuoteDocument({ data }: { data: QuotePdfData }) {
             </View>
           </View>
         </View>
+
+        {termsSection ? (
+          <View wrap={false}>
+            <Text style={styles.h2}>{termsSection.title || 'Konditionen'}</Text>
+            <Text style={styles.sectionBody}>{termsSection.body}</Text>
+          </View>
+        ) : null}
+
+        {customSections.map((s, i) => (
+          <View key={`custom-${i}`} wrap={false}>
+            <Text style={styles.h2}>{s.title}</Text>
+            <Text style={styles.sectionBody}>{s.body}</Text>
+          </View>
+        ))}
+
+        {appendixSection ? (
+          <View wrap={false}>
+            <Text style={styles.h2}>{appendixSection.title || 'Anhang'}</Text>
+            <Text style={styles.sectionBody}>{appendixSection.body}</Text>
+          </View>
+        ) : null}
+
+        {attachments.length > 0 ? (
+          <View wrap={false}>
+            <Text style={styles.h2}>Anlagen</Text>
+            {attachments.map((a, i) => (
+              <View key={`att-${i}`} style={styles.attachmentRow}>
+                <View>
+                  <Text style={styles.attachmentName}>{a.name}</Text>
+                  {a.label ? (
+                    <Text style={styles.attachmentMeta}>{a.label}</Text>
+                  ) : null}
+                </View>
+                <Text style={styles.attachmentMeta}>
+                  {a.mimeType} · {formatBytes(a.size)}
+                </Text>
+              </View>
+            ))}
+          </View>
+        ) : null}
 
         {data.notes ? (
           <View style={styles.notes} wrap={false}>

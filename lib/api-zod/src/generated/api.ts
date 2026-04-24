@@ -16,6 +16,12 @@ export const RequestUploadUrlBody = zod.object({
   name: zod.string(),
   size: zod.number(),
   contentType: zod.string(),
+  kind: zod
+    .enum(["logo", "document"])
+    .optional()
+    .describe(
+      "logo (admin only, 2MB images) or document (any user, 25MB docs+images). Default: logo for backward compatibility.",
+    ),
 });
 
 export const RequestUploadUrlResponse = zod.object({
@@ -723,6 +729,374 @@ export const AcceptQuoteResponse = zod.object({
   currency: zod.string(),
   createdAt: zod.coerce.date(),
   validUntil: zod.coerce.date(),
+});
+
+/**
+ * @summary Create a quote from a template (Wizard backend)
+ */
+export const CreateQuoteFromTemplateBody = zod.object({
+  dealId: zod.string(),
+  templateId: zod.string(),
+  validUntil: zod.coerce.date().optional(),
+  notes: zod.string().optional(),
+  attachmentLibraryIds: zod.array(zod.string()).optional(),
+});
+
+/**
+ * @summary Replace all line items of a draft quote version
+ */
+export const ReplaceQuoteLineItemsParams = zod.object({
+  id: zod.coerce.string(),
+});
+
+export const ReplaceQuoteLineItemsBody = zod.object({
+  items: zod.array(
+    zod.object({
+      name: zod.string(),
+      description: zod.string().optional(),
+      quantity: zod.number(),
+      unitPrice: zod.number(),
+      listPrice: zod.number(),
+      discountPct: zod.number(),
+    }),
+  ),
+});
+
+export const ReplaceQuoteLineItemsResponse = zod.object({
+  items: zod.array(
+    zod.object({
+      id: zod.string(),
+      quoteVersionId: zod.string(),
+      name: zod.string(),
+      description: zod.string().nullish(),
+      quantity: zod.number(),
+      unitPrice: zod.number(),
+      listPrice: zod.number(),
+      discountPct: zod.number(),
+      total: zod.number(),
+    }),
+  ),
+  totalAmount: zod.number(),
+});
+
+export const ListQuoteAttachmentsParams = zod.object({
+  id: zod.coerce.string(),
+});
+
+export const ListQuoteAttachmentsResponseItem = zod.object({
+  id: zod.string(),
+  quoteVersionId: zod.string(),
+  libraryAssetId: zod.string().nullish(),
+  name: zod.string(),
+  label: zod.string().nullish(),
+  mimeType: zod.string(),
+  size: zod.number(),
+  objectPath: zod.string(),
+  order: zod.number(),
+  createdAt: zod.coerce.date().optional(),
+});
+export const ListQuoteAttachmentsResponse = zod.array(
+  ListQuoteAttachmentsResponseItem,
+);
+
+export const AddQuoteAttachmentParams = zod.object({
+  id: zod.coerce.string(),
+});
+
+export const AddQuoteAttachmentBody = zod.object({
+  libraryAssetId: zod.string().optional(),
+  name: zod.string().optional(),
+  label: zod.string().optional(),
+  mimeType: zod.string().optional(),
+  size: zod.number().optional(),
+  objectPath: zod.string().optional(),
+  order: zod.number().optional(),
+});
+
+export const RemoveQuoteAttachmentParams = zod.object({
+  id: zod.coerce.string(),
+});
+
+export const ListQuoteTemplatesQueryParams = zod.object({
+  industry: zod.coerce.string().optional(),
+});
+
+export const ListQuoteTemplatesResponseItem = zod.object({
+  id: zod.string(),
+  tenantId: zod.string(),
+  companyId: zod.string().nullish(),
+  brandId: zod.string().nullish(),
+  name: zod.string(),
+  description: zod.string(),
+  industry: zod.string(),
+  isSystem: zod.boolean(),
+  defaultDiscountPct: zod.number(),
+  defaultMarginPct: zod.number(),
+  defaultValidityDays: zod.number(),
+  defaultLineItems: zod.array(
+    zod.object({
+      name: zod.string(),
+      description: zod.string().optional(),
+      quantity: zod.number(),
+      unitPrice: zod.number(),
+      listPrice: zod.number(),
+      discountPct: zod.number(),
+    }),
+  ),
+  defaultAttachmentLibraryIds: zod.array(zod.string()),
+  sections: zod.array(
+    zod.object({
+      id: zod.string(),
+      kind: zod.string().describe("cover|intro|scope|terms|appendix|custom"),
+      title: zod.string(),
+      body: zod.string(),
+      order: zod.number(),
+    }),
+  ),
+  createdAt: zod.coerce.date(),
+});
+export const ListQuoteTemplatesResponse = zod.array(
+  ListQuoteTemplatesResponseItem,
+);
+
+export const CreateQuoteTemplateBody = zod.object({
+  name: zod.string(),
+  description: zod.string().optional(),
+  industry: zod.string(),
+  companyId: zod.string().optional(),
+  brandId: zod.string().optional(),
+  defaultDiscountPct: zod.number().optional(),
+  defaultMarginPct: zod.number().optional(),
+  defaultValidityDays: zod.number().optional(),
+  defaultLineItems: zod
+    .array(
+      zod.object({
+        name: zod.string(),
+        description: zod.string().optional(),
+        quantity: zod.number(),
+        unitPrice: zod.number(),
+        listPrice: zod.number(),
+        discountPct: zod.number(),
+      }),
+    )
+    .optional(),
+  defaultAttachmentLibraryIds: zod.array(zod.string()).optional(),
+  sections: zod
+    .array(
+      zod.object({
+        kind: zod.string(),
+        title: zod.string(),
+        body: zod.string().optional(),
+        order: zod.number().optional(),
+      }),
+    )
+    .optional(),
+});
+
+export const GetQuoteTemplateParams = zod.object({
+  id: zod.coerce.string(),
+});
+
+export const GetQuoteTemplateResponse = zod.object({
+  id: zod.string(),
+  tenantId: zod.string(),
+  companyId: zod.string().nullish(),
+  brandId: zod.string().nullish(),
+  name: zod.string(),
+  description: zod.string(),
+  industry: zod.string(),
+  isSystem: zod.boolean(),
+  defaultDiscountPct: zod.number(),
+  defaultMarginPct: zod.number(),
+  defaultValidityDays: zod.number(),
+  defaultLineItems: zod.array(
+    zod.object({
+      name: zod.string(),
+      description: zod.string().optional(),
+      quantity: zod.number(),
+      unitPrice: zod.number(),
+      listPrice: zod.number(),
+      discountPct: zod.number(),
+    }),
+  ),
+  defaultAttachmentLibraryIds: zod.array(zod.string()),
+  sections: zod.array(
+    zod.object({
+      id: zod.string(),
+      kind: zod.string().describe("cover|intro|scope|terms|appendix|custom"),
+      title: zod.string(),
+      body: zod.string(),
+      order: zod.number(),
+    }),
+  ),
+  createdAt: zod.coerce.date(),
+});
+
+export const UpdateQuoteTemplateParams = zod.object({
+  id: zod.coerce.string(),
+});
+
+export const UpdateQuoteTemplateBody = zod.object({
+  name: zod.string(),
+  description: zod.string().optional(),
+  industry: zod.string(),
+  companyId: zod.string().optional(),
+  brandId: zod.string().optional(),
+  defaultDiscountPct: zod.number().optional(),
+  defaultMarginPct: zod.number().optional(),
+  defaultValidityDays: zod.number().optional(),
+  defaultLineItems: zod
+    .array(
+      zod.object({
+        name: zod.string(),
+        description: zod.string().optional(),
+        quantity: zod.number(),
+        unitPrice: zod.number(),
+        listPrice: zod.number(),
+        discountPct: zod.number(),
+      }),
+    )
+    .optional(),
+  defaultAttachmentLibraryIds: zod.array(zod.string()).optional(),
+  sections: zod
+    .array(
+      zod.object({
+        kind: zod.string(),
+        title: zod.string(),
+        body: zod.string().optional(),
+        order: zod.number().optional(),
+      }),
+    )
+    .optional(),
+});
+
+export const UpdateQuoteTemplateResponse = zod.object({
+  id: zod.string(),
+  tenantId: zod.string(),
+  companyId: zod.string().nullish(),
+  brandId: zod.string().nullish(),
+  name: zod.string(),
+  description: zod.string(),
+  industry: zod.string(),
+  isSystem: zod.boolean(),
+  defaultDiscountPct: zod.number(),
+  defaultMarginPct: zod.number(),
+  defaultValidityDays: zod.number(),
+  defaultLineItems: zod.array(
+    zod.object({
+      name: zod.string(),
+      description: zod.string().optional(),
+      quantity: zod.number(),
+      unitPrice: zod.number(),
+      listPrice: zod.number(),
+      discountPct: zod.number(),
+    }),
+  ),
+  defaultAttachmentLibraryIds: zod.array(zod.string()),
+  sections: zod.array(
+    zod.object({
+      id: zod.string(),
+      kind: zod.string().describe("cover|intro|scope|terms|appendix|custom"),
+      title: zod.string(),
+      body: zod.string(),
+      order: zod.number(),
+    }),
+  ),
+  createdAt: zod.coerce.date(),
+});
+
+export const DeleteQuoteTemplateParams = zod.object({
+  id: zod.coerce.string(),
+});
+
+export const ListAttachmentLibraryQueryParams = zod.object({
+  category: zod.coerce.string().optional(),
+  tag: zod.coerce.string().optional(),
+});
+
+export const ListAttachmentLibraryResponseItem = zod.object({
+  id: zod.string(),
+  tenantId: zod.string(),
+  companyId: zod.string().nullish(),
+  brandId: zod.string().nullish(),
+  name: zod.string(),
+  description: zod.string(),
+  category: zod.string(),
+  tags: zod.array(zod.string()),
+  mimeType: zod.string(),
+  size: zod.number(),
+  objectPath: zod.string(),
+  version: zod.number(),
+  createdBy: zod.string().nullish(),
+  createdAt: zod.coerce.date(),
+});
+export const ListAttachmentLibraryResponse = zod.array(
+  ListAttachmentLibraryResponseItem,
+);
+
+export const CreateAttachmentLibraryItemBody = zod.object({
+  name: zod.string(),
+  description: zod.string().optional(),
+  category: zod.string(),
+  tags: zod.array(zod.string()).optional(),
+  mimeType: zod.string(),
+  size: zod.number(),
+  objectPath: zod.string(),
+  companyId: zod.string().optional(),
+  brandId: zod.string().optional(),
+});
+
+export const DeleteAttachmentLibraryItemParams = zod.object({
+  id: zod.coerce.string(),
+});
+
+export const ListIndustryProfilesResponseItem = zod.object({
+  id: zod.string(),
+  tenantId: zod.string(),
+  industry: zod.string(),
+  label: zod.string(),
+  description: zod.string(),
+  defaultClauseVariants: zod.record(zod.string(), zod.string()),
+  suggestedTemplateId: zod.string().nullish(),
+  suggestedAttachmentLibraryIds: zod.array(zod.string()),
+  createdAt: zod.coerce.date(),
+});
+export const ListIndustryProfilesResponse = zod.array(
+  ListIndustryProfilesResponseItem,
+);
+
+export const CreateIndustryProfileBody = zod.object({
+  industry: zod.string(),
+  label: zod.string(),
+  description: zod.string().optional(),
+  defaultClauseVariants: zod.record(zod.string(), zod.string()).optional(),
+  suggestedTemplateId: zod.string().optional(),
+  suggestedAttachmentLibraryIds: zod.array(zod.string()).optional(),
+});
+
+export const UpdateIndustryProfileParams = zod.object({
+  id: zod.coerce.string(),
+});
+
+export const UpdateIndustryProfileBody = zod.object({
+  industry: zod.string(),
+  label: zod.string(),
+  description: zod.string().optional(),
+  defaultClauseVariants: zod.record(zod.string(), zod.string()).optional(),
+  suggestedTemplateId: zod.string().optional(),
+  suggestedAttachmentLibraryIds: zod.array(zod.string()).optional(),
+});
+
+export const UpdateIndustryProfileResponse = zod.object({
+  id: zod.string(),
+  tenantId: zod.string(),
+  industry: zod.string(),
+  label: zod.string(),
+  description: zod.string(),
+  defaultClauseVariants: zod.record(zod.string(), zod.string()),
+  suggestedTemplateId: zod.string().nullish(),
+  suggestedAttachmentLibraryIds: zod.array(zod.string()),
+  createdAt: zod.coerce.date(),
 });
 
 export const ListPricePositionsResponseItem = zod.object({

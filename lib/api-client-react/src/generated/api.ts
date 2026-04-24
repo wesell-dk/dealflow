@@ -28,6 +28,8 @@ import type {
   ApprovalCase,
   ApprovalDecisionInput,
   ApprovalFromReactionInput,
+  AttachmentLibraryInput,
+  AttachmentLibraryItem,
   AuditEntry,
   Brand,
   BrandDefaultsInput,
@@ -80,7 +82,10 @@ import type {
   HealthStatus,
   HelpBotInput,
   HelpBotReply,
+  IndustryProfile,
+  IndustryProfileInput,
   ListApprovalsParams,
+  ListAttachmentLibraryParams,
   ListAuditEntriesParams,
   ListContactsParams,
   ListContractsParams,
@@ -89,6 +94,7 @@ import type {
   ListGdprAccessLogParams,
   ListNegotiationsParams,
   ListOrderConfirmationsParams,
+  ListQuoteTemplatesParams,
   ListQuotesParams,
   ListSignaturePackagesParams,
   Negotiation,
@@ -108,11 +114,18 @@ import type {
   PriceRule,
   PricingSummary,
   Quote,
+  QuoteAttachment,
+  QuoteAttachmentInput,
   QuoteDetail,
+  QuoteFromTemplateInput,
   QuoteInput,
+  QuoteTemplate,
+  QuoteTemplateInput,
   QuoteVersion,
   QuoteVersionInput,
   ReactionInput,
+  ReplaceQuoteLineItems200,
+  ReplaceQuoteLineItemsBody,
   RequestApprovalFromReaction201,
   ResolvePriceParams,
   ResolvedPrice,
@@ -2719,6 +2732,1320 @@ export const useAcceptQuote = <
   TContext
 > => {
   return useMutation(getAcceptQuoteMutationOptions(options));
+};
+
+/**
+ * @summary Create a quote from a template (Wizard backend)
+ */
+export const getCreateQuoteFromTemplateUrl = () => {
+  return `/api/v1/quotes/from-template`;
+};
+
+export const createQuoteFromTemplate = async (
+  quoteFromTemplateInput: QuoteFromTemplateInput,
+  options?: RequestInit,
+): Promise<QuoteDetail> => {
+  return customFetch<QuoteDetail>(getCreateQuoteFromTemplateUrl(), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(quoteFromTemplateInput),
+  });
+};
+
+export const getCreateQuoteFromTemplateMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof createQuoteFromTemplate>>,
+    TError,
+    { data: BodyType<QuoteFromTemplateInput> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof createQuoteFromTemplate>>,
+  TError,
+  { data: BodyType<QuoteFromTemplateInput> },
+  TContext
+> => {
+  const mutationKey = ["createQuoteFromTemplate"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof createQuoteFromTemplate>>,
+    { data: BodyType<QuoteFromTemplateInput> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return createQuoteFromTemplate(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type CreateQuoteFromTemplateMutationResult = NonNullable<
+  Awaited<ReturnType<typeof createQuoteFromTemplate>>
+>;
+export type CreateQuoteFromTemplateMutationBody =
+  BodyType<QuoteFromTemplateInput>;
+export type CreateQuoteFromTemplateMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Create a quote from a template (Wizard backend)
+ */
+export const useCreateQuoteFromTemplate = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof createQuoteFromTemplate>>,
+    TError,
+    { data: BodyType<QuoteFromTemplateInput> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof createQuoteFromTemplate>>,
+  TError,
+  { data: BodyType<QuoteFromTemplateInput> },
+  TContext
+> => {
+  return useMutation(getCreateQuoteFromTemplateMutationOptions(options));
+};
+
+/**
+ * @summary Replace all line items of a draft quote version
+ */
+export const getReplaceQuoteLineItemsUrl = (id: string) => {
+  return `/api/v1/quote-versions/${id}/line-items`;
+};
+
+export const replaceQuoteLineItems = async (
+  id: string,
+  replaceQuoteLineItemsBody: ReplaceQuoteLineItemsBody,
+  options?: RequestInit,
+): Promise<ReplaceQuoteLineItems200> => {
+  return customFetch<ReplaceQuoteLineItems200>(
+    getReplaceQuoteLineItemsUrl(id),
+    {
+      ...options,
+      method: "PUT",
+      headers: { "Content-Type": "application/json", ...options?.headers },
+      body: JSON.stringify(replaceQuoteLineItemsBody),
+    },
+  );
+};
+
+export const getReplaceQuoteLineItemsMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof replaceQuoteLineItems>>,
+    TError,
+    { id: string; data: BodyType<ReplaceQuoteLineItemsBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof replaceQuoteLineItems>>,
+  TError,
+  { id: string; data: BodyType<ReplaceQuoteLineItemsBody> },
+  TContext
+> => {
+  const mutationKey = ["replaceQuoteLineItems"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof replaceQuoteLineItems>>,
+    { id: string; data: BodyType<ReplaceQuoteLineItemsBody> }
+  > = (props) => {
+    const { id, data } = props ?? {};
+
+    return replaceQuoteLineItems(id, data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type ReplaceQuoteLineItemsMutationResult = NonNullable<
+  Awaited<ReturnType<typeof replaceQuoteLineItems>>
+>;
+export type ReplaceQuoteLineItemsMutationBody =
+  BodyType<ReplaceQuoteLineItemsBody>;
+export type ReplaceQuoteLineItemsMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Replace all line items of a draft quote version
+ */
+export const useReplaceQuoteLineItems = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof replaceQuoteLineItems>>,
+    TError,
+    { id: string; data: BodyType<ReplaceQuoteLineItemsBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof replaceQuoteLineItems>>,
+  TError,
+  { id: string; data: BodyType<ReplaceQuoteLineItemsBody> },
+  TContext
+> => {
+  return useMutation(getReplaceQuoteLineItemsMutationOptions(options));
+};
+
+export const getListQuoteAttachmentsUrl = (id: string) => {
+  return `/api/v1/quote-versions/${id}/attachments`;
+};
+
+export const listQuoteAttachments = async (
+  id: string,
+  options?: RequestInit,
+): Promise<QuoteAttachment[]> => {
+  return customFetch<QuoteAttachment[]>(getListQuoteAttachmentsUrl(id), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getListQuoteAttachmentsQueryKey = (id: string) => {
+  return [`/api/v1/quote-versions/${id}/attachments`] as const;
+};
+
+export const getListQuoteAttachmentsQueryOptions = <
+  TData = Awaited<ReturnType<typeof listQuoteAttachments>>,
+  TError = ErrorType<unknown>,
+>(
+  id: string,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof listQuoteAttachments>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey =
+    queryOptions?.queryKey ?? getListQuoteAttachmentsQueryKey(id);
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof listQuoteAttachments>>
+  > = ({ signal }) => listQuoteAttachments(id, { signal, ...requestOptions });
+
+  return {
+    queryKey,
+    queryFn,
+    enabled: !!id,
+    ...queryOptions,
+  } as UseQueryOptions<
+    Awaited<ReturnType<typeof listQuoteAttachments>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type ListQuoteAttachmentsQueryResult = NonNullable<
+  Awaited<ReturnType<typeof listQuoteAttachments>>
+>;
+export type ListQuoteAttachmentsQueryError = ErrorType<unknown>;
+
+export function useListQuoteAttachments<
+  TData = Awaited<ReturnType<typeof listQuoteAttachments>>,
+  TError = ErrorType<unknown>,
+>(
+  id: string,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof listQuoteAttachments>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getListQuoteAttachmentsQueryOptions(id, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+export const getAddQuoteAttachmentUrl = (id: string) => {
+  return `/api/v1/quote-versions/${id}/attachments`;
+};
+
+export const addQuoteAttachment = async (
+  id: string,
+  quoteAttachmentInput: QuoteAttachmentInput,
+  options?: RequestInit,
+): Promise<QuoteAttachment> => {
+  return customFetch<QuoteAttachment>(getAddQuoteAttachmentUrl(id), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(quoteAttachmentInput),
+  });
+};
+
+export const getAddQuoteAttachmentMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof addQuoteAttachment>>,
+    TError,
+    { id: string; data: BodyType<QuoteAttachmentInput> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof addQuoteAttachment>>,
+  TError,
+  { id: string; data: BodyType<QuoteAttachmentInput> },
+  TContext
+> => {
+  const mutationKey = ["addQuoteAttachment"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof addQuoteAttachment>>,
+    { id: string; data: BodyType<QuoteAttachmentInput> }
+  > = (props) => {
+    const { id, data } = props ?? {};
+
+    return addQuoteAttachment(id, data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type AddQuoteAttachmentMutationResult = NonNullable<
+  Awaited<ReturnType<typeof addQuoteAttachment>>
+>;
+export type AddQuoteAttachmentMutationBody = BodyType<QuoteAttachmentInput>;
+export type AddQuoteAttachmentMutationError = ErrorType<unknown>;
+
+export const useAddQuoteAttachment = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof addQuoteAttachment>>,
+    TError,
+    { id: string; data: BodyType<QuoteAttachmentInput> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof addQuoteAttachment>>,
+  TError,
+  { id: string; data: BodyType<QuoteAttachmentInput> },
+  TContext
+> => {
+  return useMutation(getAddQuoteAttachmentMutationOptions(options));
+};
+
+export const getRemoveQuoteAttachmentUrl = (id: string) => {
+  return `/api/v1/quote-attachments/${id}`;
+};
+
+export const removeQuoteAttachment = async (
+  id: string,
+  options?: RequestInit,
+): Promise<void> => {
+  return customFetch<void>(getRemoveQuoteAttachmentUrl(id), {
+    ...options,
+    method: "DELETE",
+  });
+};
+
+export const getRemoveQuoteAttachmentMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof removeQuoteAttachment>>,
+    TError,
+    { id: string },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof removeQuoteAttachment>>,
+  TError,
+  { id: string },
+  TContext
+> => {
+  const mutationKey = ["removeQuoteAttachment"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof removeQuoteAttachment>>,
+    { id: string }
+  > = (props) => {
+    const { id } = props ?? {};
+
+    return removeQuoteAttachment(id, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type RemoveQuoteAttachmentMutationResult = NonNullable<
+  Awaited<ReturnType<typeof removeQuoteAttachment>>
+>;
+
+export type RemoveQuoteAttachmentMutationError = ErrorType<unknown>;
+
+export const useRemoveQuoteAttachment = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof removeQuoteAttachment>>,
+    TError,
+    { id: string },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof removeQuoteAttachment>>,
+  TError,
+  { id: string },
+  TContext
+> => {
+  return useMutation(getRemoveQuoteAttachmentMutationOptions(options));
+};
+
+export const getListQuoteTemplatesUrl = (params?: ListQuoteTemplatesParams) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? "null" : value.toString());
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0
+    ? `/api/v1/quote-templates?${stringifiedParams}`
+    : `/api/v1/quote-templates`;
+};
+
+export const listQuoteTemplates = async (
+  params?: ListQuoteTemplatesParams,
+  options?: RequestInit,
+): Promise<QuoteTemplate[]> => {
+  return customFetch<QuoteTemplate[]>(getListQuoteTemplatesUrl(params), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getListQuoteTemplatesQueryKey = (
+  params?: ListQuoteTemplatesParams,
+) => {
+  return [`/api/v1/quote-templates`, ...(params ? [params] : [])] as const;
+};
+
+export const getListQuoteTemplatesQueryOptions = <
+  TData = Awaited<ReturnType<typeof listQuoteTemplates>>,
+  TError = ErrorType<unknown>,
+>(
+  params?: ListQuoteTemplatesParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof listQuoteTemplates>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey =
+    queryOptions?.queryKey ?? getListQuoteTemplatesQueryKey(params);
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof listQuoteTemplates>>
+  > = ({ signal }) => listQuoteTemplates(params, { signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof listQuoteTemplates>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type ListQuoteTemplatesQueryResult = NonNullable<
+  Awaited<ReturnType<typeof listQuoteTemplates>>
+>;
+export type ListQuoteTemplatesQueryError = ErrorType<unknown>;
+
+export function useListQuoteTemplates<
+  TData = Awaited<ReturnType<typeof listQuoteTemplates>>,
+  TError = ErrorType<unknown>,
+>(
+  params?: ListQuoteTemplatesParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof listQuoteTemplates>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getListQuoteTemplatesQueryOptions(params, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+export const getCreateQuoteTemplateUrl = () => {
+  return `/api/v1/quote-templates`;
+};
+
+export const createQuoteTemplate = async (
+  quoteTemplateInput: QuoteTemplateInput,
+  options?: RequestInit,
+): Promise<QuoteTemplate> => {
+  return customFetch<QuoteTemplate>(getCreateQuoteTemplateUrl(), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(quoteTemplateInput),
+  });
+};
+
+export const getCreateQuoteTemplateMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof createQuoteTemplate>>,
+    TError,
+    { data: BodyType<QuoteTemplateInput> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof createQuoteTemplate>>,
+  TError,
+  { data: BodyType<QuoteTemplateInput> },
+  TContext
+> => {
+  const mutationKey = ["createQuoteTemplate"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof createQuoteTemplate>>,
+    { data: BodyType<QuoteTemplateInput> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return createQuoteTemplate(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type CreateQuoteTemplateMutationResult = NonNullable<
+  Awaited<ReturnType<typeof createQuoteTemplate>>
+>;
+export type CreateQuoteTemplateMutationBody = BodyType<QuoteTemplateInput>;
+export type CreateQuoteTemplateMutationError = ErrorType<unknown>;
+
+export const useCreateQuoteTemplate = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof createQuoteTemplate>>,
+    TError,
+    { data: BodyType<QuoteTemplateInput> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof createQuoteTemplate>>,
+  TError,
+  { data: BodyType<QuoteTemplateInput> },
+  TContext
+> => {
+  return useMutation(getCreateQuoteTemplateMutationOptions(options));
+};
+
+export const getGetQuoteTemplateUrl = (id: string) => {
+  return `/api/v1/quote-templates/${id}`;
+};
+
+export const getQuoteTemplate = async (
+  id: string,
+  options?: RequestInit,
+): Promise<QuoteTemplate> => {
+  return customFetch<QuoteTemplate>(getGetQuoteTemplateUrl(id), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getGetQuoteTemplateQueryKey = (id: string) => {
+  return [`/api/v1/quote-templates/${id}`] as const;
+};
+
+export const getGetQuoteTemplateQueryOptions = <
+  TData = Awaited<ReturnType<typeof getQuoteTemplate>>,
+  TError = ErrorType<unknown>,
+>(
+  id: string,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getQuoteTemplate>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getGetQuoteTemplateQueryKey(id);
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof getQuoteTemplate>>
+  > = ({ signal }) => getQuoteTemplate(id, { signal, ...requestOptions });
+
+  return {
+    queryKey,
+    queryFn,
+    enabled: !!id,
+    ...queryOptions,
+  } as UseQueryOptions<
+    Awaited<ReturnType<typeof getQuoteTemplate>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetQuoteTemplateQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getQuoteTemplate>>
+>;
+export type GetQuoteTemplateQueryError = ErrorType<unknown>;
+
+export function useGetQuoteTemplate<
+  TData = Awaited<ReturnType<typeof getQuoteTemplate>>,
+  TError = ErrorType<unknown>,
+>(
+  id: string,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getQuoteTemplate>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetQuoteTemplateQueryOptions(id, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+export const getUpdateQuoteTemplateUrl = (id: string) => {
+  return `/api/v1/quote-templates/${id}`;
+};
+
+export const updateQuoteTemplate = async (
+  id: string,
+  quoteTemplateInput: QuoteTemplateInput,
+  options?: RequestInit,
+): Promise<QuoteTemplate> => {
+  return customFetch<QuoteTemplate>(getUpdateQuoteTemplateUrl(id), {
+    ...options,
+    method: "PATCH",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(quoteTemplateInput),
+  });
+};
+
+export const getUpdateQuoteTemplateMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof updateQuoteTemplate>>,
+    TError,
+    { id: string; data: BodyType<QuoteTemplateInput> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof updateQuoteTemplate>>,
+  TError,
+  { id: string; data: BodyType<QuoteTemplateInput> },
+  TContext
+> => {
+  const mutationKey = ["updateQuoteTemplate"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof updateQuoteTemplate>>,
+    { id: string; data: BodyType<QuoteTemplateInput> }
+  > = (props) => {
+    const { id, data } = props ?? {};
+
+    return updateQuoteTemplate(id, data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type UpdateQuoteTemplateMutationResult = NonNullable<
+  Awaited<ReturnType<typeof updateQuoteTemplate>>
+>;
+export type UpdateQuoteTemplateMutationBody = BodyType<QuoteTemplateInput>;
+export type UpdateQuoteTemplateMutationError = ErrorType<unknown>;
+
+export const useUpdateQuoteTemplate = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof updateQuoteTemplate>>,
+    TError,
+    { id: string; data: BodyType<QuoteTemplateInput> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof updateQuoteTemplate>>,
+  TError,
+  { id: string; data: BodyType<QuoteTemplateInput> },
+  TContext
+> => {
+  return useMutation(getUpdateQuoteTemplateMutationOptions(options));
+};
+
+export const getDeleteQuoteTemplateUrl = (id: string) => {
+  return `/api/v1/quote-templates/${id}`;
+};
+
+export const deleteQuoteTemplate = async (
+  id: string,
+  options?: RequestInit,
+): Promise<void> => {
+  return customFetch<void>(getDeleteQuoteTemplateUrl(id), {
+    ...options,
+    method: "DELETE",
+  });
+};
+
+export const getDeleteQuoteTemplateMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof deleteQuoteTemplate>>,
+    TError,
+    { id: string },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof deleteQuoteTemplate>>,
+  TError,
+  { id: string },
+  TContext
+> => {
+  const mutationKey = ["deleteQuoteTemplate"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof deleteQuoteTemplate>>,
+    { id: string }
+  > = (props) => {
+    const { id } = props ?? {};
+
+    return deleteQuoteTemplate(id, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type DeleteQuoteTemplateMutationResult = NonNullable<
+  Awaited<ReturnType<typeof deleteQuoteTemplate>>
+>;
+
+export type DeleteQuoteTemplateMutationError = ErrorType<unknown>;
+
+export const useDeleteQuoteTemplate = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof deleteQuoteTemplate>>,
+    TError,
+    { id: string },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof deleteQuoteTemplate>>,
+  TError,
+  { id: string },
+  TContext
+> => {
+  return useMutation(getDeleteQuoteTemplateMutationOptions(options));
+};
+
+export const getListAttachmentLibraryUrl = (
+  params?: ListAttachmentLibraryParams,
+) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? "null" : value.toString());
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0
+    ? `/api/v1/attachment-library?${stringifiedParams}`
+    : `/api/v1/attachment-library`;
+};
+
+export const listAttachmentLibrary = async (
+  params?: ListAttachmentLibraryParams,
+  options?: RequestInit,
+): Promise<AttachmentLibraryItem[]> => {
+  return customFetch<AttachmentLibraryItem[]>(
+    getListAttachmentLibraryUrl(params),
+    {
+      ...options,
+      method: "GET",
+    },
+  );
+};
+
+export const getListAttachmentLibraryQueryKey = (
+  params?: ListAttachmentLibraryParams,
+) => {
+  return [`/api/v1/attachment-library`, ...(params ? [params] : [])] as const;
+};
+
+export const getListAttachmentLibraryQueryOptions = <
+  TData = Awaited<ReturnType<typeof listAttachmentLibrary>>,
+  TError = ErrorType<unknown>,
+>(
+  params?: ListAttachmentLibraryParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof listAttachmentLibrary>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey =
+    queryOptions?.queryKey ?? getListAttachmentLibraryQueryKey(params);
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof listAttachmentLibrary>>
+  > = ({ signal }) =>
+    listAttachmentLibrary(params, { signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof listAttachmentLibrary>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type ListAttachmentLibraryQueryResult = NonNullable<
+  Awaited<ReturnType<typeof listAttachmentLibrary>>
+>;
+export type ListAttachmentLibraryQueryError = ErrorType<unknown>;
+
+export function useListAttachmentLibrary<
+  TData = Awaited<ReturnType<typeof listAttachmentLibrary>>,
+  TError = ErrorType<unknown>,
+>(
+  params?: ListAttachmentLibraryParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof listAttachmentLibrary>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getListAttachmentLibraryQueryOptions(params, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+export const getCreateAttachmentLibraryItemUrl = () => {
+  return `/api/v1/attachment-library`;
+};
+
+export const createAttachmentLibraryItem = async (
+  attachmentLibraryInput: AttachmentLibraryInput,
+  options?: RequestInit,
+): Promise<AttachmentLibraryItem> => {
+  return customFetch<AttachmentLibraryItem>(
+    getCreateAttachmentLibraryItemUrl(),
+    {
+      ...options,
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...options?.headers },
+      body: JSON.stringify(attachmentLibraryInput),
+    },
+  );
+};
+
+export const getCreateAttachmentLibraryItemMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof createAttachmentLibraryItem>>,
+    TError,
+    { data: BodyType<AttachmentLibraryInput> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof createAttachmentLibraryItem>>,
+  TError,
+  { data: BodyType<AttachmentLibraryInput> },
+  TContext
+> => {
+  const mutationKey = ["createAttachmentLibraryItem"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof createAttachmentLibraryItem>>,
+    { data: BodyType<AttachmentLibraryInput> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return createAttachmentLibraryItem(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type CreateAttachmentLibraryItemMutationResult = NonNullable<
+  Awaited<ReturnType<typeof createAttachmentLibraryItem>>
+>;
+export type CreateAttachmentLibraryItemMutationBody =
+  BodyType<AttachmentLibraryInput>;
+export type CreateAttachmentLibraryItemMutationError = ErrorType<unknown>;
+
+export const useCreateAttachmentLibraryItem = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof createAttachmentLibraryItem>>,
+    TError,
+    { data: BodyType<AttachmentLibraryInput> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof createAttachmentLibraryItem>>,
+  TError,
+  { data: BodyType<AttachmentLibraryInput> },
+  TContext
+> => {
+  return useMutation(getCreateAttachmentLibraryItemMutationOptions(options));
+};
+
+export const getDeleteAttachmentLibraryItemUrl = (id: string) => {
+  return `/api/v1/attachment-library/${id}`;
+};
+
+export const deleteAttachmentLibraryItem = async (
+  id: string,
+  options?: RequestInit,
+): Promise<void> => {
+  return customFetch<void>(getDeleteAttachmentLibraryItemUrl(id), {
+    ...options,
+    method: "DELETE",
+  });
+};
+
+export const getDeleteAttachmentLibraryItemMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof deleteAttachmentLibraryItem>>,
+    TError,
+    { id: string },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof deleteAttachmentLibraryItem>>,
+  TError,
+  { id: string },
+  TContext
+> => {
+  const mutationKey = ["deleteAttachmentLibraryItem"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof deleteAttachmentLibraryItem>>,
+    { id: string }
+  > = (props) => {
+    const { id } = props ?? {};
+
+    return deleteAttachmentLibraryItem(id, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type DeleteAttachmentLibraryItemMutationResult = NonNullable<
+  Awaited<ReturnType<typeof deleteAttachmentLibraryItem>>
+>;
+
+export type DeleteAttachmentLibraryItemMutationError = ErrorType<unknown>;
+
+export const useDeleteAttachmentLibraryItem = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof deleteAttachmentLibraryItem>>,
+    TError,
+    { id: string },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof deleteAttachmentLibraryItem>>,
+  TError,
+  { id: string },
+  TContext
+> => {
+  return useMutation(getDeleteAttachmentLibraryItemMutationOptions(options));
+};
+
+export const getListIndustryProfilesUrl = () => {
+  return `/api/v1/industry-profiles`;
+};
+
+export const listIndustryProfiles = async (
+  options?: RequestInit,
+): Promise<IndustryProfile[]> => {
+  return customFetch<IndustryProfile[]>(getListIndustryProfilesUrl(), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getListIndustryProfilesQueryKey = () => {
+  return [`/api/v1/industry-profiles`] as const;
+};
+
+export const getListIndustryProfilesQueryOptions = <
+  TData = Awaited<ReturnType<typeof listIndustryProfiles>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof listIndustryProfiles>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getListIndustryProfilesQueryKey();
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof listIndustryProfiles>>
+  > = ({ signal }) => listIndustryProfiles({ signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof listIndustryProfiles>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type ListIndustryProfilesQueryResult = NonNullable<
+  Awaited<ReturnType<typeof listIndustryProfiles>>
+>;
+export type ListIndustryProfilesQueryError = ErrorType<unknown>;
+
+export function useListIndustryProfiles<
+  TData = Awaited<ReturnType<typeof listIndustryProfiles>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof listIndustryProfiles>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getListIndustryProfilesQueryOptions(options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+export const getCreateIndustryProfileUrl = () => {
+  return `/api/v1/industry-profiles`;
+};
+
+export const createIndustryProfile = async (
+  industryProfileInput: IndustryProfileInput,
+  options?: RequestInit,
+): Promise<IndustryProfile> => {
+  return customFetch<IndustryProfile>(getCreateIndustryProfileUrl(), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(industryProfileInput),
+  });
+};
+
+export const getCreateIndustryProfileMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof createIndustryProfile>>,
+    TError,
+    { data: BodyType<IndustryProfileInput> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof createIndustryProfile>>,
+  TError,
+  { data: BodyType<IndustryProfileInput> },
+  TContext
+> => {
+  const mutationKey = ["createIndustryProfile"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof createIndustryProfile>>,
+    { data: BodyType<IndustryProfileInput> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return createIndustryProfile(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type CreateIndustryProfileMutationResult = NonNullable<
+  Awaited<ReturnType<typeof createIndustryProfile>>
+>;
+export type CreateIndustryProfileMutationBody = BodyType<IndustryProfileInput>;
+export type CreateIndustryProfileMutationError = ErrorType<unknown>;
+
+export const useCreateIndustryProfile = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof createIndustryProfile>>,
+    TError,
+    { data: BodyType<IndustryProfileInput> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof createIndustryProfile>>,
+  TError,
+  { data: BodyType<IndustryProfileInput> },
+  TContext
+> => {
+  return useMutation(getCreateIndustryProfileMutationOptions(options));
+};
+
+export const getUpdateIndustryProfileUrl = (id: string) => {
+  return `/api/v1/industry-profiles/${id}`;
+};
+
+export const updateIndustryProfile = async (
+  id: string,
+  industryProfileInput: IndustryProfileInput,
+  options?: RequestInit,
+): Promise<IndustryProfile> => {
+  return customFetch<IndustryProfile>(getUpdateIndustryProfileUrl(id), {
+    ...options,
+    method: "PATCH",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(industryProfileInput),
+  });
+};
+
+export const getUpdateIndustryProfileMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof updateIndustryProfile>>,
+    TError,
+    { id: string; data: BodyType<IndustryProfileInput> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof updateIndustryProfile>>,
+  TError,
+  { id: string; data: BodyType<IndustryProfileInput> },
+  TContext
+> => {
+  const mutationKey = ["updateIndustryProfile"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof updateIndustryProfile>>,
+    { id: string; data: BodyType<IndustryProfileInput> }
+  > = (props) => {
+    const { id, data } = props ?? {};
+
+    return updateIndustryProfile(id, data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type UpdateIndustryProfileMutationResult = NonNullable<
+  Awaited<ReturnType<typeof updateIndustryProfile>>
+>;
+export type UpdateIndustryProfileMutationBody = BodyType<IndustryProfileInput>;
+export type UpdateIndustryProfileMutationError = ErrorType<unknown>;
+
+export const useUpdateIndustryProfile = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof updateIndustryProfile>>,
+    TError,
+    { id: string; data: BodyType<IndustryProfileInput> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof updateIndustryProfile>>,
+  TError,
+  { id: string; data: BodyType<IndustryProfileInput> },
+  TContext
+> => {
+  return useMutation(getUpdateIndustryProfileMutationOptions(options));
 };
 
 export const getListPricePositionsUrl = () => {

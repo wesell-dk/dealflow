@@ -178,6 +178,11 @@ export const quoteVersionsTable = pgTable("quote_versions", {
   marginPct: numeric("margin_pct").notNull(),
   status: text("status").notNull(),
   notes: text("notes"),
+  templateId: text("template_id"),
+  sectionsSnapshot: jsonb("sections_snapshot")
+    .$type<Array<{ kind: string; title: string; body: string; order: number }>>()
+    .default([])
+    .notNull(),
   createdAt: ts("created_at"),
 });
 
@@ -191,6 +196,97 @@ export const lineItemsTable = pgTable("line_items", {
   listPrice: numeric("list_price").notNull(),
   discountPct: numeric("discount_pct").notNull(),
   total: numeric("total").notNull(),
+});
+
+// Quote templates (reusable section + line-item bundles per industry)
+export const quoteTemplatesTable = pgTable("quote_templates", {
+  id: id(),
+  tenantId: text("tenant_id").notNull(),
+  companyId: text("company_id"),
+  brandId: text("brand_id"),
+  name: text("name").notNull(),
+  description: text("description").notNull().default(""),
+  industry: text("industry").notNull(),
+  isSystem: boolean("is_system").notNull().default(false),
+  defaultDiscountPct: numeric("default_discount_pct").notNull().default("0"),
+  defaultMarginPct: numeric("default_margin_pct").notNull().default("30"),
+  defaultValidityDays: integer("default_validity_days").notNull().default(30),
+  defaultLineItems: jsonb("default_line_items")
+    .$type<Array<{
+      name: string;
+      description?: string;
+      quantity: number;
+      unitPrice: number;
+      listPrice: number;
+      discountPct: number;
+    }>>()
+    .default([])
+    .notNull(),
+  defaultAttachmentLibraryIds: jsonb("default_attachment_library_ids")
+    .$type<string[]>()
+    .default([])
+    .notNull(),
+  createdAt: ts("created_at"),
+});
+
+export const quoteTemplateSectionsTable = pgTable("quote_template_sections", {
+  id: id(),
+  templateId: text("template_id").notNull(),
+  kind: text("kind").notNull(), // cover | intro | scope | terms | appendix | custom
+  title: text("title").notNull(),
+  body: text("body").notNull().default(""),
+  order: integer("order_index").notNull().default(0),
+});
+
+// Reusable attachment library (Datasheets, AGB, Referenzen, etc.)
+export const attachmentLibraryTable = pgTable("attachment_library", {
+  id: id(),
+  tenantId: text("tenant_id").notNull(),
+  companyId: text("company_id"),
+  brandId: text("brand_id"),
+  name: text("name").notNull(),
+  description: text("description").notNull().default(""),
+  category: text("category").notNull(), // datasheet | terms | reference | certificate | other
+  tags: jsonb("tags").$type<string[]>().default([]).notNull(),
+  mimeType: text("mime_type").notNull(),
+  size: integer("size").notNull(),
+  objectPath: text("object_path").notNull(),
+  version: integer("version").notNull().default(1),
+  createdBy: text("created_by"),
+  createdAt: ts("created_at"),
+});
+
+// Per-quote-version attachments (linked to library or ad-hoc upload)
+export const quoteAttachmentsTable = pgTable("quote_attachments", {
+  id: id(),
+  quoteVersionId: text("quote_version_id").notNull(),
+  libraryAssetId: text("library_asset_id"),
+  name: text("name").notNull(),
+  mimeType: text("mime_type").notNull(),
+  size: integer("size").notNull(),
+  objectPath: text("object_path").notNull(),
+  label: text("label"),
+  order: integer("order_index").notNull().default(0),
+  createdAt: ts("created_at"),
+});
+
+// Industry profile defaults: clause variants + suggested template & attachments
+export const industryProfilesTable = pgTable("industry_profiles", {
+  id: id(),
+  tenantId: text("tenant_id").notNull(),
+  industry: text("industry").notNull(),
+  label: text("label").notNull(),
+  description: text("description").notNull().default(""),
+  defaultClauseVariants: jsonb("default_clause_variants")
+    .$type<Record<string, string>>()
+    .default({})
+    .notNull(),
+  suggestedTemplateId: text("suggested_template_id"),
+  suggestedAttachmentLibraryIds: jsonb("suggested_attachment_library_ids")
+    .$type<string[]>()
+    .default([])
+    .notNull(),
+  createdAt: ts("created_at"),
 });
 
 // Pricing

@@ -7,9 +7,12 @@ Multi-tenant, multi-company, multi-brand. Deal-centric.
 
  * OpenAPI spec version: 0.1.0
  */
+import type { UploadUrlRequestKind } from "./uploadUrlRequestKind";
 
 export interface UploadUrlRequest {
   name: string;
   size: number;
   contentType: string;
+  /** logo (admin only, 2MB images) or document (any user, 25MB docs+images). Default: logo for backward compatibility. */
+  kind?: UploadUrlRequestKind;
 }

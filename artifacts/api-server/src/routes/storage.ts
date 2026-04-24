@@ -12,13 +12,31 @@ import { inArray, or, like } from "drizzle-orm";
 const router: IRouter = Router();
 const objectStorageService = new ObjectStorageService();
 
-const ALLOWED_UPLOAD_MIME = new Set([
+// Logos / inline images: small + image-only.
+const ALLOWED_LOGO_MIME = new Set([
   "image/png",
   "image/jpeg",
   "image/svg+xml",
   "image/webp",
 ]);
-const MAX_UPLOAD_BYTES = 2 * 1024 * 1024;
+const MAX_LOGO_BYTES = 2 * 1024 * 1024;
+
+// Quote attachments / library docs: docs + spreadsheets + images, up to 25 MB.
+const ALLOWED_DOCUMENT_MIME = new Set([
+  "image/png",
+  "image/jpeg",
+  "image/svg+xml",
+  "image/webp",
+  "application/pdf",
+  "application/msword",
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  "application/vnd.ms-excel",
+  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  "text/markdown",
+  "text/csv",
+  "text/plain",
+]);
+const MAX_DOCUMENT_BYTES = 25 * 1024 * 1024;
 
 function requireAuthenticated(req: Request, res: Response): boolean {
   const scope = (req as AuthedRequest).scope;
@@ -50,21 +68,34 @@ function requireAdminScope(req: Request, res: Response): boolean {
  * Then uploads the file directly to the returned presigned URL.
  */
 router.post("/storage/uploads/request-url", async (req: Request, res: Response) => {
-  if (!requireAdminScope(req, res)) return;
   const parsed = RequestUploadUrlBody.safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({ error: "Missing or invalid required fields" });
     return;
   }
 
+  const kind = (parsed.data as { kind?: "logo" | "document" }).kind ?? "logo";
+  if (kind === "logo") {
+    if (!requireAdminScope(req, res)) return;
+  } else {
+    if (!requireAuthenticated(req, res)) return;
+  }
+
   try {
     const { name, size, contentType } = parsed.data;
-    if (!ALLOWED_UPLOAD_MIME.has(contentType)) {
-      res.status(400).json({ error: "contentType not allowed (png/jpeg/svg/webp only)" });
+    const allowed = kind === "logo" ? ALLOWED_LOGO_MIME : ALLOWED_DOCUMENT_MIME;
+    const maxBytes = kind === "logo" ? MAX_LOGO_BYTES : MAX_DOCUMENT_BYTES;
+    if (!allowed.has(contentType)) {
+      res.status(400).json({
+        error:
+          kind === "logo"
+            ? "contentType not allowed (png/jpeg/svg/webp only)"
+            : "contentType not allowed for document upload",
+      });
       return;
     }
-    if (typeof size !== "number" || size <= 0 || size > MAX_UPLOAD_BYTES) {
-      res.status(400).json({ error: `size must be 1..${MAX_UPLOAD_BYTES} bytes` });
+    if (typeof size !== "number" || size <= 0 || size > maxBytes) {
+      res.status(400).json({ error: `size must be 1..${maxBytes} bytes` });
       return;
     }
 
