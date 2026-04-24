@@ -2237,28 +2237,37 @@ export const ListCopilotInsightsQueryParams = zod.object({
     .optional(),
 });
 
-export const ListCopilotInsightsResponseItem = zod.object({
-  id: zod.string(),
-  kind: zod.string(),
-  title: zod.string(),
-  summary: zod.string(),
-  severity: zod.string(),
-  dealId: zod.string(),
-  dealName: zod.string(),
-  createdAt: zod.coerce.date(),
-  suggestedAction: zod.string().nullish(),
-  status: zod.enum(["open", "acknowledged", "resolved", "dismissed"]),
-  triggerType: zod.string().nullish(),
-  triggerEntityRef: zod.string().nullish(),
-  actionType: zod.string().nullish(),
-  actionPayload: zod.record(zod.string(), zod.unknown()).nullish(),
-  acknowledgedAt: zod.coerce.date().nullish(),
-  resolvedAt: zod.coerce.date().nullish(),
-  dismissedAt: zod.coerce.date().nullish(),
+export const ListCopilotInsightsResponse = zod.object({
+  items: zod.array(
+    zod.object({
+      id: zod.string(),
+      kind: zod.string(),
+      title: zod.string(),
+      summary: zod.string(),
+      severity: zod.string(),
+      dealId: zod.string(),
+      dealName: zod.string(),
+      createdAt: zod.coerce.date(),
+      suggestedAction: zod.string().nullish(),
+      status: zod.enum(["open", "acknowledged", "resolved", "dismissed"]),
+      triggerType: zod.string().nullish(),
+      triggerEntityRef: zod.string().nullish(),
+      actionType: zod.string().nullish(),
+      actionPayload: zod.record(zod.string(), zod.unknown()).nullish(),
+      acknowledgedAt: zod.coerce.date().nullish(),
+      resolvedAt: zod.coerce.date().nullish(),
+      dismissedAt: zod.coerce.date().nullish(),
+    }),
+  ),
+  scopeRestricted: zod.boolean(),
+  emptyReason: zod
+    .union([
+      zod.literal("scope_empty"),
+      zod.literal("scope_filter_excludes_all"),
+      zod.literal(null),
+    ])
+    .nullable(),
 });
-export const ListCopilotInsightsResponse = zod.array(
-  ListCopilotInsightsResponseItem,
-);
 
 export const PatchCopilotInsightParams = zod.object({
   id: zod.coerce.string(),

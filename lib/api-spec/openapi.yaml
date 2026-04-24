@@ -1598,9 +1598,7 @@ paths:
           description: ok
           content:
             application/json:
-              schema:
-                type: array
-                items: { $ref: "#/components/schemas/CopilotInsight" }
+              schema: { $ref: "#/components/schemas/ListCopilotInsightsResponse" }
 
   /copilot/insights/{id}:
     patch:
@@ -3500,6 +3498,28 @@ components:
               pipeline: { type: number }
 
     # ── Copilot ──
+    ListCopilotInsightsResponse:
+      type: object
+      required: [items, scopeRestricted, emptyReason]
+      properties:
+        items:
+          type: array
+          items: { $ref: "#/components/schemas/CopilotInsight" }
+        # True when the caller is a non-tenantWide ("restricted") user, OR
+        # when an active scope filter is applied. The frontend uses this to
+        # decide whether the empty-state hint applies.
+        scopeRestricted:
+          type: boolean
+        # Why `items` is empty for restricted users. Allows the UI to render
+        # an explanatory empty-state instead of a generic "no data" message.
+        #   scope_empty                  — user has no companies/brands at all
+        #   scope_filter_excludes_all    — user has access, but the active
+        #                                  scope filter excludes every deal
+        #   null                         — no scope-related explanation
+        emptyReason:
+          type: ["string", "null"]
+          enum: [scope_empty, scope_filter_excludes_all, null]
+
     CopilotInsightStatusPatch:
       type: object
       required: [status]

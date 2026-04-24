@@ -1116,19 +1116,17 @@ export interface ForecastReport {
   months: ForecastReportMonthsItem[];
 }
 
-export type CopilotInsightStatusPatchStatus =
-  (typeof CopilotInsightStatusPatchStatus)[keyof typeof CopilotInsightStatusPatchStatus];
+/**
+ * @nullable
+ */
+export type ListCopilotInsightsResponseEmptyReason =
+  | (typeof ListCopilotInsightsResponseEmptyReason)[keyof typeof ListCopilotInsightsResponseEmptyReason]
+  | null;
 
-export const CopilotInsightStatusPatchStatus = {
-  open: "open",
-  acknowledged: "acknowledged",
-  resolved: "resolved",
-  dismissed: "dismissed",
+export const ListCopilotInsightsResponseEmptyReason = {
+  scope_empty: "scope_empty",
+  scope_filter_excludes_all: "scope_filter_excludes_all",
 } as const;
-
-export interface CopilotInsightStatusPatch {
-  status: CopilotInsightStatusPatchStatus;
-}
 
 export type CopilotInsightStatus =
   (typeof CopilotInsightStatus)[keyof typeof CopilotInsightStatus];
@@ -1171,6 +1169,27 @@ export interface CopilotInsight {
   resolvedAt?: string | null;
   /** @nullable */
   dismissedAt?: string | null;
+}
+
+export interface ListCopilotInsightsResponse {
+  items: CopilotInsight[];
+  scopeRestricted: boolean;
+  /** @nullable */
+  emptyReason: ListCopilotInsightsResponseEmptyReason;
+}
+
+export type CopilotInsightStatusPatchStatus =
+  (typeof CopilotInsightStatusPatchStatus)[keyof typeof CopilotInsightStatusPatchStatus];
+
+export const CopilotInsightStatusPatchStatus = {
+  open: "open",
+  acknowledged: "acknowledged",
+  resolved: "resolved",
+  dismissed: "dismissed",
+} as const;
+
+export interface CopilotInsightStatusPatch {
+  status: CopilotInsightStatusPatchStatus;
 }
 
 export interface CopilotThread {

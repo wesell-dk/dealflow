@@ -8,7 +8,8 @@ import { Skeleton } from "@/components/ui/skeleton";
 export default function Home() {
   const { t } = useTranslation();
   const { data: summary, isLoading: isLoadingSummary } = useGetDashboardSummary();
-  const { data: insights, isLoading: isLoadingInsights } = useListCopilotInsights();
+  const { data: insightsResp, isLoading: isLoadingInsights } = useListCopilotInsights();
+  const insights = insightsResp?.items;
 
   if (isLoadingSummary || isLoadingInsights) {
     return <div className="p-8 space-y-4"><Skeleton className="h-32 w-full" /><Skeleton className="h-64 w-full" /></div>;

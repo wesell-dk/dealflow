@@ -148,7 +148,9 @@ export default function Copilot() {
   const { t, i18n } = useTranslation();
   const qc = useQueryClient();
   const [statusFilter, setStatusFilter] = useState<InsightStatus>("open");
-  const { data: insights } = useListCopilotInsights({ status: statusFilter });
+  const { data: insightsResp } = useListCopilotInsights({ status: statusFilter });
+  const insights = insightsResp?.items;
+  const insightsEmptyReason = insightsResp?.emptyReason ?? null;
   const { data: threads } = useListCopilotThreads();
   const [activeThreadId, setActiveThreadId] = useState<string | null>(null);
   const patchInsight = usePatchCopilotInsight();
@@ -335,7 +337,19 @@ export default function Copilot() {
               </div>
             ))}
             {(!insights || insights.length === 0) && (
-              <p className="text-sm text-muted-foreground italic">{t("common.noData")}</p>
+              <div className="space-y-1" data-testid="insights-empty">
+                <p className="text-sm text-muted-foreground italic">{t("common.noData")}</p>
+                {insightsEmptyReason === "scope_empty" && (
+                  <p className="text-xs text-muted-foreground" data-testid="insights-empty-scope_empty">
+                    {t("pages.copilot.emptyScopeEmpty")}
+                  </p>
+                )}
+                {insightsEmptyReason === "scope_filter_excludes_all" && (
+                  <p className="text-xs text-muted-foreground" data-testid="insights-empty-scope_filter_excludes_all">
+                    {t("pages.copilot.emptyScopeFilterExcludesAll")}
+                  </p>
+                )}
+              </div>
             )}
           </CardContent>
         </Card>

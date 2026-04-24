@@ -417,10 +417,13 @@ describe("tenant isolation — list, report, audit, activity", () => {
   });
 
   it("GET /copilot/insights — each tenant only sees own insights", async () => {
+    // Response is wrapped in `{ items, scopeRestricted, emptyReason }`
+    // since task #60 — extract `.items` for the isolation check.
     await assertListIsolated(
       "/api/copilot/insights",
       worldA.copilotInsightId,
       worldB.copilotInsightId,
+      (body) => ids(((body as { items?: IdEntry[] }).items) ?? []),
     );
   });
 

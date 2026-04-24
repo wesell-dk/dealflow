@@ -108,6 +108,8 @@ export * from "./listCompaniesParams";
 export * from "./listContactsParams";
 export * from "./listContractsParams";
 export * from "./listCopilotInsightsParams";
+export * from "./listCopilotInsightsResponse";
+export * from "./listCopilotInsightsResponseEmptyReason";
 export * from "./listCopilotInsightsStatus";
 export * from "./listDealsParams";
 export * from "./listGdprAccessLogParams";

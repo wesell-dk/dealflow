@@ -276,6 +276,8 @@
       "acknowledge": "Acknowledge",
       "dismiss": "Dismiss",
       "markResolved": "Mark resolved",
+      "emptyScopeEmpty": "You don't have access to any companies or brands yet. Ask an admin to grant you a scope so insights for the matching deals show up here.",
+      "emptyScopeFilterExcludesAll": "Your active scope filter excludes every deal in this tenant. Widen the filter to see insights again.",
       "status": {
         "open": "Open",
         "acknowledged": "In progress",

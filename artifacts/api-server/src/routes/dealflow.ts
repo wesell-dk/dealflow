@@ -3190,23 +3190,71 @@ router.get('/copilot/insights', async (req, res) => {
   if (!validateInline(req, res, { query: Z.ListCopilotInsightsQueryParams })) return;
   const scope = getScope(req);
   const status = typeof req.query['status'] === 'string' ? req.query['status'] : null;
-  // Hard SQL tenant filter: copilot_insights now carries tenantId, so a
-  // second tenant cannot see this tenant's insights at all.
+
+  // Tenant + scope contract for copilot insights
+  // ─────────────────────────────────────────────
+  // 1) Hard SQL tenant filter: copilot_insights carries tenantId since
+  //    task #55, so a second tenant can never see this tenant's insights.
+  // 2) Restricted (non-tenantWide) users AND tenantWide users with an
+  //    active scope filter additionally get a dealId-scope post-filter so
+  //    they only see in-tenant insights for deals in their company/brand
+  //    scope.
+  // 3) Insights are intrinsically deal-bound (every row has a dealId), so
+  //    there is no notion of a "tenant-global" insight that would be safe
+  //    to surface independent of the deal scope. We deliberately do NOT
+  //    bypass scope for empty-scope users — that would leak deal names of
+  //    deals they cannot otherwise see (insights carry the deal title).
+  // 4) Instead, when the post-filter empties the result for a restricted
+  //    user we surface a `scopeRestricted` flag and an `emptyReason`
+  //    string in the response envelope. The frontend uses these to render
+  //    an explicit empty-state ("your scope is empty — ask an admin"
+  //    vs. "your active scope filter excludes every deal") rather than
+  //    the generic "no data" placeholder, which was confusing for
+  //    restricted users in the same tenant as a tenantWide user who sees
+  //    a long list of insights for the same data.
   const conds = [eq(copilotInsightsTable.tenantId, scope.tenantId)];
   if (status) conds.push(eq(copilotInsightsTable.status, status));
   const rows = await db.select().from(copilotInsightsTable)
     .where(and(...conds))
     .orderBy(desc(copilotInsightsTable.createdAt));
-  // Restricted (non-tenantWide) users get an additional dealId-scope post
-  // filter so they don't see in-tenant insights for deals outside their
-  // company/brand scope. tenantWide users see every insight in the tenant.
+
+  const restricted = !scope.tenantWide || hasActiveScopeFilter(scope);
   let filtered = rows;
-  if (!(scope.tenantWide && !hasActiveScopeFilter(scope))) {
+  let emptyReason: 'scope_empty' | 'scope_filter_excludes_all' | null = null;
+  if (restricted) {
     const dealIds = await allowedDealIds(req);
     filtered = rows.filter(c => dealIds.has(c.dealId));
+    if (filtered.length === 0 && rows.length > 0) {
+      // There ARE in-tenant insights, but none are visible to this user.
+      // Classify *why* so the UI can render the right hint:
+      //   scope_empty               — restricted user with zero permissions
+      //                               (admin needs to grant company/brand)
+      //   scope_filter_excludes_all — user has permissions but their active
+      //                               scope filter excludes every visible deal
+      //   null                      — user has permissions and no active
+      //                               filter; their permitted scope simply
+      //                               doesn't intersect any insight-deal.
+      //                               We leave this as generic "no data" to
+      //                               avoid implying an active filter that
+      //                               isn't there.
+      if (hasActiveScopeFilter(scope)) {
+        emptyReason = 'scope_filter_excludes_all';
+      } else if (
+        !scope.tenantWide &&
+        scope.companyIds.length === 0 &&
+        scope.brandIds.length === 0
+      ) {
+        emptyReason = 'scope_empty';
+      }
+    }
   }
+
   const dealMap = await getDealMap();
-  res.json(filtered.map(c => mapInsight(c, dealMap)));
+  res.json({
+    items: filtered.map(c => mapInsight(c, dealMap)),
+    scopeRestricted: restricted,
+    emptyReason,
+  });
 });
 
 router.patch('/copilot/insights/:id', async (req, res) => {

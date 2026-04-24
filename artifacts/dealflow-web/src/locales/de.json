@@ -276,6 +276,8 @@
       "acknowledge": "Zur Kenntnis",
       "dismiss": "Verwerfen",
       "markResolved": "Erledigt",
+      "emptyScopeEmpty": "Du hast noch keinen Zugriff auf Firmen oder Marken. Bitte einen Admin, dir einen Scope freizugeben, damit hier Insights zu deinen Deals erscheinen.",
+      "emptyScopeFilterExcludesAll": "Dein aktiver Scope-Filter schließt alle Deals dieses Mandanten aus. Erweitere den Filter, um wieder Insights zu sehen.",
       "status": {
         "open": "Offen",
         "acknowledged": "In Arbeit",

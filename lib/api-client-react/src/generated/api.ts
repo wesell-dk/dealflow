@@ -94,6 +94,7 @@ import type {
   ListContactsParams,
   ListContractsParams,
   ListCopilotInsightsParams,
+  ListCopilotInsightsResponse,
   ListDealsParams,
   ListGdprAccessLogParams,
   ListNegotiationsParams,
@@ -7197,11 +7198,14 @@ export const getListCopilotInsightsUrl = (
 export const listCopilotInsights = async (
   params?: ListCopilotInsightsParams,
   options?: RequestInit,
-): Promise<CopilotInsight[]> => {
-  return customFetch<CopilotInsight[]>(getListCopilotInsightsUrl(params), {
-    ...options,
-    method: "GET",
-  });
+): Promise<ListCopilotInsightsResponse> => {
+  return customFetch<ListCopilotInsightsResponse>(
+    getListCopilotInsightsUrl(params),
+    {
+      ...options,
+      method: "GET",
+    },
+  );
 };
 
 export const getListCopilotInsightsQueryKey = (
