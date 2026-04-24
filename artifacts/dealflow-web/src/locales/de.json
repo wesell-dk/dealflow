@@ -401,7 +401,11 @@
     "openPdf": "PDF öffnen",
     "openQuote": "Zum Angebot",
     "defaultDiscount": "Standard-Rabatt",
-    "defaultMargin": "Standard-Marge"
+    "defaultMargin": "Standard-Marge",
+    "configurator": {
+      "title": "Branche noch nicht konfiguriert",
+      "subtitle": "Für diese Branche existiert noch kein Profil. Standard-Vorlage und Anhänge können trotzdem ausgewählt werden; lege später ein Profil an, um Defaults zu speichern."
+    }
   },
   "helpBot": {
     "title": "Hilfe-Assistent",

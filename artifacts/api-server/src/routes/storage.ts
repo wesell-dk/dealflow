@@ -6,8 +6,17 @@ import {
 } from "@workspace/api-zod";
 import { ObjectStorageService, ObjectNotFoundError } from "../lib/objectStorage";
 import type { AuthedRequest } from "../middlewares/auth";
-import { db, brandsTable } from "@workspace/db";
-import { inArray, or, like } from "drizzle-orm";
+import {
+  db,
+  brandsTable,
+  attachmentLibraryTable,
+  quoteAttachmentsTable,
+  quoteVersionsTable,
+  quotesTable,
+  dealsTable,
+  companiesTable,
+} from "@workspace/db";
+import { eq, inArray, or, like, and } from "drizzle-orm";
 
 const router: IRouter = Router();
 const objectStorageService = new ObjectStorageService();
@@ -165,7 +174,7 @@ router.get("/storage/objects/*path", async (req: Request, res: Response) => {
     const objectPath = `/objects/${wildcardPath}`;
 
     const suffix = `/storage/objects/${wildcardPath}`;
-    const rows = await db
+    const brandRows = await db
       .select({ id: brandsTable.id })
       .from(brandsTable)
       .where(
@@ -174,12 +183,55 @@ router.get("/storage/objects/*path", async (req: Request, res: Response) => {
           like(brandsTable.logoUrl, `%/objects/${wildcardPath}`),
         ),
       );
-    if (rows.length === 0) {
+
+    const libRows = await db
+      .select({
+        id: attachmentLibraryTable.id,
+        tenantId: attachmentLibraryTable.tenantId,
+        companyId: attachmentLibraryTable.companyId,
+        brandId: attachmentLibraryTable.brandId,
+      })
+      .from(attachmentLibraryTable)
+      .where(eq(attachmentLibraryTable.objectPath, objectPath));
+
+    const qattRows = await db
+      .select({
+        id: quoteAttachmentsTable.id,
+        dealId: dealsTable.id,
+        tenantId: companiesTable.tenantId,
+        companyId: companiesTable.id,
+        brandId: dealsTable.brandId,
+      })
+      .from(quoteAttachmentsTable)
+      .innerJoin(quoteVersionsTable, eq(quoteVersionsTable.id, quoteAttachmentsTable.quoteVersionId))
+      .innerJoin(quotesTable, eq(quotesTable.id, quoteVersionsTable.quoteId))
+      .innerJoin(dealsTable, eq(dealsTable.id, quotesTable.dealId))
+      .innerJoin(companiesTable, eq(companiesTable.id, dealsTable.companyId))
+      .where(eq(quoteAttachmentsTable.objectPath, objectPath));
+
+    if (brandRows.length === 0 && libRows.length === 0 && qattRows.length === 0) {
       res.status(404).json({ error: "object not found" });
       return;
     }
-    const allowed = scope.tenantWide || rows.some((r) => scope.brandIds.includes(r.id));
-    if (!allowed) {
+
+    const brandAllowed = brandRows.length > 0 && (scope.tenantWide || brandRows.some((r) => scope.brandIds.includes(r.id)));
+    const libAllowed = libRows.some((r) =>
+      r.tenantId === scope.tenantId && (
+        scope.tenantWide ||
+        (!r.companyId && !r.brandId) ||
+        (r.companyId && scope.companyIds.includes(r.companyId)) ||
+        (r.brandId && scope.brandIds.includes(r.brandId))
+      ),
+    );
+    const qattAllowed = qattRows.some((r) =>
+      r.tenantId === scope.tenantId && (
+        scope.tenantWide ||
+        scope.companyIds.includes(r.companyId) ||
+        (r.brandId && scope.brandIds.includes(r.brandId))
+      ),
+    );
+
+    if (!brandAllowed && !libAllowed && !qattAllowed) {
       res.status(403).json({ error: "forbidden" });
       return;
     }

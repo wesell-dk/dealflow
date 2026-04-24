@@ -401,7 +401,11 @@
     "openPdf": "Open PDF",
     "openQuote": "Go to quote",
     "defaultDiscount": "Default discount",
-    "defaultMargin": "Default margin"
+    "defaultMargin": "Default margin",
+    "configurator": {
+      "title": "Industry profile not configured yet",
+      "subtitle": "There is no profile for this industry yet. You can still pick a template and attachments; create a profile later to persist defaults."
+    }
   },
   "helpBot": {
     "title": "Help Assistant",

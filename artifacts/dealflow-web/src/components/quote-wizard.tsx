@@ -329,11 +329,23 @@ export function QuoteWizard({ open, onOpenChange, initialDealId }: Props) {
                     ))}
                   </SelectContent>
                 </Select>
-                {industry && industryProfiles?.find((p) => p.industry === industry) && (
+                {industry && industryProfiles?.find((p) => p.industry === industry) ? (
                   <p className="mt-2 text-xs text-muted-foreground">
                     {industryProfiles.find((p) => p.industry === industry)?.description}
                   </p>
-                )}
+                ) : industry ? (
+                  <div
+                    className="mt-2 rounded-md border border-amber-500/40 bg-amber-50 dark:bg-amber-950/40 p-3 text-xs"
+                    data-testid="industry-configurator-hint"
+                  >
+                    <div className="font-semibold mb-1">
+                      {t("quoteWizard.configurator.title")}
+                    </div>
+                    <div className="text-muted-foreground">
+                      {t("quoteWizard.configurator.subtitle")}
+                    </div>
+                  </div>
+                ) : null}
               </div>
               <div>
                 <Label>{t("quoteWizard.notes")}</Label>
@@ -417,6 +429,8 @@ export function QuoteWizard({ open, onOpenChange, initialDealId }: Props) {
                 {items.map((it, idx) => {
                   const lineTotal =
                     it.quantity * it.unitPrice * (1 - it.discountPct / 100);
+                  const lineList = it.quantity * it.listPrice;
+                  const marginPct = lineList > 0 ? Math.round(((lineTotal - lineList * 0.7) / Math.max(lineTotal, 1)) * 1000) / 10 : 0;
                   return (
                     <div
                       key={idx}
@@ -483,10 +497,15 @@ export function QuoteWizard({ open, onOpenChange, initialDealId }: Props) {
                           className="text-right"
                         />
                       </div>
-                      <div className="col-span-1 text-right text-sm font-medium pt-2">
-                        {lineTotal.toLocaleString(lang, {
-                          maximumFractionDigits: 2,
-                        })}
+                      <div className="col-span-1 text-right pt-2">
+                        <div className="text-sm font-medium">
+                          {lineTotal.toLocaleString(lang, {
+                            maximumFractionDigits: 2,
+                          })}
+                        </div>
+                        <div className="text-[10px] text-muted-foreground" title={t("quoteWizard.defaultMargin")}>
+                          M {marginPct}%
+                        </div>
                       </div>
                       <div className="col-span-1 flex justify-end">
                         <Button
