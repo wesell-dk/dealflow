@@ -1204,6 +1204,23 @@ export interface CopilotThreadInput {
   scope?: string;
 }
 
+export type AiHealthOkSample = {
+  echoed: string;
+  note: string;
+};
+
+export interface AiHealthOk {
+  ok: boolean;
+  provider: string;
+  configured: boolean;
+  model: string;
+  latencyMs: number;
+  inputTokens: number;
+  outputTokens: number;
+  invocationId: string;
+  sample: AiHealthOkSample;
+}
+
 export type HelpBotInputHistoryItem = {
   role: string;
   content: string;

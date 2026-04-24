@@ -26,6 +26,7 @@ import type {
   AdminUser,
   AdminUserCreate,
   AdminUserUpdate,
+  AiHealthOk,
   ApprovalCase,
   ApprovalDecisionInput,
   ApprovalFromReactionInput,
@@ -7582,6 +7583,87 @@ export const useCreateCopilotThread = <
 > => {
   return useMutation(getCreateCopilotThreadMutationOptions(options));
 };
+
+/**
+ * @summary AI provider health probe (Tenant-Admin only). Performs a real
+round-trip against the configured LLM provider and writes one
+ai_invocations audit row.
+
+ */
+export const getGetAiHealthUrl = () => {
+  return `/api/v1/copilot/diagnostics/ai-health`;
+};
+
+export const getAiHealth = async (
+  options?: RequestInit,
+): Promise<AiHealthOk> => {
+  return customFetch<AiHealthOk>(getGetAiHealthUrl(), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getGetAiHealthQueryKey = () => {
+  return [`/api/v1/copilot/diagnostics/ai-health`] as const;
+};
+
+export const getGetAiHealthQueryOptions = <
+  TData = Awaited<ReturnType<typeof getAiHealth>>,
+  TError = ErrorType<void>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getAiHealth>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getGetAiHealthQueryKey();
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof getAiHealth>>> = ({
+    signal,
+  }) => getAiHealth({ signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getAiHealth>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetAiHealthQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getAiHealth>>
+>;
+export type GetAiHealthQueryError = ErrorType<void>;
+
+/**
+ * @summary AI provider health probe (Tenant-Admin only). Performs a real
+round-trip against the configured LLM provider and writes one
+ai_invocations audit row.
+
+ */
+
+export function useGetAiHealth<
+  TData = Awaited<ReturnType<typeof getAiHealth>>,
+  TError = ErrorType<void>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getAiHealth>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetAiHealthQueryOptions(options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
 
 /**
  * @summary Cross-domain recent activity feed

@@ -2316,6 +2316,27 @@ export const CreateCopilotThreadBody = zod.object({
 });
 
 /**
+ * @summary AI provider health probe (Tenant-Admin only). Performs a real
+round-trip against the configured LLM provider and writes one
+ai_invocations audit row.
+
+ */
+export const GetAiHealthResponse = zod.object({
+  ok: zod.boolean(),
+  provider: zod.string(),
+  configured: zod.boolean(),
+  model: zod.string(),
+  latencyMs: zod.number(),
+  inputTokens: zod.number(),
+  outputTokens: zod.number(),
+  invocationId: zod.string(),
+  sample: zod.object({
+    echoed: zod.string(),
+    note: zod.string(),
+  }),
+});
+
+/**
  * @summary Cross-domain recent activity feed
  */
 export const ListRecentActivityResponseItem = zod.object({

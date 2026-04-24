@@ -176,6 +176,29 @@ Implemented in `lib/api-spec/openapi.yaml`. Domains:
 - `/price-increases` — campaigns and letters
 - `/reports/*` — KPI summaries
 - `/copilot/*` — AI summaries, suggestions, drafts
+- `/copilot/diagnostics/ai-health` — AI provider health probe (Tenant-Admin only)
+
+## AI-Layer (Phase 1)
+
+Schmaler, austauschbarer AI-Layer in `artifacts/api-server/src/lib/ai/`:
+
+- `provider.ts` — Anthropic-Adapter über die Replit AI Integration
+  (`AI_INTEGRATIONS_ANTHROPIC_BASE_URL` + `AI_INTEGRATIONS_ANTHROPIC_API_KEY`,
+  automatisch provisioniert — kein eigener API-Key). Lazy-Init, austauschbar
+  über das `AIProvider`-Interface.
+- `promptRegistry.ts` — typisierte Prompt-Registry mit stabilen Keys (z. B.
+  `diagnostic.ping`). Jeder Prompt kennt sein Modell, System-Prompt, einen
+  typisierten Input-Builder und ein zod-Output-Schema.
+- `structuredOutput.ts` — wandelt zod-Schemas in Anthropic-tool-input-Schemas
+  und validiert die zurückgelieferten tool-Inputs.
+- `orchestrator.ts` — zentrale `runStructured()`-Funktion: Provider-Aufruf,
+  Output-Validierung, Fehlerklassifizierung (config / provider / validation).
+- `auditLog.ts` + `ai_invocations`-Tabelle (`lib/db/src/schema/index.ts`) —
+  jeder Call schreibt actor, tenant, active-scope-Snapshot, prompt-Key,
+  Modell, Token-Usage, Latenz, Status. Audit ist Pflicht.
+
+Feldregel: Routen importieren AI-Funktionalität ausschließlich aus
+`../lib/ai` (Barrel) und rufen NIE direkt den Provider.
 
 ## GDPR & Governance
 

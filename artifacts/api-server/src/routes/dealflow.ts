@@ -103,6 +103,7 @@ import {
 } from '@workspace/db';
 import { emitEvent, WEBHOOK_EVENTS, assertSafeWebhookUrl, assertSafeResolvedUrl } from '../lib/webhooks';
 import { parseAsOf, resolveSnapshot, isInvalidAsOf } from '../lib/asOf';
+import { runStructured, isAIConfigured, AIOrchestrationError } from '../lib/ai';
 
 const router: IRouter = Router();
 
@@ -4032,6 +4033,75 @@ router.post('/copilot/threads', async (req, res) => {
     id: t!.id, title: t!.title, scope: t!.scope, lastMessage: t!.lastMessage,
     messageCount: t!.messageCount, updatedAt: iso(t!.updatedAt)!,
   });
+});
+
+// ── AI DIAGNOSTICS ──
+// Health-Probe für die AI-Provider-Anbindung (Phase 1 / Schritt 1). Nur für
+// Tenant-Admins (tenantWide). Ruft den Provider via runStructured auf und
+// schreibt einen Eintrag in ai_invocations — somit gleichzeitig Smoke-Test
+// für Provider, Orchestrator, Structured-Output und Audit-Log.
+router.get('/copilot/diagnostics/ai-health', async (req, res) => {
+  const scope = getScope(req);
+  if (!scope.tenantWide) {
+    res.status(403).json({ error: 'forbidden', reason: 'tenant_admin_only' });
+    return;
+  }
+  if (!isAIConfigured()) {
+    res.status(503).json({
+      ok: false,
+      provider: 'anthropic',
+      configured: false,
+      error: 'AI provider not configured',
+    });
+    return;
+  }
+  try {
+    const result = await runStructured<
+      { echo: string },
+      { ok: boolean; echoed: string; note: string }
+    >({
+      promptKey: 'diagnostic.ping',
+      input: { echo: 'dealflow-ai-health' },
+      scope,
+    });
+    res.json({
+      ok: result.output.ok === true,
+      provider: 'anthropic',
+      configured: true,
+      model: result.model,
+      latencyMs: result.latencyMs,
+      inputTokens: result.inputTokens,
+      outputTokens: result.outputTokens,
+      invocationId: result.invocationId,
+      sample: { echoed: result.output.echoed, note: result.output.note },
+    });
+  } catch (err) {
+    const e = err as AIOrchestrationError;
+    const code = e.code ?? 'unknown';
+    // 503 = vorübergehend nicht verfügbar (kein Provider, kein Audit-Sink).
+    // 502 = Provider hat geantwortet, aber falsch (validation/no_tool_call).
+    const status =
+      code === 'config_error' || code === 'audit_unavailable' ? 503 : 502;
+    // Stabile, gehärtete Fehlermeldung — niemals interne Fehler-Messages
+    // (DB-Treiber, Stack-Hints) an den Client durchreichen. Detail nur ins
+    // Server-Log.
+    const safeMessage =
+      code === 'config_error'
+        ? 'AI provider not configured'
+        : code === 'audit_unavailable'
+        ? 'AI audit subsystem unavailable'
+        : code === 'validation_error' || code === 'no_tool_call'
+        ? 'AI returned invalid structured output'
+        : 'AI provider call failed';
+    console.error('[copilot/ai-health]', code, e.message);
+    res.status(status).json({
+      ok: false,
+      provider: 'anthropic',
+      configured: true,
+      error: safeMessage,
+      code,
+    });
+  }
 });
 
 // ── HELP BOT (stateless, context-aware) ──

@@ -1673,6 +1673,27 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/CopilotThread" }
 
+  /copilot/diagnostics/ai-health:
+    get:
+      operationId: getAiHealth
+      tags: [copilot]
+      summary: |
+        AI provider health probe (Tenant-Admin only). Performs a real
+        round-trip against the configured LLM provider and writes one
+        ai_invocations audit row.
+      responses:
+        "200":
+          description: Provider reachable, structured response validated.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AiHealthOk" }
+        "403":
+          description: Caller is not a tenant-wide admin.
+        "502":
+          description: Provider call failed or returned invalid output.
+        "503":
+          description: AI provider not configured.
+
   /activity:
     get:
       operationId: listRecentActivity
@@ -3563,6 +3584,25 @@ components:
       properties:
         title: { type: string }
         scope: { type: string }
+
+    AiHealthOk:
+      type: object
+      required: [ok, provider, configured, model, latencyMs, inputTokens, outputTokens, invocationId, sample]
+      properties:
+        ok: { type: boolean }
+        provider: { type: string }
+        configured: { type: boolean }
+        model: { type: string }
+        latencyMs: { type: integer }
+        inputTokens: { type: integer }
+        outputTokens: { type: integer }
+        invocationId: { type: string }
+        sample:
+          type: object
+          required: [echoed, note]
+          properties:
+            echoed: { type: string }
+            note: { type: string }
 
     HelpBotInput:
       type: object

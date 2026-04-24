@@ -8,6 +8,7 @@ import {
   date,
   jsonb,
   uniqueIndex,
+  index,
 } from "drizzle-orm/pg-core";
 
 const id = () => text("id").primaryKey();
@@ -647,6 +648,41 @@ export const webhooksTable = pgTable("webhooks", {
   description: text("description"),
   createdAt: ts("created_at"),
 });
+
+// AI invocations — Audit-Trail für jeden LLM-Roundtrip. Pflicht für
+// Auditierbarkeit, Cost-Tracking und Debugging der AI-Layer (siehe
+// artifacts/api-server/src/lib/ai/auditLog.ts).
+export const aiInvocationsTable = pgTable("ai_invocations", {
+  id: id(),
+  // Wer hat die Inferenz ausgelöst (users.id).
+  actor: text("actor").notNull(),
+  // Tenant-Snapshot (Pflicht — verhindert Cross-Tenant-Reporting-Lecks).
+  tenantId: text("tenant_id").notNull(),
+  // Snapshot des aktiven Scopes zum Zeitpunkt des Aufrufs (vgl. audit_log).
+  activeScopeJson: text("active_scope_json"),
+  // Stabiler Prompt-Key aus PROMPT_REGISTRY (z. B. "diagnostic.ping").
+  promptKey: text("prompt_key").notNull(),
+  // Tatsächlich verwendetes Modell (laut Provider-Antwort).
+  model: text("model").notNull(),
+  inputTokens: integer("input_tokens").notNull().default(0),
+  outputTokens: integer("output_tokens").notNull().default(0),
+  latencyMs: integer("latency_ms").notNull().default(0),
+  // success | validation_error | provider_error | config_error
+  status: text("status").notNull(),
+  errorClass: text("error_class"),
+  errorMessage: text("error_message"),
+  // Optionale Bindung an eine Fach-Entität (z. B. "deal" / "ctr_..." ).
+  entityType: text("entity_type"),
+  entityId: text("entity_id"),
+  createdAt: ts("created_at"),
+}, (t) => [
+  // Audit/Cost-Queries laufen fast immer pro Tenant + Zeitfenster.
+  index("ai_invocations_tenant_created_idx").on(t.tenantId, t.createdAt),
+  // Kosten-/Latenz-Auswertung pro Prompt über die Zeit.
+  index("ai_invocations_prompt_created_idx").on(t.promptKey, t.createdAt),
+  // Lookup von "alle Inferenzen für diesen Deal/Vertrag/Quote".
+  index("ai_invocations_entity_idx").on(t.entityType, t.entityId),
+]);
 
 // Log of outbound webhook delivery attempts.
 export const webhookDeliveriesTable = pgTable("webhook_deliveries", {

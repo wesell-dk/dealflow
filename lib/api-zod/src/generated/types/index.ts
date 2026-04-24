@@ -16,6 +16,8 @@ export * from "./activeScopeUpdateResult";
 export * from "./adminUser";
 export * from "./adminUserCreate";
 export * from "./adminUserUpdate";
+export * from "./aiHealthOk";
+export * from "./aiHealthOkSample";
 export * from "./allowedScope";
 export * from "./amendmentClauseChange";
 export * from "./approvalCase";
