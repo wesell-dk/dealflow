@@ -105,6 +105,8 @@ import { emitEvent, WEBHOOK_EVENTS, assertSafeWebhookUrl, assertSafeResolvedUrl 
 import { parseAsOf, resolveSnapshot, isInvalidAsOf } from '../lib/asOf';
 import { runStructured, isAIConfigured, AIOrchestrationError } from '../lib/ai';
 import type { HelpAssistantInput } from '../lib/ai/prompts/dealflow';
+import { runAgent, type AgentTrace } from '../lib/ai/agent.js';
+import { HELP_BOT_TOOLS_AS_AGENT_TOOLS } from '../lib/ai/tools/dealflowAgent.js';
 import {
   buildDealContext,
   buildQuoteContext,
@@ -4720,9 +4722,13 @@ const HELP_ROUTES: Array<{ path: string; title: string; purpose: string }> = [
   { path: '/admin', title: 'Tenant Admin', purpose: 'User-, Rollen- und Scope-Verwaltung' },
 ];
 
+// Fallback ohne KI: navigiert nur, legt nichts mehr an. Anlegen ist im
+// Agent-Pfad echt umgesetzt — wenn der Agent fehlt, sollen wir den Nutzer
+// nicht mit "ich öffne den Dialog" anlügen, sondern in den richtigen
+// Bereich lotsen, wo er den Dialog selbst aufrufen kann.
 const HelpFallbackResponses: Array<{ test: RegExp; reply: string; action?: { kind: string; path?: string } }> = [
-  { test: /(kunde|account).*(anlegen|erstellen|neu)/i, reply: 'Klar, ich öffne den Dialog "Kunde anlegen". Trag Name, Branche und Land ein.', action: { kind: 'open_create_account' } },
-  { test: /(deal|opportunity).*(anlegen|erstellen|neu)/i, reply: 'Alles klar, ich öffne den Dialog "Deal anlegen".', action: { kind: 'open_create_deal' } },
+  { test: /(kunde|account).*(anlegen|erstellen|neu)/i, reply: 'Lege Kunden hier an: rechts oben "Kunde anlegen". Ich kann das im KI-Modus auch direkt für dich tun, sobald der Assistent wieder erreichbar ist.', action: { kind: 'navigate', path: '/accounts' } },
+  { test: /(deal|opportunity).*(anlegen|erstellen|neu)/i, reply: 'Deals legst du hier an: rechts oben "Deal anlegen".', action: { kind: 'navigate', path: '/deals' } },
   { test: /(zeig.*pipeline|wo.*pipeline|alle deals)/i, reply: 'Hier geht\'s zur Pipeline.', action: { kind: 'navigate', path: '/deals' } },
 ];
 
@@ -4749,16 +4755,41 @@ function helpFallback(question: string) {
   };
 }
 
+// System-Prompt für den agentischen Help-Bot. Beschreibt Sprache, Tonfall und
+// die verfügbaren Tools knapp, damit das Modell weiß, wann es welches aufruft.
+const HELP_BOT_AGENT_SYSTEM = (ctx: {
+  currentPath: string;
+  user: { name: string; role: string; tenantWide: boolean };
+  routes: Array<{ path: string; title: string; purpose: string }>;
+}) =>
+  `Du bist der Hilfe-Assistent von DealFlow.One — einer B2B Commercial Execution ` +
+  `Platform. Antworte kurz, sachlich, auf Deutsch (max. 4 Sätze pro Antwort, ` +
+  `keine Marketingsprache, keine Emojis).\n\n` +
+  `Aktueller Nutzer: ${ctx.user.name} (${ctx.user.role}${ctx.user.tenantWide ? ', tenant-weit' : ', eingeschränkter Scope'}). ` +
+  `Aktuelle Seite: ${ctx.currentPath}.\n\n` +
+  `Du hast Werkzeuge, um Daten zu lesen UND zu schreiben:\n` +
+  `- search_accounts / search_deals / pipeline_stats / recent_activity → Daten nachschlagen.\n` +
+  `- create_account / create_contact / create_deal → echte Datensätze anlegen.\n\n` +
+  `Verhalten:\n` +
+  `1. Bei Fragen zu Zahlen oder Datensätzen RUFE ein Lese-Tool auf, statt zu raten.\n` +
+  `2. Bei Anlege-Wünschen: prüfe Pflichtfelder. Wenn alle Angaben da sind, lege es ` +
+  `direkt an und bestätige. Fehlt etwas, frage präzise nach EINEM Feld.\n` +
+  `3. Bei reinen Navigationsfragen erkläre kurz und nenne den passenden Bereich. ` +
+  `Verfügbare Routen: ${ctx.routes.map(r => `${r.path} (${r.title})`).join(', ')}.\n` +
+  `4. Schließe Antworten auf erledigte Anlegungen z.B. mit "Habe Kunde 'X' (id) angelegt." ab.\n` +
+  `5. Wenn du etwas nicht sicher weißt, sage das ehrlich.`;
+
 router.post('/copilot/help', async (req, res) => {
   if (!validateInline(req, res, { body: Z.AskHelpBotBody })) return;
   const b = req.body;
   const question = (b.question ?? '').trim();
   if (!question) {
     res.json({
-      reply: 'Stell mir gerne eine Frage — z.B. "Wie lege ich einen neuen Deal an?" oder "Wo finde ich offene Approvals?"',
+      reply: 'Stell mir gerne eine Frage — z.B. "Wie lege ich einen neuen Deal an?" oder "Was sind meine 3 größten offenen Deals?"',
       suggestions: [],
       action: { kind: 'none' },
-      meta: { source: 'fallback', model: null, latencyMs: null },
+      traces: [],
+      meta: { source: 'fallback', model: null, latencyMs: null, steps: 0 },
     });
     return;
   }
@@ -4767,112 +4798,75 @@ router.post('/copilot/help', async (req, res) => {
   const history = (b.history ?? []).filter((h: { role: string; content: string }) => h.role === 'user' || h.role === 'assistant') as Array<{ role: 'user' | 'assistant'; content: string }>;
   const currentPath = (b.currentPath as string | null | undefined) ?? '/';
 
-  // Plattform-Kontext sammeln (scope-bewusst).
-  let counts = { accounts: 0, deals: 0, quotes: 0, contracts: 0, approvals: 0 };
-  let recentAccounts: Array<{ id: string; name: string }> = [];
-  let recentDeals: Array<{ id: string; name: string; accountName: string; stage: string }> = [];
-  try {
-    const accIds = await allowedAccountIds(req);
-    const dealIds = await allowedDealIds(req);
-    counts.accounts = accIds.size;
-    counts.deals = dealIds.size;
-    if (accIds.size > 0) {
-      const accs = await db.select({ id: accountsTable.id, name: accountsTable.name })
-        .from(accountsTable)
-        .where(inArray(accountsTable.id, [...accIds].slice(0, 200)))
-        .orderBy(desc(accountsTable.id))
-        .limit(8);
-      recentAccounts = accs;
-    }
-    if (dealIds.size > 0) {
-      const ds = await db.select({
-        id: dealsTable.id, name: dealsTable.name, stage: dealsTable.stage,
-        accountName: accountsTable.name,
-      })
-        .from(dealsTable)
-        .leftJoin(accountsTable, eq(dealsTable.accountId, accountsTable.id))
-        .where(inArray(dealsTable.id, [...dealIds].slice(0, 200)))
-        .orderBy(desc(dealsTable.updatedAt))
-        .limit(8);
-      recentDeals = ds.map(d => ({ id: d.id, name: d.name, accountName: d.accountName ?? '', stage: d.stage }));
-      const qs = await db.select({ id: quotesTable.id }).from(quotesTable)
-        .where(inArray(quotesTable.dealId, [...dealIds]));
-      counts.quotes = qs.length;
-      const cs = await db.select({ id: contractsTable.id }).from(contractsTable)
-        .where(inArray(contractsTable.dealId, [...dealIds]));
-      counts.contracts = cs.length;
-      const aps = await db.select({ id: approvalsTable.id }).from(approvalsTable)
-        .where(inArray(approvalsTable.dealId, [...dealIds]));
-      counts.approvals = aps.length;
-    }
-  } catch {
-    // Kontext-Anreicherung ist best-effort — bei Fehler weiter mit Defaults.
-  }
-
   if (!isAIConfigured()) {
-    res.json(helpFallback(question));
+    res.json({ ...helpFallback(question), traces: [] });
     return;
   }
 
   try {
-    const result = await runStructured<HelpAssistantInput, {
-      reply: string;
-      suggestions: Array<{ label: string; path: string }>;
-      action: { kind: 'none' | 'navigate' | 'open_create_account' | 'open_create_deal'; path?: string | null; accountId?: string | null };
-    }>({
+    const result = await runAgent({
       promptKey: 'assistant.help',
-      input: {
-        question,
-        history: history.slice(-10),
+      model: 'claude-haiku-4-5',
+      system: HELP_BOT_AGENT_SYSTEM({
         currentPath,
-        user: {
-          name: scope.user.name,
-          role: scope.user.role,
-          tenantWide: scope.tenantWide,
-        },
-        counts,
+        user: { name: scope.user.name, role: scope.user.role, tenantWide: scope.tenantWide },
         routes: HELP_ROUTES,
-        recentAccounts,
-        recentDeals,
-      },
+      }),
+      userMessage: question,
+      history: history.slice(-6),
+      tools: [...HELP_BOT_TOOLS_AS_AGENT_TOOLS],
       scope,
+      req,
+      maxSteps: 6,
     });
 
-    // AI-Output ist untrusted: Aktionen müssen gegen Allowlist und Scope geprüft
-    // werden, sonst kann ein manipuliertes Modell unsinnige Routen oder
-    // fremde accountIds zurückgeben.
-    const validRoutes = new Set(HELP_ROUTES.map(r => r.path));
-    const allowedAccs = await allowedAccountIds(req);
-    const rawAction = result.output.action;
+    // Ableiten von suggestions/action aus den traces:
+    //  - wenn create_* erfolgreich lief → action='navigate' zur Übersicht
+    //  - sonst: bekannte Routen, die der Bot in seiner Antwort erwähnt
+    const validRoutes = new Set(HELP_ROUTES.map((r) => r.path));
     let action: { kind: string; path?: string | null; accountId?: string | null } = { kind: 'none' };
-    if (rawAction?.kind === 'navigate' && rawAction.path && validRoutes.has(rawAction.path)) {
-      action = { kind: 'navigate', path: rawAction.path };
-    } else if (rawAction?.kind === 'open_create_account') {
-      action = { kind: 'open_create_account' };
-    } else if (rawAction?.kind === 'open_create_deal') {
-      const acc = rawAction.accountId && allowedAccs.has(rawAction.accountId) ? rawAction.accountId : null;
-      action = { kind: 'open_create_deal', accountId: acc };
+    const lastCreate = [...result.traces].reverse().find(
+      (t) => t.kind === 'tool_call' && (t.tool === 'create_account' || t.tool === 'create_deal' || t.tool === 'create_contact'),
+    );
+    if (lastCreate?.tool === 'create_account') {
+      action = { kind: 'navigate', path: '/accounts' };
+    } else if (lastCreate?.tool === 'create_deal') {
+      action = { kind: 'navigate', path: '/deals' };
+    } else if (lastCreate?.tool === 'create_contact') {
+      action = { kind: 'navigate', path: '/accounts' };
+    } else {
+      // Heuristik: bekannte Routen, die im Reply per Pfad erwähnt wurden,
+      // werden als suggestions vorgeschlagen.
     }
 
-    // Suggestions ebenfalls auf bekannte Routen einschränken.
-    const safeSuggestions = (result.output.suggestions ?? []).filter(s => validRoutes.has(s.path)).slice(0, 4);
+    const mentioned = HELP_ROUTES.filter((r) => result.reply.includes(r.path) || result.reply.toLowerCase().includes(r.title.toLowerCase()));
+    const suggestions = mentioned.slice(0, 3).map((r) => ({ label: r.title, path: r.path })).filter((s) => validRoutes.has(s.path));
+
+    // Frontend-freundliche Trace-Ansicht: kürzen auf max 8 Einträge, Inhalt
+    // jeder trace ist bereits durch agent.ts JSON-friendly.
+    const trimmedTraces: AgentTrace[] = result.traces.slice(-8);
 
     res.json({
-      reply: result.output.reply,
-      suggestions: safeSuggestions,
+      reply: result.reply,
+      suggestions,
       action,
-      meta: { source: 'ai', model: result.model, latencyMs: result.latencyMs },
+      traces: trimmedTraces,
+      meta: { source: 'ai', model: result.model, latencyMs: result.latencyMs, steps: result.steps },
     });
   } catch (err) {
     if (err instanceof AIOrchestrationError) {
       // Fail soft — der Hilfe-Assistent darf nie 5xx erzeugen.
       req.log?.warn({ code: err.code, msg: err.message }, 'help-bot AI error, using fallback');
-      res.json(helpFallback(question));
+      res.json({ ...helpFallback(question), traces: [] });
       return;
     }
     throw err;
   }
 });
+
+// Kept for any future runStructured-based fallback; silences unused import.
+void runStructured;
+void ((): HelpAssistantInput | null => null);
 
 // ── EXTEND APPROVAL & DEAL DECISIONS WITH AUDIT ──
 // We hook into existing endpoints by re-using writeAudit at point-of-call would

@@ -15,4 +15,6 @@ export type HelpBotReplyMeta = {
   model?: string | null;
   /** @nullable */
   latencyMs?: number | null;
+  /** @nullable */
+  steps?: number | null;
 };

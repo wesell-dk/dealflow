@@ -117,6 +117,8 @@ export * from "./helpBotReplyActionKind";
 export * from "./helpBotReplyMeta";
 export * from "./helpBotReplyMetaSource";
 export * from "./helpBotReplySuggestionsItem";
+export * from "./helpBotReplyTracesItem";
+export * from "./helpBotReplyTracesItemKind";
 export * from "./industryProfile";
 export * from "./industryProfileDefaultClauseVariants";
 export * from "./industryProfileInput";

@@ -10,10 +10,15 @@ Multi-tenant, multi-company, multi-brand. Deal-centric.
 import type { HelpBotReplyAction } from "./helpBotReplyAction";
 import type { HelpBotReplyMeta } from "./helpBotReplyMeta";
 import type { HelpBotReplySuggestionsItem } from "./helpBotReplySuggestionsItem";
+import type { HelpBotReplyTracesItem } from "./helpBotReplyTracesItem";
 
 export interface HelpBotReply {
   reply: string;
   suggestions: HelpBotReplySuggestionsItem[];
   action?: HelpBotReplyAction;
+  /** Schritt-für-Schritt Spur der Tool-Aufrufe und Modell-Antworten.
+Frontend rendert dies als kompakte Aktivitäts-Liste.
+ */
+  traces?: HelpBotReplyTracesItem[];
   meta?: HelpBotReplyMeta;
 }

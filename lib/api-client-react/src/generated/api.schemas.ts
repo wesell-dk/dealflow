@@ -1515,6 +1515,25 @@ export type HelpBotReplyAction = {
   accountId?: string | null;
 };
 
+export type HelpBotReplyTracesItemKind =
+  (typeof HelpBotReplyTracesItemKind)[keyof typeof HelpBotReplyTracesItemKind];
+
+export const HelpBotReplyTracesItemKind = {
+  message: "message",
+  tool_call: "tool_call",
+  tool_error: "tool_error",
+} as const;
+
+export type HelpBotReplyTracesItem = {
+  kind: HelpBotReplyTracesItemKind;
+  text?: string;
+  tool?: string;
+  arguments?: unknown | null;
+  result?: unknown | null;
+  errorClass?: string;
+  errorMessage?: string;
+};
+
 export type HelpBotReplyMetaSource =
   (typeof HelpBotReplyMetaSource)[keyof typeof HelpBotReplyMetaSource];
 
@@ -1529,12 +1548,18 @@ export type HelpBotReplyMeta = {
   model?: string | null;
   /** @nullable */
   latencyMs?: number | null;
+  /** @nullable */
+  steps?: number | null;
 };
 
 export interface HelpBotReply {
   reply: string;
   suggestions: HelpBotReplySuggestionsItem[];
   action?: HelpBotReplyAction;
+  /** Schritt-für-Schritt Spur der Tool-Aufrufe und Modell-Antworten.
+Frontend rendert dies als kompakte Aktivitäts-Liste.
+ */
+  traces?: HelpBotReplyTracesItem[];
   meta?: HelpBotReplyMeta;
 }
 

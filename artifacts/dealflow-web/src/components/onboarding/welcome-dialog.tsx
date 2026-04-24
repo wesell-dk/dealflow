@@ -53,7 +53,7 @@ export function WelcomeDialog() {
             </p>
           </div>
 
-          <WorkflowMap onNavigate={closeWelcome} />
+          <WorkflowMap mode="inline" onNavigate={closeWelcome} />
         </div>
 
         <div className="flex flex-wrap items-center justify-end gap-2 pt-4 border-t">

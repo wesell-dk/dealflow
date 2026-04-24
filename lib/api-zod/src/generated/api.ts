@@ -2635,11 +2635,28 @@ export const AskHelpBotResponse = zod.object({
       accountId: zod.string().nullish(),
     })
     .optional(),
+  traces: zod
+    .array(
+      zod.object({
+        kind: zod.enum(["message", "tool_call", "tool_error"]),
+        text: zod.string().optional(),
+        tool: zod.string().optional(),
+        arguments: zod.unknown().nullish(),
+        result: zod.unknown().nullish(),
+        errorClass: zod.string().optional(),
+        errorMessage: zod.string().optional(),
+      }),
+    )
+    .optional()
+    .describe(
+      "Schritt-für-Schritt Spur der Tool-Aufrufe und Modell-Antworten.\nFrontend rendert dies als kompakte Aktivitäts-Liste.\n",
+    ),
   meta: zod
     .object({
       source: zod.enum(["ai", "fallback"]).optional(),
       model: zod.string().nullish(),
       latencyMs: zod.number().nullish(),
+      steps: zod.number().nullish(),
     })
     .optional(),
 });

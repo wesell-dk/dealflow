@@ -3925,6 +3925,24 @@ components:
               type: ["string", "null"]
             accountId:
               type: ["string", "null"]
+        traces:
+          description: |
+            Schritt-für-Schritt Spur der Tool-Aufrufe und Modell-Antworten.
+            Frontend rendert dies als kompakte Aktivitäts-Liste.
+          type: array
+          items:
+            type: object
+            required: [kind]
+            properties:
+              kind:
+                type: string
+                enum: [message, tool_call, tool_error]
+              text: { type: string }
+              tool: { type: string }
+              arguments: { nullable: true }
+              result: { nullable: true }
+              errorClass: { type: string }
+              errorMessage: { type: string }
         meta:
           type: object
           properties:
@@ -3934,6 +3952,8 @@ components:
             model:
               type: ["string", "null"]
             latencyMs:
+              type: ["integer", "null"]
+            steps:
               type: ["integer", "null"]
 
     AuditEntry:

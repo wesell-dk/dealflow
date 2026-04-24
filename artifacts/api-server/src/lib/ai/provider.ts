@@ -55,6 +55,10 @@ export interface AIProviderConfig {
 export interface AIToolCall {
   name: string;
   input: unknown;
+  /** Anthropic-spezifische tool_use-ID — Pflicht für tool_result mapping
+   *  in Multi-Tool-Agent-Loops. Bei klassischem single-tool runStructured
+   *  wird sie ignoriert. */
+  id?: string;
 }
 
 export interface AIInvocationResult {
@@ -70,13 +74,16 @@ export interface AIProvider {
   /**
    * Führt eine strukturierte Anfrage aus. Wenn `tool` gesetzt ist, wird
    * Anthropic über tool_use gezwungen, das Schema zu erfüllen — wir nutzen
-   * das als JSON-Mode-Ersatz.
+   * das als JSON-Mode-Ersatz. Alternativ kann `tools` mit mehreren Tools
+   * gesetzt werden — dann entscheidet das Modell selbst, ob/welches es
+   * aufruft (Agent-Loop).
    */
   complete(args: {
     config: AIProviderConfig;
     system: string;
     messages: MessageParam[];
     tool?: Tool;
+    tools?: Tool[];
   }): Promise<AIInvocationResult>;
 }
 
@@ -117,23 +124,27 @@ class AnthropicProvider implements AIProvider {
     system: string;
     messages: MessageParam[];
     tool?: Tool;
+    tools?: Tool[];
   }): Promise<AIInvocationResult> {
     // Hard policy guard: niemals ein Modell außerhalb der Allowlist an den
     // Provider geben. Wirft DisallowedModelError, der vom Orchestrator als
     // config_error klassifiziert wird.
     assertAllowedModel(args.config.model);
     const client = getAnthropicClient();
+    const toolsExtra = args.tool
+      ? {
+          tools: [args.tool],
+          tool_choice: { type: 'tool' as const, name: args.tool.name },
+        }
+      : args.tools && args.tools.length > 0
+        ? { tools: args.tools, tool_choice: { type: 'auto' as const } }
+        : {};
     const response = await client.messages.create({
       model: args.config.model,
       max_tokens: args.config.maxTokens ?? 8192,
       system: args.system,
       messages: args.messages,
-      ...(args.tool
-        ? {
-            tools: [args.tool],
-            tool_choice: { type: 'tool', name: args.tool.name },
-          }
-        : {}),
+      ...toolsExtra,
     });
 
     let text = '';
@@ -142,7 +153,7 @@ class AnthropicProvider implements AIProvider {
       if (block.type === 'text') {
         text += block.text;
       } else if (block.type === 'tool_use') {
-        toolCalls.push({ name: block.name, input: block.input });
+        toolCalls.push({ name: block.name, input: block.input, id: block.id });
       }
     }
     return {
