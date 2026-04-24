@@ -582,24 +582,24 @@ export async function seedIfEmpty(): Promise<void> {
   // from reactions, approvals, letters and quote-versions. No static seed.
 
   await db.insert(copilotThreadsTable).values([
-    { id: "ct_th_001", title: "Wie gehe ich mit Vorwerks 12%-Forderung um?",    scope: "deal:dl_001", lastMessage: "Vorschlag 9% + Mehrjahres-Bindung. Marge bleibt über 30% Floor.",                messageCount: 6 },
-    { id: "ct_th_002", title: "Renewal-Mail für Castell entwerfen",             scope: "deal:dl_005", lastMessage: "In deinem Stil entworfen. Soll ich einen Pro-Tier-Upsell-Absatz ergänzen?",     messageCount: 4 },
-    { id: "ct_th_003", title: "Gewonnene vs. verlorene Deals dieses Quartal",  scope: "global",       lastMessage: "Rabattdisziplin ist der stärkste Prädiktor (R² 0,71).",                          messageCount: 9 },
-    { id: "ct_th_004", title: "Nordstern Legal-Redlines zusammenfassen",        scope: "deal:dl_003", lastMessage: "4 materielle Änderungen; 2 erfordern Deal Desk + Legal.",                        messageCount: 5 },
+    { id: "ct_th_001", tenantId: "tn_root", title: "Wie gehe ich mit Vorwerks 12%-Forderung um?",    scope: "deal:dl_001", lastMessage: "Vorschlag 9% + Mehrjahres-Bindung. Marge bleibt über 30% Floor.",                messageCount: 6 },
+    { id: "ct_th_002", tenantId: "tn_root", title: "Renewal-Mail für Castell entwerfen",             scope: "deal:dl_005", lastMessage: "In deinem Stil entworfen. Soll ich einen Pro-Tier-Upsell-Absatz ergänzen?",     messageCount: 4 },
+    { id: "ct_th_003", tenantId: "tn_root", title: "Gewonnene vs. verlorene Deals dieses Quartal",  scope: "global",       lastMessage: "Rabattdisziplin ist der stärkste Prädiktor (R² 0,71).",                          messageCount: 9 },
+    { id: "ct_th_004", tenantId: "tn_root", title: "Nordstern Legal-Redlines zusammenfassen",        scope: "deal:dl_003", lastMessage: "4 materielle Änderungen; 2 erfordern Deal Desk + Legal.",                        messageCount: 5 },
   ]);
 
   // Copilot messages for existing threads
   await db.insert(copilotMessagesTable).values([
-    { id: "cm_001", threadId: "ct_th_001", role: "user",      content: "Vorwerk fordert 12% Rabatt. Was ist vertretbar?" },
-    { id: "cm_002", threadId: "ct_th_001", role: "assistant", content: "Median gewonnener Deals im DACH-Segment liegt bei 7,8%. Gegenangebot mit 9% bei 24-monatiger Bindung hält die Marge über 30%." },
-    { id: "cm_003", threadId: "ct_th_001", role: "user",      content: "Was, wenn sie die Laufzeitverlängerung ablehnen?" },
-    { id: "cm_004", threadId: "ct_th_001", role: "assistant", content: "Biete 8% mit Quartals-Mengen-Rabatt ab 110% Forecast. Netto-Effekt gleich, Optik besser." },
-    { id: "cm_005", threadId: "ct_th_002", role: "user",      content: "Entwirf eine Renewal-Mail für Castell." },
-    { id: "cm_006", threadId: "ct_th_002", role: "assistant", content: "In deinem Stil entworfen. Soll ich einen Pro-Tier-Upsell-Absatz ergänzen?" },
-    { id: "cm_007", threadId: "ct_th_003", role: "user",      content: "Vergleiche gewonnene vs. verlorene Deals dieses Quartal." },
-    { id: "cm_008", threadId: "ct_th_003", role: "assistant", content: "Rabattdisziplin (R² 0,71) ist der stärkste Prädiktor. Verlorene Deals lagen im Schnitt bei 13,4% Rabatt vs. 7,8% bei gewonnenen." },
-    { id: "cm_009", threadId: "ct_th_004", role: "user",      content: "Fasse die Nordstern Legal-Redlines zusammen." },
-    { id: "cm_010", threadId: "ct_th_004", role: "assistant", content: "4 materielle Änderungen; Haftungs-Cap-Verzicht und IP-Freistellung erfordern Deal Desk + Legal-Freigabe." },
+    { id: "cm_001", tenantId: "tn_root", threadId: "ct_th_001", role: "user",      content: "Vorwerk fordert 12% Rabatt. Was ist vertretbar?" },
+    { id: "cm_002", tenantId: "tn_root", threadId: "ct_th_001", role: "assistant", content: "Median gewonnener Deals im DACH-Segment liegt bei 7,8%. Gegenangebot mit 9% bei 24-monatiger Bindung hält die Marge über 30%." },
+    { id: "cm_003", tenantId: "tn_root", threadId: "ct_th_001", role: "user",      content: "Was, wenn sie die Laufzeitverlängerung ablehnen?" },
+    { id: "cm_004", tenantId: "tn_root", threadId: "ct_th_001", role: "assistant", content: "Biete 8% mit Quartals-Mengen-Rabatt ab 110% Forecast. Netto-Effekt gleich, Optik besser." },
+    { id: "cm_005", tenantId: "tn_root", threadId: "ct_th_002", role: "user",      content: "Entwirf eine Renewal-Mail für Castell." },
+    { id: "cm_006", tenantId: "tn_root", threadId: "ct_th_002", role: "assistant", content: "In deinem Stil entworfen. Soll ich einen Pro-Tier-Upsell-Absatz ergänzen?" },
+    { id: "cm_007", tenantId: "tn_root", threadId: "ct_th_003", role: "user",      content: "Vergleiche gewonnene vs. verlorene Deals dieses Quartal." },
+    { id: "cm_008", tenantId: "tn_root", threadId: "ct_th_003", role: "assistant", content: "Rabattdisziplin (R² 0,71) ist der stärkste Prädiktor. Verlorene Deals lagen im Schnitt bei 13,4% Rabatt vs. 7,8% bei gewonnenen." },
+    { id: "cm_009", tenantId: "tn_root", threadId: "ct_th_004", role: "user",      content: "Fasse die Nordstern Legal-Redlines zusammen." },
+    { id: "cm_010", tenantId: "tn_root", threadId: "ct_th_004", role: "assistant", content: "4 materielle Änderungen; Haftungs-Cap-Verzicht und IP-Freistellung erfordern Deal Desk + Legal-Freigabe." },
   ]);
 
   // Audit log — all seeded under tn_root (the only tenant we ship with).

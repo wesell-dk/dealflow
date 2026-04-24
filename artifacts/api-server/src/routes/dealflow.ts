@@ -376,12 +376,18 @@ router.patch('/orgs/me/active-scope', async (req, res) => {
 
 // ── ACCOUNTS ──
 router.get('/accounts', async (req, res) => {
-  const accs = await db.select().from(accountsTable);
-  const allDeals = await db.select().from(dealsTable);
+  // Tenant + scope-bound at the SQL level: only fetch accounts whose IDs
+  // appear in `allowedAccountIds` (which itself JOINs deals→companies on
+  // tenantId). A second tenant's accounts never leave the database.
   const accIds = await allowedAccountIds(req);
-  const visible = accs.filter(a => isAccountAllowed(accIds, a.id));
-  res.json(visible.map(a => {
-    const ds = allDeals.filter(d => d.accountId === a.id && d.stage !== 'won' && d.stage !== 'lost');
+  if (accIds.size === 0) { res.json([]); return; }
+  const accIdList = [...accIds];
+  const accs = await db.select().from(accountsTable)
+    .where(inArray(accountsTable.id, accIdList));
+  const accDeals = await db.select().from(dealsTable)
+    .where(inArray(dealsTable.accountId, accIdList));
+  res.json(accs.map(a => {
+    const ds = accDeals.filter(d => d.accountId === a.id && d.stage !== 'won' && d.stage !== 'lost');
     return {
       ...a,
       openDeals: ds.length,
@@ -422,12 +428,16 @@ router.get('/accounts/:id', async (req, res) => {
 
 router.get('/contacts', async (req, res) => {
   if (!validateInline(req, res, { query: Z.ListContactsQueryParams })) return;
+  // Tenant + scope-bound at the SQL level via allowedAccountIds (joins
+  // deals→companies on tenantId). Cross-tenant contacts can never be
+  // returned because their accountId is not in this tenant's set.
   const accountId = typeof req.query.accountId === 'string' ? req.query.accountId : null;
   const accIds = await allowedAccountIds(req);
-  const list = accountId
-    ? await db.select().from(contactsTable).where(eq(contactsTable.accountId, accountId))
-    : await db.select().from(contactsTable);
-  const visible = list.filter(c => isAccountAllowed(accIds, c.accountId));
+  if (accIds.size === 0) { res.json([]); return; }
+  if (accountId && !accIds.has(accountId)) { res.json([]); return; }
+  const targetAccountIds = accountId ? [accountId] : [...accIds];
+  const visible = await db.select().from(contactsTable)
+    .where(inArray(contactsTable.accountId, targetAccountIds));
   // PII access log
   const scope = getScope(req);
   const piiContacts = visible.filter(c => !c.deletedAt);
@@ -3178,13 +3188,23 @@ function mapInsight(
 
 router.get('/copilot/insights', async (req, res) => {
   if (!validateInline(req, res, { query: Z.ListCopilotInsightsQueryParams })) return;
-  const dealIds = await allowedDealIds(req);
+  const scope = getScope(req);
   const status = typeof req.query['status'] === 'string' ? req.query['status'] : null;
-  const rows = await db.select().from(copilotInsightsTable).orderBy(desc(copilotInsightsTable.createdAt));
-  const filtered = rows.filter(c =>
-    (!c.dealId || dealIds.has(c.dealId)) &&
-    (!status || c.status === status),
-  );
+  // Hard SQL tenant filter: copilot_insights now carries tenantId, so a
+  // second tenant cannot see this tenant's insights at all.
+  const conds = [eq(copilotInsightsTable.tenantId, scope.tenantId)];
+  if (status) conds.push(eq(copilotInsightsTable.status, status));
+  const rows = await db.select().from(copilotInsightsTable)
+    .where(and(...conds))
+    .orderBy(desc(copilotInsightsTable.createdAt));
+  // Restricted (non-tenantWide) users get an additional dealId-scope post
+  // filter so they don't see in-tenant insights for deals outside their
+  // company/brand scope. tenantWide users see every insight in the tenant.
+  let filtered = rows;
+  if (!(scope.tenantWide && !hasActiveScopeFilter(scope))) {
+    const dealIds = await allowedDealIds(req);
+    filtered = rows.filter(c => dealIds.has(c.dealId));
+  }
   const dealMap = await getDealMap();
   res.json(filtered.map(c => mapInsight(c, dealMap)));
 });
@@ -3315,7 +3335,15 @@ router.post('/copilot/insights/:id/execute', async (req, res) => {
 });
 
 router.get('/copilot/threads', async (req, res) => {
-  const rows = await db.select().from(copilotThreadsTable).orderBy(desc(copilotThreadsTable.updatedAt));
+  // Hard SQL tenant filter: copilot_threads now carries tenantId. "global"
+  // and "" scopes are tenant-scoped here — a second tenant cannot see this
+  // tenant's "global" threads. The per-row visibility check below still
+  // runs to honour deal/account scope for non-tenantWide users within the
+  // tenant.
+  const scope = getScope(req);
+  const rows = await db.select().from(copilotThreadsTable)
+    .where(eq(copilotThreadsTable.tenantId, scope.tenantId))
+    .orderBy(desc(copilotThreadsTable.updatedAt));
   const visibility = await Promise.all(rows.map(t => copilotThreadVisible(req, t.scope ?? '')));
   const visible = rows.filter((_, i) => visibility[i]);
   res.json(visible.map(t => ({
@@ -3327,6 +3355,11 @@ router.get('/copilot/threads', async (req, res) => {
 async function gateThread(req: Request, res: Response, threadId: string) {
   const [t] = await db.select().from(copilotThreadsTable).where(eq(copilotThreadsTable.id, threadId));
   if (!t) { res.status(404).json({ error: 'not found' }); return null; }
+  // Cross-tenant access by ID is reported as 404 (not 403) so this endpoint
+  // does not double as an existence-oracle for foreign tenants.
+  if (t.tenantId !== getScope(req).tenantId) {
+    res.status(404).json({ error: 'not found' }); return null;
+  }
   if (!(await copilotThreadVisible(req, t.scope ?? ''))) {
     res.status(403).json({ error: 'forbidden' });
     return null;
@@ -4012,8 +4045,17 @@ router.post('/order-confirmations/:id/complete', async (req, res) => {
 router.get('/copilot/threads/:id/messages', async (req, res) => {
   if (!validateInline(req, res, { params: Z.ListCopilotMessagesParams })) return;
   if (!(await gateThread(req, res, req.params.id))) return;
+  // Defense-in-depth: gateThread already proved the thread belongs to the
+  // caller's tenant, so under the current data model every message in the
+  // thread shares that tenant. The extra `tenantId` predicate is a hard
+  // SQL safety net — if a future bug ever inserts a message into a foreign
+  // tenant's thread (or migrates threads across tenants), this query will
+  // simply omit the bad rows instead of returning them.
   const rows = await db.select().from(copilotMessagesTable)
-    .where(eq(copilotMessagesTable.threadId, req.params.id))
+    .where(and(
+      eq(copilotMessagesTable.threadId, req.params.id),
+      eq(copilotMessagesTable.tenantId, getScope(req).tenantId),
+    ))
     .orderBy(copilotMessagesTable.createdAt);
   res.json(rows.map(m => ({
     id: m.id, threadId: m.threadId, role: m.role, content: m.content, createdAt: iso(m.createdAt)!,
@@ -4044,14 +4086,15 @@ router.post('/copilot/threads/:id/messages', async (req, res) => {
   if (!validateInline(req, res, { params: Z.PostCopilotMessageParams, body: Z.PostCopilotMessageBody })) return;
   if (!(await gateThread(req, res, req.params.id))) return;
   const b = req.body;
+  const tenantId = getScope(req).tenantId;
   const userId = `cm_${randomUUID().slice(0, 10)}`;
   await db.insert(copilotMessagesTable).values({
-    id: userId, threadId: req.params.id, role: 'user', content: b.content,
+    id: userId, tenantId, threadId: req.params.id, role: 'user', content: b.content,
   });
   const reply = craftAssistantReply(b.content);
   const asstId = `cm_${randomUUID().slice(0, 10)}`;
   await db.insert(copilotMessagesTable).values({
-    id: asstId, threadId: req.params.id, role: 'assistant', content: reply,
+    id: asstId, tenantId, threadId: req.params.id, role: 'assistant', content: reply,
   });
   await db.update(copilotThreadsTable).set({
     lastMessage: reply.slice(0, 140),
@@ -4071,7 +4114,8 @@ router.post('/copilot/threads', async (req, res) => {
   const b = req.body;
   const id = `ct_${randomUUID().slice(0, 10)}`;
   await db.insert(copilotThreadsTable).values({
-    id, title: b.title, scope: b.scope ?? 'global',
+    id, tenantId: getScope(req).tenantId,
+    title: b.title, scope: b.scope ?? 'global',
     lastMessage: 'Neuer Chat gestartet.', messageCount: 0,
   });
   const [t] = await db.select().from(copilotThreadsTable).where(eq(copilotThreadsTable.id, id));
@@ -4678,10 +4722,16 @@ router.get('/gdpr/subjects', async (req, res) => {
     return;
   }
   const accIds = await allowedAccountIds(req);
-  const list = await db.select().from(contactsTable);
+  if (accIds.size === 0) {
+    res.json({ tenantId: scope.tenantId, subjectType: type, results: [] });
+    return;
+  }
+  // Tenant + scope-bound at SQL level via accountId IN (...). The tenant's
+  // own contact list is fetched by ID set; cross-tenant rows never appear.
+  const list = await db.select().from(contactsTable)
+    .where(inArray(contactsTable.accountId, [...accIds]));
   const filtered = list.filter(c =>
-    accIds.has(c.accountId) &&
-    (q.length === 0 || c.name.toLowerCase().includes(q) || c.email.toLowerCase().includes(q))
+    q.length === 0 || c.name.toLowerCase().includes(q) || c.email.toLowerCase().includes(q)
   ).slice(0, 50);
   res.json({
     tenantId: scope.tenantId,

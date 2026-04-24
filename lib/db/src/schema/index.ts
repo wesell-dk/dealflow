@@ -530,8 +530,18 @@ export const timelineEventsTable = pgTable("timeline_events", {
 });
 
 // Copilot
+//
+// `tenantId` is REQUIRED on every copilot row (insights, threads, messages).
+// Without it, list endpoints would have to fall back to indirect filtering
+// (e.g. dealId membership) which silently leaks "global" or unbound rows
+// across tenants. With the column in place every list endpoint filters by
+// SQL on tenantId and a second tenant cannot see another tenant's copilot
+// state. The default `tn_root` exists only so historical rows from before
+// the column was introduced backfill cleanly; every writer in the codebase
+// sets tenantId explicitly.
 export const copilotInsightsTable = pgTable("copilot_insights", {
   id: id(),
+  tenantId: text("tenant_id").notNull().default("tn_root"),
   kind: text("kind").notNull(),
   title: text("title").notNull(),
   summary: text("summary").notNull(),
@@ -554,6 +564,7 @@ export const copilotInsightsTable = pgTable("copilot_insights", {
 
 export const copilotThreadsTable = pgTable("copilot_threads", {
   id: id(),
+  tenantId: text("tenant_id").notNull().default("tn_root"),
   title: text("title").notNull(),
   scope: text("scope").notNull(),
   lastMessage: text("last_message").notNull(),
@@ -563,6 +574,7 @@ export const copilotThreadsTable = pgTable("copilot_threads", {
 
 export const copilotMessagesTable = pgTable("copilot_messages", {
   id: id(),
+  tenantId: text("tenant_id").notNull().default("tn_root"),
   threadId: text("thread_id").notNull(),
   role: text("role").notNull(),
   content: text("content").notNull(),

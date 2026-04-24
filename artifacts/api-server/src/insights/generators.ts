@@ -10,7 +10,24 @@ import {
   quoteVersionsTable,
   quotesTable,
   dealsTable,
+  companiesTable,
 } from '@workspace/db';
+
+/**
+ * Resolve the tenantId an insight should belong to from its dealId. Insights
+ * carry a NOT NULL tenantId column so that /copilot/insights can SQL-filter
+ * by tenant — this lookup is the single source of truth used by every
+ * insight writer below.
+ */
+async function tenantIdForDeal(dealId: string): Promise<string | null> {
+  const rows = await db
+    .select({ tenantId: companiesTable.tenantId })
+    .from(dealsTable)
+    .innerJoin(companiesTable, eq(companiesTable.id, dealsTable.companyId))
+    .where(eq(dealsTable.id, dealId))
+    .limit(1);
+  return rows[0]?.tenantId ?? null;
+}
 
 type InsightSeed = {
   kind: string;
@@ -34,10 +51,16 @@ async function upsertInsight(seed: InsightSeed): Promise<void> {
       eq(copilotInsightsTable.triggerEntityRef, seed.triggerEntityRef),
     ));
   if (existing.length > 0) return;
+  // tenantId is mandatory on copilot_insights so the list endpoint can
+  // SQL-filter by tenant. We resolve it from the deal's company; if the
+  // deal has been deleted we silently skip (the insight would be orphan).
+  const tenantId = await tenantIdForDeal(seed.dealId);
+  if (!tenantId) return;
   // onConflictDoNothing guards against concurrent inserts (unique index on
   // trigger_type+trigger_entity_ref, created lazily by ensureInsightsIndex).
   await db.insert(copilotInsightsTable).values({
     id: `ci_${randomUUID().slice(0, 8)}`,
+    tenantId,
     kind: seed.kind,
     title: seed.title,
     summary: seed.summary,

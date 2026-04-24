@@ -441,17 +441,24 @@ export async function entityInScope(
 
 /**
  * Parse the `scope` field of a copilot thread (e.g. "deal:dl_001", "global",
- * "account:ac_001", "tenant") and decide whether the current user may see it.
+ * "account:ac_001", "tenant") and decide whether the current user may see it
+ * within their tenant.
+ *
+ * Tenant boundary is now enforced at the SQL layer in /copilot/threads via
+ * the `tenantId` column on copilot_threads — this helper assumes the row
+ * already belongs to the caller's tenant and only decides whether the row
+ * is in their company/brand scope:
+ *   "" or "global"        → visible to every user in the tenant
+ *   "deal:<id>"           → only if the deal is in scope (entityInScope)
+ *   "account:<id>"        → only if the account is in scope
+ *   "tenant:<id>"         → never visible (intentional)
+ *   "garbage-no-colon"    → never visible
  */
 export async function copilotThreadVisible(req: Request, scopeField: string): Promise<boolean> {
   if (!scopeField || scopeField === "global") return true;
   const [kind, id] = scopeField.split(":");
   if (!kind || !id) return false;
   if (kind === "tenant") return false;
-  // entityInScope is tenant-bound (allowedDealIds/allowedAccountIds JOIN
-  // through companies on tenantId). Even tenantWide users must go through
-  // it — otherwise threads scoped to another tenant's deal/account would
-  // leak across tenants.
   return entityInScope(req, kind, id);
 }
 

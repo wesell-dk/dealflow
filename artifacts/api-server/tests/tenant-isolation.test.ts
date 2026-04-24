@@ -1,7 +1,7 @@
 import { after, before, describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { eq, sql } from "drizzle-orm";
-import { db, pool, usersTable } from "@workspace/db";
+import { eq, inArray, sql } from "drizzle-orm";
+import { db, pool, usersTable, contactsTable } from "@workspace/db";
 import { hashPassword } from "../src/lib/auth";
 import {
   createTestWorld,
@@ -444,13 +444,18 @@ describe("tenant isolation — list, report, audit, activity", () => {
   });
 
   it("GET /copilot/threads — visibility matrix across scope variants", async () => {
-    // Pin down `copilotThreadVisible` for every kind of scope value:
-    //   "global"             → visible to everyone
-    //   "deal:<id>"          → only the owning tenant
-    //   "account:<id>"       → only the owning tenant
+    // Pin down `copilotThreadVisible` AND the SQL tenant filter together,
+    // for every kind of scope value:
+    //   "global"             → visible to all users IN THE SAME TENANT
+    //   ""                   → same as "global" (visible IN THE SAME TENANT)
+    //   "deal:<id>"          → only the owning tenant + in scope
+    //   "account:<id>"       → only the owning tenant + in scope
     //   "tenant:<id>"        → never visible (intentional)
-    //   ""                   → treated like "global" today
     //   "garbage-no-colon"   → invalid → never visible
+    //
+    // Task #55 hardens this: the tenant_id column on copilot_threads now
+    // SQL-filters globals/empties as well, so a second tenant must not see
+    // the other tenant's "global" / "" threads either.
     const aVar = await seedThreadScopeVariants(worldA);
     const bVar = await seedThreadScopeVariants(worldB);
     try {
@@ -459,11 +464,16 @@ describe("tenant isolation — list, report, audit, activity", () => {
       const aIds = ids(a);
       const bIds = ids(b);
 
-      // Globals + empties: cross-tenant visible (current intentional behaviour).
-      assert.ok(aIds.includes(bVar.global), "A should see B's global thread");
-      assert.ok(aIds.includes(bVar.empty), "A should see B's empty-scope thread");
-      assert.ok(bIds.includes(aVar.global), "B should see A's global thread");
-      assert.ok(bIds.includes(aVar.empty), "B should see A's empty-scope thread");
+      // Globals + empties: now strictly tenant-scoped. Each tenant sees
+      // ONLY its own globals/empties.
+      assert.ok(aIds.includes(aVar.global), "A missing own global thread");
+      assert.ok(aIds.includes(aVar.empty), "A missing own empty-scope thread");
+      assert.ok(bIds.includes(bVar.global), "B missing own global thread");
+      assert.ok(bIds.includes(bVar.empty), "B missing own empty-scope thread");
+      assert.ok(!aIds.includes(bVar.global), "A leaked B global thread");
+      assert.ok(!aIds.includes(bVar.empty), "A leaked B empty-scope thread");
+      assert.ok(!bIds.includes(aVar.global), "B leaked A global thread");
+      assert.ok(!bIds.includes(aVar.empty), "B leaked A empty-scope thread");
 
       // deal/account variants: must NOT leak across tenants.
       assert.ok(!aIds.includes(bVar.deal), `A leaked B deal-scoped thread`);
@@ -482,6 +492,60 @@ describe("tenant isolation — list, report, audit, activity", () => {
       }
     } finally {
       await cleanupThreadScopeVariants(aVar, bVar);
+    }
+  });
+
+  it("GET /accounts — each tenant only sees own accounts", async () => {
+    await assertListIsolated("/api/accounts", worldA.accountId, worldB.accountId);
+  });
+
+  it("GET /contacts — each tenant only sees own contacts (via account scope)", async () => {
+    // Seed one contact per tenant against each tenant's account so the
+    // /contacts list endpoint has rows to filter. Contacts have no
+    // tenant_id of their own — they piggyback on accountId scope, which
+    // resolves to deal→company→tenant.
+    const aContact = `${worldA.runId}_ct`;
+    const bContact = `${worldB.runId}_ct`;
+    await db.insert(contactsTable).values({
+      id: aContact, accountId: worldA.accountId,
+      name: `Test Contact A`, email: `${aContact}@example.test`,
+      role: "buyer",
+    });
+    await db.insert(contactsTable).values({
+      id: bContact, accountId: worldB.accountId,
+      name: `Test Contact B`, email: `${bContact}@example.test`,
+      role: "buyer",
+    });
+    try {
+      await assertListIsolated("/api/contacts", aContact, bContact);
+    } finally {
+      await db.delete(contactsTable).where(inArray(contactsTable.id, [aContact, bContact]));
+    }
+  });
+
+  it("GET /gdpr/subjects — each tenant only sees own subjects (via account scope)", async () => {
+    // /gdpr/subjects searches contacts by name/email and is scoped through
+    // allowedAccountIds. We seed one contact per tenant with a name that
+    // matches q="GDPR" and ensure each tenant only sees its own.
+    const aContact = `${worldA.runId}_gd`;
+    const bContact = `${worldB.runId}_gd`;
+    await db.insert(contactsTable).values({
+      id: aContact, accountId: worldA.accountId,
+      name: `GDPRSubjectA`, email: `${aContact}@example.test`,
+      role: "buyer",
+    });
+    await db.insert(contactsTable).values({
+      id: bContact, accountId: worldB.accountId,
+      name: `GDPRSubjectB`, email: `${bContact}@example.test`,
+      role: "buyer",
+    });
+    try {
+      const path = `/api/gdpr/subjects?subjectType=contact&q=GDPR`;
+      const extract = (body: unknown) =>
+        ((body as { results?: IdEntry[] }).results ?? []).map((r) => r.id);
+      await assertListIsolated(path, aContact, bContact, extract);
+    } finally {
+      await db.delete(contactsTable).where(inArray(contactsTable.id, [aContact, bContact]));
     }
   });
 

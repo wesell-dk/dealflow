@@ -249,6 +249,7 @@ export async function createTestWorld(label: string): Promise<TestWorld> {
   // (triggerType, triggerEntityRef) does not collide between worlds.
   await db.insert(copilotInsightsTable).values({
     id: copilotInsightId,
+    tenantId,
     kind: "risk",
     title: `Insight ${label}`,
     summary: `Tenant ${label} insight`,
@@ -260,6 +261,7 @@ export async function createTestWorld(label: string): Promise<TestWorld> {
   // dealId-scoped thread — only users with access to the deal must see it.
   await db.insert(copilotThreadsTable).values({
     id: copilotThreadId,
+    tenantId,
     title: `Thread ${label}`,
     scope: `deal:${dealId}`,
     lastMessage: `Hello from ${label}`,
@@ -414,6 +416,7 @@ export async function seedThreadScopeVariants(
   for (const r of rows) {
     await db.insert(copilotThreadsTable).values({
       id: r.id,
+      tenantId: world.tenantId,
       title: `Variant ${r.scope || "empty"} (${world.runId})`,
       scope: r.scope,
       lastMessage: "test",
