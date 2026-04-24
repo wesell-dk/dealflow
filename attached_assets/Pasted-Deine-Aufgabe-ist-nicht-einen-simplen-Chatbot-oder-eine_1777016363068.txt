@@ -1,0 +1,466 @@
+Deine Aufgabe ist nicht, einen simplen Chatbot oder eine lose AI-Funktion hinzuzufügen, sondern eine tief integrierte, produktionsreife, AI-native Erweiterung für DealFlow.One zu planen und umzusetzen.
+
+WICHTIG:
+- Arbeite repo-first und codebase-first.
+- Untersuche zuerst die bestehende Codebasis, Architektur, Datenmodelle, Frontend-Struktur, Backend-Struktur, Auth-/Rechtesystem, API-Layer, Datenbankzugriff, Queue-/Job-Systeme, Dokumentenerzeugung, vorhandene Integrationen und UI-Muster.
+- Erfinde keine bestehenden Tabellen-, Feld-, API-, Service-, Komponenten- oder Dateinamen. Nutze ausschließlich tatsächliche Namen und Strukturen aus dem Repository.
+- Wenn etwas fehlt, schlage eine saubere Erweiterung vor, die zur existierenden Architektur passt.
+- Baue keine parallele Zweit-App und kein vom Produkt getrenntes “AI-Spielzeug”. Die Lösung muss sich organisch in DealFlow.One einfügen.
+- Wenn du Annahmen treffen musst, dann so klein, reversibel und transparent wie möglich.
+- Wenn der Stack schon klar ist, bleibe stack-konsistent. Wenn bestimmte Infrastruktur fehlt, ergänze sie minimal-invasiv.
+- Halte die UX einfach, klar, geschäftstauglich und stark verkaufsorientiert.
+
+PRODUKTVISION
+DealFlow.One ist eine kommerzielle Multi-Tenant-Plattform für:
+- Angebote / Quotes
+- Preislogik / Pricing
+- Freigaben / Approvals
+- Vertragsgenerierung
+- Vertragsanalyse
+- Verhandlungen / Counterproposals
+- E-Signatur / Abschluss
+- Auftragsbestätigung / Handover
+- Preisänderungsschreiben / Price Increase Cases
+- Reporting / Sales-Performance
+- einen wirklich integrierten AI Copilot
+
+Die Plattform ist NICHT primär ERP-zentriert. Der Schwerpunkt liegt auf:
+- einfacher Bedienung
+- starkem Sales-Fokus
+- hoher Automatisierung
+- klarer Übersicht über Deals, Kunden, Firmen und Marken
+- Governance, Versionierung und Nachvollziehbarkeit
+- echter AI-Unterstützung entlang des gesamten Commercial Flows
+
+GESCHÄFTLICHER KONTEXT / FACHLICHE LEITPLANKEN
+Die Plattform muss folgende Struktur und Rechte sauber unterstützen:
+- Multi-Tenant-fähig
+- Innerhalb eines Tenants gibt es mehrere Companies
+- Innerhalb einer Company gibt es mehrere Brands / Brandings
+- Nutzerrechte müssen granular auf Scope-Ebene funktionieren:
+  - Zugriff auf alle Companies und Brands eines Tenants
+  - Zugriff nur auf bestimmte Companies
+  - Zugriff nur auf bestimmte Brands
+- Ein Tenant Admin verwaltet diese Sichtbarkeiten und Rechte
+- Die Datenbank und die gesamte Logik müssen von Anfang an für diese Hierarchie designt sein
+- DSGVO/GDPR ist Pflicht
+- Auditierbarkeit ist Pflicht
+- Versionierung ist Pflicht
+- Sales Performance muss messbar sein
+- Die AI muss nicht nur Text generieren, sondern Themen wirklich orchestrieren
+- Vertragsbausteine sollen soft / standard / hard Varianten unterstützen
+- Preisänderungsschreiben inklusive Reaktion, Ablehnung und Gegenvorschlag sollen unterstützt werden
+- Es soll eine API für Tenants geben, mit der sie Preispositionen und die aktuell gültige akzeptierte Angebotslage abfragen können
+- Angebot, Vertrag, Verhandlung, Freigabe und Signatur müssen fachlich miteinander verknüpft sein
+
+DEIN ZIEL
+Baue eine möglichst stark AI-unterstützte Integration in DealFlow.One, die nicht oberflächlich ist, sondern das Kernprodukt verbessert.
+
+Die AI soll insbesondere in diese Bereiche eingebaut werden:
+1. Deal Summary und Deal Intelligence
+2. Pricing Intelligence
+3. Approval Readiness und Approval Support
+4. intelligente Vertragserstellung
+5. Vertragsanalyse / Contract Intelligence
+6. Redline- / Gegenpapier-Analyse
+7. Negotiation / Counterproposal Support
+8. Price Increase Support
+9. Reporting- und Management-Zusammenfassungen
+10. tenant-, company- und brand-scope-sensitive AI-Ausgaben
+
+ARBEITSWEISE
+Gehe in folgender Reihenfolge vor:
+
+PHASE 0 – REPOSITORY AUDIT
+Untersuche zuerst die bestehende Anwendung und liefere eine konkrete Analyse:
+- Welche Tech-Stacks werden verwendet?
+- Wie ist Frontend und Backend organisiert?
+- Welche Datenmodelle / ORM / Schema-Definitionen existieren?
+- Wie ist Authentifizierung und Autorisierung gelöst?
+- Gibt es bereits Rollen / Scope-Modelle?
+- Gibt es bereits Deal-, Quote-, Contract-, Pricing- oder Approval-Objekte?
+- Gibt es Dokumentenerzeugung, Dateispeicherung, PDF-/DOCX-Handling, Signaturintegration oder E-Mail-Logik?
+- Gibt es bereits AI- oder LLM-Integrationen?
+- Gibt es Queue- / Worker- / Background-Mechanismen?
+- Welche Teile der App sind am besten geeignet, um AI-fähig erweitert zu werden?
+- Welche Lücken bestehen zur gewünschten Zielarchitektur?
+
+WICHTIG:
+Nenne in deiner Analyse echte Dateinamen, Module, Services, Routen, Komponenten, Schemas und Datenobjekte nur dann, wenn du sie tatsächlich im Repository gefunden hast.
+
+Danach:
+- Erstelle einen klaren, umsetzbaren Implementierungsplan
+- Priorisiere Phase 1 / Phase 2 / Phase 3
+- Starte dann direkt mit der Umsetzung in kleinen, sicheren, nachvollziehbaren Schritten
+- Warte nicht unnötig auf Rückfragen, außer bei wirklich blockierenden Architekturentscheidungen
+
+ZIELARCHITEKTUR DER AI-INTEGRATION
+Baue eine AI-Architektur, die aus folgenden logischen Schichten besteht. Nutze die bestehende App-Struktur und erweitere sie sauber.
+
+1. AI Provider Layer
+- Verwende den bereits vorhandenen AI-/LLM-Provider, falls einer existiert
+- Falls noch keiner existiert, führe einen provider-unabhängigen Adapter ein
+- Konfiguriere alles über Environment Variablen
+- Sorge für klare Trennung zwischen Provider-Zugriff, Prompting, Fachlogik und UI
+- Kein hart verdrahteter Monolith
+
+2. AI Orchestration Layer
+Baue eine zentrale Orchestrierung für AI-Anfragen:
+- kontextbewusste Zusammenstellung relevanter Daten
+- Scope-Filterung nach Tenant / Company / Brand / User-Recht
+- Prompt-Templates bzw. Prompt Registry
+- strukturierte Ausgaben für fachliche Entscheidungen
+- Validierung von AI-Ausgaben
+- Logging / Audit / Traceability
+- Fehlerbehandlung und Fallback-Verhalten
+- Kosten- und Latenzbewusstsein
+
+3. Context Assembly Layer
+Baue eine saubere Kontextaufbereitung je Use Case:
+- Deal-Kontext
+- Kunde / Account
+- Angebotsversion
+- Preispositionen
+- Vertragsversion
+- Freigabefall
+- Verhandlungsrunde
+- Price Increase Fall
+- Reporting-Kontext
+- Tenant / Company / Brand Scope
+
+WICHTIG:
+Es darf niemals Kontext aus nicht berechtigten Companies oder Brands in die AI gelangen. Rechte gelten auch für AI.
+
+4. Structured Output Layer
+Wo AI-Output fachliche Folgen hat, arbeite nicht nur mit Freitext, sondern mit strukturierten Ergebnissen:
+- Risikoindikatoren
+- Abweichungserkennung
+- erkannte Klauselthemen
+- Freigabeempfehlung
+- erkannte Verhandlungspunkte
+- erkannte Preisänderungsthemen
+- extrahierte Pflichten / Fristen
+- Summary + strukturierte Actions
+
+5. Action Layer
+Die AI soll nicht isoliert antworten, sondern kontrollierte nächste Schritte ermöglichen:
+- Aufgabe erzeugen
+- Vertragsreview öffnen
+- Genehmigung vorbereiten
+- neue Angebotsversion anlegen
+- Gegenvorschlag erfassen
+- Vertragsvergleich starten
+- Price Increase Follow-up erzeugen
+- Management Summary exportieren
+Aber:
+- AI darf nicht unkontrolliert verbindliche Fachentscheidungen im Hintergrund treffen
+- AI ist Assistenz, nicht unüberwachter Entscheider
+
+KERNFUNKTION 1 – AI COPILOT ALS ORCHESTRIERTE FACHKOMPONENTE
+Baue keinen generischen Chat alleinstehend.
+Der AI Copilot muss ein echter Arbeitsmodus der App sein.
+
+Der Copilot soll mindestens folgende Modi unterstützen:
+- Deal Summary Mode
+- Negotiation Support Mode
+- Pricing Review Mode
+- Approval Readiness Mode
+- Contract Drafting Mode
+- Contract Risk Review Mode
+- External Paper / Redline Analysis Mode
+- Price Increase Support Mode
+- Executive Briefing Mode
+- Commercial Health Check Mode
+
+Jeder Modus soll:
+- klaren Eingabekontext haben
+- scope-sensitiv sein
+- strukturierte und erklärbare Ergebnisse liefern
+- nachvollziehbare Quellen / Bezugspunkte haben
+- in nächste Aktionen überführbar sein
+
+KERNFUNKTION 2 – INTELLIGENTE VERTRAGSERSTELLUNG
+Baue eine intelligente Vertragslogik ein, die aus strukturierten Bausteinen statt nur aus statischen Templates besteht.
+
+Die Vertragserstellung soll auf folgenden Konzepten basieren:
+- Vertragsfamilien
+- Vertrags-Playbooks
+- Klauselbibliothek / Clause Library
+- Klauselvarianten
+- soft / standard / hard Ausprägungen
+- Pflichtbausteine
+- optionale Bausteine
+- Abhängigkeiten zwischen Klauseln
+- Regeln, wann welche Variante erlaubt, empfohlen oder freigabepflichtig ist
+- Deal- und Pricing-Datenbindung
+- Versionierung
+
+Die Vertragslogik soll ermöglichen:
+- automatische Vorbelegung basierend auf Deal, Angebot, Laufzeit, Preis, Brand, Company und Kundentyp
+- Erzeugung eines ersten Vertragsentwurfs aus dem kommerziellen Status
+- Kennzeichnung von Standard vs. Abweichung
+- Erkennung fehlender Pflichtinhalte
+- sprachliche / markenspezifische Variationen
+- Änderung einzelner Klauselblöcke ohne den Gesamtvertrag unkontrolliert zu zerstören
+- Nachvollziehbarkeit, welche Vertragsversion fachlich maßgeblich ist
+
+WICHTIG:
+Verträge dürfen nicht nur als Datei modelliert werden, sondern als Kombination aus:
+- Dokument
+- strukturierter Vertragsdatenebene
+- Klauselblöcken
+- Varianten
+- Risiko- und Abweichungssignalen
+- Verknüpfungen zu Deal, Quote, Approval und Signatur
+
+KERNFUNKTION 3 – INTELLIGENTE VERTRAGSANALYSE / CONTRACT INTELLIGENCE
+Baue eine tiefe Vertragsanalyse ein.
+
+Diese soll mindestens leisten:
+- Erkennen von Abweichungen vom internen Standard
+- Vergleich von Vertragsversionen
+- Vergleich interner Zielversion mit Kunden-Gegenpapier
+- Erkennen von Redlines / Änderungswünschen
+- Klassifikation nach Klauselkategorie
+- Risikosignale pro Klausel
+- Gesamt-Risikoscore pro Vertrag
+- Erkennung von genehmigungsrelevanten Änderungen
+- Extraktion von Fristen, Renewal-Punkten, Kündigungsfristen, Preisanpassungsklauseln und Pflichten
+- verständliche AI-Zusammenfassungen für Sales, Legal und Management
+- Hervorhebung von Widersprüchen zwischen Angebot, Pricing und Vertrag
+
+Baue Contract Intelligence so, dass sie sowohl während der Vertragserstellung als auch beim Import / Review externer Dokumente funktioniert.
+
+KERNFUNKTION 4 – EXTERNAL PAPER / REDLINE ANALYSIS
+Wenn Kunden externe Vertragsdokumente, Redlines oder Gegenentwürfe liefern, soll die App diese intelligent verarbeiten können.
+
+Baue einen Prozess, der:
+- Dokumente analysiert
+- Text / Struktur / Klauseln segmentiert
+- gegen interne Playbooks mappt
+- Abweichungen markiert
+- unbekannte oder ungewöhnliche Klauseln identifiziert
+- Risiko bewertet
+- mögliche interne Review-Pfade ableitet
+- eine Executive Summary erzeugt
+- in den Negotiation Workspace und Approval Hub überleitet
+
+Wenn im Repo bereits Dokumentenparser, Upload-Handling oder Dateispeicher existieren, nutze diese. Wenn nicht, ergänze die fehlenden Bausteine möglichst modular.
+
+KERNFUNKTION 5 – NEGOTIATION SUPPORT
+Verhandlung soll nicht nur aus Kommentaren bestehen, sondern strukturiert unterstützt werden.
+
+Baue AI-Unterstützung für:
+- Zusammenfassung von Kundenreaktionen
+- Erkennung von Preis-, Vertrags- und Mischthemen
+- Extraktion von Gegenvorschlägen
+- Einschätzung von Auswirkungen auf Preis, Marge, Risiko und Freigaben
+- Vorschläge für nächste Schritte
+- Antwortentwürfe intern / extern
+- Verknüpfung zu neuer Angebotsversion oder Vertragsversion
+- strukturierte Erfassung von Verhandlungsrunden
+
+KERNFUNKTION 6 – PRICING & APPROVAL INTELLIGENCE
+Baue AI-Unterstützung für Pricing und Freigaben.
+
+Pricing Intelligence soll:
+- Preisquellen und Preislogik erklären
+- Abweichungen zum Standardpreis sichtbar machen
+- mögliche Policy-Verletzungen erkennen
+- Margen- und Auswirkungs-Signale liefern
+- Relevanz für Genehmigungen erkennen
+- auf aktuell gültige Angebotsstände zugreifen
+
+Approval Intelligence soll:
+- bewerten, ob ein Fall entscheidungsreif ist
+- fehlende Informationen sichtbar machen
+- Abweichungen kurz und klar erklären
+- Approvern eine prägnante Zusammenfassung liefern
+- strukturierte Begründungen / Entscheidungsgrundlagen liefern
+- Genehmigungen auf Ausnahmefälle fokussieren
+
+KERNFUNKTION 7 – PRICE INCREASE SUPPORT
+Baue für Bestandskunden-Preisänderungen AI-Unterstützung ein.
+
+Die AI soll:
+- betroffene Preispositionen und Vertragsbezug erklären
+- Klauseln zur Preisanpassung identifizieren
+- Schreiben vorbereiten helfen
+- Reaktionen der Kunden klassifizieren
+- Gegenvorschläge erkennen
+- Churn- / Risiko-Signale ableiten
+- Folgeaktionen empfehlen
+- Daten an Negotiation, Approval oder Amendment-Prozesse weiterreichen
+
+KERNFUNKTION 8 – REPORTING & MANAGEMENT SUMMARIES
+Baue AI-unterstützte Management-Zusammenfassungen und Performance-Erklärungen.
+
+Die AI soll:
+- KPI-Ausreißer in Klartext erklären
+- Engpässe im Prozess identifizieren
+- Zusammenfassungen je Tenant / Company / Brand / Team erstellen
+- Gründe für lange Deal-Zyklen und Vertragsverzögerungen sichtbar machen
+- häufige Klauselabweichungen, Rabattmuster oder Verhandlungsprobleme clustern
+- Weekly / Monthly Business Review Summaries unterstützen
+
+MULTI-TENANCY, SCOPE UND RECHTE
+Dieses Thema ist kritisch und muss konsequent umgesetzt werden.
+
+Berücksichtige im Datenmodell und in allen Services:
+- Tenant
+- Company
+- Brand
+- User
+- Membership / Role / Scope
+- Sichtbarkeit und Zugriffsrechte auf Daten, AI-Kontext und Aktionen
+
+Die AI darf nur Inhalte sehen und zusammenfassen, die im Scope des Nutzers liegen.
+Berücksichtige:
+- Tenant-weite Rollen
+- Company-spezifische Rollen
+- Brand-spezifische Rollen
+- Admin-Rechte
+- Review-/Approval-Rollen
+- least-privilege Prinzip
+
+Wenn das bestehende Rechtesystem unzureichend ist, erweitere es sauber und minimal-invasiv.
+
+API-ANFORDERUNG
+Baue oder plane eine tenantfähige API, über die berechtigte Clients mindestens folgende Fälle abfragen können:
+- Preispositionen
+- die aktuell gültige und akzeptierte Angebotslage
+- idealerweise scope-gefiltert nach Tenant / Company / Brand
+
+Dabei beachten:
+- saubere Authentifizierung
+- Autorisierung
+- Audit Logging
+- stabile Response-Strukturen
+- keine Offenlegung nicht berechtigter Daten
+- klare Trennung zwischen internem Datenmodell und API-Modell, falls sinnvoll
+
+DATENMODELL / DOMAIN-MODEL-ERWEITERUNG
+Leite aus der realen Codebasis ab, welche Domain-Objekte bereits existieren und welche ergänzt werden müssen.
+
+Für die Zielarchitektur sollten fachlich folgende Konzepte unterstützt werden:
+- Deal
+- Account / Customer
+- Quote / Quote Version
+- Pricing Position / Preislogik
+- Approval Case
+- Contract Family
+- Contract Playbook
+- Clause Block
+- Clause Variant
+- Contract Version
+- Redline / Counterproposal
+- Contract Deviation
+- Contract Risk Signal
+- Contract Obligation / Deadline
+- Signature Package
+- Order Confirmation / Handover
+- Price Increase Case
+- AI Summary / AI Analysis Result
+- Audit Event
+
+WICHTIG:
+Nutze im Code nur tatsächliche Namen aus dem Repository oder führe neue Bezeichnungen konsistent zur bestehenden Namenskonvention ein.
+
+UX / PRODUKTDESIGN-PRINZIPIEN
+Die AI muss sich anfühlen wie ein integrierter Teil des Produkts, nicht wie ein fremdes Tool.
+
+Achte auf:
+- einfache Bedienung
+- sehr klare Statusanzeige
+- starke Kontextklarheit
+- klare nächste Schritte
+- keine überladene Oberfläche
+- erklärbare Ergebnisse statt “magischer” Blackbox
+- Rollen- und scopeseitige Transparenz
+- produktive Nutzbarkeit für Sales, RevOps, Legal und Management
+
+Wenn bestehende Screens vorhanden sind, integriere AI gezielt in:
+- Dashboard / Home
+- Deal Room
+- Quote Studio
+- Pricing Workspace
+- Approval Hub
+- Contract Workspace
+- Negotiation Workspace
+- Signature Center
+- Order Confirmation & Handover
+- Price Increase Center
+- Reporting / Performance Cockpit
+- Tenant Admin
+
+Wenn einzelne Screens noch fehlen, schaffe zunächst tragfähige Kernbausteine im bestehenden UI-System.
+
+DSGVO / GDPR / COMPLIANCE / SECURITY
+Setze AI und Datenverarbeitung mit DSGVO/GDPR-by-Design um.
+
+Berücksichtige:
+- Datenminimierung
+- Scope- und Rollenfilterung
+- Audit Logs
+- Nachvollziehbarkeit von AI-gestützten Entscheidungen
+- Kennzeichnung AI-generierter Inhalte
+- Trennung zwischen Quelltext, strukturierten Daten und AI-Zusammenfassungen
+- Möglichkeit zur Löschung / Retention entsprechend existierender Produktlogik
+- keine unkontrollierte Datenvermischung über Tenants hinweg
+- sichere Behandlung hochsensibler Vertrags- und Kundendaten
+
+Wenn nötig, dokumentiere offene Compliance-Punkte gesondert.
+
+ROBUSTHEIT / OPERATIVER BETRIEB
+Die Lösung muss produktionsnah gedacht sein.
+
+Berücksichtige:
+- sauberes Error Handling
+- Timeouts / Retries falls sinnvoll
+- Fallback-Verhalten bei AI-Ausfall
+- Kostenkontrolle
+- Logging
+- Observability
+- nachvollziehbare Telemetrie
+- Rate Limits / Missbrauchsschutz falls sinnvoll
+- idempotente Verarbeitung bei asynchronen Analysen, wenn notwendig
+
+TESTS UND QUALITÄT
+Erweitere die Codebasis mit sinnvollen Tests, passend zum Stack.
+
+Teste mindestens:
+- Scope- und Rechtegrenzen
+- Tenant / Company / Brand Isolation
+- AI-Kontextfilterung
+- strukturierte AI-Ausgabevalidierung
+- Versionierung von Vertrag / Angebot
+- Erkennung von Abweichungen
+- Freigabetrigger
+- Negotiation / Redline Flows
+- API-Autorisierung
+- zentrale UI- und Servicepfade
+
+Wenn E2E-Tests im Repo etabliert sind, erweitere sie. Wenn nicht, ergänze mindestens belastbare Unit- und Integrationstests.
+
+DELIVERABLES
+Liefere am Ende nicht nur Code, sondern auch eine klare Zusammenfassung:
+1. Was du in der bestehenden Codebasis gefunden hast
+2. Welche Architektur du gewählt hast
+3. Welche Dateien / Module / Routen / Services / Komponenten geändert oder ergänzt wurden
+4. Welche Datenmodell-Änderungen / Migrationen nötig waren
+5. Welche Environment Variablen / Secrets benötigt werden
+6. Welche AI Use Cases jetzt unterstützt werden
+7. Welche Grenzen / offene Punkte / sinnvollen nächsten Schritte es noch gibt
+
+DONE-KRITERIEN
+Die Aufgabe ist erst dann wirklich gut gelöst, wenn:
+- AI tief in DealFlow.One integriert ist statt nur als Chat
+- Rechte und Scopes sauber beachtet werden
+- Vertragserstellung intelligent, modular und regelbasiert funktioniert
+- Vertragsanalyse strukturierte, nachvollziehbare Ergebnisse liefert
+- Redlines / Gegenpapiere sinnvoll analysiert werden können
+- Pricing, Approval und Negotiation AI-unterstützt sind
+- Management-Zusammenfassungen und operative Empfehlungen möglich sind
+- die Lösung konsistent zur bestehenden Codebasis passt
+- die UX einfach und geschäftstauglich bleibt
+- die Lösung produktionsnah, auditierbar und erweiterbar ist
