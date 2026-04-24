@@ -1,0 +1,8 @@
+uploads = []
+generated = []
+
+[[outputs]]
+id = "h5siPziMoytsdxTmM7JqA"
+uri = "file://docs/konzept/03_vertragswesen.md"
+type = "text"
+title = "Best-in-Class Vertragswesen — Konzeption für DealFlow.One"

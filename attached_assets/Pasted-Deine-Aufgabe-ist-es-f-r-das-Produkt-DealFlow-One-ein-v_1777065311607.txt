@@ -1,0 +1,512 @@
+Deine Aufgabe ist es, für das Produkt „DealFlow.One“ ein vollständig durchdachtes, best-in-class Vertragswesen zu konzipieren, das tief in die gesamte Commercial Engine integriert ist.
+
+WICHTIG:
+Es geht nicht um ein isoliertes DMS, nicht um ein einfaches PDF-/Word-Vertragsmodul und nicht um einen reinen eSign-Workflow. Es geht um ein modernes, AI-natives, multi-tenant-fähiges, sales-orientiertes Contract Lifecycle Management innerhalb einer Deal-, Pricing-, Approval- und Negotiation-Plattform.
+
+Das Zielbild ist ein System, in dem Verträge als strukturierte Business-Objekte behandelt werden und nicht bloß als Dateien. Der Vertrag ist der kommerzielle Wahrheitsträger zwischen Deal, Angebot, Preislogik, Freigaben, Verhandlung, Signatur, Umsetzung, Nachträgen, Preisänderungen, Verlängerungen und Kündigungsfenstern.
+
+Bitte liefere eine extrem detaillierte, produktionsnahe, in sich konsistente Gesamtkonzeption auf Deutsch.
+
+PRODUKTKONTEXT
+
+DealFlow.One ist eine Plattform für:
+- Angebotsmanagement
+- Freigabeprozesse
+- Preislogik
+- Order Confirmations
+- Vertragsmanagement
+- Verhandlungen und Counterproposals
+- Preisänderungsschreiben
+- Sales Performance Management
+- AI Copilot und Orchestrierung
+
+DealFlow.One ist bewusst kein ERP. Es soll extrem sales-fokussiert, sehr leicht bedienbar, stark automatisiert und in der täglichen Nutzung deutlich klarer und operativer sein als klassische Enterprise-Systeme.
+
+Das Produkt soll die Stärken von HubSpot, Salesforce, Pipedrive + PandaDoc und Zoho vereinen, aber mit deutlich weniger Komplexität und deutlich besserer Integration zwischen Deal, Pricing, Approvals und Contracting.
+
+BESONDERE RAHMENBEDINGUNGEN
+
+1. Multi-Tenancy ist Pflicht.
+2. Innerhalb eines Tenants gibt es mehrere Companies.
+3. Innerhalb einer Company gibt es mehrere Brands bzw. Brandings.
+4. Das Rechte- und Sichtbarkeitsmodell muss von Anfang an dafür ausgelegt sein.
+5. Ein Tenant Admin muss granular steuern können, ob ein User:
+   - alles im Tenant sieht,
+   - nur bestimmte Companies sieht,
+   - nur bestimmte Brands sieht,
+   - nur bestimmte Funktionen ausführen darf,
+   - nur bestimmte Vertragstypen bearbeiten darf,
+   - nur lesen, vorschlagen, verhandeln, freigeben oder signieren darf.
+6. Die Datenbank und das Domänenmodell müssen das nativ unterstützen.
+7. DSGVO/GDPR ist zwingend.
+8. Sales-Leistung muss messbar sein.
+9. Die AI Copilot-Komponente muss tief integriert sein und Themen wirklich orchestrieren.
+10. Verträge sollen über Bausteine gebaut werden können, mit Varianten je Baustein wie soft / standard / hard.
+11. Versionierung, Gegenangebote, Ablehnungen, Preisänderungsschreiben und Nachträge sind zentrale Bestandteile.
+12. Es soll eine API auf Tenant-Ebene geben, über die z. B. Preispositionen und aktuell gültige bzw. akzeptierte Angebote abgefragt werden können.
+
+ZIELBILD FÜR DAS VERTRAGSWESEN
+
+Das Vertragswesen von DealFlow.One soll best in class sein und folgende Grundidee umsetzen:
+
+- Verträge sind strukturierte Geschäftsobjekte.
+- Ein Vertrag ist direkt mit Deal, Quote, Preislogik, Approval-Historie, Verhandlungsstand und Signaturstatus verbunden.
+- Der Vertrag wird regelbasiert aus Bausteinen, Playbooks, Daten und Policies erzeugt.
+- Abweichungen vom Standard werden automatisch erkannt, bewertet und gesteuert.
+- Verhandlungen werden nicht nur dokumentiert, sondern operativ geführt.
+- Gegenpapiere von Kunden werden intelligent analysiert.
+- Der Vertrag bleibt auch nach der Signatur aktiv und steuerbar.
+- Preisänderungen, Renewals, Amendments, Kündigungsfenster und Pflichten werden weiterverfolgt.
+- Die KI ist kein Add-on-Chat, sondern eine eingebettete Entscheidungs- und Orchestrierungsschicht.
+
+DEINE AUFGABE
+
+Entwickle ein vollständiges Zielbild für ein best-in-class Vertragswesen in DealFlow.One. Denke dabei nicht nur aus Legal-Sicht, sondern aus der Kombination von:
+- Sales
+- Revenue Operations
+- Pricing
+- Finance
+- Legal
+- Datenschutz / Compliance
+- Management
+- Customer Success / Handover
+- Plattform-Administration
+
+Liefere keine oberflächliche Beschreibung, sondern eine tiefgehende Konzeption mit klaren fachlichen Modellen, Workflows, Rollen, Entscheidungslogiken, AI-Fähigkeiten, UX-Prinzipien und Governance-Mechanismen.
+
+BITTE STRUKTURIERE DEINE AUSGABE IN DEN FOLGENDEN KAPITELN
+
+1. Executive Summary
+Beschreibe in wenigen, aber präzisen Absätzen:
+- was „best in class Vertragswesen“ im Kontext von DealFlow.One bedeutet,
+- warum Verträge als strukturierte Business-Objekte modelliert werden müssen,
+- wie sich DealFlow.One damit von klassischen CLM-, CRM- und DMS-Ansätzen unterscheidet.
+
+2. Designprinzipien des Vertragswesens
+Definiere die übergeordneten Leitprinzipien, z. B.:
+- deal-native
+- quote-native
+- pricing-native
+- approval-native
+- negotiation-native
+- AI-native
+- lifecycle-native
+- governance-native
+- multi-entity-native
+- audit-native
+- user-friendly by default
+- automation first, but controllable
+- simple in operation, powerful in depth
+
+Erläutere jedes Prinzip ausführlich und konkret.
+
+3. Fachliches Zielbild des Vertragswesens
+Beschreibe das Vertragswesen als vollständige Domäne:
+- Vertragserstellung
+- Vertragsprüfung
+- Verhandlung
+- Freigaben
+- Gegenpapieranalyse
+- Signatur
+- Ablage
+- Pflichtenmanagement
+- Amendments
+- Renewals
+- Preisänderungen
+- Kündigungsfenster
+- Reporting und Performance
+- API-Zugriff
+- tenantweite Governance
+
+4. Fachliches Objektmodell / Domain Model
+Entwirf ein detailliertes Geschäftsobjektmodell mit den wichtigsten Entitäten und ihren Beziehungen. Mindestens zu berücksichtigen sind:
+- Tenant
+- Company
+- Brand
+- User
+- Role
+- Permission
+- Customer Account
+- Contact
+- Deal
+- Deal Stage
+- Quote
+- Quote Version
+- Price Position
+- Price Book / Price List
+- Discount Rule
+- Approval Case
+- Approval Decision
+- Contract
+- Contract Version
+- Contract Type
+- Contract Playbook
+- Clause
+- Clause Variant
+- Clause Family
+- Clause Deviation
+- Negotiation Case
+- Counterproposal
+- External Paper
+- Risk Finding
+- Signature Package
+- Signer
+- Order Confirmation
+- Amendment
+- Renewal Opportunity
+- Price Increase Case
+- Obligation
+- Milestone
+- Audit Event
+- AI Recommendation
+- AI Explanation
+- API Access Scope
+- Data Retention Rule
+- Consent / Privacy-Relevant Event, falls fachlich erforderlich
+
+Beschreibe für jedes Objekt:
+- seinen fachlichen Zweck,
+- die wichtigsten Attribute,
+- Beziehungen zu anderen Objekten,
+- typische Zustände,
+- typische Lebenszyklusübergänge.
+
+WICHTIG:
+Das Modell muss von Anfang an tenant-/company-/brand-fähig und rechtefähig sein.
+
+5. Rechte-, Rollen- und Sichtbarkeitsmodell
+Entwirf ein detailliertes Berechtigungsmodell für das Vertragswesen. Berücksichtige:
+- Tenant Admin
+- Company Admin
+- Brand Admin
+- Sales Rep
+- Sales Manager
+- Legal
+- Finance
+- Approver
+- Executive
+- Customer Success
+- Read-only Auditor / Compliance / DPO
+- externe Mitwirkende, falls sinnvoll
+
+Erkläre:
+- Sichtbarkeiten auf Tenant-, Company- und Brand-Ebene
+- Rechte auf Objektebene
+- Rechte auf Aktionen
+- Rechte auf Klauselbearbeitung
+- Rechte auf Verhandlung
+- Rechte auf Freigabe
+- Rechte auf Signaturfreigabe
+- Rechte auf Export und API-Nutzung
+- Rechte auf Einsicht in sensible Klauseln oder DSGVO-relevante Inhalte
+- Delegationen und Stellvertretungen
+- Segregation of Duties
+- Eskalationsrechte
+
+Leite daraus konkrete Governance-Regeln ab.
+
+6. Best-in-Class Vertragserstellung
+Beschreibe im Detail, wie intelligente Vertragserstellung funktionieren soll:
+- Vertrag nicht als freies Word-Dokument, sondern als strukturierte Generierung
+- Nutzung von Templates
+- Nutzung von Vertrags-Playbooks
+- Nutzung von Clause Libraries
+- Soft / Standard / Hard Varianten pro Klauselblock
+- regionale, sprachliche, brandspezifische und kundenspezifische Unterschiede
+- Pflichtklauseln
+- optionale Klauseln
+- gesperrte Klauseln
+- Klauselabhängigkeiten
+- Klauselkompatibilität
+- Fallback-Regeln
+- Eskalationsregeln bei Abweichungen
+
+Beschreibe, wie Daten aus Deal, Quote, Pricing, Kunde, Entity, Brand und Freigaben automatisch in Verträge einfließen.
+
+7. Deviation- und Policy-Engine
+Beschreibe eine leistungsfähige Regel- und Governance-Engine für Verträge:
+- welche Abweichungen erkannt werden sollen,
+- wie Abweichungen klassifiziert werden,
+- wann eine Freigabe ausgelöst wird,
+- wie finanzielle, rechtliche, operative und datenschutzrelevante Risiken zusammengeführt werden,
+- wie tenant-, company- oder brand-spezifische Policies greifen.
+
+Beispiele für Regeln:
+- Haftung weicht von Standard ab
+- Zahlungsziel überschreitet Schwelle
+- Preis unter Mindestmarge
+- Auto-Renewal von Standard abweichend
+- Kündigungsfrist verändert
+- DPA / DSGVO-Klauseln verändert
+- nicht erlaubte Clause Variant gewählt
+- Signer nicht autorisiert
+- Brand nutzt unzulässigen Vertragstyp
+
+Zeige, wie diese Regeln im System interpretiert und UX-seitig erklärt werden.
+
+8. Verhandlung und Gegenpapier-Management
+Beschreibe ein best-in-class Negotiation Framework:
+- Verhandlung als eigener Arbeitsbereich
+- Version-zu-Version-Vergleich
+- Redlining
+- Counterproposals
+- Kundenablehnungen
+- Gegenangebote
+- dokumentierte Begründungen
+- Zuordnung offener Punkte an Sales, Legal, Finance
+- Deadlines
+- Eskalationen
+- Wiedervorlagen
+- Verhandlungshistorie
+- Business-Versionen statt nur Dokumentversionen
+
+Beschreibe außerdem die Analyse externer Kundendokumente:
+- Upload und Verarbeitung
+- Erkennung von Klauseln
+- Mapping auf interne Clause Library / Playbooks
+- Erkennung von Abweichungen gegenüber internen Standards
+- Risk-Scoring pro Klausel und pro Vertrag
+- Vorschläge für akzeptieren / ablehnen / alternative Formulierung / eskalieren
+
+9. AI-Native Contract Intelligence
+Entwickle eine tief integrierte AI-Schicht. Sie darf kein oberflächlicher Chat sein, sondern muss direkt in die Objekte, Regeln und Workflows integriert sein.
+
+Beschreibe:
+- Copilot im Deal Room
+- Copilot im Contract Workspace
+- Copilot im Negotiation Workspace
+- Copilot in Approvals
+- Copilot bei Price Increase Cases
+- Copilot für Renewal-Risiken
+- Copilot für Executive Summaries
+
+Die KI soll u. a. können:
+- Verträge in Geschäftssprache zusammenfassen
+- Risiken klauselscharf erklären
+- Abweichungen zum Standard identifizieren
+- empfohlene Klauselvarianten vorschlagen
+- zulässige Alternativen aus Playbooks ziehen
+- Freigabebedarf erklären
+- Verkaufs-, Finanz- und Legal-Sicht zusammenführen
+- offene Punkte extrahieren
+- Gegenpapier und internes Standardpapier vergleichen
+- Inkonsistenzen zwischen Deal, Quote, Pricing, Approval und Vertrag erkennen
+- Preisänderungsschreiben mit Kontext vorbereiten
+- Verhandlungshistorien zusammenfassen
+- Führungskräften Management-Briefings geben
+- scope-sensitive und rights-aware arbeiten, also nur Daten sehen und verwenden, die der User tatsächlich sehen darf
+
+Beschreibe dafür:
+- AI Context Assembly
+- Rechteprüfung vor Kontextbildung
+- strukturierte Outputs statt nur Freitext
+- erklärbare AI-Ergebnisse
+- Confidence / Quality Indikatoren
+- Human-in-the-loop
+- Logging / Auditierbarkeit
+- Guardrails gegen Halluzinationen
+- keine Vermischung von Tenant-Daten
+
+10. Signatur und Abschluss
+Beschreibe den Übergang von Verhandlung zu Abschluss:
+- Signature Package
+- Signierreihenfolge
+- interne und externe Signer
+- Signaturfreigaben
+- Signer-Berechtigungen
+- Signaturstatus
+- Rückläufer
+- Ablehnungen
+- Neuauslösung
+- Abschlussnachweis
+- Übergang zu Order Confirmation / Handover
+
+Der Vertragsabschluss soll nicht nur „Dokument signiert“ bedeuten, sondern:
+- kommerziell bestätigt,
+- operativ freigegeben,
+- nachgelagerte Pflichten aktiviert,
+- relevante Teams informiert,
+- messbar gemacht.
+
+11. Post-Signature Lifecycle Management
+Beschreibe, wie der Vertrag nach Unterschrift weiterlebt:
+- Obligations Management
+- Fristen
+- Milestones
+- Handover
+- Renewals
+- Kündigungsfenster
+- Auto-Renewal-Kontrolle
+- Amendments
+- Supplements
+- Price Increase Cases
+- dokumentierte Ablehnungen oder Gegenangebote des Kunden
+- Portfolio-Überblick aller aktiven Risiken und Fristen
+
+Beschreibe, wie das System aktiv steuert statt passiv zu archivieren.
+
+12. Preisänderungen und kommerzielle Vertragsfortschreibung
+Da Preissteigerungsschreiben explizit wichtig sind, entwerfe einen vollständigen Prozess dafür:
+- Ausgangsbasis im Vertrag und in Preispositionen
+- Prüfung, ob eine Preisänderungsklausel greift
+- Berechnung / fachliche Begründung
+- Generierung eines Preisänderungsschreibens
+- Versandstatus
+- Kundenreaktion
+- Annahme / Ablehnung / Gegenangebot
+- Eskalation
+- Einfluss auf Deal, Vertrag, Pricing und Forecast
+- Nachverfolgung über Versionen
+
+13. Such-, Analyse- und Reporting-Fähigkeiten
+Beschreibe, wie ein best-in-class Vertragswesen messbar und auswertbar wird.
+Mögliche Fragestellungen:
+- durchschnittliche Zeit von Quote zu Signatur
+- durchschnittliche Verhandlungsdauer
+- häufigste Klauselabweichungen
+- häufigste Eskalationsgründe
+- Anteil Soft/Standard/Hard je Klauseltyp
+- Vertragsrisiko nach Company / Brand / Region / Segment
+- Performance von Sales bei Vertragsabschluss
+- Erfolgsquote nach Verhandlungsmuster
+- Preisänderungsannahmequote
+- Renewal-Risiko
+- Anteil Verträge außerhalb Standard
+- Compliance-relevante Abweichungen
+- Pipeline mit hohem Vertragsrisiko
+
+Beschreibe auch, welche Dashboards und Berichte welche Rollen benötigen.
+
+14. API-Zielbild
+Entwirf ein API-Zielbild auf Business-Ebene. Besonders wichtig:
+- API für Tenant-spezifische Preispositionsabfragen
+- API für „aktuell gültiges und akzeptiertes Angebot“
+- API für Vertragsstatus
+- API für Obligationen / Fristen
+- API für Vertragsversionen
+- API für Price Increase Cases
+- API-Sicherheit und Scope-Begrenzung
+- Tenant-, Company- und Brand-Kontext
+- Rechteprüfung
+- Auditierbarkeit
+- Idempotenz, wenn relevant
+- Versionierung der API
+
+Beschreibe auch typische Use Cases von API-Consumers.
+
+15. UX- und Screen-Konzept für das Vertragswesen
+Beschreibe die wichtigsten Screens und Arbeitsbereiche:
+- Deal Room mit Contract Summary
+- Contract Workspace
+- Clause / Playbook Explorer
+- Negotiation & Counterproposal Workspace
+- Approval Hub
+- Signature Center
+- Order Confirmation & Handover Center
+- Price Increase Center
+- Reports & Performance Cockpit
+- Tenant Admin Console
+- Platform Admin Console, falls relevant
+
+Für jeden Screen beschreibe:
+- strategische Rolle
+- Hauptnutzer
+- wichtigste Informationsblöcke
+- primäre Aktionen
+- Zustände / States
+- AI-Unterstützung
+- KPIs / Sichtbarkeit
+- UX-Prinzipien
+- typische Fehlerfälle und Ausnahmefälle
+
+16. DSGVO, Compliance, Sicherheit und Audit
+Beschreibe die regulatorischen und sicherheitsbezogenen Anforderungen:
+- Mandantentrennung
+- fein granulare Zugriffskontrollen
+- Audit Trail
+- Lösch- und Aufbewahrungsregeln
+- datensparsame AI-Kontextbildung
+- Protokollierung kritischer Entscheidungen
+- Schutz sensibler Vertragsdaten
+- Export- und Download-Restriktionen
+- Rechte auf personenbezogene Daten
+- Data Residency / Datenklassifikation, wenn sinnvoll
+- Admin-Audits
+- Revisionsfähigkeit
+
+17. Technische und nicht-funktionale Anforderungen
+Beschreibe Anforderungen an:
+- Skalierbarkeit
+- Performance
+- Änderbarkeit
+- Erweiterbarkeit
+- regelbasierte Konfigurierbarkeit
+- Observability
+- Fehlerrobustheit
+- Testing
+- Migration von Bestandsverträgen
+- Internationalisierung / Mehrsprachigkeit
+- Barrierearmut / Accessibility
+- Suchperformance auf strukturierten Inhalten und Dokumenteninhalten
+- Nachvollziehbarkeit automatischer Entscheidungen
+
+18. Was „best in class“ konkret bedeutet
+Definiere abschließend messbar, woran man erkennt, dass dieses Vertragswesen wirklich best in class ist.
+Zum Beispiel:
+- weniger manuelle Vertragserstellung
+- schnellere Verhandlung
+- weniger ungesteuerte Abweichungen
+- bessere Sales-to-Signature-Conversion
+- schnellere Freigaben
+- bessere Risikotransparenz
+- aktive Steuerung nach Signatur
+- bessere Auswertbarkeit
+- bessere User Acceptance
+- geringere operative Reibung zwischen Sales, Legal, Finance und Management
+
+19. Umsetzungs-Roadmap
+Schlage eine sinnvolle Umsetzungsreihenfolge vor:
+- MVP
+- Phase 2
+- Phase 3
+- Enterprise-Ausbaustufe
+
+Wichtig:
+Das MVP darf bereits hochwertig sein, aber muss realistisch priorisiert sein.
+
+20. Deliverables
+Liefere die Antwort so, dass sie unmittelbar als Blaupause für Produkt, UX, Architektur und spätere Implementierung nutzbar ist.
+
+ERWARTETE QUALITÄT DER ANTWORT
+
+Die Antwort muss:
+- sehr detailliert sein,
+- in sauberem, professionellem Deutsch formuliert sein,
+- fachlich tief und operativ konkret sein,
+- keine leeren Allgemeinplätze enthalten,
+- DealFlow.One als sales-first Commercial Operating System denken,
+- Verträge als strukturierte Objekte behandeln,
+- echte Governance, echte Versionierung und echte Verhandlung abbilden,
+- KI tief integriert beschreiben,
+- Multi-Tenancy, Multi-Company und Multi-Brand nativ berücksichtigen,
+- UX und Bedienerfreundlichkeit explizit mitdenken,
+- für ein Produktteam direkt weiterverwendbar sein.
+
+AUSGABEFORMAT
+
+Bitte liefere die Antwort in folgendem Format:
+1. Executive Summary
+2. Best-in-Class-Prinzipien
+3. Fachliches Zielbild
+4. Detailliertes Domain Model
+5. Rollen- und Rechtemodell
+6. End-to-End Prozesse
+7. AI-Architektur und AI-Funktionen
+8. Screen-by-Screen Konzept
+9. API-Zielbild
+10. Compliance / Security / Audit
+11. KPI- und Reporting-Framework
+12. Roadmap
+13. Done Criteria / Erfolgsmaßstäbe
+
+Denke tief, strukturiert, realistisch und produktionsnah. Schreibe nicht knapp. Schreibe so, als würdest du die Grundlage für ein echtes Enterprise-SaaS-Produkt liefern, das in Bedienbarkeit jedoch deutlich besser sein soll als typische schwere Enterprise-Lösungen.
