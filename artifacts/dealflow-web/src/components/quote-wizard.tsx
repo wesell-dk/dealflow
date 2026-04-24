@@ -732,7 +732,7 @@ export function QuoteWizard({ open, onOpenChange, initialDealId }: Props) {
             {step < 4 && (
               <Button
                 onClick={() => setStep((s) => s + 1)}
-                disabled={!canNext || ambiguousScope}
+                disabled={!canNext}
                 data-testid="wizard-next"
               >
                 {t("quoteWizard.next")}
@@ -742,7 +742,7 @@ export function QuoteWizard({ open, onOpenChange, initialDealId }: Props) {
             {step === 4 && (
               <Button
                 onClick={handleSubmit}
-                disabled={submitting || ambiguousScope}
+                disabled={submitting}
                 data-testid="wizard-submit"
               >
                 {submitting && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
@@ -762,17 +762,16 @@ export function QuoteWizard({ open, onOpenChange, initialDealId }: Props) {
 }
 
 /**
- * Wenn die aktive Sicht des Users mehrdeutig ist, kann der Wizard kein
- * eindeutiges (Company, Brand)-Paar als Default ableiten. Definition
- * eindeutig:
- *   activeScope.companyIds.length === 1 && activeScope.brandIds.length === 1
+ * Aktive Sicht des Users gilt als "eindeutig", wenn sie genau eine Company UND
+ * genau einen Brand referenziert. Andernfalls (>1 Company, >1 Brand, 1C+0B,
+ * 0C+1B) gilt sie als mehrdeutig.
  *
- * Damit blocken wir auch die Fälle:
- *   - 1 Company, 0 Brands (Brand inheritiert mehrere Brands der Company)
- *   - 0 Companies, 1 Brand (Company nicht explizit gewählt)
- *   - >1 Company oder >1 Brand (klassisch ambig).
- *
- * Kann von künftigen Contract-/Deal-Create-Wizards wiederverwendet werden.
+ * Im Quote-Wizard ist Mehrdeutigkeit *kein* Hard-Stop: der Deal-Selector im
+ * ersten Schritt diktiert Company/Brand bereits eindeutig (jeder Deal hat ein
+ * fixes Tupel), und die Deal-Liste ist serverseitig auf die aktive Sicht
+ * eingeschränkt. Der Hook bleibt aber exportiert, damit künftige
+ * Contract-/Deal-Create-Wizards (die direkt nach Company+Brand fragen) die
+ * gleiche Definition verwenden können.
  */
 export function useAmbiguousActiveScope(): boolean {
   const { user } = useAuth();
@@ -785,8 +784,9 @@ export function useAmbiguousActiveScope(): boolean {
 
 /**
  * Hint-Banner im Wizard, wenn der User aktuell in einer eingeschränkten Sicht
- * arbeitet. Bei mehrdeutiger Sicht wird ein blockierender Alert angezeigt;
- * sonst nur ein dezenter Hinweis.
+ * arbeitet. Bei mehrdeutiger Sicht zeigen wir einen Hinweis, dass der gewählte
+ * Deal Company/Brand eindeutig festlegt — und die Deal-Liste sowieso auf die
+ * aktive Sicht beschränkt ist. Bei eindeutiger Sicht ein dezenter Hinweis.
  */
 function ActiveScopeWizardHint() {
   const { t } = useTranslation();
@@ -796,7 +796,7 @@ function ActiveScopeWizardHint() {
   if (ambiguous) {
     return (
       <Alert
-        variant="destructive"
+        className="bg-amber-50 dark:bg-amber-950/30 border-amber-300 dark:border-amber-800"
         data-testid="alert-wizard-scope-ambiguous"
       >
         <Filter className="h-4 w-4" />
