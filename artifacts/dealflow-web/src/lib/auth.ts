@@ -10,6 +10,34 @@ export interface ActiveScope {
   filtered: boolean;
 }
 
+const ACTIVE_SCOPE_COOKIE = "df_active_scope";
+
+/**
+ * Liest den vom Server gespiegelten Active-Scope-Cookie (df_active_scope).
+ * Wird beim App-Boot SOFORT (synchron) gelesen, bevor /auth/me antwortet,
+ * damit der ScopeSwitcher und Folge-Queries keinen "tenantWide-Flash" zeigen.
+ */
+export function readActiveScopeCookie(): ActiveScope | null {
+  if (typeof document === "undefined") return null;
+  const match = document.cookie
+    .split("; ")
+    .find((c) => c.startsWith(`${ACTIVE_SCOPE_COOKIE}=`));
+  if (!match) return null;
+  try {
+    const raw = decodeURIComponent(match.split("=")[1] ?? "");
+    const parsed = JSON.parse(raw) as { companyIds?: string[] | null; brandIds?: string[] | null };
+    const companyIds = parsed.companyIds ?? null;
+    const brandIds = parsed.brandIds ?? null;
+    return {
+      companyIds,
+      brandIds,
+      filtered: companyIds !== null || brandIds !== null,
+    };
+  } catch {
+    return null;
+  }
+}
+
 export interface CurrentUser {
   id: string;
   name: string;

@@ -71,6 +71,8 @@ export function QuoteWizard({ open, onOpenChange, initialDealId }: Props) {
   const { toast } = useToast();
   const [, navigate] = useLocation();
 
+  const ambiguousScope = useAmbiguousActiveScope();
+
   const [step, setStep] = useState(0);
   const [dealId, setDealId] = useState<string>(initialDealId ?? "");
   const [industry, setIndustry] = useState<string>("");
@@ -730,7 +732,7 @@ export function QuoteWizard({ open, onOpenChange, initialDealId }: Props) {
             {step < 4 && (
               <Button
                 onClick={() => setStep((s) => s + 1)}
-                disabled={!canNext}
+                disabled={!canNext || ambiguousScope}
                 data-testid="wizard-next"
               >
                 {t("quoteWizard.next")}
@@ -740,7 +742,7 @@ export function QuoteWizard({ open, onOpenChange, initialDealId }: Props) {
             {step === 4 && (
               <Button
                 onClick={handleSubmit}
-                disabled={submitting}
+                disabled={submitting || ambiguousScope}
                 data-testid="wizard-submit"
               >
                 {submitting && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
@@ -760,14 +762,46 @@ export function QuoteWizard({ open, onOpenChange, initialDealId }: Props) {
 }
 
 /**
+ * Wenn die aktive Sicht des Users mehrdeutig ist (mehrere Companies oder
+ * mehrere Brands), kann der Wizard das Ziel-Mandanten-Paar nicht eindeutig
+ * bestimmen. Wir zwingen den User in dem Fall, die Sicht zuvor auf genau
+ * eine Company + Brand einzuschränken.
+ */
+export function useAmbiguousActiveScope(): boolean {
+  const { user } = useAuth();
+  if (!user) return false;
+  if (!user.activeScope.filtered) return false;
+  const cIds = user.activeScope.companyIds ?? [];
+  const bIds = user.activeScope.brandIds ?? [];
+  return cIds.length > 1 || bIds.length > 1;
+}
+
+/**
  * Hint-Banner im Wizard, wenn der User aktuell in einer eingeschränkten Sicht
- * arbeitet. Damit wird klar, dass eine Auswahl von Companies/Brands außerhalb
- * dieser Sicht serverseitig abgewiesen wird.
+ * arbeitet. Bei mehrdeutiger Sicht wird ein blockierender Alert angezeigt;
+ * sonst nur ein dezenter Hinweis.
  */
 function ActiveScopeWizardHint() {
   const { t } = useTranslation();
   const { user } = useAuth();
+  const ambiguous = useAmbiguousActiveScope();
   if (!user?.activeScope.filtered) return null;
+  if (ambiguous) {
+    return (
+      <Alert
+        variant="destructive"
+        data-testid="alert-wizard-scope-ambiguous"
+      >
+        <Filter className="h-4 w-4" />
+        <AlertTitle className="text-sm">
+          {t("scopeSwitcher.ambiguousScopeRequired")}
+        </AlertTitle>
+        <AlertDescription className="text-xs">
+          {t("scopeSwitcher.ambiguousScopeRequiredDesc")}
+        </AlertDescription>
+      </Alert>
+    );
+  }
   return (
     <Alert className="bg-primary/5 border-primary/30" data-testid="alert-wizard-scope-hint">
       <Filter className="h-4 w-4 text-primary" />

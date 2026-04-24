@@ -13,6 +13,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/auth-context";
 import { apiUpdateActiveScope } from "@/lib/auth";
@@ -25,7 +26,7 @@ import { apiUpdateActiveScope } from "@/lib/auth";
  */
 export function ScopeSwitcher() {
   const { t } = useTranslation();
-  const { user, refresh } = useAuth();
+  const { user, bootActiveScope, refresh } = useAuth();
   const qc = useQueryClient();
   const { toast } = useToast();
   const [open, setOpen] = useState(false);
@@ -71,18 +72,28 @@ export function ScopeSwitcher() {
   }, [brands, allowedBrandIds]);
 
   const totalPermittedItems = permittedCompanies.length + Array.from(brandsByCompany.values()).reduce((acc, l) => acc + l.length, 0);
-  const isLocked = totalPermittedItems <= 1;
+  // Disabled-Logik:
+  //  - !tenantWide  → Admin hat den User auf eine feste Permission-Menge
+  //                   restringiert; Switcher wird mit Tooltip blockiert.
+  //  - 1 Item       → Es gibt nichts zu wählen.
+  const isAdminLocked = !!user && !user.tenantWide;
+  const isSingleItemLocked = !!user && user.tenantWide && totalPermittedItems <= 1;
+  const isLocked = isAdminLocked || isSingleItemLocked;
 
   // Aktive Auswahl. NULL = "alle" → wir setzen NICHT in selectedCompanies.
+  // Fallback auf bootActiveScope (Cookie) verhindert "tenantWide-Flash" wenn
+  // /auth/me noch nicht geantwortet hat.
+  const effectiveActiveScope =
+    user?.activeScope ?? (bootActiveScope ? bootActiveScope : null);
   const activeCompanyIds = useMemo(
-    () => new Set(user?.activeScope.companyIds ?? []),
-    [user?.activeScope.companyIds],
+    () => new Set(effectiveActiveScope?.companyIds ?? []),
+    [effectiveActiveScope?.companyIds],
   );
   const activeBrandIds = useMemo(
-    () => new Set(user?.activeScope.brandIds ?? []),
-    [user?.activeScope.brandIds],
+    () => new Set(effectiveActiveScope?.brandIds ?? []),
+    [effectiveActiveScope?.brandIds],
   );
-  const filtered = !!user?.activeScope.filtered;
+  const filtered = !!effectiveActiveScope?.filtered;
 
   // Lokaler Draft-State für Multi-Select
   const [draftCompanies, setDraftCompanies] = useState<Set<string>>(activeCompanyIds);
@@ -179,20 +190,36 @@ export function ScopeSwitcher() {
 
   if (!user) return null;
 
-  // Disabled-Render: Restricted User mit nur 1 erlaubten Eintrag
+  // Disabled-Render. Zwei Gründe:
+  //  - !tenantWide: Admin hat User auf feste Permission-Menge restringiert
+  //                 → Tooltip "Vom Administrator festgelegt".
+  //  - 1 Item:      Es gibt nichts zu wählen → generisches "Locked".
   if (isLocked) {
+    const tooltipText = isAdminLocked
+      ? t("scopeSwitcher.lockedAdminTooltip")
+      : t("scopeSwitcher.lockedSingleTooltip");
     return (
-      <Button
-        variant="outline"
-        size="sm"
-        className="hidden md:inline-flex h-8 gap-1.5 cursor-not-allowed opacity-70"
-        disabled
-        data-testid="button-scope-switcher"
-        aria-label={t("scopeSwitcher.lockedAria")}
-      >
-        <Lock className="h-3.5 w-3.5" />
-        <span className="text-xs font-medium">{t("scopeSwitcher.lockedLabel")}</span>
-      </Button>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          {/* span weil disabled buttons keine pointer events bekommen */}
+          <span tabIndex={0} className="inline-flex">
+            <Button
+              variant="outline"
+              size="sm"
+              className="hidden md:inline-flex h-8 gap-1.5 cursor-not-allowed opacity-70"
+              disabled
+              data-testid="button-scope-switcher"
+              aria-label={tooltipText}
+            >
+              <Lock className="h-3.5 w-3.5" />
+              <span className="text-xs font-medium">{t("scopeSwitcher.lockedLabel")}</span>
+            </Button>
+          </span>
+        </TooltipTrigger>
+        <TooltipContent side="bottom" data-testid="tooltip-scope-locked">
+          {tooltipText}
+        </TooltipContent>
+      </Tooltip>
     );
   }
 

@@ -341,7 +341,8 @@ router.patch('/orgs/me/active-scope', async (req, res) => {
     maxAge: 1000 * 60 * 60 * 24 * 30,
     path: '/',
   });
-  // Audit-Log Snapshot
+  // Audit-Log Snapshot — hier explizit den NEUEN Scope speichern
+  // (writeAuditFromReq würde den alten/Pre-Update-Scope nehmen).
   await writeAudit({
     entityType: 'user',
     entityId: scope.user.id,
@@ -1776,8 +1777,7 @@ router.patch('/brands/:id', async (req, res) => {
     await db.update(brandsTable).set(patch).where(eq(brandsTable.id, existing.id));
   }
   const [updated] = await db.select().from(brandsTable).where(eq(brandsTable.id, existing.id));
-  await writeAudit({
-    entityType: 'brand',
+  await writeAuditFromReq(req, {    entityType: 'brand',
     entityId: existing.id,
     action: 'update',
     actor: scope.user.name,
@@ -1812,8 +1812,7 @@ router.patch('/brands/:id/default-clauses', async (req, res) => {
   await db.update(brandsTable)
     .set({ defaultClauseVariants: defaults })
     .where(eq(brandsTable.id, req.params.id));
-  await writeAudit({
-    entityType: 'brand', entityId: req.params.id, action: 'default_clauses_updated',
+  await writeAuditFromReq(req, {    entityType: 'brand', entityId: req.params.id, action: 'default_clauses_updated',
     summary: `Brand defaults aktualisiert (${Object.keys(defaults).length} Familien)`,
     before: existing.defaultClauseVariants, after: defaults,
   });
@@ -2002,8 +2001,7 @@ router.post('/contracts/:id/amendments', async (req, res) => {
       severity: ch.severity ?? null,
     });
   }
-  await writeAudit({
-    entityType: 'contract_amendment', entityId: id, action: 'create',
+  await writeAuditFromReq(req, {    entityType: 'contract_amendment', entityId: id, action: 'create',
     summary: `Amendment ${number} (${b.type}) angelegt`,
     after: { number, type: b.type, title: b.title },
   });
@@ -2058,8 +2056,7 @@ router.patch('/amendments/:id', async (req, res) => {
   if (typeof b.title === 'string') patch.title = b.title;
   if (Object.keys(patch).length > 0) {
     await db.update(contractAmendmentsTable).set(patch).where(eq(contractAmendmentsTable.id, a.id));
-    await writeAudit({
-      entityType: 'contract_amendment', entityId: a.id, action: 'update',
+    await writeAuditFromReq(req, {      entityType: 'contract_amendment', entityId: a.id, action: 'update',
       summary: `Amendment ${a.number} aktualisiert`,
       before: { status: a.status }, after: patch,
     });
@@ -2081,8 +2078,7 @@ router.patch('/amendments/:id', async (req, res) => {
           impactValue: '0',
           currency: 'EUR',
         });
-        await writeAudit({
-          entityType: 'contract_amendment', entityId: a.id, action: 'approval_created',
+        await writeAuditFromReq(req, {          entityType: 'contract_amendment', entityId: a.id, action: 'approval_created',
           summary: `Approval angelegt für Nachtrag ${a.number}`,
           after: { approvalId },
         });
@@ -2103,8 +2099,7 @@ router.patch('/amendments/:id', async (req, res) => {
           escalationAfterHours: 120,
           deadline: null,
         });
-        await writeAudit({
-          entityType: 'contract_amendment', entityId: a.id, action: 'signature_created',
+        await writeAuditFromReq(req, {          entityType: 'contract_amendment', entityId: a.id, action: 'signature_created',
           summary: `Signatur-Paket angelegt für Nachtrag ${a.number}`,
           after: { packageId: pkgId },
         });
@@ -2325,8 +2320,7 @@ router.patch('/contract-clauses/:id', async (req, res) => {
     severity: sevLabel(nextScore),
     summary: nextVar.summary,
   }).where(eq(contractClausesTable.id, cl.id));
-  await writeAudit({
-    entityType: 'contract', entityId: ctr.id, action: 'clause_variant_changed',
+  await writeAuditFromReq(req, {    entityType: 'contract', entityId: ctr.id, action: 'clause_variant_changed',
     summary: `${cl.family}: ${prevVar?.name ?? '—'} → ${nextVar.name} (Δ severityScore ${deltaScore >= 0 ? '+' : ''}${deltaScore})`,
     before: { variantId: cl.activeVariantId, name: prevVar?.name, severityScore: prevScore },
     after: { variantId: nextVar.id, name: nextVar.name, severityScore: nextScore },
@@ -2347,8 +2341,7 @@ router.patch('/contract-clauses/:id', async (req, res) => {
       priority: nextScore <= 1 ? 'high' : 'medium',
       impactValue: '0', currency: 'EUR',
     });
-    await writeAudit({
-      entityType: 'contract', entityId: ctr.id, action: 'approval_created',
+    await writeAuditFromReq(req, {      entityType: 'contract', entityId: ctr.id, action: 'approval_created',
       summary: `Approval angelegt für ${cl.family} (weichere Variante, Δ ${deltaScore})`,
       after: { approvalId, dealId: ctr.dealId },
     });
@@ -2804,7 +2797,7 @@ async function buildSignatureDetail(s: PackageRow) {
   };
 }
 
-async function maybeCompletePackageAndCreateOC(pkg: PackageRow, signers: SignerRow[]) {
+async function maybeCompletePackageAndCreateOC(req: Request, pkg: PackageRow, signers: SignerRow[]) {
   const active = signers.filter(sg => sg.status !== 'declined');
   const allSigned = active.length > 0 && active.every(sg => sg.status === 'signed');
   if (!allSigned || signers.length === 0) return;
@@ -2838,8 +2831,7 @@ async function maybeCompletePackageAndCreateOC(pkg: PackageRow, signers: SignerR
     description: `${pkg.title} abgeschlossen; Auftragsbestätigung ${ocId} erstellt.`,
     actor: 'System', dealId: pkg.dealId,
   });
-  await writeAudit({
-    entityType: 'signature_package', entityId: pkg.id,
+  await writeAuditFromReq(req, {    entityType: 'signature_package', entityId: pkg.id,
     action: 'completed',
     summary: `Signature-Package ${pkg.title} vollständig; OC ${ocId} erzeugt.`,
   });
@@ -2898,8 +2890,7 @@ router.post('/signatures/:id/send-reminder', async (req, res) => {
     description: `Reminder an ${waiting.name} für ${s.title}.`,
     actor: 'Priya Raman', dealId: s.dealId,
   });
-  await writeAudit({
-    entityType: 'signature_package', entityId: s.id, action: 'reminder_sent',
+  await writeAuditFromReq(req, {    entityType: 'signature_package', entityId: s.id, action: 'reminder_sent',
     summary: `Reminder an ${waiting.name} (${waiting.email}) gesendet.`,
   });
   const [fresh] = await db.select().from(signaturePackagesTable).where(eq(signaturePackagesTable.id, s.id));
@@ -2930,8 +2921,7 @@ router.patch('/signers/:id/decline', async (req, res) => {
     description: `${sg.name} hat abgelehnt: ${reason}`,
     actor: 'System', dealId: pkg.dealId,
   });
-  await writeAudit({
-    entityType: 'signature_package', entityId: pkg.id, action: 'declined',
+  await writeAuditFromReq(req, {    entityType: 'signature_package', entityId: pkg.id, action: 'declined',
     summary: `${sg.name} hat ${pkg.title} abgelehnt (${reason}).`,
     before: { signerStatus: sg.status }, after: { signerStatus: 'declined' },
   });
@@ -2976,8 +2966,7 @@ router.post('/signatures/:id/escalate', async (req, res) => {
     description: `${name} übernimmt für ${replaced.name} bei ${s.title}.`,
     actor: 'Priya Raman', dealId: s.dealId,
   });
-  await writeAudit({
-    entityType: 'signature_package', entityId: s.id, action: 'escalated',
+  await writeAuditFromReq(req, {    entityType: 'signature_package', entityId: s.id, action: 'escalated',
     summary: `Fallback ${name} aktiviert statt ${replaced.name}.`,
     after: { fallbackSignerId: newId, replacesSignerId: replaced.id },
   });
@@ -3014,7 +3003,7 @@ router.post('/signers/:id/sign', async (req, res) => {
   }
   const all = await db.select().from(signersTable).where(eq(signersTable.packageId, pkg.id));
   const [fresh] = await db.select().from(signaturePackagesTable).where(eq(signaturePackagesTable.id, pkg.id));
-  await maybeCompletePackageAndCreateOC(fresh!, all);
+  await maybeCompletePackageAndCreateOC(req, fresh!, all);
   const [after] = await db.select().from(signaturePackagesTable).where(eq(signaturePackagesTable.id, pkg.id));
   res.json(await buildSignatureDetail(after!));
 });
@@ -3205,8 +3194,7 @@ router.patch('/copilot/insights/:id', async (req, res) => {
   if (next === 'resolved') patch['resolvedAt'] = new Date();
   if (next === 'dismissed') patch['dismissedAt'] = new Date();
   await db.update(copilotInsightsTable).set(patch).where(eq(copilotInsightsTable.id, c.id));
-  await writeAudit({
-    entityType: 'copilot_insight', entityId: c.id, action: `status_${next}`,
+  await writeAuditFromReq(req, {    entityType: 'copilot_insight', entityId: c.id, action: `status_${next}`,
     summary: `Insight "${c.title}" → ${next}`,
     before: { status: c.status }, after: { status: next },
     actor: scope?.user.id ?? 'system',
@@ -3305,8 +3293,7 @@ router.post('/copilot/insights/:id/execute', async (req, res) => {
     await db.update(copilotInsightsTable).set({
       status: 'resolved', resolvedAt: new Date(),
     }).where(eq(copilotInsightsTable.id, c.id));
-    await writeAudit({
-      entityType: 'copilot_insight', entityId: c.id, action: `execute_${c.actionType}`,
+    await writeAuditFromReq(req, {      entityType: 'copilot_insight', entityId: c.id, action: `execute_${c.actionType}`,
       summary: `Insight "${c.title}" ausgeführt (${c.actionType})`,
       after: result, actor,
     });
@@ -3456,8 +3443,7 @@ router.post('/contracts/:id/versions', async (req, res) => {
     actor: 'Priya Raman', comment: b.comment ?? null,
   });
   await db.update(contractsTable).set({ version: newVersion }).where(eq(contractsTable.id, c.id));
-  await writeAudit({
-    entityType: 'contract', entityId: c.id, action: 'version_created',
+  await writeAuditFromReq(req, {    entityType: 'contract', entityId: c.id, action: 'version_created',
     summary: `Vertragsversion ${newVersion} angelegt: ${b.label}`,
   });
   const [v] = await db.select().from(entityVersionsTable).where(eq(entityVersionsTable.id, id));
@@ -3485,8 +3471,7 @@ router.post('/price-positions/:id/versions', async (req, res) => {
     actor: 'Priya Raman', comment: b.comment ?? null,
   });
   await db.update(pricePositionsTable).set({ version: newVersion }).where(eq(pricePositionsTable.id, p.id));
-  await writeAudit({
-    entityType: 'price_position', entityId: p.id, action: 'version_created',
+  await writeAuditFromReq(req, {    entityType: 'price_position', entityId: p.id, action: 'version_created',
     summary: `Preis ${p.sku} neue Version ${newVersion}`,
   });
   const [v] = await db.select().from(entityVersionsTable).where(eq(entityVersionsTable.id, id));
@@ -3737,15 +3722,13 @@ router.post('/price-increases/:id/letters/:letterId/respond', async (req, res) =
         effectiveFrom: null,
         createdBy: 'System',
       });
-      await writeAudit({
-        entityType: 'contract_amendment', entityId: aid, action: 'create',
+      await writeAuditFromReq(req, {        entityType: 'contract_amendment', entityId: aid, action: 'create',
         summary: `Amendment ${number} automatisch aus Preiserhöhung erzeugt`,
         after: { from: 'price_increase_letter', letterId: l.id, upliftPct: num(l.upliftPct) },
       });
     }
   }
-  await writeAudit({
-    entityType: 'price_increase_letter', entityId: l.id,
+  await writeAuditFromReq(req, {    entityType: 'price_increase_letter', entityId: l.id,
     action: `respond_${b.decision}`,
     summary: `${accName}: ${b.decision} (+${num(l.upliftPct)}%)`,
     after: { status: newStatus },
@@ -3835,26 +3818,27 @@ router.get('/order-confirmations', async (req, res) => {
     if (o.status === 'in_onboarding' || o.status === 'completed') return o;
     const checks = await db.select().from(orderConfirmationChecksTable)
       .where(eq(orderConfirmationChecksTable.orderConfirmationId, o.id));
-    return reconcileOcState(o, checks);
+    return reconcileOcState(req, o, checks);
   }));
   res.json(reconciled.map(o => mapOC(o, dealMap.get(o.dealId)?.name ?? 'Unknown', userMap)));
 });
 
 async function reconcileOcState(
+  req: Request,
   o: typeof orderConfirmationsTable.$inferSelect,
   checks: Array<typeof orderConfirmationChecksTable.$inferSelect>,
 ): Promise<typeof orderConfirmationsTable.$inferSelect> {
   if (o.status === 'in_onboarding' || o.status === 'completed') return o;
-  const req = checks.filter(c => c.required);
-  const allOk = req.length > 0 && req.every(c => c.status === 'ok');
-  const anyBlocked = req.some(c => c.status === 'blocked');
+  const requiredChecks = checks.filter(c => c.required);
+  const allOk = requiredChecks.length > 0 && requiredChecks.every(c => c.status === 'ok');
+  const anyBlocked = requiredChecks.some(c => c.status === 'blocked');
   let target = o.status;
   if (allOk) target = 'ready_for_handover';
-  else if (req.length > 0) target = 'checks_pending';
+  else if (requiredChecks.length > 0) target = 'checks_pending';
   if (target !== o.status) {
     await db.update(orderConfirmationsTable).set({ status: target })
       .where(eq(orderConfirmationsTable.id, o.id));
-    await writeAudit({
+    await writeAuditFromReq(req, {
       entityType: 'order_confirmation', entityId: o.id, action: 'status_auto_transition',
       summary: `${o.number}: Status automatisch von ${o.status} auf ${target} gesetzt`,
       before: { status: o.status }, after: { status: target },
@@ -3869,8 +3853,8 @@ async function reconcileOcState(
         eq(auditLogTable.action, 'escalation_raised'),
       ));
     if (existing.length === 0) {
-      const blocked = req.filter(c => c.status === 'blocked');
-      await writeAudit({
+      const blocked = requiredChecks.filter(c => c.status === 'blocked');
+      await writeAuditFromReq(req, {
         entityType: 'order_confirmation', entityId: o.id, action: 'escalation_raised',
         summary: `${o.number}: ${blocked.length} Pflicht-Check blockiert — Eskalation an Sales-Owner`,
         after: { blockedChecks: blocked.map(b => ({ id: b.id, label: b.label, reason: b.detail })), salesOwnerId: o.salesOwnerId },
@@ -3895,7 +3879,7 @@ router.get('/order-confirmations/:id', async (req, res) => {
   const userMap = await getUserMap();
   const checks = await db.select().from(orderConfirmationChecksTable)
     .where(eq(orderConfirmationChecksTable.orderConfirmationId, raw.id));
-  const o = await reconcileOcState(raw, checks);
+  const o = await reconcileOcState(req, raw, checks);
   res.json(buildOcDetail(o, dealMap.get(o.dealId)?.name ?? 'Unknown', userMap, checks));
 });
 
@@ -3941,8 +3925,7 @@ router.post('/order-confirmations/:id/handover', async (req, res) => {
     handoverDeliveryDate: String(deliveryDate),
     handoverCriticalNotes: criticalNotes ?? null,
   }).where(eq(orderConfirmationsTable.id, o.id));
-  await writeAudit({
-    entityType: 'order_confirmation', entityId: o.id, action: 'handover_completed',
+  await writeAuditFromReq(req, {    entityType: 'order_confirmation', entityId: o.id, action: 'handover_completed',
     summary: `Auftragsbestätigung ${o.number} an ${owner.name} (Onboarding) übergeben`,
     after: { onboardingOwnerId: owner.id, contactName, contactEmail, deliveryDate, slaDays: o.slaDays },
   });
@@ -3966,8 +3949,7 @@ router.post('/order-confirmations/:id/complete', async (req, res) => {
   await db.update(orderConfirmationsTable).set({
     status: 'completed', completedAt: new Date(),
   }).where(eq(orderConfirmationsTable.id, o.id));
-  await writeAudit({
-    entityType: 'order_confirmation', entityId: o.id, action: 'completed',
+  await writeAuditFromReq(req, {    entityType: 'order_confirmation', entityId: o.id, action: 'completed',
     summary: `Onboarding für ${o.number} abgeschlossen`,
   });
   await db.insert(timelineEventsTable).values({
@@ -4146,7 +4128,7 @@ const ManualAuditBody = z.object({
 router.post('/audit/manual', async (req, res) => {
   if (!validateInline(req, res, { body: ManualAuditBody })) return;
   const b = req.body;
-  await writeAudit(b);
+  await writeAuditFromReq(req, b);
   res.status(201).json({ ok: true });
 });
 
@@ -4266,8 +4248,7 @@ router.post('/admin/users', async (req, res) => {
     scopeCompanyIds: JSON.stringify(validCompanies),
     scopeBrandIds: JSON.stringify(validBrands),
   }).returning();
-  await writeAudit({
-    entityType: 'user', entityId: id, action: 'create',
+  await writeAuditFromReq(req, {    entityType: 'user', entityId: id, action: 'create',
     summary: `Benutzer angelegt: ${b.name} (${b.role})`,
     after: { email: b.email, role: b.role, tenantWide: !!b.tenantWide },
     actor: scope.user.name,
@@ -4328,8 +4309,7 @@ router.patch('/admin/users/:id', async (req, res) => {
     await db.update(usersTable).set(patch).where(eq(usersTable.id, u.id));
     const redacted = { ...patch };
     if ('passwordHash' in redacted) redacted.passwordHash = '[redacted]';
-    await writeAudit({
-      entityType: 'user', entityId: u.id, action: 'update',
+    await writeAuditFromReq(req, {      entityType: 'user', entityId: u.id, action: 'update',
       summary: `Benutzer aktualisiert: ${u.name}`,
       before: { role: u.role, isActive: u.isActive, tenantWide: u.tenantWide },
       after: redacted,
@@ -4364,8 +4344,7 @@ router.post('/admin/roles', async (req, res) => {
     id, name: b.name.trim(), description: b.description.trim(),
     isSystem: false, tenantId: scope.tenantId,
   }).returning();
-  await writeAudit({
-    entityType: 'role', entityId: id, action: 'create',
+  await writeAuditFromReq(req, {    entityType: 'role', entityId: id, action: 'create',
     summary: `Rolle angelegt: ${b.name}`,
     after: { name: b.name, description: b.description },
     actor: scope.user.name,
@@ -4393,8 +4372,7 @@ router.patch('/admin/roles/:id', async (req, res) => {
         .where(and(eq(usersTable.tenantId, scope.tenantId), eq(usersTable.role, r.name)));
     }
     await db.update(rolesTable).set(patch).where(eq(rolesTable.id, r.id));
-    await writeAudit({
-      entityType: 'role', entityId: r.id, action: 'update',
+    await writeAuditFromReq(req, {      entityType: 'role', entityId: r.id, action: 'update',
       summary: `Rolle aktualisiert: ${r.name}`,
       before: { name: r.name, description: r.description },
       after: patch,
@@ -4416,8 +4394,7 @@ router.delete('/admin/roles/:id', async (req, res) => {
     .where(and(eq(usersTable.tenantId, scope.tenantId), eq(usersTable.role, r.name)));
   if (userWithRole) { res.status(400).json({ error: 'role is in use by users' }); return; }
   await db.delete(rolesTable).where(eq(rolesTable.id, r.id));
-  await writeAudit({
-    entityType: 'role', entityId: r.id, action: 'delete',
+  await writeAuditFromReq(req, {    entityType: 'role', entityId: r.id, action: 'delete',
     summary: `Rolle gelöscht: ${r.name}`,
     before: { name: r.name, description: r.description },
     actor: scope.user.name,
@@ -4624,8 +4601,7 @@ router.get('/gdpr/export', async (req, res) => {
     res.status(404).json({ error: 'not found' });
     return;
   }
-  await writeAudit({
-    entityType: 'contact',
+  await writeAuditFromReq(req, {    entityType: 'contact',
     entityId: subjectId,
     action: 'gdpr_export',
     summary: `DSGVO Export erstellt durch ${scope.user.name}`,
@@ -4700,8 +4676,7 @@ router.post('/gdpr/retention/run', async (req, res) => {
   if (!requireAdmin(req, res)) return;
   const scope = getScope(req);
   const result = await runRetentionSweepForTenant(scope.tenantId);
-  await writeAudit({
-    entityType: 'gdpr',
+  await writeAuditFromReq(req, {    entityType: 'gdpr',
     entityId: scope.tenantId,
     action: 'retention.run',
     actor: scope.user.name,
@@ -4740,8 +4715,7 @@ router.patch('/gdpr/retention-policy', async (req, res) => {
     }
   }
   await db.update(tenantsTable).set({ retentionPolicy: current }).where(eq(tenantsTable.id, scope.tenantId));
-  await writeAudit({
-    entityType: 'gdpr',
+  await writeAuditFromReq(req, {    entityType: 'gdpr',
     entityId: scope.tenantId,
     action: 'retention.policy.update',
     actor: scope.user.name,
