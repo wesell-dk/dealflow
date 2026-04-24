@@ -89,7 +89,7 @@ import {
   webhooksTable,
   webhookDeliveriesTable,
 } from '@workspace/db';
-import { emitEvent, WEBHOOK_EVENTS, assertSafeWebhookUrl } from '../lib/webhooks';
+import { emitEvent, WEBHOOK_EVENTS, assertSafeWebhookUrl, assertSafeResolvedUrl } from '../lib/webhooks';
 import { parseAsOf, resolveSnapshot, isInvalidAsOf } from '../lib/asOf';
 
 const router: IRouter = Router();
@@ -3688,6 +3688,12 @@ router.post('/admin/webhooks', async (req, res) => {
   try { assertSafeWebhookUrl(b.url); } catch (e) {
     res.status(422).json({ error: (e as Error).message }); return;
   }
+  // Resolve DNS once at admin time so the admin sees a clear error if the
+  // hostname maps to an internal address. The dispatcher re-checks on every
+  // delivery to defeat DNS-rebinding between create and dispatch.
+  try { await assertSafeResolvedUrl(b.url); } catch (e) {
+    res.status(422).json({ error: (e as Error).message }); return;
+  }
   const secret = `whs_${randomUUID().replace(/-/g, '')}`;
   const id = `wh_${randomUUID().slice(0, 8)}`;
   await db.insert(webhooksTable).values({
@@ -3715,6 +3721,9 @@ router.patch('/admin/webhooks/:id', async (req, res) => {
   const b = req.body as z.infer<typeof WebhookPatchBody>;
   if (b.url !== undefined) {
     try { assertSafeWebhookUrl(b.url); } catch (e) {
+      res.status(422).json({ error: (e as Error).message }); return;
+    }
+    try { await assertSafeResolvedUrl(b.url); } catch (e) {
       res.status(422).json({ error: (e as Error).message }); return;
     }
   }
