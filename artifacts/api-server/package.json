@@ -8,7 +8,8 @@
     "build": "node ./build.mjs",
     "start": "node --enable-source-maps ./dist/index.mjs",
     "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tests/tsconfig.json --noEmit",
-    "test": "node --import tsx --test --test-reporter=spec tests/tenant-isolation.test.ts"
+    "test:isolation": "node --import tsx --test --test-reporter=spec tests/tenant-isolation.test.ts tests/validation-negative.test.ts",
+    "test": "pnpm run test:isolation"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.90.0",

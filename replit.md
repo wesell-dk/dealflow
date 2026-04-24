@@ -143,9 +143,13 @@ workspaces:
 
 - `pnpm run typecheck` — full typecheck across all packages.
 - `pnpm run build` — typecheck + build everything (no DB needed).
-- `pnpm run test` — run tests across all artifacts (today: API tenant-isolation
-  integration tests in `artifacts/api-server/tests/`, run with `node --test` +
-  `tsx`). Requires `DATABASE_URL` (see below).
+- `pnpm run test` — run tests across all artifacts (today: the cross-tenant
+  isolation suite *and* the negative-validation suite in
+  `artifacts/api-server/tests/`, both run with `node --test` + `tsx`).
+  Requires `DATABASE_URL` (see below).
+- `pnpm run test:isolation` — alias that runs just the API tenant-isolation +
+  negative-validation suites. Wired into the `ci` validation step so every
+  significant change is checked for cross-tenant leakage.
 - `pnpm run ci` — full CI gate: `build` followed by `test`. This is the
   registered `ci` validation and is the merge gate. **Requires a reachable
   `DATABASE_URL`.** It injects neutral `PORT=1` / `BASE_PATH=/` defaults for
