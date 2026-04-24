@@ -444,12 +444,14 @@ export async function entityInScope(
  * "account:ac_001", "tenant") and decide whether the current user may see it.
  */
 export async function copilotThreadVisible(req: Request, scopeField: string): Promise<boolean> {
-  const s = getScope(req);
-  if (s.tenantWide && !hasActiveScopeFilter(s)) return true;
   if (!scopeField || scopeField === "global") return true;
   const [kind, id] = scopeField.split(":");
   if (!kind || !id) return false;
   if (kind === "tenant") return false;
+  // entityInScope is tenant-bound (allowedDealIds/allowedAccountIds JOIN
+  // through companies on tenantId). Even tenantWide users must go through
+  // it — otherwise threads scoped to another tenant's deal/account would
+  // leak across tenants.
   return entityInScope(req, kind, id);
 }
 

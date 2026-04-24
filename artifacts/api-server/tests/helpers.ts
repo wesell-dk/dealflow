@@ -14,6 +14,12 @@ import {
   timelineEventsTable,
   auditLogTable,
   sessionsTable,
+  contractsTable,
+  negotiationsTable,
+  orderConfirmationsTable,
+  copilotInsightsTable,
+  copilotThreadsTable,
+  pricePositionsTable,
 } from "@workspace/db";
 import { hashPassword } from "../src/lib/auth";
 
@@ -39,6 +45,12 @@ export interface TestWorld {
    */
   nullTimelineEventId: string;
   auditId: string;
+  contractId: string;
+  negotiationId: string;
+  orderConfirmationId: string;
+  copilotInsightId: string;
+  copilotThreadId: string;
+  pricePositionId: string;
 }
 
 /**
@@ -65,6 +77,12 @@ export async function createTestWorld(label: string): Promise<TestWorld> {
   const timelineEventId = `${runId}_tl`;
   const nullTimelineEventId = `${runId}_tlnull`;
   const auditId = `${runId}_au`;
+  const contractId = `${runId}_ctr`;
+  const negotiationId = `${runId}_neg`;
+  const orderConfirmationId = `${runId}_oc`;
+  const copilotInsightId = `${runId}_ci`;
+  const copilotThreadId = `${runId}_ct`;
+  const pricePositionId = `${runId}_pp`;
 
   await db.insert(tenantsTable).values({
     id: tenantId,
@@ -194,6 +212,73 @@ export async function createTestWorld(label: string): Promise<TestWorld> {
     summary: `Deal created in tenant ${label}`,
   });
 
+  await db.insert(contractsTable).values({
+    id: contractId,
+    dealId,
+    title: `Test Contract ${label}`,
+    status: "drafting",
+    version: 1,
+    riskLevel: "low",
+    template: "standard",
+  });
+
+  await db.insert(negotiationsTable).values({
+    id: negotiationId,
+    dealId,
+    status: "open",
+    round: 1,
+    lastReactionType: "objection",
+    riskLevel: "low",
+  });
+
+  await db.insert(orderConfirmationsTable).values({
+    id: orderConfirmationId,
+    dealId,
+    number: `OC-${label}`,
+    status: "in_preparation",
+    readinessScore: 0,
+    totalAmount: "100000",
+    currency: "EUR",
+    slaDays: 7,
+  });
+
+  // dealId-bound insight; trigger fields stay NULL so the unique index
+  // (triggerType, triggerEntityRef) does not collide between worlds.
+  await db.insert(copilotInsightsTable).values({
+    id: copilotInsightId,
+    kind: "risk",
+    title: `Insight ${label}`,
+    summary: `Tenant ${label} insight`,
+    severity: "medium",
+    dealId,
+    status: "open",
+  });
+
+  // dealId-scoped thread — only users with access to the deal must see it.
+  await db.insert(copilotThreadsTable).values({
+    id: copilotThreadId,
+    title: `Thread ${label}`,
+    scope: `deal:${dealId}`,
+    lastMessage: `Hello from ${label}`,
+    messageCount: 1,
+  });
+
+  // price position — scoped through company.tenantId, NOT through dealId.
+  await db.insert(pricePositionsTable).values({
+    id: pricePositionId,
+    sku: `SKU-${runId}`,
+    name: `Test Price Position ${label}`,
+    category: "test",
+    listPrice: "1000",
+    currency: "EUR",
+    status: "active",
+    validFrom: new Date().toISOString().slice(0, 10),
+    brandId,
+    companyId,
+    version: 1,
+    isStandard: true,
+  });
+
   return {
     runId,
     tenantId,
@@ -210,6 +295,12 @@ export async function createTestWorld(label: string): Promise<TestWorld> {
     timelineEventId,
     nullTimelineEventId,
     auditId,
+    contractId,
+    negotiationId,
+    orderConfirmationId,
+    copilotInsightId,
+    copilotThreadId,
+    pricePositionId,
   };
 }
 
@@ -276,6 +367,67 @@ export async function seedExtraDealflowItems(
   return { approvalIds, signaturePackageIds, quoteIds };
 }
 
+/** Variants used to exercise the visibility logic in `copilotThreadVisible`. */
+export interface ThreadScopeVariantIds {
+  /** scope = "global" — visible to everyone (intentional). */
+  global: string;
+  /** scope = "deal:<own deal>" — visible only to the owning tenant. */
+  deal: string;
+  /** scope = "account:<own account>" — visible only to the owning tenant. */
+  account: string;
+  /** scope = "tenant:<own tenant>" — currently never visible. */
+  tenant: string;
+  /** scope = "" — empty string is treated as "global" today. */
+  empty: string;
+  /** scope = "garbage" — malformed; must not be visible. */
+  malformed: string;
+}
+
+/**
+ * Seed the full set of `copilot_threads.scope` variants for one tenant world.
+ * Used by the matrix test that pins down what each variant should resolve to
+ * when the requester belongs to a different tenant.
+ */
+export async function seedThreadScopeVariants(
+  world: TestWorld,
+): Promise<ThreadScopeVariantIds> {
+  const mk = (suffix: string) => `${TEST_PREFIX}_var_${world.runId}_${suffix}`;
+  const ids: ThreadScopeVariantIds = {
+    global: mk("global"),
+    deal: mk("deal"),
+    account: mk("account"),
+    tenant: mk("tenant"),
+    empty: mk("empty"),
+    malformed: mk("malformed"),
+  };
+  const rows = [
+    { id: ids.global, scope: "global" },
+    { id: ids.deal, scope: `deal:${world.dealId}` },
+    { id: ids.account, scope: `account:${world.accountId}` },
+    { id: ids.tenant, scope: `tenant:${world.tenantId}` },
+    { id: ids.empty, scope: "" },
+    { id: ids.malformed, scope: "garbage-no-colon" },
+  ];
+  for (const r of rows) {
+    await db.insert(copilotThreadsTable).values({
+      id: r.id,
+      title: `Variant ${r.scope || "empty"} (${world.runId})`,
+      scope: r.scope,
+      lastMessage: "test",
+      messageCount: 1,
+    });
+  }
+  return ids;
+}
+
+export async function cleanupThreadScopeVariants(
+  ...variants: ThreadScopeVariantIds[]
+): Promise<void> {
+  const all = variants.flatMap((v) => Object.values(v));
+  if (all.length === 0) return;
+  await db.delete(copilotThreadsTable).where(inArray(copilotThreadsTable.id, all));
+}
+
 export async function cleanupExtraDealflowItems(extras: ExtraDealflowIds): Promise<void> {
   if (extras.approvalIds.length) {
     await db.delete(approvalsTable).where(inArray(approvalsTable.id, extras.approvalIds));
@@ -304,8 +456,15 @@ export async function destroyTestWorlds(...worlds: TestWorld[]): Promise<void> {
   const quoteIds = worlds.map((w) => w.quoteId);
   const timelineIds = worlds.flatMap((w) => [w.timelineEventId, w.nullTimelineEventId]);
   const auditIds = worlds.map((w) => w.auditId);
+  const contractIds = worlds.map((w) => w.contractId);
+  const negotiationIds = worlds.map((w) => w.negotiationId);
+  const ocIds = worlds.map((w) => w.orderConfirmationId);
+  const insightIds = worlds.map((w) => w.copilotInsightId);
+  const threadIds = worlds.map((w) => w.copilotThreadId);
+  const ppIds = worlds.map((w) => w.pricePositionId);
 
   await db.delete(sessionsTable).where(inArray(sessionsTable.userId, userIds));
+  await db.delete(pricePositionsTable).where(inArray(pricePositionsTable.id, ppIds));
   await db.delete(timelineEventsTable).where(
     or(
       inArray(timelineEventsTable.id, timelineIds),
@@ -313,6 +472,11 @@ export async function destroyTestWorlds(...worlds: TestWorld[]): Promise<void> {
     )!,
   );
   await db.delete(auditLogTable).where(inArray(auditLogTable.id, auditIds));
+  await db.delete(copilotThreadsTable).where(inArray(copilotThreadsTable.id, threadIds));
+  await db.delete(copilotInsightsTable).where(inArray(copilotInsightsTable.id, insightIds));
+  await db.delete(orderConfirmationsTable).where(inArray(orderConfirmationsTable.id, ocIds));
+  await db.delete(negotiationsTable).where(inArray(negotiationsTable.id, negotiationIds));
+  await db.delete(contractsTable).where(inArray(contractsTable.id, contractIds));
   await db.delete(approvalsTable).where(inArray(approvalsTable.id, approvalIds));
   await db.delete(signaturePackagesTable).where(inArray(signaturePackagesTable.id, sigIds));
   await db.delete(quotesTable).where(inArray(quotesTable.id, quoteIds));
@@ -352,19 +516,38 @@ export async function sweepStaleTestData(): Promise<void> {
     .where(sql`${dealsTable.id} LIKE ${like} ${ESC}`);
 
   if (deals.length) {
+    const dealIdList = deals.map((d) => d.id);
     await db.delete(timelineEventsTable).where(
-      inArray(timelineEventsTable.dealId, deals.map((d) => d.id)),
+      inArray(timelineEventsTable.dealId, dealIdList),
+    );
+    await db.delete(copilotThreadsTable).where(
+      inArray(
+        copilotThreadsTable.scope,
+        dealIdList.map((id) => `deal:${id}`),
+      ),
+    );
+    await db.delete(copilotInsightsTable).where(
+      inArray(copilotInsightsTable.dealId, dealIdList),
+    );
+    await db.delete(orderConfirmationsTable).where(
+      inArray(orderConfirmationsTable.dealId, dealIdList),
+    );
+    await db.delete(negotiationsTable).where(
+      inArray(negotiationsTable.dealId, dealIdList),
+    );
+    await db.delete(contractsTable).where(
+      inArray(contractsTable.dealId, dealIdList),
     );
     await db.delete(approvalsTable).where(
-      inArray(approvalsTable.dealId, deals.map((d) => d.id)),
+      inArray(approvalsTable.dealId, dealIdList),
     );
     await db.delete(signaturePackagesTable).where(
-      inArray(signaturePackagesTable.dealId, deals.map((d) => d.id)),
+      inArray(signaturePackagesTable.dealId, dealIdList),
     );
     await db.delete(quotesTable).where(
-      inArray(quotesTable.dealId, deals.map((d) => d.id)),
+      inArray(quotesTable.dealId, dealIdList),
     );
-    await db.delete(dealsTable).where(inArray(dealsTable.id, deals.map((d) => d.id)));
+    await db.delete(dealsTable).where(inArray(dealsTable.id, dealIdList));
   }
   // Sweep extras inserted by seedExtraDealflowItems even if no test deal
   // remains (e.g. a previous test crashed between insert and cleanup).
@@ -373,6 +556,12 @@ export async function sweepStaleTestData(): Promise<void> {
   await db.delete(quotesTable).where(sql`${quotesTable.id} LIKE ${like} ${ESC}`);
   await db.delete(timelineEventsTable).where(sql`${timelineEventsTable.id} LIKE ${like} ${ESC}`);
   await db.delete(auditLogTable).where(sql`${auditLogTable.id} LIKE ${like} ${ESC}`);
+  await db.delete(copilotThreadsTable).where(sql`${copilotThreadsTable.id} LIKE ${like} ${ESC}`);
+  await db.delete(copilotInsightsTable).where(sql`${copilotInsightsTable.id} LIKE ${like} ${ESC}`);
+  await db.delete(orderConfirmationsTable).where(sql`${orderConfirmationsTable.id} LIKE ${like} ${ESC}`);
+  await db.delete(negotiationsTable).where(sql`${negotiationsTable.id} LIKE ${like} ${ESC}`);
+  await db.delete(contractsTable).where(sql`${contractsTable.id} LIKE ${like} ${ESC}`);
+  await db.delete(pricePositionsTable).where(sql`${pricePositionsTable.id} LIKE ${like} ${ESC}`);
   await db.delete(accountsTable).where(sql`${accountsTable.id} LIKE ${like} ${ESC}`);
   if (users.length) {
     await db.delete(sessionsTable).where(inArray(sessionsTable.userId, users.map((u) => u.id)));

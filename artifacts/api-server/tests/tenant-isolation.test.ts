@@ -7,6 +7,8 @@ import {
   sweepStaleTestData,
   seedExtraDealflowItems,
   cleanupExtraDealflowItems,
+  seedThreadScopeVariants,
+  cleanupThreadScopeVariants,
   type TestWorld,
 } from "./helpers";
 import { loginClient, startTestServer, type AuthedClient, type TestServer } from "./server";
@@ -246,6 +248,139 @@ describe("tenant isolation — list, report, audit, activity", () => {
     }
     for (const r of b.body as ActivityResp) {
       assert.ok(r.dealId, `B activity row ${r.id} has null dealId`);
+    }
+  });
+
+  // ── List endpoints scoped via dealId ──
+  // For each route that returns rows joined to deals via dealId, verify that
+  // tenant A only sees its own seeded entity and never tenant B's. Same in
+  // reverse. These cover the routes called out in task #53.
+  async function assertListIsolated(
+    path: string,
+    aOwnId: string,
+    bOwnId: string,
+    extract: (body: unknown) => string[] = (body) => ids(body as IdEntry[]),
+  ) {
+    const a = await clientA.get(path);
+    const b = await clientB.get(path);
+    assert.ok(ok(a.status), `${path} A status ${a.status}`);
+    assert.ok(ok(b.status), `${path} B status ${b.status}`);
+    const aIds = extract(a.body);
+    const bIds = extract(b.body);
+    assert.ok(aIds.includes(aOwnId), `A ${path} missing own id ${aOwnId}`);
+    assert.ok(bIds.includes(bOwnId), `B ${path} missing own id ${bOwnId}`);
+    assert.ok(
+      !aIds.includes(bOwnId),
+      `A ${path} leaked B id ${bOwnId} (got ${aIds.join(",")})`,
+    );
+    assert.ok(
+      !bIds.includes(aOwnId),
+      `B ${path} leaked A id ${aOwnId} (got ${bIds.join(",")})`,
+    );
+  }
+
+  it("GET /quotes — each tenant only sees own quotes", async () => {
+    await assertListIsolated("/api/quotes", worldA.quoteId, worldB.quoteId);
+  });
+
+  it("GET /approvals — each tenant only sees own approvals", async () => {
+    await assertListIsolated("/api/approvals", worldA.approvalId, worldB.approvalId);
+  });
+
+  it("GET /signatures — each tenant only sees own signature packages", async () => {
+    await assertListIsolated(
+      "/api/signatures",
+      worldA.signaturePackageId,
+      worldB.signaturePackageId,
+    );
+  });
+
+  it("GET /contracts — each tenant only sees own contracts", async () => {
+    await assertListIsolated("/api/contracts", worldA.contractId, worldB.contractId);
+  });
+
+  it("GET /negotiations — each tenant only sees own negotiations", async () => {
+    await assertListIsolated(
+      "/api/negotiations",
+      worldA.negotiationId,
+      worldB.negotiationId,
+    );
+  });
+
+  it("GET /order-confirmations — each tenant only sees own order confirmations", async () => {
+    await assertListIsolated(
+      "/api/order-confirmations",
+      worldA.orderConfirmationId,
+      worldB.orderConfirmationId,
+    );
+  });
+
+  it("GET /copilot/insights — each tenant only sees own insights", async () => {
+    await assertListIsolated(
+      "/api/copilot/insights",
+      worldA.copilotInsightId,
+      worldB.copilotInsightId,
+    );
+  });
+
+  it("GET /copilot/threads — each tenant only sees own threads (deal-scoped)", async () => {
+    await assertListIsolated(
+      "/api/copilot/threads",
+      worldA.copilotThreadId,
+      worldB.copilotThreadId,
+    );
+  });
+
+  it("GET /price-positions — each tenant only sees own positions (company-scoped)", async () => {
+    // /price-positions does NOT use the dealId pipeline; it joins through
+    // companies.tenantId. Verify the alternate scoping path isolates rows
+    // exactly the same way.
+    await assertListIsolated(
+      "/api/price-positions",
+      worldA.pricePositionId,
+      worldB.pricePositionId,
+    );
+  });
+
+  it("GET /copilot/threads — visibility matrix across scope variants", async () => {
+    // Pin down `copilotThreadVisible` for every kind of scope value:
+    //   "global"             → visible to everyone
+    //   "deal:<id>"          → only the owning tenant
+    //   "account:<id>"       → only the owning tenant
+    //   "tenant:<id>"        → never visible (intentional)
+    //   ""                   → treated like "global" today
+    //   "garbage-no-colon"   → invalid → never visible
+    const aVar = await seedThreadScopeVariants(worldA);
+    const bVar = await seedThreadScopeVariants(worldB);
+    try {
+      const a = (await clientA.get("/api/copilot/threads")).body as IdEntry[];
+      const b = (await clientB.get("/api/copilot/threads")).body as IdEntry[];
+      const aIds = ids(a);
+      const bIds = ids(b);
+
+      // Globals + empties: cross-tenant visible (current intentional behaviour).
+      assert.ok(aIds.includes(bVar.global), "A should see B's global thread");
+      assert.ok(aIds.includes(bVar.empty), "A should see B's empty-scope thread");
+      assert.ok(bIds.includes(aVar.global), "B should see A's global thread");
+      assert.ok(bIds.includes(aVar.empty), "B should see A's empty-scope thread");
+
+      // deal/account variants: must NOT leak across tenants.
+      assert.ok(!aIds.includes(bVar.deal), `A leaked B deal-scoped thread`);
+      assert.ok(!aIds.includes(bVar.account), `A leaked B account-scoped thread`);
+      assert.ok(!bIds.includes(aVar.deal), `B leaked A deal-scoped thread`);
+      assert.ok(!bIds.includes(aVar.account), `B leaked A account-scoped thread`);
+
+      // Owners must still see their own deal/account variants.
+      assert.ok(aIds.includes(aVar.deal), "A missing own deal thread");
+      assert.ok(aIds.includes(aVar.account), "A missing own account thread");
+
+      // tenant:<id> and malformed: never visible — to anyone, including owner.
+      for (const v of [aVar.tenant, aVar.malformed, bVar.tenant, bVar.malformed]) {
+        assert.ok(!aIds.includes(v), `A should not see ${v}`);
+        assert.ok(!bIds.includes(v), `B should not see ${v}`);
+      }
+    } finally {
+      await cleanupThreadScopeVariants(aVar, bVar);
     }
   });
 
