@@ -21,15 +21,17 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { useToast } from "@/hooks/use-toast";
 import { Loader2 } from "lucide-react";
 import { useOnboarding } from "@/contexts/onboarding-context";
+import { FieldHint } from "@/components/ui/field-hint";
+import { DEAL_STAGES } from "@/lib/glossary";
 
 const STAGES = [
-  { value: "qualified",   label: "Qualifiziert" },
-  { value: "discovery",   label: "Discovery" },
-  { value: "proposal",    label: "Angebot" },
-  { value: "negotiation", label: "Verhandlung" },
-  { value: "closing",     label: "Closing" },
-  { value: "won",         label: "Won" },
-  { value: "lost",        label: "Lost" },
+  { value: "qualified",   label: DEAL_STAGES.qualified.label,   short: DEAL_STAGES.qualified.short },
+  { value: "discovery",   label: DEAL_STAGES.discovery.label,   short: DEAL_STAGES.discovery.short },
+  { value: "proposal",    label: DEAL_STAGES.proposal.label,    short: DEAL_STAGES.proposal.short },
+  { value: "negotiation", label: DEAL_STAGES.negotiation.label, short: DEAL_STAGES.negotiation.short },
+  { value: "closing",     label: DEAL_STAGES.closing.label,     short: DEAL_STAGES.closing.short },
+  { value: "won",         label: DEAL_STAGES.won.label,         short: DEAL_STAGES.won.short },
+  { value: "lost",        label: DEAL_STAGES.lost.label,        short: DEAL_STAGES.lost.short },
 ];
 
 type EditDeal = {
@@ -212,9 +214,12 @@ export function DealFormDialog({ open, onOpenChange, deal, defaultAccountId, onS
             </div>
           )}
 
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div className="space-y-2">
-              <Label htmlFor="deal-value">Wert (€) *</Label>
+              <div className="flex items-center gap-1.5">
+                <Label htmlFor="deal-value">Wert (€) *</Label>
+                <FieldHint term={{ group: "concepts", value: "value" }} />
+              </div>
               <Input
                 id="deal-value"
                 data-testid="deal-form-value"
@@ -227,20 +232,36 @@ export function DealFormDialog({ open, onOpenChange, deal, defaultAccountId, onS
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="deal-stage">Phase *</Label>
+              <div className="flex items-center gap-1.5">
+                <Label htmlFor="deal-stage">Phase *</Label>
+                <FieldHint
+                  title="Pipeline-Phasen"
+                  text="Qualifiziert → Discovery → Angebot → Verhandlung → Closing → Won/Lost. Jede Phase steht für einen klaren Reifegrad. Wähle in der Liste eine Phase, um die Detail-Erklärung zu sehen."
+                />
+              </div>
               <Select value={stage} onValueChange={setStage} disabled={pending}>
                 <SelectTrigger id="deal-stage" data-testid="deal-form-stage"><SelectValue /></SelectTrigger>
                 <SelectContent>
-                  {STAGES.map(s => <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>)}
+                  {STAGES.map(s => (
+                    <SelectItem key={s.value} value={s.value} className="py-2">
+                      <div className="flex flex-col">
+                        <span>{s.label}</span>
+                        <span className="text-[11px] leading-snug text-muted-foreground">{s.short}</span>
+                      </div>
+                    </SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
             </div>
           </div>
 
           {!isEdit && (
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div className="space-y-2">
-                <Label htmlFor="deal-brand">Marke *</Label>
+                <div className="flex items-center gap-1.5">
+                  <Label htmlFor="deal-brand">Marke *</Label>
+                  <FieldHint term={{ group: "concepts", value: "brand" }} />
+                </div>
                 <Select value={brandId} onValueChange={setBrandId} disabled={pending}>
                   <SelectTrigger id="deal-brand" data-testid="deal-form-brand"><SelectValue placeholder="Marke wählen…" /></SelectTrigger>
                   <SelectContent>
@@ -249,7 +270,10 @@ export function DealFormDialog({ open, onOpenChange, deal, defaultAccountId, onS
                 </Select>
               </div>
               <div className="space-y-2">
-                <Label htmlFor="deal-company">Company *</Label>
+                <div className="flex items-center gap-1.5">
+                  <Label htmlFor="deal-company">Company *</Label>
+                  <FieldHint term={{ group: "concepts", value: "company" }} />
+                </div>
                 <Select value={companyId} onValueChange={setCompanyId} disabled={pending}>
                   <SelectTrigger id="deal-company" data-testid="deal-form-company"><SelectValue placeholder="Company wählen…" /></SelectTrigger>
                   <SelectContent>
@@ -262,7 +286,10 @@ export function DealFormDialog({ open, onOpenChange, deal, defaultAccountId, onS
 
           {!isEdit && (
             <div className="space-y-2">
-              <Label htmlFor="deal-owner">Verantwortlich *</Label>
+              <div className="flex items-center gap-1.5">
+                <Label htmlFor="deal-owner">Verantwortlich *</Label>
+                <FieldHint term={{ group: "concepts", value: "owner" }} />
+              </div>
               <Select value={ownerId} onValueChange={setOwnerId} disabled={pending}>
                 <SelectTrigger id="deal-owner" data-testid="deal-form-owner"><SelectValue placeholder="User wählen…" /></SelectTrigger>
                 <SelectContent>
@@ -272,9 +299,12 @@ export function DealFormDialog({ open, onOpenChange, deal, defaultAccountId, onS
             </div>
           )}
 
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div className="space-y-2">
-              <Label htmlFor="deal-close">Erwartetes Abschlussdatum {!isEdit && "*"}</Label>
+              <div className="flex items-center gap-1.5">
+                <Label htmlFor="deal-close">Erwartetes Abschlussdatum {!isEdit && "*"}</Label>
+                <FieldHint term={{ group: "concepts", value: "expectedCloseDate" }} />
+              </div>
               <Input
                 id="deal-close"
                 data-testid="deal-form-close"
@@ -287,7 +317,10 @@ export function DealFormDialog({ open, onOpenChange, deal, defaultAccountId, onS
             </div>
             {isEdit && (
               <div className="space-y-2">
-                <Label htmlFor="deal-prob">Wahrscheinlichkeit (%)</Label>
+                <div className="flex items-center gap-1.5">
+                  <Label htmlFor="deal-prob">Wahrscheinlichkeit (%)</Label>
+                  <FieldHint term={{ group: "concepts", value: "probability" }} />
+                </div>
                 <Input
                   id="deal-prob"
                   data-testid="deal-form-probability"

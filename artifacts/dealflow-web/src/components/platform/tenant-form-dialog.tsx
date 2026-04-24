@@ -18,9 +18,14 @@ import {
 } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { Loader2 } from "lucide-react";
+import { FieldHint } from "@/components/ui/field-hint";
+import { TENANT_PLANS, TENANT_REGIONS } from "@/lib/glossary";
 
 type Plan = "Starter" | "Growth" | "Business" | "Enterprise";
 type Region = "EU" | "US" | "UK" | "APAC";
+
+const PLAN_OPTIONS: Plan[] = ["Starter", "Growth", "Business", "Enterprise"];
+const REGION_OPTIONS: Region[] = ["EU", "US", "UK", "APAC"];
 
 interface Props {
   open: boolean;
@@ -98,28 +103,48 @@ export function TenantFormDialog({ open, onOpenChange }: Props) {
               data-testid="input-tenant-name"
             />
           </div>
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div className="grid gap-2">
-              <Label>{t("pages.platformAdmin.plan")}</Label>
+              <div className="flex items-center gap-1.5">
+                <Label htmlFor="tenant-plan">{t("pages.platformAdmin.plan")}</Label>
+                <FieldHint
+                  title="Tarif"
+                  text="Bestimmt Limits (User, Deals, Speicher) und freigeschaltete Funktionen. Wähle einen Eintrag, um die Beschreibung zu sehen."
+                />
+              </div>
               <Select value={plan} onValueChange={(v) => setPlan(v as Plan)}>
-                <SelectTrigger data-testid="select-tenant-plan"><SelectValue /></SelectTrigger>
+                <SelectTrigger id="tenant-plan" data-testid="select-tenant-plan"><SelectValue /></SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="Starter">Starter</SelectItem>
-                  <SelectItem value="Growth">Growth</SelectItem>
-                  <SelectItem value="Business">Business</SelectItem>
-                  <SelectItem value="Enterprise">Enterprise</SelectItem>
+                  {PLAN_OPTIONS.map(p => (
+                    <SelectItem key={p} value={p} className="py-2">
+                      <div className="flex flex-col">
+                        <span>{TENANT_PLANS[p].label}</span>
+                        <span className="text-[11px] leading-snug text-muted-foreground">{TENANT_PLANS[p].short}</span>
+                      </div>
+                    </SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
             </div>
             <div className="grid gap-2">
-              <Label>{t("pages.platformAdmin.region")}</Label>
+              <div className="flex items-center gap-1.5">
+                <Label htmlFor="tenant-region">{t("pages.platformAdmin.region")}</Label>
+                <FieldHint
+                  title="Datenresidenz"
+                  text="Region, in der Daten dieses Mandanten physisch gespeichert werden. Nach dem Anlegen nicht mehr änderbar – wähle bewusst nach Compliance-Anforderung."
+                />
+              </div>
               <Select value={region} onValueChange={(v) => setRegion(v as Region)}>
-                <SelectTrigger data-testid="select-tenant-region"><SelectValue /></SelectTrigger>
+                <SelectTrigger id="tenant-region" data-testid="select-tenant-region"><SelectValue /></SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="EU">EU</SelectItem>
-                  <SelectItem value="US">US</SelectItem>
-                  <SelectItem value="UK">UK</SelectItem>
-                  <SelectItem value="APAC">APAC</SelectItem>
+                  {REGION_OPTIONS.map(r => (
+                    <SelectItem key={r} value={r} className="py-2">
+                      <div className="flex flex-col">
+                        <span>{TENANT_REGIONS[r].label}</span>
+                        <span className="text-[11px] leading-snug text-muted-foreground">{TENANT_REGIONS[r].short}</span>
+                      </div>
+                    </SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
             </div>

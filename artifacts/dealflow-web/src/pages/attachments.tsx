@@ -28,6 +28,8 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
+import { FieldHint } from "@/components/ui/field-hint";
+import { ATTACHMENT_CATEGORIES } from "@/lib/glossary";
 import { Paperclip, Upload, Trash2, Search, Loader2, Plus, Download } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
@@ -174,20 +176,36 @@ export default function Attachments() {
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <Label>{t("pages.attachments.category")}</Label>
+                  <div className="flex items-center gap-1.5">
+                    <Label htmlFor="upload-category">{t("pages.attachments.category")}</Label>
+                    <FieldHint
+                      title="Kategorie"
+                      text="Bestimmt, wie das Dokument in der Bibliothek gefiltert und an Quotes/Verträge vorgeschlagen wird. Wähle einen Eintrag, um die Beschreibung zu sehen."
+                    />
+                  </div>
                   <Select
                     value={uploadCategory}
                     onValueChange={setUploadCategory}
                   >
-                    <SelectTrigger>
+                    <SelectTrigger id="upload-category">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      {CATEGORIES.filter((c) => c !== "all").map((c) => (
-                        <SelectItem key={c} value={c}>
-                          {c}
-                        </SelectItem>
-                      ))}
+                      {CATEGORIES.filter((c) => c !== "all").map((c) => {
+                        const entry = ATTACHMENT_CATEGORIES[c];
+                        return (
+                          <SelectItem key={c} value={c} className="py-2">
+                            <div className="flex flex-col">
+                              <span>{entry?.label ?? c}</span>
+                              {entry?.short && (
+                                <span className="text-[11px] leading-snug text-muted-foreground">
+                                  {entry.short}
+                                </span>
+                              )}
+                            </div>
+                          </SelectItem>
+                        );
+                      })}
                     </SelectContent>
                   </Select>
                 </div>

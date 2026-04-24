@@ -56,6 +56,11 @@
 - **InlineEditField select fix**: Resolved a closure race in `kind="select"` where `onOpenChange(false)` reverted the picked value. `commit()` now accepts an explicit override and a `committingRef` distinguishes commit-close from outside-click.
 - **Brand logoUrl length**: `PATCH /api/brands/:id` allows `logoUrl` up to 256 KB (data:image URIs); other text fields remain capped at 512 chars.
 
+**In-App-Glossar & FieldHint (April 2026):**
+- **`lib/glossary.ts`**: Zentrale Wörterbuch-Datei mit Kurz- und Langbeschreibungen für die wichtigsten Domain-Enums (Deal-Phasen, Quote-/Vertrag-/Approval-/Signatur-Status, Anhang-Kategorien, Tenant-Pläne, Tenant-Regionen) sowie konzeptionelle Begriffe (Marke, Company, Owner, Wert, Wahrscheinlichkeit, Scope).
+- **`<FieldHint>`-Komponente** (`components/ui/field-hint.tsx`): Wiederverwendbares kleines Info-Icon (Lucide HelpCircle) das einen Radix-Popover mit Titel + Erklärung öffnet. Akzeptiert entweder `term={{ group, value }}` (aus dem Glossar) oder `title`/`text` für Ad-hoc-Erklärungen.
+- **Anwendung**: Deal-Form (Wert, Phase, Marke, Company, Verantwortlich, Abschlussdatum, Wahrscheinlichkeit) zeigt jetzt Hint-Icons an Labels, und die Phase-Auswahl rendert Label + Beschreibung pro Option direkt in der Dropdown-Liste. Dasselbe Pattern in Tenant-Form (Plan, Region) und Anhang-Upload (Kategorie). Grids im Deal-Form sind jetzt responsiv (`grid-cols-1 sm:grid-cols-2`) und alle neu hinzugefügten Selects haben `htmlFor`/`id`-Verknüpfung für Screenreader.
+
 ## External Dependencies
 
 - **PostgreSQL**: Primary database.
