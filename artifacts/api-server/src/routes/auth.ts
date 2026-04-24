@@ -34,6 +34,9 @@ async function publicUser(u: typeof usersTable.$inferSelect) {
       .where(eq(companiesTable.tenantId, scope.tenantId));
     permittedBrandIds = bs.map(b => b.id);
   } else {
+    // Restricted: explizite Companies + Companies aller explizit erlaubten
+    // Brands. Anschließend tenant-gefiltert, damit keine Cross-Tenant-IDs aus
+    // korrupten User-Records den Picker erreichen.
     const compSet = new Set<string>(scope.companyIds);
     const brandSet = new Set<string>(scope.brandIds);
     if (scope.brandIds.length) {
@@ -44,8 +47,18 @@ async function publicUser(u: typeof usersTable.$inferSelect) {
       const bs = await db.select().from(brandsTable).where(inArray(brandsTable.companyId, scope.companyIds));
       for (const b of bs) brandSet.add(b.id);
     }
-    permittedCompanyIds = [...compSet];
-    permittedBrandIds = [...brandSet];
+    // Tenant-Whitelist einmalig laden und Schnittmenge bilden.
+    const tenantComps = await db.select({ id: companiesTable.id })
+      .from(companiesTable)
+      .where(eq(companiesTable.tenantId, scope.tenantId));
+    const tenantCompSet = new Set(tenantComps.map(c => c.id));
+    const tenantBrands = await db.select({ id: brandsTable.id })
+      .from(brandsTable)
+      .innerJoin(companiesTable, eq(companiesTable.id, brandsTable.companyId))
+      .where(eq(companiesTable.tenantId, scope.tenantId));
+    const tenantBrandSet = new Set(tenantBrands.map(b => b.id));
+    permittedCompanyIds = [...compSet].filter(id => tenantCompSet.has(id));
+    permittedBrandIds = [...brandSet].filter(id => tenantBrandSet.has(id));
   }
   return {
     id: u.id,
