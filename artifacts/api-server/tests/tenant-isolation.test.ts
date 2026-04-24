@@ -1,6 +1,8 @@
 import { after, before, describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { pool } from "@workspace/db";
+import { eq, sql } from "drizzle-orm";
+import { db, pool, usersTable } from "@workspace/db";
+import { hashPassword } from "../src/lib/auth";
 import {
   createTestWorld,
   destroyTestWorlds,
@@ -126,11 +128,14 @@ describe("tenant isolation — list, report, audit, activity", () => {
     assert.ok(!aEventIds.includes(worldB.timelineEventId), "A dashboard leaked B event");
     assert.ok(!bEventIds.includes(worldA.timelineEventId), "B dashboard leaked A event");
 
-    // NULL-dealId events from BOTH tenants must be filtered out — they have no
-    // tenant binding and previously leaked across tenants.
-    assert.ok(!aEventIds.includes(worldA.nullTimelineEventId), "A dashboard leaked NULL-dealId own event");
+    // NULL-dealId events are now properly tenant-scoped via the new
+    // tenant_id column on timeline_events. They MUST be visible to their
+    // own tenant (tenantWide users see all rows in tenant) and MUST NOT
+    // leak to other tenants. Previously they were filtered out everywhere
+    // because there was no way to tell which tenant they belonged to.
+    assert.ok(aEventIds.includes(worldA.nullTimelineEventId), "A dashboard missing own NULL-dealId event");
+    assert.ok(bEventIds.includes(worldB.nullTimelineEventId), "B dashboard missing own NULL-dealId event");
     assert.ok(!aEventIds.includes(worldB.nullTimelineEventId), "A dashboard leaked NULL-dealId B event");
-    assert.ok(!bEventIds.includes(worldB.nullTimelineEventId), "B dashboard leaked NULL-dealId own event");
     assert.ok(!bEventIds.includes(worldA.nullTimelineEventId), "B dashboard leaked NULL-dealId A event");
 
     // Counts must include each tenant's own contributions.
@@ -226,7 +231,83 @@ describe("tenant isolation — list, report, audit, activity", () => {
     assert.ok(!bEntities.includes(worldA.dealId), `B audit leaked A entry`);
   });
 
-  it("GET /activity — own deal events visible, foreign + NULL-dealId filtered out", async () => {
+  it("schema — INSERT without tenant_id (omitted column) fails fast", async () => {
+    // Defence-in-depth for the structural-isolation guarantee: the
+    // tenant_id column is NOT NULL with NO database default, so any
+    // future code path that simply forgets to set the column gets a hard
+    // error instead of silently landing in tn_root.
+    let timelineRejected = false;
+    try {
+      await db.execute(sql`
+        INSERT INTO timeline_events (id, type, title, description, actor)
+        VALUES ('tl_omit_fail', 'test', 'x', 'x', 'x')
+      `);
+    } catch {
+      timelineRejected = true;
+    } finally {
+      await db.execute(sql`DELETE FROM timeline_events WHERE id = 'tl_omit_fail'`);
+    }
+    assert.ok(timelineRejected, "timeline_events: omitted tenant_id must fail");
+
+    let auditRejected = false;
+    try {
+      await db.execute(sql`
+        INSERT INTO audit_log (id, entity_type, entity_id, action, actor, summary)
+        VALUES ('au_omit_fail', 'x', 'x', 'x', 'x', 'x')
+      `);
+    } catch {
+      auditRejected = true;
+    } finally {
+      await db.execute(sql`DELETE FROM audit_log WHERE id = 'au_omit_fail'`);
+    }
+    assert.ok(auditRejected, "audit_log: omitted tenant_id must fail");
+  });
+
+  it("GET /audit — restricted user (non-tenantWide) is denied in-tenant out-of-scope rows", async () => {
+    // The SQL tenant_id filter prevents cross-tenant leakage; this test
+    // proves the SECOND layer — entityInScope post-filter — still runs
+    // for restricted users so an audit row for an entity outside their
+    // company/brand scope is hidden even though it shares the tenant.
+    //
+    // We promote a restricted user into worldA's tenant with empty
+    // scope (companyIds=[], brandIds=[]). Their allowedDealIds is the
+    // empty set, so EVERY in-tenant audit row tied to a deal must be
+    // hidden — including worldA.auditId.
+    const restrictedId = `${worldA.runId}_restricted`;
+    const restrictedEmail = `${restrictedId}@example.test`.toLowerCase();
+    const restrictedPw = "restricted-pw-123!";
+    await db.insert(usersTable).values({
+      id: restrictedId,
+      name: "Restricted User",
+      email: restrictedEmail,
+      role: "Account Executive",
+      scope: `tenant:${worldA.tenantId}`,
+      initials: "RU",
+      passwordHash: hashPassword(restrictedPw),
+      isActive: true,
+      tenantId: worldA.tenantId,
+      tenantWide: false,
+      scopeCompanyIds: "[]",
+      scopeBrandIds: "[]",
+    });
+    try {
+      const restricted = await loginClient(server.baseUrl, restrictedEmail, restrictedPw);
+      const r = await restricted.get(`/api/audit?entityType=deal&limit=200`);
+      assert.ok(ok(r.status), `restricted status ${r.status}`);
+      const ids = (r.body as AuditResp).map((x) => x.id);
+      // worldA.auditId is a same-tenant deal audit row. SQL tenant filter
+      // alone would let it through; only the entityInScope post-filter
+      // hides it.
+      assert.ok(
+        !ids.includes(worldA.auditId),
+        `restricted user saw same-tenant out-of-scope audit row: ${worldA.auditId}`,
+      );
+    } finally {
+      await db.delete(usersTable).where(eq(usersTable.id, restrictedId));
+    }
+  });
+
+  it("GET /activity — own-tenant events visible (incl. NULL-dealId), cross-tenant hidden", async () => {
     const a = await clientA.get("/api/activity");
     const b = await clientB.get("/api/activity");
     assert.ok(ok(a.status), `A status ${a.status}`);
@@ -237,17 +318,37 @@ describe("tenant isolation — list, report, audit, activity", () => {
     assert.ok(bIds.includes(worldB.timelineEventId), "B activity missing own event");
     assert.ok(!aIds.includes(worldB.timelineEventId), `A activity leaked B event`);
     assert.ok(!bIds.includes(worldA.timelineEventId), `B activity leaked A event`);
-    // NULL-dealId from both tenants — must not appear anywhere.
-    assert.ok(!aIds.includes(worldA.nullTimelineEventId), "A activity leaked own NULL-dealId");
+    // NULL-dealId rows: own-tenant visible (the row carries tenant_id),
+    // cross-tenant strictly hidden. Tenant-wide users (which both test
+    // worlds use) see all rows in their tenant including NULL-dealId.
+    assert.ok(aIds.includes(worldA.nullTimelineEventId), "A activity missing own NULL-dealId event");
+    assert.ok(bIds.includes(worldB.nullTimelineEventId), "B activity missing own NULL-dealId event");
     assert.ok(!aIds.includes(worldB.nullTimelineEventId), "A activity leaked B NULL-dealId");
-    assert.ok(!bIds.includes(worldB.nullTimelineEventId), "B activity leaked own NULL-dealId");
     assert.ok(!bIds.includes(worldA.nullTimelineEventId), "B activity leaked A NULL-dealId");
-    // Sanity: no row in /activity should have a null dealId at all.
+    // Cross-tenant safety: every row returned to A must belong to A's
+    // tenant (either tied to a deal in A's company, or a NULL-dealId row
+    // we just confirmed is A's). Same for B.
+    const aWorldIds = new Set([
+      worldA.timelineEventId,
+      worldA.nullTimelineEventId,
+      worldB.timelineEventId,
+      worldB.nullTimelineEventId,
+    ]);
     for (const r of a.body as ActivityResp) {
-      assert.ok(r.dealId, `A activity row ${r.id} has null dealId`);
+      if (aWorldIds.has(r.id)) {
+        assert.ok(
+          r.id === worldA.timelineEventId || r.id === worldA.nullTimelineEventId,
+          `A activity returned a non-A test row: ${r.id}`,
+        );
+      }
     }
     for (const r of b.body as ActivityResp) {
-      assert.ok(r.dealId, `B activity row ${r.id} has null dealId`);
+      if (aWorldIds.has(r.id)) {
+        assert.ok(
+          r.id === worldB.timelineEventId || r.id === worldB.nullTimelineEventId,
+          `B activity returned a non-B test row: ${r.id}`,
+        );
+      }
     }
   });
 

@@ -183,6 +183,7 @@ export async function createTestWorld(label: string): Promise<TestWorld> {
 
   await db.insert(timelineEventsTable).values({
     id: timelineEventId,
+    tenantId,
     type: "deal",
     title: `Deal updated (${label})`,
     description: `Activity in tenant ${label}`,
@@ -190,21 +191,23 @@ export async function createTestWorld(label: string): Promise<TestWorld> {
     dealId,
   });
 
-  // Critical: a NULL-dealId timeline event. Older code paths leaked these
-  // across tenants in /activity and /reports/dashboard.recentEvents because
-  // timeline_events has no tenantId column. Tests below assert these are
-  // filtered out for both tenants.
+  // A NULL-dealId timeline event. timeline_events now carries an explicit
+  // tenant_id column (NOT NULL, no default), so these tenant-global events
+  // are properly scoped to their own tenant — visible to that tenant's
+  // /activity and /reports/dashboard, invisible to every other tenant.
   await db.insert(timelineEventsTable).values({
     id: nullTimelineEventId,
+    tenantId,
     type: "system",
     title: `NULL-dealId event (${label})`,
-    description: `Untenanted note from ${label}`,
+    description: `Tenant-global note from ${label}`,
     actor: userId,
     dealId: null,
   });
 
   await db.insert(auditLogTable).values({
     id: auditId,
+    tenantId,
     entityType: "deal",
     entityId: dealId,
     action: "created",

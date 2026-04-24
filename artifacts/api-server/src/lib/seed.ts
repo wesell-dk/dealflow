@@ -574,7 +574,9 @@ export async function seedIfEmpty(): Promise<void> {
     { type: "copilot",    title: "Risk detected on Atlas deal",     description: "Discount erosion detected vs. similar won deals.", actor: "Copilot", dealId: "dl_007", at: daysFromNow(-1) },
     { type: "quote_sent", title: "Northwind v2 quote sent",         description: "Counter quote with phased rollout option.", actor: "James Whitfield", dealId: "dl_008", at: daysFromNow(-2) },
   ];
-  await db.insert(timelineEventsTable).values(tl.map((t, i) => ({ id: id("tl", i + 1), ...t })));
+  await db.insert(timelineEventsTable).values(
+    tl.map((t, i) => ({ id: id("tl", i + 1), tenantId: "tn_root", ...t })),
+  );
 
   // Copilot — insights are generated dynamically by insights/generators.ts
   // from reactions, approvals, letters and quote-versions. No static seed.
@@ -600,16 +602,16 @@ export async function seedIfEmpty(): Promise<void> {
     { id: "cm_010", threadId: "ct_th_004", role: "assistant", content: "4 materielle Änderungen; Haftungs-Cap-Verzicht und IP-Freistellung erfordern Deal Desk + Legal-Freigabe." },
   ]);
 
-  // Audit log
+  // Audit log — all seeded under tn_root (the only tenant we ship with).
   await db.insert(auditLogTable).values([
-    { id: "au_001", entityType: "deal",     entityId: "dl_001", action: "discount_changed",  actor: "Anna Brandt",      summary: "Rabatt auf Vorwerk-Renewal von 8% auf 12% angehoben.",          beforeJson: '{"discount":8}',  afterJson: '{"discount":12}', at: daysFromNow(-2) },
-    { id: "au_002", entityType: "contract", entityId: "ctr_001", action: "clause_swapped",    actor: "Sara Lindqvist",   summary: "Haftungs-Cap-Klausel auf Standard-Variante umgestellt.",          beforeJson: null, afterJson: null, at: daysFromNow(-3) },
-    { id: "au_003", entityType: "price",    entityId: "pr_001", action: "price_overridden",  actor: "Priya Raman",      summary: "Override auf PRO-200 (-4,5%) für Atlas-Account.",                 beforeJson: '{"price":1280}', afterJson: '{"price":1222}', at: daysFromNow(-5) },
-    { id: "au_004", entityType: "deal",     entityId: "dl_007", action: "stage_changed",     actor: "Marcel Voss",      summary: "Atlas Energy von Verhandlung → Closing verschoben.",              beforeJson: null, afterJson: null, at: daysFromNow(-1) },
-    { id: "au_005", entityType: "letter",   entityId: "pl_001", action: "letter_sent",       actor: "Priya Raman",      summary: "Hardware-Uplift-Schreiben an 14 Kunden versendet.",               beforeJson: null, afterJson: null, at: daysFromNow(-6) },
-    { id: "au_006", entityType: "deal",     entityId: "dl_003", action: "comment_added",     actor: "James Whitfield",  summary: "Champion bestätigte erhaltene Budget-Freigabe.",                  beforeJson: null, afterJson: null, at: daysFromNow(-4) },
-    { id: "au_007", entityType: "contract", entityId: "ctr_005", action: "version_published", actor: "Sara Lindqvist",   summary: "Northwind v2 mit Stufen-Rollout-Option veröffentlicht.",          beforeJson: null, afterJson: null, at: daysFromNow(-2) },
-    { id: "au_008", entityType: "order",    entityId: "oc_001", action: "handover_started",  actor: "Anna Brandt",      summary: "Handover-Prüfungen für OC-2026-001 gestartet.",                   beforeJson: null, afterJson: null, at: daysFromNow(-1) },
+    { id: "au_001", tenantId: "tn_root", entityType: "deal",     entityId: "dl_001", action: "discount_changed",  actor: "Anna Brandt",      summary: "Rabatt auf Vorwerk-Renewal von 8% auf 12% angehoben.",          beforeJson: '{"discount":8}',  afterJson: '{"discount":12}', at: daysFromNow(-2) },
+    { id: "au_002", tenantId: "tn_root", entityType: "contract", entityId: "ctr_001", action: "clause_swapped",    actor: "Sara Lindqvist",   summary: "Haftungs-Cap-Klausel auf Standard-Variante umgestellt.",          beforeJson: null, afterJson: null, at: daysFromNow(-3) },
+    { id: "au_003", tenantId: "tn_root", entityType: "price",    entityId: "pr_001", action: "price_overridden",  actor: "Priya Raman",      summary: "Override auf PRO-200 (-4,5%) für Atlas-Account.",                 beforeJson: '{"price":1280}', afterJson: '{"price":1222}', at: daysFromNow(-5) },
+    { id: "au_004", tenantId: "tn_root", entityType: "deal",     entityId: "dl_007", action: "stage_changed",     actor: "Marcel Voss",      summary: "Atlas Energy von Verhandlung → Closing verschoben.",              beforeJson: null, afterJson: null, at: daysFromNow(-1) },
+    { id: "au_005", tenantId: "tn_root", entityType: "letter",   entityId: "pl_001", action: "letter_sent",       actor: "Priya Raman",      summary: "Hardware-Uplift-Schreiben an 14 Kunden versendet.",               beforeJson: null, afterJson: null, at: daysFromNow(-6) },
+    { id: "au_006", tenantId: "tn_root", entityType: "deal",     entityId: "dl_003", action: "comment_added",     actor: "James Whitfield",  summary: "Champion bestätigte erhaltene Budget-Freigabe.",                  beforeJson: null, afterJson: null, at: daysFromNow(-4) },
+    { id: "au_007", tenantId: "tn_root", entityType: "contract", entityId: "ctr_005", action: "version_published", actor: "Sara Lindqvist",   summary: "Northwind v2 mit Stufen-Rollout-Option veröffentlicht.",          beforeJson: null, afterJson: null, at: daysFromNow(-2) },
+    { id: "au_008", tenantId: "tn_root", entityType: "order",    entityId: "oc_001", action: "handover_started",  actor: "Anna Brandt",      summary: "Handover-Prüfungen für OC-2026-001 gestartet.",                   beforeJson: null, afterJson: null, at: daysFromNow(-1) },
   ]);
 
   // Order confirmations

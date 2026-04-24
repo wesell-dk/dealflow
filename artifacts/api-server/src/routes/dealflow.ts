@@ -345,6 +345,7 @@ router.patch('/orgs/me/active-scope', async (req, res) => {
   // Audit-Log Snapshot — hier explizit den NEUEN Scope speichern
   // (writeAuditFromReq würde den alten/Pre-Update-Scope nehmen).
   await writeAudit({
+    tenantId: scope.tenantId,
     entityType: 'user',
     entityId: scope.user.id,
     action: 'scope.switch',
@@ -2327,7 +2328,7 @@ router.patch('/contract-clauses/:id', async (req, res) => {
     after: { variantId: nextVar.id, name: nextVar.name, severityScore: nextScore },
   });
   await db.insert(timelineEventsTable).values({
-    id: `tl_${randomUUID().slice(0, 8)}`, type: 'contract',
+    id: `tl_${randomUUID().slice(0, 8)}`, tenantId: getScope(req).tenantId, type: 'contract',
     title: `Klausel geändert: ${cl.family}`,
     description: `${prevVar?.name ?? '—'} → ${nextVar.name}`,
     actor: actor.name, dealId: ctr.dealId,
@@ -2827,7 +2828,7 @@ async function maybeCompletePackageAndCreateOC(req: Request, pkg: PackageRow, si
     status: 'completed', orderConfirmationId: ocId,
   }).where(eq(signaturePackagesTable.id, pkg.id));
   await db.insert(timelineEventsTable).values({
-    id: `tl_${randomUUID().slice(0, 8)}`, type: 'signature',
+    id: `tl_${randomUUID().slice(0, 8)}`, tenantId: getScope(req).tenantId, type: 'signature',
     title: 'Alle Unterschriften vollständig',
     description: `${pkg.title} abgeschlossen; Auftragsbestätigung ${ocId} erstellt.`,
     actor: 'System', dealId: pkg.dealId,
@@ -2886,7 +2887,7 @@ router.post('/signatures/:id/send-reminder', async (req, res) => {
   await db.update(signersTable).set({ lastReminderAt: now })
     .where(eq(signersTable.id, waiting.id));
   await db.insert(timelineEventsTable).values({
-    id: `tl_${randomUUID().slice(0, 8)}`, type: 'signature',
+    id: `tl_${randomUUID().slice(0, 8)}`, tenantId: getScope(req).tenantId, type: 'signature',
     title: 'Reminder gesendet',
     description: `Reminder an ${waiting.name} für ${s.title}.`,
     actor: 'Priya Raman', dealId: s.dealId,
@@ -2917,7 +2918,7 @@ router.patch('/signers/:id/decline', async (req, res) => {
   await db.update(signaturePackagesTable).set({ status: 'blocked' })
     .where(eq(signaturePackagesTable.id, pkg.id));
   await db.insert(timelineEventsTable).values({
-    id: `tl_${randomUUID().slice(0, 8)}`, type: 'signature',
+    id: `tl_${randomUUID().slice(0, 8)}`, tenantId: getScope(req).tenantId, type: 'signature',
     title: 'Signatur abgelehnt',
     description: `${sg.name} hat abgelehnt: ${reason}`,
     actor: 'System', dealId: pkg.dealId,
@@ -2962,7 +2963,7 @@ router.post('/signatures/:id/escalate', async (req, res) => {
   await db.update(signaturePackagesTable).set({ status: 'in_progress' })
     .where(eq(signaturePackagesTable.id, s.id));
   await db.insert(timelineEventsTable).values({
-    id: `tl_${randomUUID().slice(0, 8)}`, type: 'signature',
+    id: `tl_${randomUUID().slice(0, 8)}`, tenantId: getScope(req).tenantId, type: 'signature',
     title: 'Eskalation: Fallback-Signer aktiviert',
     description: `${name} übernimmt für ${replaced.name} bei ${s.title}.`,
     actor: 'Priya Raman', dealId: s.dealId,
@@ -3080,10 +3081,19 @@ router.get('/reports/dashboard', async (req, res) => {
         db.select({ c: sql<number>`count(*)::int` }).from(signaturePackagesTable)
           .where(and(eq(signaturePackagesTable.status, 'in_progress'), inScopeDealFilter!(signaturePackagesTable.dealId, dealIds))).then(r => r[0]?.c ?? 0),
       ]);
-  const tlAll = await db.select().from(timelineEventsTable).orderBy(desc(timelineEventsTable.at)).limit(60);
-  // timeline_events has no tenantId column → require dealId AND in-scope.
-  // Rows with NULL dealId would otherwise leak metadata across tenants.
-  const tl = tlAll.filter(t => !!t.dealId && dealIdSet.has(t.dealId)).slice(0, 8);
+  const scope = getScope(req);
+  // Hard SQL filter: tenant_id pins recent events to the caller's tenant.
+  // Restricted (non tenant-wide) users additionally lose any deals they can't
+  // see; we keep tenant-global events (NULL dealId) since those belong to
+  // the tenant, not to a specific deal/brand/company.
+  const tlAll = await db.select().from(timelineEventsTable)
+    .where(eq(timelineEventsTable.tenantId, scope.tenantId))
+    .orderBy(desc(timelineEventsTable.at))
+    .limit(60);
+  const tl = (scope.tenantWide && !hasActiveScopeFilter(scope)
+    ? tlAll
+    : tlAll.filter(t => t.dealId === null || dealIdSet.has(t.dealId))
+  ).slice(0, 8);
   const dealMap = await getDealMap();
   res.json({
     openDealsCount: open.length,
@@ -3256,7 +3266,7 @@ router.post('/copilot/insights/:id/execute', async (req, res) => {
       await db.update(approvalsTable).set({ priority: 'high' })
         .where(eq(approvalsTable.id, approvalId));
       await db.insert(timelineEventsTable).values({
-        id: `tl_${randomUUID().slice(0, 8)}`, type: 'approval',
+        id: `tl_${randomUUID().slice(0, 8)}`, tenantId: getScope(req).tenantId, type: 'approval',
         title: 'Approval eskaliert',
         description: `Approval ${approvalId} eskaliert durch Copilot-Insight.`,
         actor, dealId: c.dealId,
@@ -3270,7 +3280,7 @@ router.post('/copilot/insights/:id/execute', async (req, res) => {
       const accIds = await allowedAccountIds(req);
       if (!isAccountAllowed(accIds, l.accountId)) throw new Error('letter/account forbidden');
       await db.insert(timelineEventsTable).values({
-        id: `tl_${randomUUID().slice(0, 8)}`, type: 'reminder',
+        id: `tl_${randomUUID().slice(0, 8)}`, tenantId: getScope(req).tenantId, type: 'reminder',
         title: 'Reminder gesendet',
         description: `Erinnerung an Preiserhöhung (Letter ${l.id}) an Kunde gesendet.`,
         actor, dealId: null,
@@ -3325,13 +3335,30 @@ async function gateThread(req: Request, res: Response, threadId: string) {
 }
 
 router.get('/activity', async (req, res) => {
+  const scope = getScope(req);
+  // Hard SQL tenant filter — rows with NULL dealId (e.g. global "price index
+  // uplift" events) are now safely tenant-scoped via the column on the row.
+  // For non-tenantWide users we additionally restrict to their visible deals
+  // so they don't see events from companies/brands outside their scope.
   const dealIds = await allowedDealIds(req);
-  const rows = await db.select().from(timelineEventsTable).orderBy(desc(timelineEventsTable.at)).limit(200);
-  // timeline_events has no tenantId column → require dealId AND in-scope.
-  // Rows with NULL dealId would otherwise leak metadata across tenants.
-  const filtered = rows.filter(t => !!t.dealId && dealIds.has(t.dealId)).slice(0, 40);
+  const tenantFilter = eq(timelineEventsTable.tenantId, scope.tenantId);
+  let rows: typeof timelineEventsTable.$inferSelect[];
+  if (scope.tenantWide && !hasActiveScopeFilter(scope)) {
+    rows = await db.select().from(timelineEventsTable)
+      .where(tenantFilter)
+      .orderBy(desc(timelineEventsTable.at))
+      .limit(40);
+  } else {
+    // Restricted user: include events with NULL dealId (tenant-global events
+    // they may legitimately see) plus events for deals in their scope.
+    rows = await db.select().from(timelineEventsTable)
+      .where(tenantFilter)
+      .orderBy(desc(timelineEventsTable.at))
+      .limit(200);
+    rows = rows.filter(t => t.dealId === null || dealIds.has(t.dealId)).slice(0, 40);
+  }
   const dealMap = await getDealMap();
-  res.json(filtered.map(t => ({
+  res.json(rows.map(t => ({
     id: t.id, type: t.type, title: t.title, description: t.description,
     actor: t.actor, dealId: t.dealId,
     dealName: t.dealId ? (dealMap.get(t.dealId)?.name ?? null) : null,
@@ -3340,7 +3367,12 @@ router.get('/activity', async (req, res) => {
 });
 
 // ── AUDIT LOG ──
+//
+// tenantId is REQUIRED on every audit_log row. The schema enforces NOT NULL,
+// and writeAudit makes the parameter mandatory so a forgotten call site
+// fails at compile-time instead of silently using a default.
 async function writeAudit(args: {
+  tenantId: string;
   entityType: string; entityId: string; action: string;
   summary: string; before?: unknown; after?: unknown; actor?: string;
   /**
@@ -3351,6 +3383,7 @@ async function writeAudit(args: {
 }) {
   await db.insert(auditLogTable).values({
     id: `au_${randomUUID().slice(0, 10)}`,
+    tenantId: args.tenantId,
     entityType: args.entityType,
     entityId: args.entityId,
     action: args.action,
@@ -3364,38 +3397,51 @@ async function writeAudit(args: {
 
 /**
  * Wrapper: writeAudit aus Request-Kontext mit automatischem activeScope
- * Snapshot. Bevorzugt nutzen für mutating endpoints.
+ * Snapshot UND tenantId aus dem authentifizierten Scope. Bevorzugt nutzen
+ * für mutating endpoints — diese Variante stellt strukturell sicher, dass
+ * keine Aktion in einem fremden Tenant landet.
  */
-async function writeAuditFromReq(req: Request, args: Omit<Parameters<typeof writeAudit>[0], 'activeScope'>) {
-  let snapshot: ReturnType<typeof activeScopeSnapshot> = null;
-  try {
-    const scope = getScope(req);
-    snapshot = activeScopeSnapshot(scope);
-  } catch {
-    // No scope (e.g. seed) — leave snapshot null
-  }
-  await writeAudit({ ...args, activeScope: snapshot });
+async function writeAuditFromReq(
+  req: Request,
+  args: Omit<Parameters<typeof writeAudit>[0], 'activeScope' | 'tenantId'>,
+) {
+  const scope = getScope(req);
+  const snapshot = activeScopeSnapshot(scope);
+  await writeAudit({ ...args, tenantId: scope.tenantId, activeScope: snapshot });
 }
 
 router.get('/audit', async (req, res) => {
   if (!validateInline(req, res, { query: Z.ListAuditEntriesQueryParams })) return;
-  const filters = [];
+  const scope = getScope(req);
+  // Two-layer authorization:
+  //   1. Hard SQL filter on tenantId. Cross-tenant leakage is structurally
+  //      impossible — even an INSERT with a bogus entityType cannot leak,
+  //      because the row carries a tenantId column.
+  //   2. For restricted users (not tenant-wide, OR tenant-wide with an
+  //      active company/brand filter), additionally enforce per-entity
+  //      visibility via entityInScope. Otherwise an audit row for
+  //      `deal:dl_in_co_uk` would still be visible to a co_helix-only user
+  //      just because both deals share `tn_root`.
+  const filters = [eq(auditLogTable.tenantId, scope.tenantId)];
   if (req.query.entityType) filters.push(eq(auditLogTable.entityType, String(req.query.entityType)));
   if (req.query.entityId)   filters.push(eq(auditLogTable.entityId, String(req.query.entityId)));
   const limit = req.query.limit ? Number(req.query.limit) : 100;
-  // Fetch a generous window from the DB; scope-filter post-fetch.
-  const rows = await db.select().from(auditLogTable)
-    .where(filters.length ? and(...filters) : undefined)
+  const restricted = !scope.tenantWide || hasActiveScopeFilter(scope);
+  // When restricted, fetch a wider window so the post-filter still has
+  // enough rows to return up to `limit` after filtering.
+  const fetchLimit = restricted ? Math.max(limit * 5, 200) : limit;
+  const raw = await db.select().from(auditLogTable)
+    .where(and(...filters))
     .orderBy(desc(auditLogTable.at))
-    .limit(Math.max(limit * 4, 200));
-  // audit_log has no tenantId column — we MUST verify each row's entity
-  // belongs to the user's tenant via entityInScope (which uses tenant-bound
-  // allowedDealIds/allowedAccountIds). No tenantWide pass-through here, or we
-  // would leak audit rows from other tenants.
-  const visible = (await Promise.all(
-    rows.map(async r => ({ r, ok: await entityInScope(req, r.entityType, r.entityId) }))
-  )).filter(x => x.ok).map(x => x.r);
-  res.json(visible.slice(0, limit).map(a => ({
+    .limit(fetchLimit);
+  let rows = raw;
+  if (restricted) {
+    const allowed = await Promise.all(
+      raw.map(a => entityInScope(req, a.entityType, a.entityId)),
+    );
+    rows = raw.filter((_, i) => allowed[i]).slice(0, limit);
+  }
+  res.json(rows.map(a => ({
     id: a.id, entityType: a.entityType, entityId: a.entityId,
     action: a.action, actor: a.actor, summary: a.summary,
     beforeJson: a.beforeJson, afterJson: a.afterJson, at: iso(a.at)!,
@@ -3695,7 +3741,7 @@ router.post('/price-increases/:id/letters/:letterId/respond', async (req, res) =
 
   if (newStatus === 'accepted') {
     await db.insert(timelineEventsTable).values({
-      id: `tl_${randomUUID().slice(0, 8)}`, type: 'price_increase',
+      id: `tl_${randomUUID().slice(0, 8)}`, tenantId: getScope(req).tenantId, type: 'price_increase',
       title: 'Preiserhöhung angenommen',
       description: `${accName} akzeptierte +${num(l.upliftPct)}%. Vertragsanpassung wird angestoßen.`,
       actor: 'System', dealId: null,
@@ -3861,7 +3907,7 @@ async function reconcileOcState(
         after: { blockedChecks: blocked.map(b => ({ id: b.id, label: b.label, reason: b.detail })), salesOwnerId: o.salesOwnerId },
       });
       await db.insert(timelineEventsTable).values({
-        id: `tl_${randomUUID().slice(0, 8)}`, type: 'handover',
+        id: `tl_${randomUUID().slice(0, 8)}`, tenantId: getScope(req).tenantId, type: 'handover',
         title: 'Eskalation: Pflicht-Check blockiert',
         description: `${o.number}: ${blocked.map(b => b.label).join(', ')}`,
         actor: 'System', dealId: o.dealId,
@@ -3931,7 +3977,7 @@ router.post('/order-confirmations/:id/handover', async (req, res) => {
     after: { onboardingOwnerId: owner.id, contactName, contactEmail, deliveryDate, slaDays: o.slaDays },
   });
   await db.insert(timelineEventsTable).values({
-    id: `tl_${randomUUID().slice(0, 8)}`, type: 'handover',
+    id: `tl_${randomUUID().slice(0, 8)}`, tenantId: getScope(req).tenantId, type: 'handover',
     title: 'Übergabe an Onboarding',
     description: `Auftragsbestätigung ${o.number} an ${owner.name} übergeben. SLA ${o.slaDays} Tage läuft.`,
     actor: 'Priya Raman', dealId: o.dealId,
@@ -3954,7 +4000,7 @@ router.post('/order-confirmations/:id/complete', async (req, res) => {
     summary: `Onboarding für ${o.number} abgeschlossen`,
   });
   await db.insert(timelineEventsTable).values({
-    id: `tl_${randomUUID().slice(0, 8)}`, type: 'handover',
+    id: `tl_${randomUUID().slice(0, 8)}`, tenantId: getScope(req).tenantId, type: 'handover',
     title: 'Onboarding abgeschlossen',
     description: `Auftragsbestätigung ${o.number} ist produktiv übergeben.`,
     actor: 'Priya Raman', dealId: o.dealId,

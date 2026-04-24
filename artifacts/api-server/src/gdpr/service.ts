@@ -224,6 +224,7 @@ export async function forgetSubject(
 
   await db.insert(auditLogTable).values({
     id: `al_${randomUUID().slice(0, 8)}`,
+    tenantId,
     entityType: "contact",
     entityId: subjectId,
     action: "gdpr_forget",

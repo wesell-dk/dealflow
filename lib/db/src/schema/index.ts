@@ -506,8 +506,21 @@ export const priceIncreaseLettersTable = pgTable("price_increase_letters", {
 });
 
 // Timeline events
+//
+// `tenantId` is REQUIRED for every row. Historically the table relied on
+// `dealId → deals.companyId → companies.tenantId` for tenant scoping, but
+// `dealId` is nullable (e.g. for global system events like "Hardware index
+// uplift completed"). Without an explicit tenantId column those rows were
+// invisible to every tenant — and any new INSERT site that forgot to set
+// a `dealId` could leak across tenants. The column makes isolation a hard
+// SQL constraint instead of an application-side filter.
 export const timelineEventsTable = pgTable("timeline_events", {
   id: id(),
+  // No DB default: every INSERT must provide tenantId explicitly. A missing
+  // tenantId fails fast with a NOT NULL violation instead of silently
+  // landing in tn_root. Backfill of pre-existing rows ran with the default
+  // in place; callers and seed.ts now always set this field explicitly.
+  tenantId: text("tenant_id").notNull(),
   type: text("type").notNull(),
   title: text("title").notNull(),
   description: text("description").notNull(),
@@ -557,8 +570,22 @@ export const copilotMessagesTable = pgTable("copilot_messages", {
 });
 
 // Audit log
+//
+// `tenantId` is REQUIRED for every row. Previously the writer relied on the
+// reader to verify each entity belongs to the caller's tenant via
+// `entityInScope`, which silently denied access for unknown entity types
+// (safe but fragile: a forgotten case in the switch statement quietly hides
+// an entire class of rows from everyone). With an explicit tenantId column
+// the reader filters by SQL and the writer is forced to set the column at
+// every call site.
 export const auditLogTable = pgTable("audit_log", {
   id: id(),
+  // No DB default: every INSERT must provide tenantId explicitly. A missing
+  // tenantId fails fast with a NOT NULL violation instead of silently
+  // landing in tn_root. Backfill of pre-existing rows ran with the default
+  // in place; writeAudit makes the tenantId parameter required at the type
+  // level, so a forgotten call site is a compile error.
+  tenantId: text("tenant_id").notNull(),
   entityType: text("entity_type").notNull(),
   entityId: text("entity_id").notNull(),
   action: text("action").notNull(),
