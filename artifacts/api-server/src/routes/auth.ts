@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
-import { eq } from "drizzle-orm";
-import { db, usersTable } from "@workspace/db";
+import { eq, inArray } from "drizzle-orm";
+import { db, usersTable, brandsTable, companiesTable } from "@workspace/db";
 import {
   createSession,
   destroySession,
@@ -8,14 +8,45 @@ import {
   SESSION_COOKIE,
   verifyPassword,
 } from "../lib/auth";
-import { buildScope } from "../lib/scope";
+import { buildScope, hasActiveScopeFilter } from "../lib/scope";
 
 const router: IRouter = Router();
 
 const SEVEN_DAYS = 7 * 24 * 60 * 60 * 1000;
 
-function publicUser(u: typeof usersTable.$inferSelect) {
+/**
+ * Vollständige Public-User-Repräsentation inkl. erlaubtem (Permission) und
+ * aktivem (UI-Wahl) Scope. Wird für /auth/login, /auth/me genutzt.
+ */
+async function publicUser(u: typeof usersTable.$inferSelect) {
   const scope = buildScope(u);
+  // Permitted set für Picker-Anzeige (raw, ohne aktiven Filter).
+  // Tenant-weite User: alle Companies/Brands des Tenants. Restricted: explizite
+  // Companies + Companies aller explizit erlaubten Brands.
+  let permittedCompanyIds: string[];
+  let permittedBrandIds: string[];
+  if (scope.tenantWide) {
+    const cs = await db.select({ id: companiesTable.id }).from(companiesTable)
+      .where(eq(companiesTable.tenantId, scope.tenantId));
+    permittedCompanyIds = cs.map(c => c.id);
+    const bs = await db.select({ id: brandsTable.id })
+      .from(brandsTable).innerJoin(companiesTable, eq(companiesTable.id, brandsTable.companyId))
+      .where(eq(companiesTable.tenantId, scope.tenantId));
+    permittedBrandIds = bs.map(b => b.id);
+  } else {
+    const compSet = new Set<string>(scope.companyIds);
+    const brandSet = new Set<string>(scope.brandIds);
+    if (scope.brandIds.length) {
+      const bs = await db.select().from(brandsTable).where(inArray(brandsTable.id, scope.brandIds));
+      for (const b of bs) compSet.add(b.companyId);
+    }
+    if (scope.companyIds.length) {
+      const bs = await db.select().from(brandsTable).where(inArray(brandsTable.companyId, scope.companyIds));
+      for (const b of bs) brandSet.add(b.id);
+    }
+    permittedCompanyIds = [...compSet];
+    permittedBrandIds = [...brandSet];
+  }
   return {
     id: u.id,
     name: u.name,
@@ -27,6 +58,16 @@ function publicUser(u: typeof usersTable.$inferSelect) {
     tenantWide: scope.tenantWide,
     companyIds: scope.companyIds,
     brandIds: scope.brandIds,
+    allowedScope: {
+      tenantWide: scope.tenantWide,
+      companyIds: permittedCompanyIds,
+      brandIds: permittedBrandIds,
+    },
+    activeScope: {
+      companyIds: scope.activeCompanyIds,
+      brandIds: scope.activeBrandIds,
+      filtered: hasActiveScopeFilter(scope),
+    },
   };
 }
 
@@ -51,7 +92,7 @@ router.post("/login", async (req, res) => {
     maxAge: SEVEN_DAYS,
     path: "/",
   });
-  res.json({ user: publicUser(u) });
+  res.json({ user: await publicUser(u) });
 });
 
 router.post("/logout", async (req, res) => {
@@ -74,7 +115,7 @@ router.get("/me", async (req, res) => {
     res.status(401).json({ error: "session invalid" });
     return;
   }
-  res.json({ user: publicUser(u) });
+  res.json({ user: await publicUser(u) });
 });
 
 export default router;

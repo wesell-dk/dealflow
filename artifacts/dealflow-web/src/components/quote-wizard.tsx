@@ -29,11 +29,14 @@ import {
   ArrowRight,
   Check,
   FileText,
+  Filter,
   Loader2,
   Paperclip,
   Plus,
   Trash2,
 } from "lucide-react";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { useAuth } from "@/contexts/auth-context";
 import { useToast } from "@/hooks/use-toast";
 import {
   useListDeals,
@@ -263,6 +266,8 @@ export function QuoteWizard({ open, onOpenChange, initialDealId }: Props) {
           <DialogTitle>{t("quoteWizard.title")}</DialogTitle>
           <DialogDescription>{t("quoteWizard.subtitle")}</DialogDescription>
         </DialogHeader>
+
+        <ActiveScopeWizardHint />
 
         {/* Stepper */}
         <div className="flex items-center gap-2 overflow-x-auto py-2">
@@ -751,5 +756,25 @@ export function QuoteWizard({ open, onOpenChange, initialDealId }: Props) {
         </DialogFooter>
       </DialogContent>
     </Dialog>
+  );
+}
+
+/**
+ * Hint-Banner im Wizard, wenn der User aktuell in einer eingeschränkten Sicht
+ * arbeitet. Damit wird klar, dass eine Auswahl von Companies/Brands außerhalb
+ * dieser Sicht serverseitig abgewiesen wird.
+ */
+function ActiveScopeWizardHint() {
+  const { t } = useTranslation();
+  const { user } = useAuth();
+  if (!user?.activeScope.filtered) return null;
+  return (
+    <Alert className="bg-primary/5 border-primary/30" data-testid="alert-wizard-scope-hint">
+      <Filter className="h-4 w-4 text-primary" />
+      <AlertTitle className="text-sm">{t("scopeSwitcher.wizardHintTitle")}</AlertTitle>
+      <AlertDescription className="text-xs">
+        {t("scopeSwitcher.wizardHintBody")}
+      </AlertDescription>
+    </Alert>
   );
 }

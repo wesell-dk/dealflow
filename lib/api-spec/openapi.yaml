@@ -85,6 +85,14 @@ paths:
     get:
       operationId: listCompanies
       tags: [orgs]
+      parameters:
+        - in: query
+          name: permitted
+          required: false
+          schema: { type: boolean }
+          description: |
+            If true, returns the FULL permitted set (ignoring active scope filter).
+            Used by the scope picker so users can switch back from a restricted view.
       responses:
         "200":
           description: ok
@@ -98,6 +106,14 @@ paths:
     get:
       operationId: listBrands
       tags: [orgs]
+      parameters:
+        - in: query
+          name: permitted
+          required: false
+          schema: { type: boolean }
+          description: |
+            If true, returns the FULL permitted set (ignoring active scope filter).
+            Used by the scope picker so users can switch back from a restricted view.
       responses:
         "200":
           description: ok
@@ -184,7 +200,31 @@ paths:
           description: ok
           content:
             application/json:
-              schema: { $ref: "#/components/schemas/User" }
+              schema: { $ref: "#/components/schemas/MeUser" }
+
+  /orgs/me/active-scope:
+    patch:
+      operationId: updateActiveScope
+      tags: [users]
+      summary: Update aktiver Scope (Mandanten-Switcher)
+      description: |
+        Setzt die aktive Sicht des Users (Companies/Brands). NULL pro Liste
+        bedeutet "alle erlaubten" für diese Dimension. Server validiert hart
+        gegen die Permissions — Restricted User können nie über ihre
+        Berechtigungen hinaus filtern.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/UpdateActiveScopeBody" }
+      responses:
+        "200":
+          description: ok
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ActiveScopeUpdateResult" }
+        "403":
+          description: Scope nicht erlaubt
 
   /admin/users:
     get:
@@ -2153,6 +2193,71 @@ components:
         avatarColor:
           type: ["string", "null"]
 
+    AllowedScope:
+      type: object
+      required: [tenantWide, companyIds, brandIds]
+      properties:
+        tenantWide: { type: boolean }
+        companyIds:
+          type: array
+          items: { type: string }
+        brandIds:
+          type: array
+          items: { type: string }
+
+    ActiveScope:
+      type: object
+      required: [filtered]
+      properties:
+        companyIds:
+          type: ["array", "null"]
+          items: { type: string }
+        brandIds:
+          type: ["array", "null"]
+          items: { type: string }
+        filtered:
+          type: boolean
+          description: True wenn aktiver Scope gesetzt (Companies oder Brands != null).
+
+    MeUser:
+      type: object
+      required: [id, name, email, role, scope, initials, tenantId, tenantWide, companyIds, brandIds, allowedScope, activeScope]
+      properties:
+        id: { type: string }
+        name: { type: string }
+        email: { type: string }
+        role: { type: string }
+        scope: { type: string }
+        initials: { type: string }
+        avatarColor: { type: ["string", "null"] }
+        tenantId: { type: string }
+        tenantWide: { type: boolean }
+        companyIds:
+          type: array
+          items: { type: string }
+        brandIds:
+          type: array
+          items: { type: string }
+        allowedScope: { $ref: "#/components/schemas/AllowedScope" }
+        activeScope: { $ref: "#/components/schemas/ActiveScope" }
+
+    UpdateActiveScopeBody:
+      type: object
+      properties:
+        companyIds:
+          type: ["array", "null"]
+          items: { type: string }
+        brandIds:
+          type: ["array", "null"]
+          items: { type: string }
+
+    ActiveScopeUpdateResult:
+      type: object
+      required: [activeScope, allowedScope]
+      properties:
+        activeScope: { $ref: "#/components/schemas/ActiveScope" }
+        allowedScope: { $ref: "#/components/schemas/AllowedScope" }
+
     AdminUser:
       type: object
       required:
@@ -3504,6 +3609,11 @@ components:
         afterJson:
           type: ["string", "null"]
         at: { type: string, format: date-time }
+        activeScopeJson:
+          type: ["string", "null"]
+          description: |
+            JSON-Snapshot der aktiven Sicht zum Zeitpunkt der Mutation. NULL =
+            keine Filterung aktiv. Format: {tenantWide,companyIds,brandIds}.
 
     EntityVersion:
       type: object

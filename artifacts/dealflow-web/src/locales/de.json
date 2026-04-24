@@ -412,5 +412,31 @@
     "placeholder": "Wie kann ich helfen?",
     "greeting": "Hallo! Ich helfe dir beim Bedienen von DealFlow One. Frag mich z.B. nach Verträgen, Preisen oder Workflows.",
     "open": "Hilfe öffnen"
+  },
+  "scopeSwitcher": {
+    "title": "Aktive Sicht",
+    "allScope": "Alle Mandanten",
+    "companiesCount_one": "{{count}} Company",
+    "companiesCount_other": "{{count}} Companies",
+    "brandsCount_one": "{{count}} Brand",
+    "brandsCount_other": "{{count}} Brands",
+    "companiesAndBrandsCount": "{{c}} Companies · {{b}} Brands",
+    "search": "Suchen…",
+    "empty": "Keine Treffer.",
+    "draftCount": "Auswahl: {{c}} Companies · {{b}} Brands",
+    "apply": "Anwenden",
+    "cancel": "Abbrechen",
+    "reset": "Zurücksetzen",
+    "filteredBadge": "Eingeschränkte Sicht",
+    "lockedLabel": "Eine Sicht",
+    "lockedAria": "Sicht-Auswahl deaktiviert — nur ein Mandant erlaubt",
+    "toastUpdated": "Sicht aktualisiert",
+    "toastUpdatedDesc": "Die aktive Sicht wurde gespeichert.",
+    "toastError": "Aktualisierung fehlgeschlagen",
+    "auditColumn": "Sicht",
+    "auditTenantWide": "Tenant-weit",
+    "auditFiltered": "Gefiltert",
+    "wizardHintTitle": "Eingeschränkte Sicht aktiv",
+    "wizardHintBody": "Du arbeitest gerade in einer gefilterten Sicht. Es können nur Companies und Brands ausgewählt werden, die in deiner aktiven Sicht enthalten sind."
   }
 }

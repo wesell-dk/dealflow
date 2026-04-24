@@ -412,5 +412,31 @@
     "placeholder": "How can I help?",
     "greeting": "Hi! I help you use DealFlow One. Ask me about contracts, pricing or workflows.",
     "open": "Open Help"
+  },
+  "scopeSwitcher": {
+    "title": "Active Scope",
+    "allScope": "All tenants",
+    "companiesCount_one": "{{count}} company",
+    "companiesCount_other": "{{count}} companies",
+    "brandsCount_one": "{{count}} brand",
+    "brandsCount_other": "{{count}} brands",
+    "companiesAndBrandsCount": "{{c}} companies · {{b}} brands",
+    "search": "Search…",
+    "empty": "No matches.",
+    "draftCount": "Selected: {{c}} companies · {{b}} brands",
+    "apply": "Apply",
+    "cancel": "Cancel",
+    "reset": "Reset",
+    "filteredBadge": "Filtered view",
+    "lockedLabel": "Single scope",
+    "lockedAria": "Scope picker disabled — only one tenant allowed",
+    "toastUpdated": "Scope updated",
+    "toastUpdatedDesc": "Your active scope has been saved.",
+    "toastError": "Update failed",
+    "auditColumn": "Scope",
+    "auditTenantWide": "Tenant-wide",
+    "auditFiltered": "Filtered",
+    "wizardHintTitle": "Filtered view active",
+    "wizardHintBody": "You are currently working in a filtered scope. Only companies and brands within your active scope can be selected."
   }
 }

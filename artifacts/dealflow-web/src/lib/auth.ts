@@ -1,3 +1,15 @@
+export interface AllowedScope {
+  tenantWide: boolean;
+  companyIds: string[];
+  brandIds: string[];
+}
+
+export interface ActiveScope {
+  companyIds: string[] | null;
+  brandIds: string[] | null;
+  filtered: boolean;
+}
+
 export interface CurrentUser {
   id: string;
   name: string;
@@ -9,6 +21,25 @@ export interface CurrentUser {
   tenantWide: boolean;
   companyIds: string[];
   brandIds: string[];
+  allowedScope: AllowedScope;
+  activeScope: ActiveScope;
+}
+
+export async function apiUpdateActiveScope(input: {
+  companyIds: string[] | null;
+  brandIds: string[] | null;
+}): Promise<{ activeScope: ActiveScope; allowedScope: AllowedScope }> {
+  const r = await fetch(`${API_BASE}/orgs/me/active-scope`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    credentials: "include",
+    body: JSON.stringify(input),
+  });
+  if (!r.ok) {
+    const body = (await r.json().catch(() => ({}))) as { error?: string };
+    throw new Error(body.error ?? "Scope-Update fehlgeschlagen");
+  }
+  return (await r.json()) as { activeScope: ActiveScope; allowedScope: AllowedScope };
 }
 
 const API_BASE = `${import.meta.env.BASE_URL.replace(/\/$/, "")}/api`;

@@ -110,6 +110,50 @@ export interface User {
   avatarColor?: string | null;
 }
 
+export interface AllowedScope {
+  tenantWide: boolean;
+  companyIds: string[];
+  brandIds: string[];
+}
+
+export interface ActiveScope {
+  /** @nullable */
+  companyIds?: string[] | null;
+  /** @nullable */
+  brandIds?: string[] | null;
+  /** True wenn aktiver Scope gesetzt (Companies oder Brands != null). */
+  filtered: boolean;
+}
+
+export interface MeUser {
+  id: string;
+  name: string;
+  email: string;
+  role: string;
+  scope: string;
+  initials: string;
+  /** @nullable */
+  avatarColor?: string | null;
+  tenantId: string;
+  tenantWide: boolean;
+  companyIds: string[];
+  brandIds: string[];
+  allowedScope: AllowedScope;
+  activeScope: ActiveScope;
+}
+
+export interface UpdateActiveScopeBody {
+  /** @nullable */
+  companyIds?: string[] | null;
+  /** @nullable */
+  brandIds?: string[] | null;
+}
+
+export interface ActiveScopeUpdateResult {
+  activeScope: ActiveScope;
+  allowedScope: AllowedScope;
+}
+
 export interface AdminUser {
   id: string;
   name: string;
@@ -1194,6 +1238,13 @@ export interface AuditEntry {
   /** @nullable */
   afterJson?: string | null;
   at: string;
+  /**
+   * JSON-Snapshot der aktiven Sicht zum Zeitpunkt der Mutation. NULL =
+keine Filterung aktiv. Format: {tenantWide,companyIds,brandIds}.
+
+   * @nullable
+   */
+  activeScopeJson?: string | null;
 }
 
 export interface EntityVersion {
@@ -1413,6 +1464,24 @@ export type GdprRetentionResultApplied = { [key: string]: number };
 export interface GdprRetentionResult {
   applied: GdprRetentionResultApplied;
 }
+
+export type ListCompaniesParams = {
+  /**
+ * If true, returns the FULL permitted set (ignoring active scope filter).
+Used by the scope picker so users can switch back from a restricted view.
+
+ */
+  permitted?: boolean;
+};
+
+export type ListBrandsParams = {
+  /**
+ * If true, returns the FULL permitted set (ignoring active scope filter).
+Used by the scope picker so users can switch back from a restricted view.
+
+ */
+  permitted?: boolean;
+};
 
 export type ListContactsParams = {
   accountId?: string;

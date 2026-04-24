@@ -41,6 +41,7 @@ import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { setLanguage } from "@/lib/i18n";
 import { HelpBot } from "@/components/help-bot";
+import { ScopeSwitcher } from "@/components/scope-switcher";
 
 function useNavigation() {
   const { t } = useTranslation();
@@ -139,6 +140,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               {tenant?.name && <span className="font-medium text-foreground">{tenant.name}</span>}
               {tenant?.region && <span className="text-xs bg-muted px-2 py-0.5 rounded-full">{tenant.region}</span>}
             </div>
+            <ScopeSwitcher />
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button variant="outline" size="sm" className="h-8 gap-1.5">

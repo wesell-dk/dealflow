@@ -22,6 +22,7 @@ import type {
   Account,
   AccountDetail,
   AccountInput,
+  ActiveScopeUpdateResult,
   AdminUser,
   AdminUserCreate,
   AdminUserUpdate,
@@ -87,6 +88,8 @@ import type {
   ListApprovalsParams,
   ListAttachmentLibraryParams,
   ListAuditEntriesParams,
+  ListBrandsParams,
+  ListCompaniesParams,
   ListContactsParams,
   ListContractsParams,
   ListCopilotInsightsParams,
@@ -97,6 +100,7 @@ import type {
   ListQuoteTemplatesParams,
   ListQuotesParams,
   ListSignaturePackagesParams,
+  MeUser,
   Negotiation,
   NegotiationDetail,
   NegotiationImpactResponse,
@@ -138,6 +142,7 @@ import type {
   SignaturePackageDetail,
   Tenant,
   TimelineEvent,
+  UpdateActiveScopeBody,
   UploadUrlRequest,
   UploadUrlResponse,
   User,
@@ -378,41 +383,57 @@ export function useGetTenant<
   return { ...query, queryKey: queryOptions.queryKey };
 }
 
-export const getListCompaniesUrl = () => {
-  return `/api/v1/orgs/companies`;
+export const getListCompaniesUrl = (params?: ListCompaniesParams) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? "null" : value.toString());
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0
+    ? `/api/v1/orgs/companies?${stringifiedParams}`
+    : `/api/v1/orgs/companies`;
 };
 
 export const listCompanies = async (
+  params?: ListCompaniesParams,
   options?: RequestInit,
 ): Promise<Company[]> => {
-  return customFetch<Company[]>(getListCompaniesUrl(), {
+  return customFetch<Company[]>(getListCompaniesUrl(params), {
     ...options,
     method: "GET",
   });
 };
 
-export const getListCompaniesQueryKey = () => {
-  return [`/api/v1/orgs/companies`] as const;
+export const getListCompaniesQueryKey = (params?: ListCompaniesParams) => {
+  return [`/api/v1/orgs/companies`, ...(params ? [params] : [])] as const;
 };
 
 export const getListCompaniesQueryOptions = <
   TData = Awaited<ReturnType<typeof listCompanies>>,
   TError = ErrorType<unknown>,
->(options?: {
-  query?: UseQueryOptions<
-    Awaited<ReturnType<typeof listCompanies>>,
-    TError,
-    TData
-  >;
-  request?: SecondParameter<typeof customFetch>;
-}) => {
+>(
+  params?: ListCompaniesParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof listCompanies>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
   const { query: queryOptions, request: requestOptions } = options ?? {};
 
-  const queryKey = queryOptions?.queryKey ?? getListCompaniesQueryKey();
+  const queryKey = queryOptions?.queryKey ?? getListCompaniesQueryKey(params);
 
   const queryFn: QueryFunction<Awaited<ReturnType<typeof listCompanies>>> = ({
     signal,
-  }) => listCompanies({ signal, ...requestOptions });
+  }) => listCompanies(params, { signal, ...requestOptions });
 
   return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
     Awaited<ReturnType<typeof listCompanies>>,
@@ -429,15 +450,18 @@ export type ListCompaniesQueryError = ErrorType<unknown>;
 export function useListCompanies<
   TData = Awaited<ReturnType<typeof listCompanies>>,
   TError = ErrorType<unknown>,
->(options?: {
-  query?: UseQueryOptions<
-    Awaited<ReturnType<typeof listCompanies>>,
-    TError,
-    TData
-  >;
-  request?: SecondParameter<typeof customFetch>;
-}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
-  const queryOptions = getListCompaniesQueryOptions(options);
+>(
+  params?: ListCompaniesParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof listCompanies>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getListCompaniesQueryOptions(params, options);
 
   const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
     queryKey: QueryKey;
@@ -446,39 +470,57 @@ export function useListCompanies<
   return { ...query, queryKey: queryOptions.queryKey };
 }
 
-export const getListBrandsUrl = () => {
-  return `/api/v1/orgs/brands`;
+export const getListBrandsUrl = (params?: ListBrandsParams) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? "null" : value.toString());
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0
+    ? `/api/v1/orgs/brands?${stringifiedParams}`
+    : `/api/v1/orgs/brands`;
 };
 
-export const listBrands = async (options?: RequestInit): Promise<Brand[]> => {
-  return customFetch<Brand[]>(getListBrandsUrl(), {
+export const listBrands = async (
+  params?: ListBrandsParams,
+  options?: RequestInit,
+): Promise<Brand[]> => {
+  return customFetch<Brand[]>(getListBrandsUrl(params), {
     ...options,
     method: "GET",
   });
 };
 
-export const getListBrandsQueryKey = () => {
-  return [`/api/v1/orgs/brands`] as const;
+export const getListBrandsQueryKey = (params?: ListBrandsParams) => {
+  return [`/api/v1/orgs/brands`, ...(params ? [params] : [])] as const;
 };
 
 export const getListBrandsQueryOptions = <
   TData = Awaited<ReturnType<typeof listBrands>>,
   TError = ErrorType<unknown>,
->(options?: {
-  query?: UseQueryOptions<
-    Awaited<ReturnType<typeof listBrands>>,
-    TError,
-    TData
-  >;
-  request?: SecondParameter<typeof customFetch>;
-}) => {
+>(
+  params?: ListBrandsParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof listBrands>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
   const { query: queryOptions, request: requestOptions } = options ?? {};
 
-  const queryKey = queryOptions?.queryKey ?? getListBrandsQueryKey();
+  const queryKey = queryOptions?.queryKey ?? getListBrandsQueryKey(params);
 
   const queryFn: QueryFunction<Awaited<ReturnType<typeof listBrands>>> = ({
     signal,
-  }) => listBrands({ signal, ...requestOptions });
+  }) => listBrands(params, { signal, ...requestOptions });
 
   return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
     Awaited<ReturnType<typeof listBrands>>,
@@ -495,15 +537,18 @@ export type ListBrandsQueryError = ErrorType<unknown>;
 export function useListBrands<
   TData = Awaited<ReturnType<typeof listBrands>>,
   TError = ErrorType<unknown>,
->(options?: {
-  query?: UseQueryOptions<
-    Awaited<ReturnType<typeof listBrands>>,
-    TError,
-    TData
-  >;
-  request?: SecondParameter<typeof customFetch>;
-}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
-  const queryOptions = getListBrandsQueryOptions(options);
+>(
+  params?: ListBrandsParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof listBrands>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getListBrandsQueryOptions(params, options);
 
   const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
     queryKey: QueryKey;
@@ -806,8 +851,10 @@ export const getGetCurrentUserUrl = () => {
   return `/api/v1/orgs/me`;
 };
 
-export const getCurrentUser = async (options?: RequestInit): Promise<User> => {
-  return customFetch<User>(getGetCurrentUserUrl(), {
+export const getCurrentUser = async (
+  options?: RequestInit,
+): Promise<MeUser> => {
+  return customFetch<MeUser>(getGetCurrentUserUrl(), {
     ...options,
     method: "GET",
   });
@@ -867,6 +914,97 @@ export function useGetCurrentUser<
 
   return { ...query, queryKey: queryOptions.queryKey };
 }
+
+/**
+ * Setzt die aktive Sicht des Users (Companies/Brands). NULL pro Liste
+bedeutet "alle erlaubten" für diese Dimension. Server validiert hart
+gegen die Permissions — Restricted User können nie über ihre
+Berechtigungen hinaus filtern.
+
+ * @summary Update aktiver Scope (Mandanten-Switcher)
+ */
+export const getUpdateActiveScopeUrl = () => {
+  return `/api/v1/orgs/me/active-scope`;
+};
+
+export const updateActiveScope = async (
+  updateActiveScopeBody: UpdateActiveScopeBody,
+  options?: RequestInit,
+): Promise<ActiveScopeUpdateResult> => {
+  return customFetch<ActiveScopeUpdateResult>(getUpdateActiveScopeUrl(), {
+    ...options,
+    method: "PATCH",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(updateActiveScopeBody),
+  });
+};
+
+export const getUpdateActiveScopeMutationOptions = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof updateActiveScope>>,
+    TError,
+    { data: BodyType<UpdateActiveScopeBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof updateActiveScope>>,
+  TError,
+  { data: BodyType<UpdateActiveScopeBody> },
+  TContext
+> => {
+  const mutationKey = ["updateActiveScope"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof updateActiveScope>>,
+    { data: BodyType<UpdateActiveScopeBody> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return updateActiveScope(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type UpdateActiveScopeMutationResult = NonNullable<
+  Awaited<ReturnType<typeof updateActiveScope>>
+>;
+export type UpdateActiveScopeMutationBody = BodyType<UpdateActiveScopeBody>;
+export type UpdateActiveScopeMutationError = ErrorType<void>;
+
+/**
+ * @summary Update aktiver Scope (Mandanten-Switcher)
+ */
+export const useUpdateActiveScope = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof updateActiveScope>>,
+    TError,
+    { data: BodyType<UpdateActiveScopeBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof updateActiveScope>>,
+  TError,
+  { data: BodyType<UpdateActiveScopeBody> },
+  TContext
+> => {
+  return useMutation(getUpdateActiveScopeMutationOptions(options));
+};
 
 export const getListAdminUsersUrl = () => {
   return `/api/v1/admin/users`;

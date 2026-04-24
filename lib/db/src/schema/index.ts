@@ -74,6 +74,10 @@ export const usersTable = pgTable("users", {
   tenantWide: boolean("tenant_wide").notNull().default(false),
   scopeCompanyIds: text("scope_company_ids").notNull().default("[]"),
   scopeBrandIds: text("scope_brand_ids").notNull().default("[]"),
+  // Active UI scope (User-Wahl im Header). NULL = "alle erlaubten" (kein Filter).
+  // Server intersected aktiver Scope IMMER mit den erlaubten Permissions.
+  activeScopeCompanyIds: text("active_scope_company_ids"),
+  activeScopeBrandIds: text("active_scope_brand_ids"),
 });
 
 export const rolesTable = pgTable("roles", {
@@ -561,6 +565,11 @@ export const auditLogTable = pgTable("audit_log", {
   beforeJson: text("before_json"),
   afterJson: text("after_json"),
   summary: text("summary").notNull(),
+  // Snapshot des aktiven Scopes zum Zeitpunkt der Mutation: JSON
+  // {tenantWide:boolean, companyIds:string[]|null, brandIds:string[]|null}
+  // null = "keine Einschränkung". Hilft beim Auditieren, mit welcher Sicht
+  // eine Aktion ausgeführt wurde.
+  activeScopeJson: text("active_scope_json"),
   at: ts("at"),
 });
 

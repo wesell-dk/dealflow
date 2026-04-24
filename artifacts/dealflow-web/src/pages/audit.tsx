@@ -12,7 +12,23 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { History } from "lucide-react";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { History, Filter, Globe } from "lucide-react";
+
+interface ParsedActiveScope {
+  tenantWide?: boolean;
+  companyIds?: string[] | null;
+  brandIds?: string[] | null;
+}
+
+function parseActiveScope(json: string | null | undefined): ParsedActiveScope | null {
+  if (!json) return null;
+  try {
+    return JSON.parse(json) as ParsedActiveScope;
+  } catch {
+    return null;
+  }
+}
 
 const actionVariant: Record<string, "default" | "secondary" | "destructive" | "outline"> = {
   create: "default",
@@ -110,35 +126,66 @@ export default function Audit() {
           ) : filtered.length === 0 ? (
             <p className="text-sm text-muted-foreground">{t("pages.audit.noEntries")}</p>
           ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>{t("common.date")}</TableHead>
-                  <TableHead>{t("pages.audit.entityType")}</TableHead>
-                  <TableHead>{t("pages.audit.action")}</TableHead>
-                  <TableHead>{t("common.user")}</TableHead>
-                  <TableHead>Summary</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {filtered.map((e) => (
-                  <TableRow key={e.id}>
-                    <TableCell className="text-xs text-muted-foreground tabular-nums whitespace-nowrap">
-                      {new Date(e.at).toLocaleString(i18n.resolvedLanguage)}
-                    </TableCell>
-                    <TableCell>
-                      <Badge variant="outline">{e.entityType}</Badge>
-                      <span className="ml-2 font-mono text-xs text-muted-foreground">{e.entityId}</span>
-                    </TableCell>
-                    <TableCell>
-                      <Badge variant={actionVariant[e.action] ?? "outline"}>{e.action}</Badge>
-                    </TableCell>
-                    <TableCell className="text-sm">{e.actor}</TableCell>
-                    <TableCell className="text-sm">{e.summary}</TableCell>
+            <TooltipProvider delayDuration={250}>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>{t("common.date")}</TableHead>
+                    <TableHead>{t("pages.audit.entityType")}</TableHead>
+                    <TableHead>{t("pages.audit.action")}</TableHead>
+                    <TableHead>{t("common.user")}</TableHead>
+                    <TableHead>{t("scopeSwitcher.auditColumn")}</TableHead>
+                    <TableHead>Summary</TableHead>
                   </TableRow>
-                ))}
-              </TableBody>
-            </Table>
+                </TableHeader>
+                <TableBody>
+                  {filtered.map((e) => {
+                    const scope = parseActiveScope(e.activeScopeJson);
+                    const isFiltered =
+                      !!scope && ((scope.companyIds && scope.companyIds.length > 0) || (scope.brandIds && scope.brandIds.length > 0));
+                    return (
+                      <TableRow key={e.id}>
+                        <TableCell className="text-xs text-muted-foreground tabular-nums whitespace-nowrap">
+                          {new Date(e.at).toLocaleString(i18n.resolvedLanguage)}
+                        </TableCell>
+                        <TableCell>
+                          <Badge variant="outline">{e.entityType}</Badge>
+                          <span className="ml-2 font-mono text-xs text-muted-foreground">{e.entityId}</span>
+                        </TableCell>
+                        <TableCell>
+                          <Badge variant={actionVariant[e.action] ?? "outline"}>{e.action}</Badge>
+                        </TableCell>
+                        <TableCell className="text-sm">{e.actor}</TableCell>
+                        <TableCell className="text-xs">
+                          {isFiltered ? (
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <Badge variant="secondary" className="gap-1" data-testid={`badge-audit-scope-${e.id}`}>
+                                  <Filter className="h-3 w-3" />
+                                  {t("scopeSwitcher.auditFiltered")}
+                                </Badge>
+                              </TooltipTrigger>
+                              <TooltipContent className="max-w-xs">
+                                <div className="space-y-1 font-mono text-xs">
+                                  <div>Companies: {scope?.companyIds?.length ?? 0}</div>
+                                  <div>Brands: {scope?.brandIds?.length ?? 0}</div>
+                                </div>
+                              </TooltipContent>
+                            </Tooltip>
+                          ) : (
+                            <Badge variant="outline" className="gap-1 text-muted-foreground">
+                              <Globe className="h-3 w-3" />
+                              {t("scopeSwitcher.auditTenantWide")}
+                            </Badge>
+                          )}
+                        </TableCell>
+                        <TableCell className="text-sm">{e.summary}</TableCell>
+                      </TableRow>
+                    );
+                  })}
+                </TableBody>
+              </Table>
+            </TooltipProvider>
           )}
         </CardContent>
       </Card>

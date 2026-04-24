@@ -54,6 +54,15 @@ export const GetTenantResponse = zod.object({
   createdAt: zod.coerce.date(),
 });
 
+export const ListCompaniesQueryParams = zod.object({
+  permitted: zod.coerce
+    .boolean()
+    .optional()
+    .describe(
+      "If true, returns the FULL permitted set (ignoring active scope filter).\nUsed by the scope picker so users can switch back from a restricted view.\n",
+    ),
+});
+
 export const ListCompaniesResponseItem = zod.object({
   id: zod.string(),
   tenantId: zod.string(),
@@ -63,6 +72,15 @@ export const ListCompaniesResponseItem = zod.object({
   currency: zod.string(),
 });
 export const ListCompaniesResponse = zod.array(ListCompaniesResponseItem);
+
+export const ListBrandsQueryParams = zod.object({
+  permitted: zod.coerce
+    .boolean()
+    .optional()
+    .describe(
+      "If true, returns the FULL permitted set (ignoring active scope filter).\nUsed by the scope picker so users can switch back from a restricted view.\n",
+    ),
+});
 
 export const ListBrandsResponseItem = zod.object({
   id: zod.string(),
@@ -183,6 +201,54 @@ export const GetCurrentUserResponse = zod.object({
   scope: zod.string(),
   initials: zod.string(),
   avatarColor: zod.string().nullish(),
+  tenantId: zod.string(),
+  tenantWide: zod.boolean(),
+  companyIds: zod.array(zod.string()),
+  brandIds: zod.array(zod.string()),
+  allowedScope: zod.object({
+    tenantWide: zod.boolean(),
+    companyIds: zod.array(zod.string()),
+    brandIds: zod.array(zod.string()),
+  }),
+  activeScope: zod.object({
+    companyIds: zod.array(zod.string()).nullish(),
+    brandIds: zod.array(zod.string()).nullish(),
+    filtered: zod
+      .boolean()
+      .describe(
+        "True wenn aktiver Scope gesetzt (Companies oder Brands != null).",
+      ),
+  }),
+});
+
+/**
+ * Setzt die aktive Sicht des Users (Companies/Brands). NULL pro Liste
+bedeutet "alle erlaubten" für diese Dimension. Server validiert hart
+gegen die Permissions — Restricted User können nie über ihre
+Berechtigungen hinaus filtern.
+
+ * @summary Update aktiver Scope (Mandanten-Switcher)
+ */
+export const UpdateActiveScopeBody = zod.object({
+  companyIds: zod.array(zod.string()).nullish(),
+  brandIds: zod.array(zod.string()).nullish(),
+});
+
+export const UpdateActiveScopeResponse = zod.object({
+  activeScope: zod.object({
+    companyIds: zod.array(zod.string()).nullish(),
+    brandIds: zod.array(zod.string()).nullish(),
+    filtered: zod
+      .boolean()
+      .describe(
+        "True wenn aktiver Scope gesetzt (Companies oder Brands != null).",
+      ),
+  }),
+  allowedScope: zod.object({
+    tenantWide: zod.boolean(),
+    companyIds: zod.array(zod.string()),
+    brandIds: zod.array(zod.string()),
+  }),
 });
 
 export const ListAdminUsersResponseItem = zod.object({
@@ -2331,6 +2397,12 @@ export const ListAuditEntriesResponseItem = zod.object({
   beforeJson: zod.string().nullish(),
   afterJson: zod.string().nullish(),
   at: zod.coerce.date(),
+  activeScopeJson: zod
+    .string()
+    .nullish()
+    .describe(
+      "JSON-Snapshot der aktiven Sicht zum Zeitpunkt der Mutation. NULL =\nkeine Filterung aktiv. Format: {tenantWide,companyIds,brandIds}.\n",
+    ),
 });
 export const ListAuditEntriesResponse = zod.array(ListAuditEntriesResponseItem);
 

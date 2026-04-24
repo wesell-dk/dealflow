@@ -20,4 +20,11 @@ export interface AuditEntry {
   /** @nullable */
   afterJson?: string | null;
   at: Date;
+  /**
+   * JSON-Snapshot der aktiven Sicht zum Zeitpunkt der Mutation. NULL =
+keine Filterung aktiv. Format: {tenantWide,companyIds,brandIds}.
+
+   * @nullable
+   */
+  activeScopeJson?: string | null;
 }

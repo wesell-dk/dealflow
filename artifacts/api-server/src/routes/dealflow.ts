@@ -24,13 +24,19 @@ async function resolveLogoForPdf(logoUrl: string | null | undefined): Promise<st
 import {
   allowedAccountIds,
   allowedBrandIds,
+  allowedCompanyIds,
   allowedDealIds,
   dealScopeSql,
+  dealsWhereSql,
   getScope,
   isAccountAllowed,
   entityInScope,
   entityScopeStatus,
   copilotThreadVisible,
+  permittedCompanyIds,
+  permittedBrandIds,
+  hasActiveScopeFilter,
+  activeScopeSnapshot,
 } from '../lib/scope';
 import {
   db,
@@ -200,18 +206,33 @@ router.get('/orgs/tenant', async (req, res) => {
 
 router.get('/orgs/companies', async (req, res) => {
   const scope = getScope(req);
+  const usePermitted = req.query.permitted === 'true' || req.query.permitted === '1';
   const rows = await db.select().from(companiesTable).where(eq(companiesTable.tenantId, scope.tenantId));
-  if (scope.tenantWide) { res.json(rows); return; }
-  // Restrict: only companies in scope OR companies of explicit brand scope
-  const allowedCompanyIds = new Set<string>(scope.companyIds);
-  if (scope.brandIds.length) {
-    const bs = await db.select().from(brandsTable).where(inArray(brandsTable.id, scope.brandIds));
-    for (const b of bs) allowedCompanyIds.add(b.companyId);
+  // Picker mode: bypass active filter, return Permission set only.
+  if (usePermitted) {
+    if (scope.tenantWide) { res.json(rows); return; }
+    const permitted = new Set<string>(await permittedCompanyIds(req));
+    const permittedB = await permittedBrandIds(req);
+    if (permittedB.length) {
+      const bs = await db.select().from(brandsTable).where(inArray(brandsTable.id, permittedB));
+      for (const b of bs) permitted.add(b.companyId);
+    }
+    res.json(rows.filter(c => permitted.has(c.id)));
+    return;
   }
-  res.json(rows.filter(c => allowedCompanyIds.has(c.id)));
+  // Default: apply Permission ∩ Active.
+  if (scope.tenantWide && !hasActiveScopeFilter(scope)) { res.json(rows); return; }
+  const allowed = new Set<string>(await allowedCompanyIds(req));
+  const activeB = await allowedBrandIds(req);
+  if (activeB.length) {
+    const bs = await db.select().from(brandsTable).where(inArray(brandsTable.id, activeB));
+    for (const b of bs) allowed.add(b.companyId);
+  }
+  res.json(rows.filter(c => allowed.has(c.id)));
 });
 router.get('/orgs/brands', async (req, res) => {
   const scope = getScope(req);
+  const usePermitted = req.query.permitted === 'true' || req.query.permitted === '1';
   // Tenant-bound: only brands whose company belongs to the user's tenant.
   const rows = await db
     .select({ brand: brandsTable })
@@ -219,9 +240,22 @@ router.get('/orgs/brands', async (req, res) => {
     .innerJoin(companiesTable, eq(companiesTable.id, brandsTable.companyId))
     .where(eq(companiesTable.tenantId, scope.tenantId));
   const brands = rows.map(r => r.brand);
-  const visible = scope.tenantWide
-    ? brands
-    : brands.filter(b => scope.companyIds.includes(b.companyId) || scope.brandIds.includes(b.id));
+  let visible: typeof brands;
+  if (usePermitted) {
+    if (scope.tenantWide) {
+      visible = brands;
+    } else {
+      const pc = await permittedCompanyIds(req);
+      const pb = await permittedBrandIds(req);
+      visible = brands.filter(b => pc.includes(b.companyId) || pb.includes(b.id));
+    }
+  } else if (scope.tenantWide && !hasActiveScopeFilter(scope)) {
+    visible = brands;
+  } else {
+    const ac = await allowedCompanyIds(req);
+    const ab = await allowedBrandIds(req);
+    visible = brands.filter(b => ac.includes(b.companyId) || ab.includes(b.id));
+  }
   res.json(visible.map(mapBrand));
 });
 router.get('/orgs/users', async (req, res) => {
@@ -235,11 +269,105 @@ router.get('/orgs/users', async (req, res) => {
 router.get('/orgs/me', async (req, res) => {
   const scope = getScope(req);
   const u = scope.user;
+  const allowedCompanyIds = await permittedCompanyIds(req);
+  const allowedBrandIdsList = await permittedBrandIds(req);
   res.json({
     id: u.id, name: u.name, email: u.email, role: u.role, scope: u.scope,
     initials: u.initials, avatarColor: u.avatarColor,
     tenantId: u.tenantId, tenantWide: scope.tenantWide,
+    // Backwards-compat
     companyIds: scope.companyIds, brandIds: scope.brandIds,
+    // Allowed scope (Permission, vollständig)
+    allowedScope: {
+      tenantWide: scope.tenantWide,
+      companyIds: allowedCompanyIds,
+      brandIds: allowedBrandIdsList,
+    },
+    // Active scope (UI-Wahl). NULL-Listen = "alle erlaubten" für die jeweilige
+    // Dimension. Wenn beide Listen null sind, ist kein Filter aktiv.
+    activeScope: {
+      companyIds: scope.activeCompanyIds,
+      brandIds: scope.activeBrandIds,
+      filtered: hasActiveScopeFilter(scope),
+    },
+  });
+});
+
+const ACTIVE_SCOPE_COOKIE = 'df_active_scope';
+
+router.patch('/orgs/me/active-scope', async (req, res) => {
+  if (!validateInline(req, res, { body: Z.UpdateActiveScopeBody })) return;
+  const scope = getScope(req);
+  const body = req.body as { companyIds?: string[] | null; brandIds?: string[] | null };
+  // Normalize: undefined → null (=Reset für die jeweilige Dimension)
+  const reqCompanies = body.companyIds === undefined ? null : body.companyIds;
+  const reqBrands = body.brandIds === undefined ? null : body.brandIds;
+  // Validate against PERMITTED set (not active-filtered) — Restricted User darf
+  // aktiven Scope nur als Teilmenge der erlaubten Permissions setzen.
+  const permittedC = new Set(await permittedCompanyIds(req));
+  const permittedB = new Set(await permittedBrandIds(req));
+  if (reqCompanies !== null) {
+    for (const cid of reqCompanies) {
+      if (!permittedC.has(cid)) {
+        res.status(403).json({ error: `companyId "${cid}" not permitted` });
+        return;
+      }
+    }
+  }
+  if (reqBrands !== null) {
+    for (const bid of reqBrands) {
+      if (!permittedB.has(bid)) {
+        res.status(403).json({ error: `brandId "${bid}" not permitted` });
+        return;
+      }
+    }
+  }
+  // Persist
+  await db.update(usersTable)
+    .set({
+      activeScopeCompanyIds: reqCompanies === null ? null : JSON.stringify(reqCompanies),
+      activeScopeBrandIds: reqBrands === null ? null : JSON.stringify(reqBrands),
+    })
+    .where(eq(usersTable.id, scope.user.id));
+  // Cookie spiegeln (für no-flash beim Boot)
+  const cookieVal = JSON.stringify({
+    companyIds: reqCompanies,
+    brandIds: reqBrands,
+  });
+  res.cookie(ACTIVE_SCOPE_COOKIE, cookieVal, {
+    httpOnly: false,
+    sameSite: 'lax',
+    secure: process.env.NODE_ENV === 'production',
+    maxAge: 1000 * 60 * 60 * 24 * 30,
+    path: '/',
+  });
+  // Audit-Log Snapshot
+  await writeAudit({
+    entityType: 'user',
+    entityId: scope.user.id,
+    action: 'scope.switch',
+    summary: reqCompanies === null && reqBrands === null
+      ? 'Aktiver Scope zurückgesetzt'
+      : `Aktiver Scope geändert: ${reqCompanies?.length ?? 0} Companies, ${reqBrands?.length ?? 0} Brands`,
+    after: { companyIds: reqCompanies, brandIds: reqBrands },
+    actor: scope.user.name,
+    activeScope: {
+      tenantWide: scope.tenantWide,
+      companyIds: reqCompanies,
+      brandIds: reqBrands,
+    },
+  });
+  res.json({
+    activeScope: {
+      companyIds: reqCompanies,
+      brandIds: reqBrands,
+      filtered: reqCompanies !== null || reqBrands !== null,
+    },
+    allowedScope: {
+      tenantWide: scope.tenantWide,
+      companyIds: [...permittedC],
+      brandIds: [...permittedB],
+    },
   });
 });
 
@@ -321,10 +449,9 @@ router.get('/deals', async (req, res) => {
   if (req.query.ownerId)   filters.push(eq(dealsTable.ownerId, String(req.query.ownerId)));
   if (req.query.companyId) filters.push(eq(dealsTable.companyId, String(req.query.companyId)));
   if (req.query.brandId)   filters.push(eq(dealsTable.brandId, String(req.query.brandId)));
-  const sf = dealScopeSql(scope);
-  if (sf) filters.push(sf);
+  filters.push(dealsWhereSql(scope));
   const rows = await db.select().from(dealsTable)
-    .where(filters.length ? and(...filters) : undefined)
+    .where(and(...filters))
     .orderBy(desc(dealsTable.updatedAt));
   const ctx = await dealCtx();
   let result = await Promise.all(rows.map(d => buildDeal(d, ctx)));
@@ -347,9 +474,11 @@ router.post('/deals', async (req, res) => {
   if (!company || company.tenantId !== scope.tenantId) {
     res.status(403).json({ error: 'forbidden (out of tenant)' }); return;
   }
-  if (!scope.tenantWide) {
-    const okCompany = scope.companyIds.includes(b.companyId);
-    const okBrand = scope.brandIds.includes(b.brandId);
+  // Intersection (Permission ∩ Active) für POST: aktive Sicht muss companyId
+  // ODER brandId enthalten. Tenant-weit + kein aktiver Filter ⇒ pass-through.
+  if (!scope.tenantWide || hasActiveScopeFilter(scope)) {
+    const okCompany = (await allowedCompanyIds(req)).includes(b.companyId);
+    const okBrand = (await allowedBrandIds(req)).includes(b.brandId);
     if (!okCompany && !okBrand) {
       res.status(403).json({ error: 'forbidden (out of scope)' }); return;
     }
@@ -367,8 +496,7 @@ router.post('/deals', async (req, res) => {
 });
 
 router.get('/deals/pipeline', async (req, res) => {
-  const sf = dealScopeSql(getScope(req));
-  const rows = await db.select().from(dealsTable).where(sf);
+  const rows = await db.select().from(dealsTable).where(dealsWhereSql(getScope(req)));
   const ctx = await dealCtx();
   const stages = ['qualified', 'discovery', 'proposal', 'negotiation', 'closing', 'won', 'lost'];
   const out = await Promise.all(stages.map(async stage => {
@@ -710,15 +838,22 @@ router.post('/quotes/:id/accept', async (req, res) => {
 type QuoteTemplateRow = typeof quoteTemplatesTable.$inferSelect;
 type QuoteTemplateSectionRow = typeof quoteTemplateSectionsTable.$inferSelect;
 
-function scopedRowVisible(
-  scope: ReturnType<typeof getScope>,
+/**
+ * Visibility-Check für Rows mit (companyId|brandId|null,null) Scope-Stamping.
+ * Wendet Permission ∩ Active-Filter konsistent an.
+ */
+async function scopedRowVisibleAsync(
+  req: Request,
   row: { tenantId: string; companyId?: string | null; brandId?: string | null },
-): boolean {
+): Promise<boolean> {
+  const scope = getScope(req);
   if (row.tenantId !== scope.tenantId) return false;
-  if (scope.tenantWide) return true;
-  if (!row.companyId && !row.brandId) return true;
-  if (row.companyId && scope.companyIds.includes(row.companyId)) return true;
-  if (row.brandId && scope.brandIds.includes(row.brandId)) return true;
+  if (scope.tenantWide && !hasActiveScopeFilter(scope)) return true;
+  if (!row.companyId && !row.brandId) return !hasActiveScopeFilter(scope);
+  const allowedC = await allowedCompanyIds(req);
+  const allowedB = await allowedBrandIds(req);
+  if (row.companyId && allowedC.includes(row.companyId)) return true;
+  if (row.brandId && allowedB.includes(row.brandId)) return true;
   return false;
 }
 
@@ -752,11 +887,8 @@ router.get('/quote-templates', async (req, res) => {
   const rows = await db.select().from(quoteTemplatesTable)
     .where(and(...filters))
     .orderBy(asc(quoteTemplatesTable.name));
-  const visible = scope.tenantWide ? rows : rows.filter(t =>
-    !t.companyId && !t.brandId
-    || (t.companyId && scope.companyIds.includes(t.companyId))
-    || (t.brandId && scope.brandIds.includes(t.brandId)),
-  );
+  const visFlags = await Promise.all(rows.map(t => scopedRowVisibleAsync(req, t)));
+  const visible = rows.filter((_, i) => visFlags[i]);
   const ids = visible.map(t => t.id);
   const sections = ids.length
     ? await db.select().from(quoteTemplateSectionsTable).where(inArray(quoteTemplateSectionsTable.templateId, ids))
@@ -767,7 +899,7 @@ router.get('/quote-templates', async (req, res) => {
 router.get('/quote-templates/:id', async (req, res) => {
   const scope = getScope(req);
   const [t] = await db.select().from(quoteTemplatesTable).where(eq(quoteTemplatesTable.id, req.params.id));
-  if (!t || !scopedRowVisible(scope, t)) { res.status(404).json({ error: 'not found' }); return; }
+  if (!t || !(await scopedRowVisibleAsync(req, t))) { res.status(404).json({ error: 'not found' }); return; }
   const sections = await db.select().from(quoteTemplateSectionsTable)
     .where(eq(quoteTemplateSectionsTable.templateId, t.id));
   res.json(mapQuoteTemplate(t, sections));
@@ -809,8 +941,10 @@ router.post('/quote-templates', async (req, res) => {
     const [bb] = await db.select().from(brandsTable).where(eq(brandsTable.id, b.brandId));
     if (!bb || !(await brandVisible(req, bb))) { res.status(403).json({ error: 'brand not in scope' }); return; }
   }
-  if (b.companyId && !scope.tenantWide && !scope.companyIds.includes(b.companyId)) {
-    res.status(403).json({ error: 'company not in scope' }); return;
+  if (b.companyId && (!scope.tenantWide || hasActiveScopeFilter(scope))) {
+    if (!(await allowedCompanyIds(req)).includes(b.companyId)) {
+      res.status(403).json({ error: 'company not in scope' }); return;
+    }
   }
   const id = `qtpl_${randomUUID().slice(0, 8)}`;
   await db.insert(quoteTemplatesTable).values({
@@ -842,9 +976,19 @@ router.patch('/quote-templates/:id', async (req, res) => {
   if (!validateInline(req, res, { body: QuoteTemplateBody })) return;
   const scope = getScope(req);
   const [existing] = await db.select().from(quoteTemplatesTable).where(eq(quoteTemplatesTable.id, req.params.id));
-  if (!existing || !scopedRowVisible(scope, existing)) { res.status(404).json({ error: 'not found' }); return; }
+  if (!existing || !(await scopedRowVisibleAsync(req, existing))) { res.status(404).json({ error: 'not found' }); return; }
   if (existing.isSystem && !scope.tenantWide) { res.status(403).json({ error: 'cannot edit system template' }); return; }
   const b = req.body as z.infer<typeof QuoteTemplateBody>;
+  // Prevent re-stamping the template to a target outside Permission ∩ Active.
+  if (b.brandId) {
+    const [bb] = await db.select().from(brandsTable).where(eq(brandsTable.id, b.brandId));
+    if (!bb || !(await brandVisible(req, bb))) { res.status(403).json({ error: 'brand not in scope' }); return; }
+  }
+  if (b.companyId && (!scope.tenantWide || hasActiveScopeFilter(scope))) {
+    if (!(await allowedCompanyIds(req)).includes(b.companyId)) {
+      res.status(403).json({ error: 'company not in scope' }); return;
+    }
+  }
   await db.update(quoteTemplatesTable).set({
     name: b.name, description: b.description ?? '', industry: b.industry,
     companyId: b.companyId ?? null, brandId: b.brandId ?? null,
@@ -873,7 +1017,7 @@ router.patch('/quote-templates/:id', async (req, res) => {
 router.delete('/quote-templates/:id', async (req, res) => {
   const scope = getScope(req);
   const [existing] = await db.select().from(quoteTemplatesTable).where(eq(quoteTemplatesTable.id, req.params.id));
-  if (!existing || !scopedRowVisible(scope, existing)) { res.status(404).json({ error: 'not found' }); return; }
+  if (!existing || !(await scopedRowVisibleAsync(req, existing))) { res.status(404).json({ error: 'not found' }); return; }
   if (existing.isSystem) { res.status(403).json({ error: 'cannot delete system template' }); return; }
   await db.delete(quoteTemplateSectionsTable).where(eq(quoteTemplateSectionsTable.templateId, req.params.id));
   await db.delete(quoteTemplatesTable).where(eq(quoteTemplatesTable.id, req.params.id));
@@ -931,13 +1075,8 @@ router.get('/attachment-library', async (req, res) => {
   const filters = [eq(attachmentLibraryTable.tenantId, scope.tenantId)];
   if (req.query.category) filters.push(eq(attachmentLibraryTable.category, String(req.query.category)));
   let rows = await db.select().from(attachmentLibraryTable).where(and(...filters)).orderBy(desc(attachmentLibraryTable.createdAt));
-  if (!scope.tenantWide) {
-    rows = rows.filter(a =>
-      (!a.companyId && !a.brandId)
-      || (a.companyId && scope.companyIds.includes(a.companyId))
-      || (a.brandId && scope.brandIds.includes(a.brandId)),
-    );
-  }
+  const visFlags = await Promise.all(rows.map(a => scopedRowVisibleAsync(req, a)));
+  rows = rows.filter((_, i) => visFlags[i]);
   if (req.query.tag) {
     const tag = String(req.query.tag).toLowerCase();
     rows = rows.filter(a => (a.tags ?? []).some(t => t.toLowerCase() === tag));
@@ -953,8 +1092,10 @@ router.post('/attachment-library', async (req, res) => {
     const [bb] = await db.select().from(brandsTable).where(eq(brandsTable.id, b.brandId));
     if (!bb || !(await brandVisible(req, bb))) { res.status(403).json({ error: 'brand not in scope' }); return; }
   }
-  if (b.companyId && !scope.tenantWide && !scope.companyIds.includes(b.companyId)) {
-    res.status(403).json({ error: 'company not in scope' }); return;
+  if (b.companyId && (!scope.tenantWide || hasActiveScopeFilter(scope))) {
+    if (!(await allowedCompanyIds(req)).includes(b.companyId)) {
+      res.status(403).json({ error: 'company not in scope' }); return;
+    }
   }
   if (!(await assertOwnedObjectPath(req, res, scope, b.objectPath))) return;
   const id = `att_${randomUUID().slice(0, 8)}`;
@@ -973,7 +1114,7 @@ router.post('/attachment-library', async (req, res) => {
 router.delete('/attachment-library/:id', async (req, res) => {
   const scope = getScope(req);
   const [a] = await db.select().from(attachmentLibraryTable).where(eq(attachmentLibraryTable.id, req.params.id));
-  if (!a || !scopedRowVisible(scope, a)) { res.status(404).json({ error: 'not found' }); return; }
+  if (!a || !(await scopedRowVisibleAsync(req, a))) { res.status(404).json({ error: 'not found' }); return; }
   await db.delete(attachmentLibraryTable).where(eq(attachmentLibraryTable.id, req.params.id));
   res.status(204).end();
 });
@@ -1059,7 +1200,7 @@ router.post('/quotes/from-template', async (req, res) => {
   const [d] = await db.select().from(dealsTable).where(eq(dealsTable.id, b.dealId));
   if (!d) { res.status(404).json({ error: 'deal not found' }); return; }
   const [tpl] = await db.select().from(quoteTemplatesTable).where(eq(quoteTemplatesTable.id, b.templateId));
-  if (!tpl || !scopedRowVisible(scope, tpl)) { res.status(404).json({ error: 'template not found' }); return; }
+  if (!tpl || !(await scopedRowVisibleAsync(req, tpl))) { res.status(404).json({ error: 'template not found' }); return; }
 
   const validUntil = b.validUntil ?? new Date(Date.now() + tpl.defaultValidityDays * 86400000).toISOString().slice(0, 10);
   const id = `qt_${randomUUID().slice(0, 8)}`;
@@ -1109,7 +1250,8 @@ router.post('/quotes/from-template', async (req, res) => {
   if (attIds.length) {
     const libsAll = await db.select().from(attachmentLibraryTable)
       .where(and(eq(attachmentLibraryTable.tenantId, scope.tenantId), inArray(attachmentLibraryTable.id, attIds)));
-    const libs = libsAll.filter(a => scopedRowVisible(scope, a));
+    const visFlags = await Promise.all(libsAll.map(a => scopedRowVisibleAsync(req, a)));
+    const libs = libsAll.filter((_, i) => visFlags[i]);
     if (libs.length) {
       await db.insert(quoteAttachmentsTable).values(libs.map((a, i) => ({
         id: `qatt_${randomUUID().slice(0, 8)}`,
@@ -1254,7 +1396,7 @@ router.post('/quote-versions/:id/attachments', async (req, res) => {
   let payload: typeof quoteAttachmentsTable.$inferInsert;
   if (b.libraryAssetId) {
     const [a] = await db.select().from(attachmentLibraryTable).where(eq(attachmentLibraryTable.id, b.libraryAssetId));
-    if (!a || !scopedRowVisible(scope, a)) { res.status(404).json({ error: 'library asset not found' }); return; }
+    if (!a || !(await scopedRowVisibleAsync(req, a))) { res.status(404).json({ error: 'library asset not found' }); return; }
     payload = {
       id: `qatt_${randomUUID().slice(0, 8)}`,
       quoteVersionId: qv.id, libraryAssetId: a.id,
@@ -1317,8 +1459,11 @@ router.get('/price-positions', async (req, res) => {
   const tenantRows = rows.map(r => r.p);
   const brands = await getBrandMap();
   const companies = await getCompanyMap();
-  const filtered = scope.tenantWide ? tenantRows : tenantRows.filter(p =>
-    scope.companyIds.includes(p.companyId) || scope.brandIds.includes(p.brandId));
+  const allowC = await allowedCompanyIds(req);
+  const allowB = await allowedBrandIds(req);
+  const filtered = (scope.tenantWide && !hasActiveScopeFilter(scope))
+    ? tenantRows
+    : tenantRows.filter(p => allowC.includes(p.companyId) || allowB.includes(p.brandId));
   res.json(filtered.map(p => mapPricePosition(p, brands.get(p.brandId)?.name ?? '', companies.get(p.companyId)?.name ?? '')));
 });
 
@@ -1326,10 +1471,10 @@ router.post('/price-positions', async (req, res) => {
   if (!validateInline(req, res, { body: Z.CreatePricePositionBody })) return;
   const scope = getScope(req);
   const b = req.body;
-  // Scope-check target brand/company unless user is tenantWide.
-  if (!scope.tenantWide) {
+  // Scope-check target brand/company. Apply intersection (Permission ∩ Active).
+  if (!scope.tenantWide || hasActiveScopeFilter(scope)) {
     const brandAllowed = (await allowedBrandIds(req)).includes(b.brandId);
-    const companyAllowed = scope.companyIds.includes(b.companyId);
+    const companyAllowed = (await allowedCompanyIds(req)).includes(b.companyId);
     if (!brandAllowed && !companyAllowed) { res.status(403).json({ error: 'forbidden' }); return; }
   } else {
     // tenantWide must still be bound to own tenant: verify company belongs to tenant.
@@ -1364,9 +1509,10 @@ router.get('/price-rules', async (req, res) => {
   const rows = await db.select().from(priceRulesTable);
   const tenantRows = rows.filter(r =>
     r.scope === 'global' || tenantCos.has(r.scope) || tenantBrs.has(r.scope));
-  if (scope.tenantWide) { res.json(tenantRows); return; }
+  if (scope.tenantWide && !hasActiveScopeFilter(scope)) { res.json(tenantRows); return; }
   const allowedBrandsArr = await allowedBrandIds(req);
-  const allowedScopes = new Set<string>(['global', ...scope.companyIds, ...allowedBrandsArr]);
+  const allowedCompaniesArr = await allowedCompanyIds(req);
+  const allowedScopes = new Set<string>(['global', ...allowedCompaniesArr, ...allowedBrandsArr]);
   res.json(tenantRows.filter(r => allowedScopes.has(r.scope)));
 });
 
@@ -1380,8 +1526,8 @@ router.get('/pricing/summary', async (req, res) => {
     .where(eq(companiesTable.tenantId, scope.tenantId))
   ).map(r => r.p);
   const allowedBrands = new Set(await allowedBrandIds(req));
-  const allowedCompanies = new Set(scope.companyIds);
-  const positions = scope.tenantWide
+  const allowedCompanies = new Set(await allowedCompanyIds(req));
+  const positions = (scope.tenantWide && !hasActiveScopeFilter(scope))
     ? tenantPositions
     : tenantPositions.filter(p => allowedBrands.has(p.brandId) || allowedCompanies.has(p.companyId));
   const dealIds = await scopedDealIds(req);
@@ -1552,9 +1698,12 @@ async function brandVisible(req: Request, b: typeof brandsTable.$inferSelect): P
   const scope = getScope(req);
   const [company] = await db.select().from(companiesTable).where(eq(companiesTable.id, b.companyId));
   if (!company || company.tenantId !== scope.tenantId) return false;
-  if (scope.tenantWide) return true;
-  if (scope.companyIds.includes(b.companyId)) return true;
-  if (scope.brandIds.includes(b.id)) return true;
+  // Permission ∩ Active für jeden nicht-tenant-weit-uneingeschränkten Fall.
+  if (scope.tenantWide && !hasActiveScopeFilter(scope)) return true;
+  const allowedC = await allowedCompanyIds(req);
+  const allowedB = await allowedBrandIds(req);
+  if (allowedC.includes(b.companyId)) return true;
+  if (allowedB.includes(b.id)) return true;
   return false;
 }
 
@@ -1566,10 +1715,12 @@ router.get('/brands', async (req, res) => {
     .innerJoin(companiesTable, eq(companiesTable.id, brandsTable.companyId))
     .where(eq(companiesTable.tenantId, scope.tenantId));
   const brands = rows.map(r => r.brands);
-  const visible = scope.tenantWide
-    ? brands
-    : brands.filter(b => scope.companyIds.includes(b.companyId) || scope.brandIds.includes(b.id));
-  res.json(visible.map(mapBrand));
+  if (scope.tenantWide && !hasActiveScopeFilter(scope)) {
+    res.json(brands.map(mapBrand)); return;
+  }
+  const allowedC = new Set(await allowedCompanyIds(req));
+  const allowedB = new Set(await allowedBrandIds(req));
+  res.json(brands.filter(b => allowedC.has(b.companyId) || allowedB.has(b.id)).map(mapBrand));
 });
 
 router.patch('/brands/:id', async (req, res) => {
@@ -2917,8 +3068,7 @@ router.get('/price-increases/:id', async (req, res) => {
 
 // ── REPORTS ──
 router.get('/reports/dashboard', async (req, res) => {
-  const sf = dealScopeSql(getScope(req));
-  const deals = await db.select().from(dealsTable).where(sf);
+  const deals = await db.select().from(dealsTable).where(dealsWhereSql(getScope(req)));
   const open = deals.filter(d => d.stage !== 'won' && d.stage !== 'lost');
   const won = deals.filter(d => d.stage === 'won').length;
   const lost = deals.filter(d => d.stage === 'lost').length;
@@ -2941,7 +3091,9 @@ router.get('/reports/dashboard', async (req, res) => {
           .where(and(eq(signaturePackagesTable.status, 'in_progress'), inScopeDealFilter!(signaturePackagesTable.dealId, dealIds))).then(r => r[0]?.c ?? 0),
       ]);
   const tlAll = await db.select().from(timelineEventsTable).orderBy(desc(timelineEventsTable.at)).limit(60);
-  const tl = tlAll.filter(t => !t.dealId || dealIdSet.has(t.dealId)).slice(0, 8);
+  // timeline_events has no tenantId column → require dealId AND in-scope.
+  // Rows with NULL dealId would otherwise leak metadata across tenants.
+  const tl = tlAll.filter(t => !!t.dealId && dealIdSet.has(t.dealId)).slice(0, 8);
   const dealMap = await getDealMap();
   res.json({
     openDealsCount: open.length,
@@ -2964,8 +3116,7 @@ router.get('/reports/dashboard', async (req, res) => {
 });
 
 router.get('/reports/performance', async (req, res) => {
-  const sf = dealScopeSql(getScope(req));
-  const deals = await db.select().from(dealsTable).where(sf);
+  const deals = await db.select().from(dealsTable).where(dealsWhereSql(getScope(req)));
   const won = deals.filter(d => d.stage === 'won');
   const lost = deals.filter(d => d.stage === 'lost');
   const users = await getUserMap();
@@ -3188,7 +3339,9 @@ async function gateThread(req: Request, res: Response, threadId: string) {
 router.get('/activity', async (req, res) => {
   const dealIds = await allowedDealIds(req);
   const rows = await db.select().from(timelineEventsTable).orderBy(desc(timelineEventsTable.at)).limit(200);
-  const filtered = rows.filter(t => !t.dealId || dealIds.has(t.dealId)).slice(0, 40);
+  // timeline_events has no tenantId column → require dealId AND in-scope.
+  // Rows with NULL dealId would otherwise leak metadata across tenants.
+  const filtered = rows.filter(t => !!t.dealId && dealIds.has(t.dealId)).slice(0, 40);
   const dealMap = await getDealMap();
   res.json(filtered.map(t => ({
     id: t.id, type: t.type, title: t.title, description: t.description,
@@ -3202,6 +3355,11 @@ router.get('/activity', async (req, res) => {
 async function writeAudit(args: {
   entityType: string; entityId: string; action: string;
   summary: string; before?: unknown; after?: unknown; actor?: string;
+  /**
+   * Snapshot des aktiven Scopes zum Zeitpunkt der Mutation. Wenn nicht
+   * angegeben, wird `null` gespeichert (kein Filter aktiv / nicht relevant).
+   */
+  activeScope?: { tenantWide: boolean; companyIds: string[] | null; brandIds: string[] | null } | null;
 }) {
   await db.insert(auditLogTable).values({
     id: `au_${randomUUID().slice(0, 10)}`,
@@ -3212,7 +3370,23 @@ async function writeAudit(args: {
     beforeJson: args.before === undefined ? null : JSON.stringify(args.before),
     afterJson: args.after === undefined ? null : JSON.stringify(args.after),
     summary: args.summary,
+    activeScopeJson: args.activeScope ? JSON.stringify(args.activeScope) : null,
   });
+}
+
+/**
+ * Wrapper: writeAudit aus Request-Kontext mit automatischem activeScope
+ * Snapshot. Bevorzugt nutzen für mutating endpoints.
+ */
+async function writeAuditFromReq(req: Request, args: Omit<Parameters<typeof writeAudit>[0], 'activeScope'>) {
+  let snapshot: ReturnType<typeof activeScopeSnapshot> = null;
+  try {
+    const scope = getScope(req);
+    snapshot = activeScopeSnapshot(scope);
+  } catch {
+    // No scope (e.g. seed) — leave snapshot null
+  }
+  await writeAudit({ ...args, activeScope: snapshot });
 }
 
 router.get('/audit', async (req, res) => {
@@ -3226,15 +3400,18 @@ router.get('/audit', async (req, res) => {
     .where(filters.length ? and(...filters) : undefined)
     .orderBy(desc(auditLogTable.at))
     .limit(Math.max(limit * 4, 200));
-  const scope = getScope(req);
-  const visible = scope.tenantWide
-    ? rows
-    : (await Promise.all(rows.map(async r => ({ r, ok: await entityInScope(req, r.entityType, r.entityId) }))))
-        .filter(x => x.ok).map(x => x.r);
+  // audit_log has no tenantId column — we MUST verify each row's entity
+  // belongs to the user's tenant via entityInScope (which uses tenant-bound
+  // allowedDealIds/allowedAccountIds). No tenantWide pass-through here, or we
+  // would leak audit rows from other tenants.
+  const visible = (await Promise.all(
+    rows.map(async r => ({ r, ok: await entityInScope(req, r.entityType, r.entityId) }))
+  )).filter(x => x.ok).map(x => x.r);
   res.json(visible.slice(0, limit).map(a => ({
     id: a.id, entityType: a.entityType, entityId: a.entityId,
     action: a.action, actor: a.actor, summary: a.summary,
     beforeJson: a.beforeJson, afterJson: a.afterJson, at: iso(a.at)!,
+    activeScopeJson: a.activeScopeJson,
   })));
 });
 
@@ -3333,7 +3510,7 @@ router.get('/pricing/resolve', async (req, res) => {
 
   const scope = getScope(req);
   const allowedBrands = new Set(await allowedBrandIds(req));
-  const allowedCompanies = new Set(scope.companyIds);
+  const allowedCompanies = new Set(await allowedCompanyIds(req));
   // Tenant-bound: join companies and filter by tenantId.
   const tenantPositions = (await db
     .select({ p: pricePositionsTable })
@@ -3343,7 +3520,7 @@ router.get('/pricing/resolve', async (req, res) => {
   ).map(r => r.p);
   const positions = tenantPositions
     .filter(p => p.sku === sku && p.status === 'active')
-    .filter(p => scope.tenantWide || allowedBrands.has(p.brandId) || allowedCompanies.has(p.companyId));
+    .filter(p => (scope.tenantWide && !hasActiveScopeFilter(scope)) || allowedBrands.has(p.brandId) || allowedCompanies.has(p.companyId));
   const brands = await getBrandMap();
   const companies = await getCompanyMap();
 
@@ -3391,7 +3568,7 @@ router.get('/pricing/resolve', async (req, res) => {
     }
     const inScope = allCandidates.filter(c =>
       c.sku === sku && c.status === 'active' &&
-      (scope.tenantWide || allowedBrands.has(c.brandId) || allowedCompanies.has(c.companyId))
+      ((scope.tenantWide && !hasActiveScopeFilter(scope)) || allowedBrands.has(c.brandId) || allowedCompanies.has(c.companyId))
     );
     const bHitH = brandId ? inScope.find(c => c.brandId === brandId) : undefined;
     const cHitH = companyId ? inScope.find(c => c.companyId === companyId && c.brandId !== brandId) : undefined;
