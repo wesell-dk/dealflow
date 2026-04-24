@@ -1,0 +1,388 @@
+import { randomBytes } from "node:crypto";
+import { eq, inArray, or, sql } from "drizzle-orm";
+import {
+  db,
+  tenantsTable,
+  companiesTable,
+  brandsTable,
+  usersTable,
+  accountsTable,
+  dealsTable,
+  approvalsTable,
+  signaturePackagesTable,
+  quotesTable,
+  timelineEventsTable,
+  auditLogTable,
+  sessionsTable,
+} from "@workspace/db";
+import { hashPassword } from "../src/lib/auth";
+
+const TEST_PREFIX = "tnt_iso";
+
+export interface TestWorld {
+  runId: string;
+  tenantId: string;
+  companyId: string;
+  brandId: string;
+  userId: string;
+  userEmail: string;
+  password: string;
+  accountId: string;
+  dealId: string;
+  approvalId: string;
+  signaturePackageId: string;
+  quoteId: string;
+  timelineEventId: string;
+  /**
+   * Timeline event with a NULL dealId — must never appear in /activity or
+   * /reports/dashboard.recentEvents because it carries no tenant binding.
+   */
+  nullTimelineEventId: string;
+  auditId: string;
+}
+
+/**
+ * Build a fully self-contained tenant world: tenant + company + brand + user
+ * (tenant-wide, with password) + account + deal + approval + signature pkg +
+ * quote + timeline events (one bound to deal, one with NULL dealId) + audit
+ * log entry. All IDs are prefixed with `<runId>` so two worlds never collide.
+ */
+export async function createTestWorld(label: string): Promise<TestWorld> {
+  const runId = `${TEST_PREFIX}_${label}_${randomBytes(4).toString("hex")}`;
+  const tenantId = `${runId}_tn`;
+  const companyId = `${runId}_co`;
+  const brandId = `${runId}_br`;
+  const userId = `${runId}_us`;
+  // Login normalises email via .trim().toLowerCase() — store lowercase too so
+  // lookups match.
+  const userEmail = `${runId}@example.test`.toLowerCase();
+  const password = "test-pw-123!";
+  const accountId = `${runId}_ac`;
+  const dealId = `${runId}_dl`;
+  const approvalId = `${runId}_ap`;
+  const signaturePackageId = `${runId}_sg`;
+  const quoteId = `${runId}_qt`;
+  const timelineEventId = `${runId}_tl`;
+  const nullTimelineEventId = `${runId}_tlnull`;
+  const auditId = `${runId}_au`;
+
+  await db.insert(tenantsTable).values({
+    id: tenantId,
+    name: `Test Tenant ${label}`,
+    plan: "Test",
+    region: "EU",
+  });
+
+  await db.insert(companiesTable).values({
+    id: companyId,
+    tenantId,
+    name: `Test Co ${label}`,
+    legalName: `Test Co ${label} GmbH`,
+    country: "DE",
+    currency: "EUR",
+  });
+
+  await db.insert(brandsTable).values({
+    id: brandId,
+    companyId,
+    name: `Test Brand ${label}`,
+    color: "#000000",
+    voice: "neutral",
+  });
+
+  await db.insert(usersTable).values({
+    id: userId,
+    name: `Test User ${label}`,
+    email: userEmail,
+    role: "Account Executive",
+    scope: `tenant:${tenantId}`,
+    initials: label.slice(0, 2).toUpperCase(),
+    passwordHash: hashPassword(password),
+    isActive: true,
+    tenantId,
+    tenantWide: true,
+    scopeCompanyIds: "[]",
+    scopeBrandIds: "[]",
+  });
+
+  await db.insert(accountsTable).values({
+    id: accountId,
+    name: `Test Account ${label}`,
+    industry: "Test",
+    country: "DE",
+    healthScore: 80,
+    ownerId: userId,
+  });
+
+  await db.insert(dealsTable).values({
+    id: dealId,
+    name: `Test Deal ${label}`,
+    accountId,
+    stage: "qualified",
+    value: "100000",
+    currency: "EUR",
+    probability: 30,
+    expectedCloseDate: new Date(Date.now() + 30 * 86400000)
+      .toISOString()
+      .slice(0, 10),
+    ownerId: userId,
+    brandId,
+    companyId,
+    riskLevel: "low",
+    nextStep: null,
+  });
+
+  await db.insert(approvalsTable).values({
+    id: approvalId,
+    dealId,
+    type: "discount",
+    reason: `Test approval ${label}`,
+    requestedBy: userId,
+    status: "pending",
+    priority: "medium",
+    impactValue: "1000",
+    currency: "EUR",
+  });
+
+  await db.insert(signaturePackagesTable).values({
+    id: signaturePackageId,
+    dealId,
+    title: `Test Sig ${label}`,
+    status: "in_progress",
+  });
+
+  await db.insert(quotesTable).values({
+    id: quoteId,
+    dealId,
+    number: `Q-${label}`,
+    status: "sent",
+    currentVersion: 1,
+    currency: "EUR",
+    validUntil: new Date(Date.now() + 30 * 86400000)
+      .toISOString()
+      .slice(0, 10),
+  });
+
+  await db.insert(timelineEventsTable).values({
+    id: timelineEventId,
+    type: "deal",
+    title: `Deal updated (${label})`,
+    description: `Activity in tenant ${label}`,
+    actor: userId,
+    dealId,
+  });
+
+  // Critical: a NULL-dealId timeline event. Older code paths leaked these
+  // across tenants in /activity and /reports/dashboard.recentEvents because
+  // timeline_events has no tenantId column. Tests below assert these are
+  // filtered out for both tenants.
+  await db.insert(timelineEventsTable).values({
+    id: nullTimelineEventId,
+    type: "system",
+    title: `NULL-dealId event (${label})`,
+    description: `Untenanted note from ${label}`,
+    actor: userId,
+    dealId: null,
+  });
+
+  await db.insert(auditLogTable).values({
+    id: auditId,
+    entityType: "deal",
+    entityId: dealId,
+    action: "created",
+    actor: userId,
+    summary: `Deal created in tenant ${label}`,
+  });
+
+  return {
+    runId,
+    tenantId,
+    companyId,
+    brandId,
+    userId,
+    userEmail,
+    password,
+    accountId,
+    dealId,
+    approvalId,
+    signaturePackageId,
+    quoteId,
+    timelineEventId,
+    nullTimelineEventId,
+    auditId,
+  };
+}
+
+/**
+ * IDs of the extra dealflow rows created by `seedExtraDealflowItems` so the
+ * caller can pass them to `cleanupExtraDealflowItems` in a `finally` block.
+ */
+export interface ExtraDealflowIds {
+  approvalIds: string[];
+  signaturePackageIds: string[];
+  quoteIds: string[];
+}
+
+/**
+ * Add `count` extra pending approvals + in_progress signature packages + sent
+ * quotes against an existing deal. Used by the dashboard precision check to
+ * verify that another tenant's dashboard counts are unaffected.
+ */
+export async function seedExtraDealflowItems(
+  dealId: string,
+  userId: string,
+  count: number,
+): Promise<ExtraDealflowIds> {
+  const approvalIds: string[] = [];
+  const signaturePackageIds: string[] = [];
+  const quoteIds: string[] = [];
+  for (let i = 0; i < count; i++) {
+    const suffix = randomBytes(4).toString("hex");
+    const apId = `${TEST_PREFIX}_extra_ap_${suffix}`;
+    const sgId = `${TEST_PREFIX}_extra_sg_${suffix}`;
+    const qtId = `${TEST_PREFIX}_extra_qt_${suffix}`;
+    await db.insert(approvalsTable).values({
+      id: apId,
+      dealId,
+      type: "discount",
+      reason: `Extra approval ${i}`,
+      requestedBy: userId,
+      status: "pending",
+      priority: "low",
+      impactValue: "100",
+      currency: "EUR",
+    });
+    await db.insert(signaturePackagesTable).values({
+      id: sgId,
+      dealId,
+      title: `Extra Sig ${i}`,
+      status: "in_progress",
+    });
+    await db.insert(quotesTable).values({
+      id: qtId,
+      dealId,
+      number: `Q-EXTRA-${suffix}`,
+      status: "sent",
+      currentVersion: 1,
+      currency: "EUR",
+      validUntil: new Date(Date.now() + 30 * 86400000)
+        .toISOString()
+        .slice(0, 10),
+    });
+    approvalIds.push(apId);
+    signaturePackageIds.push(sgId);
+    quoteIds.push(qtId);
+  }
+  return { approvalIds, signaturePackageIds, quoteIds };
+}
+
+export async function cleanupExtraDealflowItems(extras: ExtraDealflowIds): Promise<void> {
+  if (extras.approvalIds.length) {
+    await db.delete(approvalsTable).where(inArray(approvalsTable.id, extras.approvalIds));
+  }
+  if (extras.signaturePackageIds.length) {
+    await db
+      .delete(signaturePackagesTable)
+      .where(inArray(signaturePackagesTable.id, extras.signaturePackageIds));
+  }
+  if (extras.quoteIds.length) {
+    await db.delete(quotesTable).where(inArray(quotesTable.id, extras.quoteIds));
+  }
+}
+
+/** Hard delete every row created by createTestWorld for the given tenants. */
+export async function destroyTestWorlds(...worlds: TestWorld[]): Promise<void> {
+  if (worlds.length === 0) return;
+  const tenantIds = worlds.map((w) => w.tenantId);
+  const userIds = worlds.map((w) => w.userId);
+  const dealIds = worlds.map((w) => w.dealId);
+  const accountIds = worlds.map((w) => w.accountId);
+  const companyIds = worlds.map((w) => w.companyId);
+  const brandIds = worlds.map((w) => w.brandId);
+  const approvalIds = worlds.map((w) => w.approvalId);
+  const sigIds = worlds.map((w) => w.signaturePackageId);
+  const quoteIds = worlds.map((w) => w.quoteId);
+  const timelineIds = worlds.flatMap((w) => [w.timelineEventId, w.nullTimelineEventId]);
+  const auditIds = worlds.map((w) => w.auditId);
+
+  await db.delete(sessionsTable).where(inArray(sessionsTable.userId, userIds));
+  await db.delete(timelineEventsTable).where(
+    or(
+      inArray(timelineEventsTable.id, timelineIds),
+      inArray(timelineEventsTable.dealId, dealIds),
+    )!,
+  );
+  await db.delete(auditLogTable).where(inArray(auditLogTable.id, auditIds));
+  await db.delete(approvalsTable).where(inArray(approvalsTable.id, approvalIds));
+  await db.delete(signaturePackagesTable).where(inArray(signaturePackagesTable.id, sigIds));
+  await db.delete(quotesTable).where(inArray(quotesTable.id, quoteIds));
+  await db.delete(dealsTable).where(inArray(dealsTable.id, dealIds));
+  await db.delete(accountsTable).where(inArray(accountsTable.id, accountIds));
+  await db.delete(usersTable).where(inArray(usersTable.id, userIds));
+  await db.delete(brandsTable).where(inArray(brandsTable.id, brandIds));
+  await db.delete(companiesTable).where(inArray(companiesTable.id, companyIds));
+  await db.delete(tenantsTable).where(inArray(tenantsTable.id, tenantIds));
+}
+
+/**
+ * Sweep any leftover rows from past failed test runs (prefix-based). Idempotent
+ * and safe — only touches rows whose ID starts with TEST_PREFIX.
+ */
+export async function sweepStaleTestData(): Promise<void> {
+  // Use ESCAPE so the literal underscores in TEST_PREFIX are not LIKE
+  // wildcards. We escape the trailing-`_` separator and use `%` only as
+  // suffix wildcard.
+  const like = `${TEST_PREFIX}\\_%`;
+  const ESC = sql.raw("ESCAPE '\\'");
+  const tenants = await db
+    .select({ id: tenantsTable.id })
+    .from(tenantsTable)
+    .where(sql`${tenantsTable.id} LIKE ${like} ${ESC}`);
+  const companies = await db
+    .select({ id: companiesTable.id })
+    .from(companiesTable)
+    .where(sql`${companiesTable.id} LIKE ${like} ${ESC}`);
+  const users = await db
+    .select({ id: usersTable.id })
+    .from(usersTable)
+    .where(sql`${usersTable.id} LIKE ${like} ${ESC}`);
+  const deals = await db
+    .select({ id: dealsTable.id })
+    .from(dealsTable)
+    .where(sql`${dealsTable.id} LIKE ${like} ${ESC}`);
+
+  if (deals.length) {
+    await db.delete(timelineEventsTable).where(
+      inArray(timelineEventsTable.dealId, deals.map((d) => d.id)),
+    );
+    await db.delete(approvalsTable).where(
+      inArray(approvalsTable.dealId, deals.map((d) => d.id)),
+    );
+    await db.delete(signaturePackagesTable).where(
+      inArray(signaturePackagesTable.dealId, deals.map((d) => d.id)),
+    );
+    await db.delete(quotesTable).where(
+      inArray(quotesTable.dealId, deals.map((d) => d.id)),
+    );
+    await db.delete(dealsTable).where(inArray(dealsTable.id, deals.map((d) => d.id)));
+  }
+  // Sweep extras inserted by seedExtraDealflowItems even if no test deal
+  // remains (e.g. a previous test crashed between insert and cleanup).
+  await db.delete(approvalsTable).where(sql`${approvalsTable.id} LIKE ${like} ${ESC}`);
+  await db.delete(signaturePackagesTable).where(sql`${signaturePackagesTable.id} LIKE ${like} ${ESC}`);
+  await db.delete(quotesTable).where(sql`${quotesTable.id} LIKE ${like} ${ESC}`);
+  await db.delete(timelineEventsTable).where(sql`${timelineEventsTable.id} LIKE ${like} ${ESC}`);
+  await db.delete(auditLogTable).where(sql`${auditLogTable.id} LIKE ${like} ${ESC}`);
+  await db.delete(accountsTable).where(sql`${accountsTable.id} LIKE ${like} ${ESC}`);
+  if (users.length) {
+    await db.delete(sessionsTable).where(inArray(sessionsTable.userId, users.map((u) => u.id)));
+    await db.delete(usersTable).where(inArray(usersTable.id, users.map((u) => u.id)));
+  }
+  await db.delete(brandsTable).where(sql`${brandsTable.id} LIKE ${like} ${ESC}`);
+  if (companies.length) {
+    await db.delete(companiesTable).where(inArray(companiesTable.id, companies.map((c) => c.id)));
+  }
+  if (tenants.length) {
+    await db.delete(tenantsTable).where(inArray(tenantsTable.id, tenants.map((t) => t.id)));
+  }
+}

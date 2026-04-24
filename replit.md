@@ -143,6 +143,9 @@ workspaces:
 
 - `pnpm run typecheck` — full typecheck across all packages.
 - `pnpm run build` — typecheck + build everything.
+- `pnpm run test` — run tests across all artifacts (today: API tenant-isolation
+  integration tests in `artifacts/api-server/tests/`, run with `node --test` +
+  `tsx`).
 - `pnpm --filter @workspace/api-spec run codegen` — regenerate hooks and Zod
   schemas after editing the OpenAPI spec.
 - `pnpm --filter @workspace/db run push` — push DB schema changes (dev only).
