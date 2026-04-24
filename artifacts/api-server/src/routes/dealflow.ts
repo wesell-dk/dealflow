@@ -80,6 +80,7 @@ import {
   quoteAttachmentsTable,
   industryProfilesTable,
   uploadedObjectsTable,
+  savedViewsTable,
 } from '@workspace/db';
 import {
   generatePriceRejectionForReaction,
@@ -127,8 +128,10 @@ const iso = (d: Date | string | null | undefined) =>
   d == null ? null : (d instanceof Date ? d.toISOString() : new Date(d).toISOString());
 
 // Helpers to map joined data
-async function getUserMap() {
-  const list = await db.select().from(usersTable);
+async function getUserMap(tenantId?: string) {
+  const list = tenantId
+    ? await db.select().from(usersTable).where(eq(usersTable.tenantId, tenantId))
+    : await db.select().from(usersTable);
   return new Map(list.map(u => [u.id, u]));
 }
 async function getAccountMap() {
@@ -186,9 +189,9 @@ async function buildDeal(d: typeof dealsTable.$inferSelect, ctx: {
   };
 }
 
-async function dealCtx() {
+async function dealCtx(tenantId?: string) {
   const [accs, users, brands, companies] = await Promise.all([
-    getAccountMap(), getUserMap(), getBrandMap(), getCompanyMap(),
+    getAccountMap(), getUserMap(tenantId), getBrandMap(), getCompanyMap(),
   ]);
   return { accs, users, brands, companies };
 }
@@ -433,7 +436,7 @@ router.get('/accounts/:id', async (req, res) => {
   const dealIds = await allowedDealIds(req);
   const allDs = await db.select().from(dealsTable).where(eq(dealsTable.accountId, a.id));
   const ds = allDs.filter(d => dealIds.has(d.id));
-  const ctx = await dealCtx();
+  const ctx = await dealCtx(getScope(req).tenantId);
   const openDeals = ds.filter(d => d.stage !== 'won' && d.stage !== 'lost');
   res.json({
     ...a,
@@ -444,15 +447,41 @@ router.get('/accounts/:id', async (req, res) => {
   });
 });
 
+// Validates ownerId against current tenant. Returns:
+//   { ok:true, value:string|null }  -> safe to assign
+//   { ok:false }                    -> response was already sent (422)
+async function resolveOwnerId(
+  req: import('express').Request,
+  res: import('express').Response,
+  ownerId: string | null | undefined,
+): Promise<{ ok: true; value: string | null } | { ok: false }> {
+  if (ownerId === null || ownerId === '') return { ok: true, value: null };
+  if (ownerId === undefined) return { ok: true, value: null };
+  const scope = getScope(req);
+  const [owner] = await db.select({ id: usersTable.id })
+    .from(usersTable)
+    .where(and(eq(usersTable.id, ownerId), eq(usersTable.tenantId, scope.tenantId)));
+  if (!owner) {
+    res.status(422).json({ error: 'invalid ownerId for tenant' });
+    return { ok: false };
+  }
+  return { ok: true, value: ownerId };
+}
+
 router.patch('/accounts/:id', async (req, res) => {
   if (!validateInline(req, res, { params: Z.UpdateAccountParams, body: Z.UpdateAccountBody })) return;
   if (!(await gateAccount(req, res, req.params.id))) return;
-  const b = req.body as { name?: string; industry?: string; country?: string; healthScore?: number };
+  const b = req.body as { name?: string; industry?: string; country?: string; healthScore?: number; ownerId?: string | null };
   const update: Record<string, unknown> = { updatedAt: new Date() };
   if (b.name !== undefined) update.name = b.name;
   if (b.industry !== undefined) update.industry = b.industry;
   if (b.country !== undefined) update.country = b.country;
   if (b.healthScore !== undefined) update.healthScore = b.healthScore;
+  if (b.ownerId !== undefined) {
+    const ownerCheck = await resolveOwnerId(req, res, b.ownerId);
+    if (!ownerCheck.ok) return;
+    update.ownerId = ownerCheck.value;
+  }
   await db.update(accountsTable).set(update).where(eq(accountsTable.id, req.params.id));
   const [a] = await db.select().from(accountsTable).where(eq(accountsTable.id, req.params.id));
   if (!a) { res.status(404).json({ error: 'not found' }); return; }
@@ -507,7 +536,7 @@ router.get('/deals', async (req, res) => {
   const rows = await db.select().from(dealsTable)
     .where(and(...filters))
     .orderBy(desc(dealsTable.updatedAt));
-  const ctx = await dealCtx();
+  const ctx = await dealCtx(getScope(req).tenantId);
   let result = await Promise.all(rows.map(d => buildDeal(d, ctx)));
   if (req.query.search) {
     const q = String(req.query.search).toLowerCase();
@@ -544,6 +573,11 @@ router.post('/deals', async (req, res) => {
   if (!allowedAccs.has(b.accountId)) {
     res.status(403).json({ error: 'forbidden (account not in scope)' }); return;
   }
+  // Owner muss innerhalb des Tenants liegen (Cross-Tenant-Owner-Assignment verhindern).
+  const [owner] = await db.select({ id: usersTable.id })
+    .from(usersTable)
+    .where(and(eq(usersTable.id, b.ownerId), eq(usersTable.tenantId, scope.tenantId)));
+  if (!owner) { res.status(422).json({ error: 'invalid ownerId for tenant' }); return; }
   const id = `dl_${randomUUID().slice(0, 8)}`;
   await db.insert(dealsTable).values({
     id, name: b.name, accountId: b.accountId, stage: b.stage, value: String(b.value),
@@ -552,13 +586,13 @@ router.post('/deals', async (req, res) => {
     companyId: b.companyId, riskLevel: 'low', nextStep: null,
   });
   const [d] = await db.select().from(dealsTable).where(eq(dealsTable.id, id));
-  const ctx = await dealCtx();
+  const ctx = await dealCtx(getScope(req).tenantId);
   res.status(201).json(await buildDeal(d!, ctx));
 });
 
 router.get('/deals/pipeline', async (req, res) => {
   const rows = await db.select().from(dealsTable).where(dealsWhereSql(getScope(req)));
-  const ctx = await dealCtx();
+  const ctx = await dealCtx(getScope(req).tenantId);
   const stages = ['qualified', 'discovery', 'proposal', 'negotiation', 'closing', 'won', 'lost'];
   const out = await Promise.all(stages.map(async stage => {
     const deals = rows.filter(d => d.stage === stage);
@@ -578,7 +612,7 @@ router.get('/deals/:id', async (req, res) => {
   if (!(await gateDeal(req, res, req.params.id))) return;
   const [d] = await db.select().from(dealsTable).where(eq(dealsTable.id, req.params.id));
   if (!d) { res.status(404).json({ error: 'not found' }); return; }
-  const ctx = await dealCtx();
+  const ctx = await dealCtx(getScope(req).tenantId);
   const base = await buildDeal(d, ctx);
   const [quotes, contracts, approvals, sigs, contacts, negs] = await Promise.all([
     db.select().from(quotesTable).where(eq(quotesTable.dealId, d.id)),
@@ -620,7 +654,7 @@ router.patch('/deals/:id', async (req, res) => {
   await db.update(dealsTable).set(update).where(eq(dealsTable.id, req.params.id));
   const [d] = await db.select().from(dealsTable).where(eq(dealsTable.id, req.params.id));
   if (!d) { res.status(404).json({ error: 'not found' }); return; }
-  const ctx = await dealCtx();
+  const ctx = await dealCtx(getScope(req).tenantId);
   res.json(await buildDeal(d, ctx));
 });
 
@@ -1638,7 +1672,7 @@ router.get('/approvals', async (req, res) => {
   filters.push(inArray(approvalsTable.dealId, dealIds));
   const rows = await db.select().from(approvalsTable).where(and(...filters)).orderBy(desc(approvalsTable.createdAt));
   const dealMap = await getDealMap();
-  const users = await getUserMap();
+  const users = await getUserMap(getScope(req).tenantId);
   res.json(rows.map(a => mapApproval(a, dealMap.get(a.dealId)?.name ?? 'Unknown', users)));
 });
 
@@ -1655,7 +1689,7 @@ router.post('/approvals/:id/decide', async (req, res) => {
   const [a] = await db.select().from(approvalsTable).where(eq(approvalsTable.id, req.params.id));
   if (!a) { res.status(404).json({ error: 'not found' }); return; }
   const dealMap = await getDealMap();
-  const users = await getUserMap();
+  const users = await getUserMap(getScope(req).tenantId);
   void emitEvent(getScope(req).tenantId, 'approval.decided', { approvalId: a.id, dealId: a.dealId, decision: a.status });
   res.json(mapApproval(a, dealMap.get(a.dealId)?.name ?? 'Unknown', users));
 });
@@ -3177,7 +3211,7 @@ router.get('/reports/performance', async (req, res) => {
   const deals = await db.select().from(dealsTable).where(dealsWhereSql(getScope(req)));
   const won = deals.filter(d => d.stage === 'won');
   const lost = deals.filter(d => d.stage === 'lost');
-  const users = await getUserMap();
+  const users = await getUserMap(getScope(req).tenantId);
   const monthly = ['Nov', 'Dec', 'Jan', 'Feb', 'Mar', 'Apr'].map((m, i) => ({
     month: m,
     won: 3 + ((i * 2) % 5),
@@ -3989,7 +4023,7 @@ router.get('/order-confirmations', async (req, res) => {
   if (req.query.status) filters.push(eq(orderConfirmationsTable.status, String(req.query.status)));
   const rows = await db.select().from(orderConfirmationsTable).where(and(...filters)).orderBy(desc(orderConfirmationsTable.createdAt));
   const dealMap = await getDealMap();
-  const userMap = await getUserMap();
+  const userMap = await getUserMap(getScope(req).tenantId);
   const reconciled = await Promise.all(rows.map(async (o) => {
     if (o.status === 'in_onboarding' || o.status === 'completed') return o;
     const checks = await db.select().from(orderConfirmationChecksTable)
@@ -4052,19 +4086,19 @@ router.get('/order-confirmations/:id', async (req, res) => {
   if (!raw) { res.status(404).json({ error: 'not found' }); return; }
   if (!(await gateDeal(req, res, raw.dealId))) return;
   const dealMap = await getDealMap();
-  const userMap = await getUserMap();
+  const userMap = await getUserMap(getScope(req).tenantId);
   const checks = await db.select().from(orderConfirmationChecksTable)
     .where(eq(orderConfirmationChecksTable.orderConfirmationId, raw.id));
   const o = await reconcileOcState(req, raw, checks);
   res.json(buildOcDetail(o, dealMap.get(o.dealId)?.name ?? 'Unknown', userMap, checks));
 });
 
-async function respondOcDetail(res: Response, ocId: string) {
+async function respondOcDetail(req: Request, res: Response, ocId: string) {
   const [u] = await db.select().from(orderConfirmationsTable).where(eq(orderConfirmationsTable.id, ocId));
   const checks = await db.select().from(orderConfirmationChecksTable)
     .where(eq(orderConfirmationChecksTable.orderConfirmationId, ocId));
   const dealMap = await getDealMap();
-  const userMap = await getUserMap();
+  const userMap = await getUserMap(getScope(req).tenantId);
   res.json(buildOcDetail(u!, dealMap.get(u!.dealId)?.name ?? 'Unknown', userMap, checks));
 }
 
@@ -4111,7 +4145,7 @@ router.post('/order-confirmations/:id/handover', async (req, res) => {
     description: `Auftragsbestätigung ${o.number} an ${owner.name} übergeben. SLA ${o.slaDays} Tage läuft.`,
     actor: 'Priya Raman', dealId: o.dealId,
   });
-  await respondOcDetail(res, o.id);
+  await respondOcDetail(req, res, o.id);
 });
 
 router.post('/order-confirmations/:id/complete', async (req, res) => {
@@ -4134,7 +4168,7 @@ router.post('/order-confirmations/:id/complete', async (req, res) => {
     description: `Auftragsbestätigung ${o.number} ist produktiv übergeben.`,
     actor: 'Priya Raman', dealId: o.dealId,
   });
-  await respondOcDetail(res, o.id);
+  await respondOcDetail(req, res, o.id);
 });
 
 // ── COPILOT CHAT ──
@@ -5401,7 +5435,7 @@ router.get('/gdpr/access-log', async (req, res) => {
     .where(filters.length === 1 ? filters[0] : and(...filters))
     .orderBy(desc(accessLogTable.at))
     .limit(200);
-  const userMap = await getUserMap();
+  const userMap = await getUserMap(getScope(req).tenantId);
   res.json(rows.map(r => ({
     id: r.id,
     at: iso(r.at),
@@ -5486,6 +5520,188 @@ router.patch('/gdpr/retention-policy', async (req, res) => {
     after: current,
   });
   res.json({ tenantId: scope.tenantId, policy: current });
+});
+
+// ───────────── SAVED VIEWS ─────────────
+const savedViewInputSchema = z.object({
+  entityType: z.enum(['account', 'deal']),
+  name: z.string().min(1).max(80),
+  filters: z.record(z.string(), z.unknown()).optional().default({}),
+  columns: z.array(z.string()).optional().default([]),
+  sortBy: z.string().nullable().optional(),
+  sortDir: z.enum(['asc', 'desc']).nullable().optional(),
+  position: z.number().int().optional(),
+  isDefault: z.boolean().optional(),
+  isShared: z.boolean().optional(),
+});
+const savedViewPatchSchema = savedViewInputSchema.partial().omit({ entityType: true });
+
+router.get('/saved-views', async (req, res) => {
+  const scope = getScope(req);
+  const entityType = typeof req.query.entityType === 'string' ? req.query.entityType : null;
+  if (entityType && entityType !== 'account' && entityType !== 'deal') {
+    res.status(422).json({ error: 'invalid entityType' });
+    return;
+  }
+  const filters = [
+    eq(savedViewsTable.tenantId, scope.tenantId),
+    sql`(${savedViewsTable.userId} = ${scope.user.id} OR ${savedViewsTable.isShared} = true)`,
+  ];
+  if (entityType) filters.push(eq(savedViewsTable.entityType, entityType));
+  const rows = await db.select().from(savedViewsTable)
+    .where(and(...filters))
+    .orderBy(asc(savedViewsTable.position), asc(savedViewsTable.createdAt));
+  res.json(rows);
+});
+
+router.post('/saved-views', async (req, res) => {
+  const scope = getScope(req);
+  const parsed = savedViewInputSchema.safeParse(req.body);
+  if (!parsed.success) { res.status(422).json({ error: 'validation', issues: parsed.error.issues }); return; }
+  const id = `sv_${randomUUID().slice(0, 10)}`;
+  await db.insert(savedViewsTable).values({
+    id,
+    userId: scope.user.id,
+    tenantId: scope.tenantId,
+    entityType: parsed.data.entityType,
+    name: parsed.data.name,
+    filters: parsed.data.filters ?? {},
+    columns: parsed.data.columns ?? [],
+    sortBy: parsed.data.sortBy ?? null,
+    sortDir: parsed.data.sortDir ?? null,
+    position: parsed.data.position ?? 0,
+    isDefault: parsed.data.isDefault ?? false,
+    isShared: parsed.data.isShared ?? false,
+  });
+  const [row] = await db.select().from(savedViewsTable).where(eq(savedViewsTable.id, id));
+  res.status(201).json(row);
+});
+
+router.patch('/saved-views/:id', async (req, res) => {
+  const scope = getScope(req);
+  const parsed = savedViewPatchSchema.safeParse(req.body);
+  if (!parsed.success) { res.status(422).json({ error: 'validation', issues: parsed.error.issues }); return; }
+  const [existing] = await db.select().from(savedViewsTable).where(eq(savedViewsTable.id, req.params.id));
+  if (!existing || existing.tenantId !== scope.tenantId || (existing.userId !== scope.user.id && !existing.isShared)) {
+    res.status(404).json({ error: 'not found' }); return;
+  }
+  // Only the owner may rename / delete; shared views can be read by all but mutated only by owner.
+  if (existing.userId !== scope.user.id) {
+    res.status(403).json({ error: 'forbidden' }); return;
+  }
+  const update: Record<string, unknown> = { updatedAt: new Date() };
+  if (parsed.data.name !== undefined) update.name = parsed.data.name;
+  if (parsed.data.filters !== undefined) update.filters = parsed.data.filters;
+  if (parsed.data.columns !== undefined) update.columns = parsed.data.columns;
+  if (parsed.data.sortBy !== undefined) update.sortBy = parsed.data.sortBy;
+  if (parsed.data.sortDir !== undefined) update.sortDir = parsed.data.sortDir;
+  if (parsed.data.position !== undefined) update.position = parsed.data.position;
+  if (parsed.data.isDefault !== undefined) update.isDefault = parsed.data.isDefault;
+  if (parsed.data.isShared !== undefined) update.isShared = parsed.data.isShared;
+  await db.update(savedViewsTable).set(update).where(eq(savedViewsTable.id, req.params.id));
+  const [row] = await db.select().from(savedViewsTable).where(eq(savedViewsTable.id, req.params.id));
+  res.json(row);
+});
+
+router.delete('/saved-views/:id', async (req, res) => {
+  const scope = getScope(req);
+  const [existing] = await db.select().from(savedViewsTable).where(eq(savedViewsTable.id, req.params.id));
+  if (!existing || existing.tenantId !== scope.tenantId || existing.userId !== scope.user.id) {
+    res.status(404).json({ error: 'not found' }); return;
+  }
+  await db.delete(savedViewsTable).where(eq(savedViewsTable.id, req.params.id));
+  res.status(204).end();
+});
+
+// ───────────── BULK ACTIONS ─────────────
+const bulkOwnerSchema = z.object({
+  ids: z.array(z.string()).min(1).max(500),
+  ownerId: z.union([z.string().min(1), z.null()]),
+});
+const bulkOwnerStrictSchema = z.object({
+  ids: z.array(z.string()).min(1).max(500),
+  ownerId: z.string().min(1),
+});
+const bulkStageSchema = z.object({ ids: z.array(z.string()).min(1).max(500), stage: z.string().min(1) });
+const bulkDeleteSchema = z.object({ ids: z.array(z.string()).min(1).max(500) });
+
+router.post('/accounts/bulk/owner', async (req, res) => {
+  const parsed = bulkOwnerSchema.safeParse(req.body);
+  if (!parsed.success) { res.status(422).json({ error: 'validation', issues: parsed.error.issues }); return; }
+  const ownerCheck = await resolveOwnerId(req, res, parsed.data.ownerId);
+  if (!ownerCheck.ok) return;
+  const allowed = await allowedAccountIds(req);
+  const targetIds = parsed.data.ids.filter(id => allowed.has(id));
+  const skipped = parsed.data.ids.filter(id => !allowed.has(id));
+  if (targetIds.length === 0) { res.json({ updated: 0, skipped: skipped.length, skippedIds: skipped }); return; }
+  await db.update(accountsTable)
+    .set({ ownerId: ownerCheck.value })
+    .where(inArray(accountsTable.id, targetIds));
+  const summary = ownerCheck.value === null ? 'Owner entfernt' : `Owner gesetzt auf ${ownerCheck.value}`;
+  for (const id of targetIds) {
+    await writeAuditFromReq(req, { entityType: 'account', entityId: id, action: 'bulk_owner', summary });
+  }
+  res.json({ updated: targetIds.length, skipped: skipped.length, skippedIds: skipped });
+});
+
+router.post('/accounts/bulk/delete', async (req, res) => {
+  const parsed = bulkDeleteSchema.safeParse(req.body);
+  if (!parsed.success) { res.status(422).json({ error: 'validation', issues: parsed.error.issues }); return; }
+  const allowed = await allowedAccountIds(req);
+  const targetIds = parsed.data.ids.filter(id => allowed.has(id));
+  const skipped = parsed.data.ids.filter(id => !allowed.has(id));
+  // Block deletion if account has deals — surface as skipped.
+  const skipForDeals: string[] = [];
+  if (targetIds.length > 0) {
+    const dealRows = await db.select({ accountId: dealsTable.accountId })
+      .from(dealsTable).where(inArray(dealsTable.accountId, targetIds));
+    const blocked = new Set(dealRows.map(r => r.accountId));
+    for (const id of [...blocked]) skipForDeals.push(id);
+  }
+  const finalIds = targetIds.filter(id => !skipForDeals.includes(id));
+  if (finalIds.length > 0) {
+    await db.delete(accountsTable).where(inArray(accountsTable.id, finalIds));
+    for (const id of finalIds) {
+      await writeAuditFromReq(req, { entityType: 'account', entityId: id, action: 'bulk_delete', summary: 'Kunde gelöscht (Bulk)' });
+    }
+  }
+  res.json({ updated: finalIds.length, skipped: skipped.length + skipForDeals.length, skippedIds: [...skipped, ...skipForDeals] });
+});
+
+router.post('/deals/bulk/owner', async (req, res) => {
+  // Deals require a non-null owner (DB column is NOT NULL).
+  const parsed = bulkOwnerStrictSchema.safeParse(req.body);
+  if (!parsed.success) { res.status(422).json({ error: 'validation', issues: parsed.error.issues }); return; }
+  const ownerCheck = await resolveOwnerId(req, res, parsed.data.ownerId);
+  if (!ownerCheck.ok) return;
+  if (ownerCheck.value === null) { res.status(422).json({ error: 'ownerId required for deals' }); return; }
+  const allowed = await allowedDealIds(req);
+  const targetIds = parsed.data.ids.filter(id => allowed.has(id));
+  const skipped = parsed.data.ids.filter(id => !allowed.has(id));
+  if (targetIds.length === 0) { res.json({ updated: 0, skipped: skipped.length, skippedIds: skipped }); return; }
+  await db.update(dealsTable)
+    .set({ ownerId: ownerCheck.value, updatedAt: new Date() })
+    .where(inArray(dealsTable.id, targetIds));
+  for (const id of targetIds) {
+    await writeAuditFromReq(req, { entityType: 'deal', entityId: id, action: 'bulk_owner', summary: `Owner gesetzt auf ${ownerCheck.value}` });
+  }
+  res.json({ updated: targetIds.length, skipped: skipped.length, skippedIds: skipped });
+});
+
+router.post('/deals/bulk/stage', async (req, res) => {
+  const parsed = bulkStageSchema.safeParse(req.body);
+  if (!parsed.success) { res.status(422).json({ error: 'validation', issues: parsed.error.issues }); return; }
+  const allowed = await allowedDealIds(req);
+  const targetIds = parsed.data.ids.filter(id => allowed.has(id));
+  const skipped = parsed.data.ids.filter(id => !allowed.has(id));
+  if (targetIds.length === 0) { res.json({ updated: 0, skipped: skipped.length, skippedIds: skipped }); return; }
+  await db.update(dealsTable)
+    .set({ stage: parsed.data.stage, updatedAt: new Date() })
+    .where(inArray(dealsTable.id, targetIds));
+  for (const id of targetIds) {
+    await writeAuditFromReq(req, { entityType: 'deal', entityId: id, action: 'bulk_stage', summary: `Stage geändert auf ${parsed.data.stage}` });
+  }
+  res.json({ updated: targetIds.length, skipped: skipped.length, skippedIds: skipped });
 });
 
 export default router;

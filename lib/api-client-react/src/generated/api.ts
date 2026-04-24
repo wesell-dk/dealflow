@@ -38,6 +38,10 @@ import type {
   Brand,
   BrandDefaultsInput,
   BrandUpdate,
+  BulkActionResult,
+  BulkDeleteInput,
+  BulkOwnerInput,
+  BulkStageInput,
   ClauseChangeResult,
   ClauseDiff,
   ClauseFamily,
@@ -105,6 +109,7 @@ import type {
   ListOrderConfirmationsParams,
   ListQuoteTemplatesParams,
   ListQuotesParams,
+  ListSavedViewsParams,
   ListSignaturePackagesParams,
   MeUser,
   Negotiation,
@@ -143,6 +148,9 @@ import type {
   Role,
   RoleCreate,
   RoleUpdate,
+  SavedView,
+  SavedViewInput,
+  SavedViewPatch,
   ScopeTree,
   SearchGdprSubjectsParams,
   SignaturePackage,
@@ -9969,4 +9977,650 @@ export const useUpdateGdprRetentionPolicy = <
   TContext
 > => {
   return useMutation(getUpdateGdprRetentionPolicyMutationOptions(options));
+};
+
+export const getListSavedViewsUrl = (params?: ListSavedViewsParams) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? "null" : value.toString());
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0
+    ? `/api/v1/saved-views?${stringifiedParams}`
+    : `/api/v1/saved-views`;
+};
+
+export const listSavedViews = async (
+  params?: ListSavedViewsParams,
+  options?: RequestInit,
+): Promise<SavedView[]> => {
+  return customFetch<SavedView[]>(getListSavedViewsUrl(params), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getListSavedViewsQueryKey = (params?: ListSavedViewsParams) => {
+  return [`/api/v1/saved-views`, ...(params ? [params] : [])] as const;
+};
+
+export const getListSavedViewsQueryOptions = <
+  TData = Awaited<ReturnType<typeof listSavedViews>>,
+  TError = ErrorType<unknown>,
+>(
+  params?: ListSavedViewsParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof listSavedViews>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getListSavedViewsQueryKey(params);
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof listSavedViews>>> = ({
+    signal,
+  }) => listSavedViews(params, { signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof listSavedViews>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type ListSavedViewsQueryResult = NonNullable<
+  Awaited<ReturnType<typeof listSavedViews>>
+>;
+export type ListSavedViewsQueryError = ErrorType<unknown>;
+
+export function useListSavedViews<
+  TData = Awaited<ReturnType<typeof listSavedViews>>,
+  TError = ErrorType<unknown>,
+>(
+  params?: ListSavedViewsParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof listSavedViews>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getListSavedViewsQueryOptions(params, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+export const getCreateSavedViewUrl = () => {
+  return `/api/v1/saved-views`;
+};
+
+export const createSavedView = async (
+  savedViewInput: SavedViewInput,
+  options?: RequestInit,
+): Promise<SavedView> => {
+  return customFetch<SavedView>(getCreateSavedViewUrl(), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(savedViewInput),
+  });
+};
+
+export const getCreateSavedViewMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof createSavedView>>,
+    TError,
+    { data: BodyType<SavedViewInput> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof createSavedView>>,
+  TError,
+  { data: BodyType<SavedViewInput> },
+  TContext
+> => {
+  const mutationKey = ["createSavedView"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof createSavedView>>,
+    { data: BodyType<SavedViewInput> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return createSavedView(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type CreateSavedViewMutationResult = NonNullable<
+  Awaited<ReturnType<typeof createSavedView>>
+>;
+export type CreateSavedViewMutationBody = BodyType<SavedViewInput>;
+export type CreateSavedViewMutationError = ErrorType<unknown>;
+
+export const useCreateSavedView = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof createSavedView>>,
+    TError,
+    { data: BodyType<SavedViewInput> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof createSavedView>>,
+  TError,
+  { data: BodyType<SavedViewInput> },
+  TContext
+> => {
+  return useMutation(getCreateSavedViewMutationOptions(options));
+};
+
+export const getUpdateSavedViewUrl = (id: string) => {
+  return `/api/v1/saved-views/${id}`;
+};
+
+export const updateSavedView = async (
+  id: string,
+  savedViewPatch: SavedViewPatch,
+  options?: RequestInit,
+): Promise<SavedView> => {
+  return customFetch<SavedView>(getUpdateSavedViewUrl(id), {
+    ...options,
+    method: "PATCH",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(savedViewPatch),
+  });
+};
+
+export const getUpdateSavedViewMutationOptions = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof updateSavedView>>,
+    TError,
+    { id: string; data: BodyType<SavedViewPatch> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof updateSavedView>>,
+  TError,
+  { id: string; data: BodyType<SavedViewPatch> },
+  TContext
+> => {
+  const mutationKey = ["updateSavedView"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof updateSavedView>>,
+    { id: string; data: BodyType<SavedViewPatch> }
+  > = (props) => {
+    const { id, data } = props ?? {};
+
+    return updateSavedView(id, data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type UpdateSavedViewMutationResult = NonNullable<
+  Awaited<ReturnType<typeof updateSavedView>>
+>;
+export type UpdateSavedViewMutationBody = BodyType<SavedViewPatch>;
+export type UpdateSavedViewMutationError = ErrorType<void>;
+
+export const useUpdateSavedView = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof updateSavedView>>,
+    TError,
+    { id: string; data: BodyType<SavedViewPatch> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof updateSavedView>>,
+  TError,
+  { id: string; data: BodyType<SavedViewPatch> },
+  TContext
+> => {
+  return useMutation(getUpdateSavedViewMutationOptions(options));
+};
+
+export const getDeleteSavedViewUrl = (id: string) => {
+  return `/api/v1/saved-views/${id}`;
+};
+
+export const deleteSavedView = async (
+  id: string,
+  options?: RequestInit,
+): Promise<void> => {
+  return customFetch<void>(getDeleteSavedViewUrl(id), {
+    ...options,
+    method: "DELETE",
+  });
+};
+
+export const getDeleteSavedViewMutationOptions = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof deleteSavedView>>,
+    TError,
+    { id: string },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof deleteSavedView>>,
+  TError,
+  { id: string },
+  TContext
+> => {
+  const mutationKey = ["deleteSavedView"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof deleteSavedView>>,
+    { id: string }
+  > = (props) => {
+    const { id } = props ?? {};
+
+    return deleteSavedView(id, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type DeleteSavedViewMutationResult = NonNullable<
+  Awaited<ReturnType<typeof deleteSavedView>>
+>;
+
+export type DeleteSavedViewMutationError = ErrorType<void>;
+
+export const useDeleteSavedView = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof deleteSavedView>>,
+    TError,
+    { id: string },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof deleteSavedView>>,
+  TError,
+  { id: string },
+  TContext
+> => {
+  return useMutation(getDeleteSavedViewMutationOptions(options));
+};
+
+export const getBulkUpdateAccountOwnerUrl = () => {
+  return `/api/v1/accounts/bulk/owner`;
+};
+
+export const bulkUpdateAccountOwner = async (
+  bulkOwnerInput: BulkOwnerInput,
+  options?: RequestInit,
+): Promise<BulkActionResult> => {
+  return customFetch<BulkActionResult>(getBulkUpdateAccountOwnerUrl(), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(bulkOwnerInput),
+  });
+};
+
+export const getBulkUpdateAccountOwnerMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof bulkUpdateAccountOwner>>,
+    TError,
+    { data: BodyType<BulkOwnerInput> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof bulkUpdateAccountOwner>>,
+  TError,
+  { data: BodyType<BulkOwnerInput> },
+  TContext
+> => {
+  const mutationKey = ["bulkUpdateAccountOwner"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof bulkUpdateAccountOwner>>,
+    { data: BodyType<BulkOwnerInput> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return bulkUpdateAccountOwner(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type BulkUpdateAccountOwnerMutationResult = NonNullable<
+  Awaited<ReturnType<typeof bulkUpdateAccountOwner>>
+>;
+export type BulkUpdateAccountOwnerMutationBody = BodyType<BulkOwnerInput>;
+export type BulkUpdateAccountOwnerMutationError = ErrorType<unknown>;
+
+export const useBulkUpdateAccountOwner = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof bulkUpdateAccountOwner>>,
+    TError,
+    { data: BodyType<BulkOwnerInput> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof bulkUpdateAccountOwner>>,
+  TError,
+  { data: BodyType<BulkOwnerInput> },
+  TContext
+> => {
+  return useMutation(getBulkUpdateAccountOwnerMutationOptions(options));
+};
+
+export const getBulkDeleteAccountsUrl = () => {
+  return `/api/v1/accounts/bulk/delete`;
+};
+
+export const bulkDeleteAccounts = async (
+  bulkDeleteInput: BulkDeleteInput,
+  options?: RequestInit,
+): Promise<BulkActionResult> => {
+  return customFetch<BulkActionResult>(getBulkDeleteAccountsUrl(), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(bulkDeleteInput),
+  });
+};
+
+export const getBulkDeleteAccountsMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof bulkDeleteAccounts>>,
+    TError,
+    { data: BodyType<BulkDeleteInput> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof bulkDeleteAccounts>>,
+  TError,
+  { data: BodyType<BulkDeleteInput> },
+  TContext
+> => {
+  const mutationKey = ["bulkDeleteAccounts"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof bulkDeleteAccounts>>,
+    { data: BodyType<BulkDeleteInput> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return bulkDeleteAccounts(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type BulkDeleteAccountsMutationResult = NonNullable<
+  Awaited<ReturnType<typeof bulkDeleteAccounts>>
+>;
+export type BulkDeleteAccountsMutationBody = BodyType<BulkDeleteInput>;
+export type BulkDeleteAccountsMutationError = ErrorType<unknown>;
+
+export const useBulkDeleteAccounts = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof bulkDeleteAccounts>>,
+    TError,
+    { data: BodyType<BulkDeleteInput> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof bulkDeleteAccounts>>,
+  TError,
+  { data: BodyType<BulkDeleteInput> },
+  TContext
+> => {
+  return useMutation(getBulkDeleteAccountsMutationOptions(options));
+};
+
+export const getBulkUpdateDealOwnerUrl = () => {
+  return `/api/v1/deals/bulk/owner`;
+};
+
+export const bulkUpdateDealOwner = async (
+  bulkOwnerInput: BulkOwnerInput,
+  options?: RequestInit,
+): Promise<BulkActionResult> => {
+  return customFetch<BulkActionResult>(getBulkUpdateDealOwnerUrl(), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(bulkOwnerInput),
+  });
+};
+
+export const getBulkUpdateDealOwnerMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof bulkUpdateDealOwner>>,
+    TError,
+    { data: BodyType<BulkOwnerInput> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof bulkUpdateDealOwner>>,
+  TError,
+  { data: BodyType<BulkOwnerInput> },
+  TContext
+> => {
+  const mutationKey = ["bulkUpdateDealOwner"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof bulkUpdateDealOwner>>,
+    { data: BodyType<BulkOwnerInput> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return bulkUpdateDealOwner(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type BulkUpdateDealOwnerMutationResult = NonNullable<
+  Awaited<ReturnType<typeof bulkUpdateDealOwner>>
+>;
+export type BulkUpdateDealOwnerMutationBody = BodyType<BulkOwnerInput>;
+export type BulkUpdateDealOwnerMutationError = ErrorType<unknown>;
+
+export const useBulkUpdateDealOwner = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof bulkUpdateDealOwner>>,
+    TError,
+    { data: BodyType<BulkOwnerInput> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof bulkUpdateDealOwner>>,
+  TError,
+  { data: BodyType<BulkOwnerInput> },
+  TContext
+> => {
+  return useMutation(getBulkUpdateDealOwnerMutationOptions(options));
+};
+
+export const getBulkUpdateDealStageUrl = () => {
+  return `/api/v1/deals/bulk/stage`;
+};
+
+export const bulkUpdateDealStage = async (
+  bulkStageInput: BulkStageInput,
+  options?: RequestInit,
+): Promise<BulkActionResult> => {
+  return customFetch<BulkActionResult>(getBulkUpdateDealStageUrl(), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(bulkStageInput),
+  });
+};
+
+export const getBulkUpdateDealStageMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof bulkUpdateDealStage>>,
+    TError,
+    { data: BodyType<BulkStageInput> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof bulkUpdateDealStage>>,
+  TError,
+  { data: BodyType<BulkStageInput> },
+  TContext
+> => {
+  const mutationKey = ["bulkUpdateDealStage"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof bulkUpdateDealStage>>,
+    { data: BodyType<BulkStageInput> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return bulkUpdateDealStage(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type BulkUpdateDealStageMutationResult = NonNullable<
+  Awaited<ReturnType<typeof bulkUpdateDealStage>>
+>;
+export type BulkUpdateDealStageMutationBody = BodyType<BulkStageInput>;
+export type BulkUpdateDealStageMutationError = ErrorType<unknown>;
+
+export const useBulkUpdateDealStage = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof bulkUpdateDealStage>>,
+    TError,
+    { data: BodyType<BulkStageInput> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof bulkUpdateDealStage>>,
+  TError,
+  { data: BodyType<BulkStageInput> },
+  TContext
+> => {
+  return useMutation(getBulkUpdateDealStageMutationOptions(options));
 };

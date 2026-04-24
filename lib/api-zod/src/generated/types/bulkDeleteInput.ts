@@ -8,11 +8,7 @@ Multi-tenant, multi-company, multi-brand. Deal-centric.
  * OpenAPI spec version: 0.1.0
  */
 
-export interface AccountPatch {
-  name?: string;
-  industry?: string;
-  country?: string;
-  healthScore?: number;
-  /** @nullable */
-  ownerId?: string | null;
+export interface BulkDeleteInput {
+  /** @minItems 1 */
+  ids: string[];
 }

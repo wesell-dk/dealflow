@@ -4,9 +4,12 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Briefcase, Activity, Target, AlertTriangle } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
+import { TourBanner } from "@/components/patterns/tour-banner";
+import { useOnboarding } from "@/contexts/onboarding-context";
 
 export default function Home() {
   const { t } = useTranslation();
+  const { openWelcome } = useOnboarding();
   const { data: summary, isLoading: isLoadingSummary } = useGetDashboardSummary();
   const { data: insightsResp, isLoading: isLoadingInsights } = useListCopilotInsights();
   const insights = insightsResp?.items;
@@ -19,6 +22,7 @@ export default function Home() {
 
   return (
     <div className="flex flex-col gap-6">
+      <TourBanner onStartTour={openWelcome} />
       <div>
         <h1 className="text-3xl font-bold tracking-tight">{t("pages.home.title")}</h1>
         <p className="text-muted-foreground mt-1">{t("pages.home.subtitle")}</p>

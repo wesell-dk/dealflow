@@ -7,12 +7,8 @@ Multi-tenant, multi-company, multi-brand. Deal-centric.
 
  * OpenAPI spec version: 0.1.0
  */
+import type { ListSavedViewsEntityType } from "./listSavedViewsEntityType";
 
-export interface AccountPatch {
-  name?: string;
-  industry?: string;
-  country?: string;
-  healthScore?: number;
-  /** @nullable */
-  ownerId?: string | null;
-}
+export type ListSavedViewsParams = {
+  entityType?: ListSavedViewsEntityType;
+};

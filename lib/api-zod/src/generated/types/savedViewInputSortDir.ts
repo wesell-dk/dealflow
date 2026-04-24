@@ -8,11 +8,11 @@ Multi-tenant, multi-company, multi-brand. Deal-centric.
  * OpenAPI spec version: 0.1.0
  */
 
-export interface AccountPatch {
-  name?: string;
-  industry?: string;
-  country?: string;
-  healthScore?: number;
-  /** @nullable */
-  ownerId?: string | null;
-}
+export type SavedViewInputSortDir =
+  | (typeof SavedViewInputSortDir)[keyof typeof SavedViewInputSortDir]
+  | null;
+
+export const SavedViewInputSortDir = {
+  asc: "asc",
+  desc: "desc",
+} as const;

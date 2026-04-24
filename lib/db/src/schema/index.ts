@@ -743,3 +743,21 @@ export const webhookDeliveriesTable = pgTable("webhook_deliveries", {
   deliveredAt: timestamp("delivered_at", { withTimezone: true }),
   createdAt: ts("created_at"),
 });
+
+// Saved Views (HubSpot-style Tabs auf Listen-Seiten)
+export const savedViewsTable = pgTable("saved_views", {
+  id: id(),
+  userId: text("user_id").notNull(),
+  entityType: text("entity_type").notNull(), // "account" | "deal"
+  name: text("name").notNull(),
+  filters: jsonb("filters").notNull().default({}),
+  columns: jsonb("columns").notNull().default([]),
+  sortBy: text("sort_by"),
+  sortDir: text("sort_dir"),
+  position: integer("position").notNull().default(0),
+  isDefault: boolean("is_default").notNull().default(false),
+  isShared: boolean("is_shared").notNull().default(false),
+  tenantId: text("tenant_id").notNull().default("tn_root"),
+  createdAt: ts("created_at"),
+  updatedAt: ts("updated_at"),
+});

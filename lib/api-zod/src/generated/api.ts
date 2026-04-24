@@ -432,6 +432,7 @@ export const UpdateAccountBody = zod.object({
   industry: zod.string().optional(),
   country: zod.string().optional(),
   healthScore: zod.number().optional(),
+  ownerId: zod.string().nullish(),
 });
 
 export const UpdateAccountResponse = zod.object({
@@ -3101,4 +3102,123 @@ export const UpdateGdprRetentionPolicyResponse = zod.object({
     auditLogDays: zod.number().optional(),
     accessLogDays: zod.number().optional(),
   }),
+});
+
+export const ListSavedViewsQueryParams = zod.object({
+  entityType: zod.enum(["account", "deal"]).optional(),
+});
+
+export const ListSavedViewsResponseItem = zod.object({
+  id: zod.string(),
+  userId: zod.string(),
+  entityType: zod.enum(["account", "deal"]),
+  name: zod.string(),
+  filters: zod.record(zod.string(), zod.unknown()),
+  columns: zod.array(zod.string()),
+  sortBy: zod.string().nullish(),
+  sortDir: zod
+    .union([zod.literal("asc"), zod.literal("desc"), zod.literal(null)])
+    .nullish(),
+  position: zod.number(),
+  isDefault: zod.boolean(),
+  isShared: zod.boolean(),
+  createdAt: zod.coerce.date().optional(),
+  updatedAt: zod.coerce.date().optional(),
+});
+export const ListSavedViewsResponse = zod.array(ListSavedViewsResponseItem);
+
+export const createSavedViewBodyNameMax = 80;
+
+export const CreateSavedViewBody = zod.object({
+  entityType: zod.enum(["account", "deal"]),
+  name: zod.string().min(1).max(createSavedViewBodyNameMax),
+  filters: zod.record(zod.string(), zod.unknown()).optional(),
+  columns: zod.array(zod.string()).optional(),
+  sortBy: zod.string().nullish(),
+  sortDir: zod.enum(["asc", "desc"]).nullish(),
+  position: zod.number().optional(),
+  isDefault: zod.boolean().optional(),
+  isShared: zod.boolean().optional(),
+});
+
+export const UpdateSavedViewParams = zod.object({
+  id: zod.coerce.string(),
+});
+
+export const updateSavedViewBodyNameMax = 80;
+
+export const UpdateSavedViewBody = zod.object({
+  name: zod.string().min(1).max(updateSavedViewBodyNameMax).optional(),
+  filters: zod.record(zod.string(), zod.unknown()).optional(),
+  columns: zod.array(zod.string()).optional(),
+  sortBy: zod.string().nullish(),
+  sortDir: zod.enum(["asc", "desc"]).nullish(),
+  position: zod.number().optional(),
+  isDefault: zod.boolean().optional(),
+  isShared: zod.boolean().optional(),
+});
+
+export const UpdateSavedViewResponse = zod.object({
+  id: zod.string(),
+  userId: zod.string(),
+  entityType: zod.enum(["account", "deal"]),
+  name: zod.string(),
+  filters: zod.record(zod.string(), zod.unknown()),
+  columns: zod.array(zod.string()),
+  sortBy: zod.string().nullish(),
+  sortDir: zod
+    .union([zod.literal("asc"), zod.literal("desc"), zod.literal(null)])
+    .nullish(),
+  position: zod.number(),
+  isDefault: zod.boolean(),
+  isShared: zod.boolean(),
+  createdAt: zod.coerce.date().optional(),
+  updatedAt: zod.coerce.date().optional(),
+});
+
+export const DeleteSavedViewParams = zod.object({
+  id: zod.coerce.string(),
+});
+
+export const BulkUpdateAccountOwnerBody = zod.object({
+  ids: zod.array(zod.string()).min(1),
+  ownerId: zod.string(),
+});
+
+export const BulkUpdateAccountOwnerResponse = zod.object({
+  updated: zod.number(),
+  skipped: zod.number(),
+  skippedIds: zod.array(zod.string()).optional(),
+});
+
+export const BulkDeleteAccountsBody = zod.object({
+  ids: zod.array(zod.string()).min(1),
+});
+
+export const BulkDeleteAccountsResponse = zod.object({
+  updated: zod.number(),
+  skipped: zod.number(),
+  skippedIds: zod.array(zod.string()).optional(),
+});
+
+export const BulkUpdateDealOwnerBody = zod.object({
+  ids: zod.array(zod.string()).min(1),
+  ownerId: zod.string(),
+});
+
+export const BulkUpdateDealOwnerResponse = zod.object({
+  updated: zod.number(),
+  skipped: zod.number(),
+  skippedIds: zod.array(zod.string()).optional(),
+});
+
+export const BulkUpdateDealStageBody = zod.object({
+  ids: zod.array(zod.string()).min(1),
+  stage: zod.string(),
+});
+
+export const BulkUpdateDealStageResponse = zod.object({
+  updated: zod.number(),
+  skipped: zod.number(),
+  skippedIds: zod.array(zod.string()).optional(),
 });

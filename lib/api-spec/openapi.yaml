@@ -2217,6 +2217,134 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/GdprRetentionPolicyResponse" }
 
+  # ───────────── SAVED VIEWS ─────────────
+  /saved-views:
+    get:
+      operationId: listSavedViews
+      tags: [savedViews]
+      parameters:
+        - in: query
+          name: entityType
+          required: false
+          schema: { type: string, enum: [account, deal] }
+      responses:
+        "200":
+          description: ok
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/SavedView" }
+    post:
+      operationId: createSavedView
+      tags: [savedViews]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/SavedViewInput" }
+      responses:
+        "201":
+          description: created
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SavedView" }
+
+  /saved-views/{id}:
+    patch:
+      operationId: updateSavedView
+      tags: [savedViews]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/SavedViewPatch" }
+      responses:
+        "200":
+          description: ok
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SavedView" }
+        "404": { description: not found }
+    delete:
+      operationId: deleteSavedView
+      tags: [savedViews]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        "204": { description: deleted }
+        "404": { description: not found }
+
+  # ───────────── BULK ACTIONS ─────────────
+  /accounts/bulk/owner:
+    post:
+      operationId: bulkUpdateAccountOwner
+      tags: [accounts]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/BulkOwnerInput" }
+      responses:
+        "200":
+          description: ok
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/BulkActionResult" }
+  /accounts/bulk/delete:
+    post:
+      operationId: bulkDeleteAccounts
+      tags: [accounts]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/BulkDeleteInput" }
+      responses:
+        "200":
+          description: ok
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/BulkActionResult" }
+  /deals/bulk/owner:
+    post:
+      operationId: bulkUpdateDealOwner
+      tags: [deals]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/BulkOwnerInput" }
+      responses:
+        "200":
+          description: ok
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/BulkActionResult" }
+  /deals/bulk/stage:
+    post:
+      operationId: bulkUpdateDealStage
+      tags: [deals]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/BulkStageInput" }
+      responses:
+        "200":
+          description: ok
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/BulkActionResult" }
+
 components:
   schemas:
 
@@ -2530,6 +2658,102 @@ components:
         industry: { type: string }
         country: { type: string }
         healthScore: { type: integer }
+        ownerId: { type: ["string", "null"] }
+
+    SavedView:
+      type: object
+      required: [id, userId, entityType, name, filters, columns, position, isDefault, isShared]
+      properties:
+        id: { type: string }
+        userId: { type: string }
+        entityType: { type: string, enum: [account, deal] }
+        name: { type: string }
+        filters:
+          type: object
+          additionalProperties: true
+        columns:
+          type: array
+          items: { type: string }
+        sortBy: { type: ["string", "null"] }
+        sortDir: { type: ["string", "null"], enum: [asc, desc, null] }
+        position: { type: integer }
+        isDefault: { type: boolean }
+        isShared: { type: boolean }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+
+    SavedViewInput:
+      type: object
+      required: [entityType, name]
+      properties:
+        entityType: { type: string, enum: [account, deal] }
+        name: { type: string, minLength: 1, maxLength: 80 }
+        filters:
+          type: object
+          additionalProperties: true
+        columns:
+          type: array
+          items: { type: string }
+        sortBy: { type: string, nullable: true }
+        sortDir: { type: string, enum: [asc, desc], nullable: true }
+        position: { type: integer }
+        isDefault: { type: boolean }
+        isShared: { type: boolean }
+
+    SavedViewPatch:
+      type: object
+      properties:
+        name: { type: string, minLength: 1, maxLength: 80 }
+        filters:
+          type: object
+          additionalProperties: true
+        columns:
+          type: array
+          items: { type: string }
+        sortBy: { type: string, nullable: true }
+        sortDir: { type: string, enum: [asc, desc], nullable: true }
+        position: { type: integer }
+        isDefault: { type: boolean }
+        isShared: { type: boolean }
+
+    BulkOwnerInput:
+      type: object
+      required: [ids, ownerId]
+      properties:
+        ids:
+          type: array
+          items: { type: string }
+          minItems: 1
+        ownerId: { type: string }
+
+    BulkStageInput:
+      type: object
+      required: [ids, stage]
+      properties:
+        ids:
+          type: array
+          items: { type: string }
+          minItems: 1
+        stage: { type: string }
+
+    BulkDeleteInput:
+      type: object
+      required: [ids]
+      properties:
+        ids:
+          type: array
+          items: { type: string }
+          minItems: 1
+
+    BulkActionResult:
+      type: object
+      required: [updated, skipped]
+      properties:
+        updated: { type: integer }
+        skipped: { type: integer }
+        skippedIds:
+          type: array
+          items: { type: string }
 
     Contact:
       type: object

@@ -282,6 +282,132 @@ export interface AccountPatch {
   industry?: string;
   country?: string;
   healthScore?: number;
+  /** @nullable */
+  ownerId?: string | null;
+}
+
+export type SavedViewEntityType =
+  (typeof SavedViewEntityType)[keyof typeof SavedViewEntityType];
+
+export const SavedViewEntityType = {
+  account: "account",
+  deal: "deal",
+} as const;
+
+export type SavedViewFilters = { [key: string]: unknown };
+
+/**
+ * @nullable
+ */
+export type SavedViewSortDir =
+  | (typeof SavedViewSortDir)[keyof typeof SavedViewSortDir]
+  | null;
+
+export const SavedViewSortDir = {
+  asc: "asc",
+  desc: "desc",
+} as const;
+
+export interface SavedView {
+  id: string;
+  userId: string;
+  entityType: SavedViewEntityType;
+  name: string;
+  filters: SavedViewFilters;
+  columns: string[];
+  /** @nullable */
+  sortBy?: string | null;
+  /** @nullable */
+  sortDir?: SavedViewSortDir;
+  position: number;
+  isDefault: boolean;
+  isShared: boolean;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export type SavedViewInputEntityType =
+  (typeof SavedViewInputEntityType)[keyof typeof SavedViewInputEntityType];
+
+export const SavedViewInputEntityType = {
+  account: "account",
+  deal: "deal",
+} as const;
+
+export type SavedViewInputFilters = { [key: string]: unknown };
+
+export type SavedViewInputSortDir =
+  | (typeof SavedViewInputSortDir)[keyof typeof SavedViewInputSortDir]
+  | null;
+
+export const SavedViewInputSortDir = {
+  asc: "asc",
+  desc: "desc",
+} as const;
+
+export interface SavedViewInput {
+  entityType: SavedViewInputEntityType;
+  /**
+   * @minLength 1
+   * @maxLength 80
+   */
+  name: string;
+  filters?: SavedViewInputFilters;
+  columns?: string[];
+  sortBy?: string | null;
+  sortDir?: SavedViewInputSortDir;
+  position?: number;
+  isDefault?: boolean;
+  isShared?: boolean;
+}
+
+export type SavedViewPatchFilters = { [key: string]: unknown };
+
+export type SavedViewPatchSortDir =
+  | (typeof SavedViewPatchSortDir)[keyof typeof SavedViewPatchSortDir]
+  | null;
+
+export const SavedViewPatchSortDir = {
+  asc: "asc",
+  desc: "desc",
+} as const;
+
+export interface SavedViewPatch {
+  /**
+   * @minLength 1
+   * @maxLength 80
+   */
+  name?: string;
+  filters?: SavedViewPatchFilters;
+  columns?: string[];
+  sortBy?: string | null;
+  sortDir?: SavedViewPatchSortDir;
+  position?: number;
+  isDefault?: boolean;
+  isShared?: boolean;
+}
+
+export interface BulkOwnerInput {
+  /** @minItems 1 */
+  ids: string[];
+  ownerId: string;
+}
+
+export interface BulkStageInput {
+  /** @minItems 1 */
+  ids: string[];
+  stage: string;
+}
+
+export interface BulkDeleteInput {
+  /** @minItems 1 */
+  ids: string[];
+}
+
+export interface BulkActionResult {
+  updated: number;
+  skipped: number;
+  skippedIds?: string[];
 }
 
 export interface DealInput {
@@ -1951,3 +2077,15 @@ export type ListGdprAccessLogParams = {
   entityType?: string;
   entityId?: string;
 };
+
+export type ListSavedViewsParams = {
+  entityType?: ListSavedViewsEntityType;
+};
+
+export type ListSavedViewsEntityType =
+  (typeof ListSavedViewsEntityType)[keyof typeof ListSavedViewsEntityType];
+
+export const ListSavedViewsEntityType = {
+  account: "account",
+  deal: "deal",
+} as const;

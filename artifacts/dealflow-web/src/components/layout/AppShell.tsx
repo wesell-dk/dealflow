@@ -1,3 +1,4 @@
+import { useEffect, useState } from "react";
 import { Link, useLocation } from "wouter";
 import { useTranslation } from "react-i18next";
 import {
@@ -28,7 +29,6 @@ import { useGetTenant } from "@workspace/api-client-react";
 import { useAuth } from "@/contexts/auth-context";
 import { LogOut } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -46,6 +46,8 @@ import { HelpCircle, Compass } from "lucide-react";
 import { useOnboarding } from "@/contexts/onboarding-context";
 import { WelcomeDialog } from "@/components/onboarding/welcome-dialog";
 import { PageHelpDrawer } from "@/components/onboarding/page-help";
+import { CommandPalette } from "@/components/patterns/command-palette";
+import { RecentsDropdown } from "@/components/patterns/recents-dropdown";
 
 function useNavigation() {
   const { t } = useTranslation();
@@ -109,6 +111,19 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const { user, logout } = useAuth();
   const { t, i18n } = useTranslation();
   const { openHelp, openWelcome } = useOnboarding();
+  const [paletteOpen, setPaletteOpen] = useState(false);
+
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      const isMod = e.metaKey || e.ctrlKey;
+      if (isMod && (e.key === "k" || e.key === "K")) {
+        e.preventDefault();
+        setPaletteOpen((p) => !p);
+      }
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
 
   return (
     <div className="grid min-h-screen w-full md:grid-cols-[220px_1fr] lg:grid-cols-[280px_1fr]">
@@ -129,16 +144,19 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             </SheetContent>
           </Sheet>
           <div className="w-full flex-1">
-            <form>
-              <div className="relative">
-                <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-                <Input
-                  type="search"
-                  placeholder={t("common.search")}
-                  className="w-full appearance-none bg-background pl-8 shadow-none md:w-2/3 lg:w-1/3"
-                />
-              </div>
-            </form>
+            <button
+              type="button"
+              onClick={() => setPaletteOpen(true)}
+              className="group flex w-full items-center gap-2 rounded-md border bg-background px-3 h-9 text-sm text-muted-foreground hover:border-foreground/30 transition-colors md:w-2/3 lg:w-1/3 text-left"
+              data-testid="header-cmdk-trigger"
+              aria-label="Suche öffnen (Cmd+K)"
+            >
+              <Search className="h-4 w-4" />
+              <span className="flex-1 truncate">Suchen oder Befehl ausführen…</span>
+              <kbd className="hidden md:inline-flex items-center gap-0.5 rounded border bg-muted/60 px-1.5 py-0.5 text-[10px] font-mono">
+                ⌘ K
+              </kbd>
+            </button>
           </div>
           <div className="flex items-center gap-3">
             <div className="hidden md:flex items-center gap-2 text-sm text-muted-foreground">
@@ -146,6 +164,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               {tenant?.region && <span className="text-xs bg-muted px-2 py-0.5 rounded-full">{tenant.region}</span>}
             </div>
             <ScopeSwitcher />
+            <RecentsDropdown />
             <Button
               variant="outline"
               size="sm"
@@ -221,6 +240,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           {children}
         </main>
       </div>
+      <CommandPalette open={paletteOpen} onOpenChange={setPaletteOpen} />
       <HelpBot />
       <WelcomeDialog />
       <PageHelpDrawer />

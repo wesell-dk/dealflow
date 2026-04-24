@@ -82,6 +82,22 @@ Key capabilities include managing deals, accounts, contacts, and roles; versione
 - **Backend**: Added `PATCH /api/v1/accounts/:id` endpoint and `AccountPatch` OpenAPI schema. `PATCH /api/v1/deals/:id` already existed.
 - **Scope Fix**: `lib/scope.ts → allowedAccountIds()` now also includes accounts owned by the current user (and, for tenantWide users, all accounts owned by users in the same tenant). Previously, freshly-created accounts without deals were invisible even to their creator.
 
+**HubSpot best-in-class Patterns A–L (April 2026):**
+- **Saved Views (A)**: `savedViewsTable` (id, userId, tenantId, entityType, name, filters jsonb, columns jsonb, sortBy, sortDir, position, isDefault). Routes `/saved-views` (CRUD scoped to current user). `<SavedViewTabs>` renders built-in + user views as `role=tab` buttons with `+` and `×`.
+- **Filter Chips (B)**: `<FilterChipsRow>` + `<FilterChip>` with popover-edit, value-pill and reset-all.
+- **Bulk Selection (C)**: row-level checkboxes + sticky `<BulkActionBar>` ("N ausgewählt", Owner/Stage/Delete actions). Backend: `POST /accounts/bulk/owner|delete`, `POST /deals/bulk/owner|stage`. Tenant-isolation: ownerId is validated against `usersTable WHERE tenantId=scope.tenantId` via `resolveOwnerId()` helper, returning 422 on cross-tenant assignment. Deals require non-null owner (DB column NOT NULL); accounts allow null to unset.
+- **Inline Edit (D)**: `<InlineEditField>` (text/select/number/date/currency) — click cell, edit, Enter to PATCH. `useEffect` skips re-sync while editing to avoid clobbering local state.
+- **Activity Timeline (E)**: `<ActivityTimeline>` reads from audit_log feed.
+- **Cmd+K (F)**: `<CommandPalette>` (cmdk) with Accounts/Deals/Contracts/Quotes/Actions/Recents groups, registered globally in AppShell.
+- **Recents (G)**: `<RecentsDropdown>` in topbar; localStorage-tracked on detail-route mount.
+- **Column Chooser (H)**: `<ColumnChooser>` popover with checkboxes; `useColumnVisibility(storageKey, defs)` persists to localStorage. Saved-View ↔ Chooser sync: visible columns mirror into `view.columns` via guarded `useEffect`; selecting a tab applies stored `view.columns` via `colVis.setAll(...)`.
+- **Empty States (I)**: `<EmptyStateCard>` (icon, headline, body, CTA).
+- **Pagination (J)**: `<PaginationBar>` with page-size selector (25/50/100).
+- **CSV Im-/Export (K)**: `<CSVExportButton>` (client-side from rows) + `<CSVImportDialog>` (file → preview → POST batch); dropzone is keyboard-accessible (Enter/Space).
+- **Tour Banner (L)**: dismissible `<TourBanner>` on `/` with "Tour erneut starten" toggle.
+- **Cross-Tenant Owner Hardening**: `getUserMap(tenantId?)` is now tenant-scoped at all 7 callers + `dealCtx(tenantId)`. `POST /deals` validates `ownerId` tenant membership before insert. `respondOcDetail(req,...)` carries tenant context for owner resolution. Eliminates cross-tenant user-name leakage via owner mapping.
+- **Generated Query Keys**: All cache invalidations use `getList*QueryKey()` / `getGet*QueryKey(id)` from `lib/api-client-react/src/generated/api.ts` (no hardcoded arrays).
+
 ## External Dependencies
 
 - **PostgreSQL**: Primary database for data persistence.
