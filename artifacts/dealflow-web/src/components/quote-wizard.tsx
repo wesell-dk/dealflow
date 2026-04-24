@@ -762,10 +762,17 @@ export function QuoteWizard({ open, onOpenChange, initialDealId }: Props) {
 }
 
 /**
- * Wenn die aktive Sicht des Users mehrdeutig ist (mehrere Companies oder
- * mehrere Brands), kann der Wizard das Ziel-Mandanten-Paar nicht eindeutig
- * bestimmen. Wir zwingen den User in dem Fall, die Sicht zuvor auf genau
- * eine Company + Brand einzuschränken.
+ * Wenn die aktive Sicht des Users mehrdeutig ist, kann der Wizard kein
+ * eindeutiges (Company, Brand)-Paar als Default ableiten. Definition
+ * eindeutig:
+ *   activeScope.companyIds.length === 1 && activeScope.brandIds.length === 1
+ *
+ * Damit blocken wir auch die Fälle:
+ *   - 1 Company, 0 Brands (Brand inheritiert mehrere Brands der Company)
+ *   - 0 Companies, 1 Brand (Company nicht explizit gewählt)
+ *   - >1 Company oder >1 Brand (klassisch ambig).
+ *
+ * Kann von künftigen Contract-/Deal-Create-Wizards wiederverwendet werden.
  */
 export function useAmbiguousActiveScope(): boolean {
   const { user } = useAuth();
@@ -773,7 +780,7 @@ export function useAmbiguousActiveScope(): boolean {
   if (!user.activeScope.filtered) return false;
   const cIds = user.activeScope.companyIds ?? [];
   const bIds = user.activeScope.brandIds ?? [];
-  return cIds.length > 1 || bIds.length > 1;
+  return !(cIds.length === 1 && bIds.length === 1);
 }
 
 /**

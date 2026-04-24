@@ -167,15 +167,36 @@ export function ScopeSwitcher() {
     updateScope.mutate({ companyIds: null, brandIds: null });
   }
 
-  // Trigger-Label
+  // Trigger-Label.
+  // Wenn die aktive Sicht eindeutig auf genau eine Company / einen Brand
+  // zeigt, blenden wir den Entity-Namen ein (Pfad bei Brand: "Company › Brand").
+  // Bei mehrdeutiger Sicht fallen wir auf die Aggregat-Counts zurück, damit
+  // der Trigger nicht überquillt.
   const triggerLabel = useMemo(() => {
     if (!filtered) return t("scopeSwitcher.allScope");
     const cCount = activeCompanyIds.size;
     const bCount = activeBrandIds.size;
+    // Eindeutige Brand-Auswahl → "Company › Brand" (Pfad)
+    if (bCount === 1) {
+      const brandId = Array.from(activeBrandIds)[0];
+      const brand = brands.find((b) => b.id === brandId);
+      if (brand) {
+        const company = permittedCompanies.find((c) => c.id === brand.companyId);
+        if (company) return `${company.name} › ${brand.name}`;
+        return brand.name;
+      }
+    }
+    // Eindeutige Company-Auswahl ohne Brand-Filter → Company-Name
+    if (cCount === 1 && bCount === 0) {
+      const companyId = Array.from(activeCompanyIds)[0];
+      const company = permittedCompanies.find((c) => c.id === companyId);
+      if (company) return company.name;
+    }
+    // Fallback: Aggregat-Counts (mehrdeutig)
     if (cCount > 0 && bCount === 0) return t("scopeSwitcher.companiesCount", { count: cCount });
     if (bCount > 0 && cCount === 0) return t("scopeSwitcher.brandsCount", { count: bCount });
     return t("scopeSwitcher.companiesAndBrandsCount", { c: cCount, b: bCount });
-  }, [filtered, activeCompanyIds.size, activeBrandIds.size, t]);
+  }, [filtered, activeCompanyIds, activeBrandIds, brands, permittedCompanies, t]);
 
   // Suche
   const searchLower = search.trim().toLowerCase();
