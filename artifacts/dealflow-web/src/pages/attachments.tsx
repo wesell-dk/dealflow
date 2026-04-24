@@ -28,7 +28,7 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
-import { Paperclip, Upload, Trash2, Search, Loader2, Plus } from "lucide-react";
+import { Paperclip, Upload, Trash2, Search, Loader2, Plus, Download } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
 const CATEGORIES = ["all", "datasheet", "terms", "reference", "certificate", "other"];
@@ -295,13 +295,29 @@ export default function Attachments() {
                     {a.mimeType} · {(a.size / 1024).toFixed(0)} KB
                   </div>
                 </div>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  onClick={() => handleDelete(a.id)}
-                >
-                  <Trash2 className="h-4 w-4" />
-                </Button>
+                <div className="flex items-center gap-1">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    data-testid={`attachment-open-${a.id}`}
+                    onClick={() => {
+                      const path = a.objectPath.startsWith("/objects/")
+                        ? `/api/storage${a.objectPath}`
+                        : a.objectPath;
+                      window.open(path, "_blank");
+                    }}
+                    title={t("common.open")}
+                  >
+                    <Download className="h-4 w-4" />
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={() => handleDelete(a.id)}
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </Button>
+                </div>
               </div>
             </CardContent>
           </Card>

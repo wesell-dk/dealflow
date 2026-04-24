@@ -1,4 +1,4 @@
-import { sql } from "drizzle-orm";
+import { sql, and, like, eq } from "drizzle-orm";
 import {
   db,
   tenantsTable,
@@ -44,6 +44,7 @@ import {
 } from "@workspace/db";
 import { hashPassword } from "./auth";
 import { logger } from "./logger";
+import { ObjectStorageService } from "./objectStorage";
 
 const id = (prefix: string, n: number) => `${prefix}_${String(n).padStart(3, "0")}`;
 const now = new Date();
@@ -869,4 +870,104 @@ export async function seedQuoteTemplatesIdempotent(): Promise<void> {
       suggestedTemplateId: "qtpl_manufacturing",
       suggestedAttachmentLibraryIds: ["att_datasheet_typeA", "att_warranty_terms", "att_incoterms_dap"] },
   ]).onConflictDoNothing();
+}
+
+/**
+ * Build a tiny, valid PDF with a title and short body.
+ * Hand-crafted to avoid pulling in the React PDF renderer for placeholder seed
+ * documents. The result is well below 1 KB and opens cleanly in any PDF viewer.
+ */
+function buildPlaceholderPdf(title: string, subtitle: string): Buffer {
+  // Escape parentheses and backslashes for PDF string literals.
+  const esc = (s: string) =>
+    s.replace(/\\/g, "\\\\").replace(/\(/g, "\\(").replace(/\)/g, "\\)");
+  const safeTitle = esc(title.slice(0, 80));
+  const safeSubtitle = esc(subtitle.slice(0, 120));
+  const stream = `BT /F1 22 Tf 60 760 Td (${safeTitle}) Tj ET\nBT /F1 12 Tf 60 720 Td (${safeSubtitle}) Tj ET\nBT /F1 10 Tf 60 680 Td (DealFlow.One Demo-Dokument - Inhalt zu Demonstrationszwecken.) Tj ET\n`;
+  const streamLen = Buffer.byteLength(stream, "latin1");
+  // No EOL marker between the stream payload and `endstream` so that
+  // /Length matches exactly the bytes between `stream\n` and `endstream`.
+  const objs: string[] = [
+    `1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n`,
+    `2 0 obj\n<< /Type /Pages /Kids [3 0 R] /Count 1 >>\nendobj\n`,
+    `3 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Contents 4 0 R /Resources << /Font << /F1 5 0 R >> >> >>\nendobj\n`,
+    `4 0 obj\n<< /Length ${streamLen} >>\nstream\n${stream}endstream\nendobj\n`,
+    `5 0 obj\n<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>\nendobj\n`,
+  ];
+  const header = `%PDF-1.4\n`;
+  let body = header;
+  const offsets: number[] = [];
+  for (const o of objs) {
+    offsets.push(Buffer.byteLength(body, "latin1"));
+    body += o;
+  }
+  const xrefOffset = Buffer.byteLength(body, "latin1");
+  let xref = `xref\n0 ${objs.length + 1}\n0000000000 65535 f \n`;
+  for (const off of offsets) {
+    xref += `${String(off).padStart(10, "0")} 00000 n \n`;
+  }
+  const trailer = `trailer\n<< /Size ${objs.length + 1} /Root 1 0 R >>\nstartxref\n${xrefOffset}\n%%EOF`;
+  return Buffer.from(body + xref + trailer, "latin1");
+}
+
+/**
+ * Idempotent: ensure SEED-only attachment_library rows actually have a file in
+ * private object storage. Strictly scoped to root-tenant rows whose objectPath
+ * starts with the seed prefix, so customer-uploaded attachments are NEVER
+ * touched (no risk of silently replacing a missing tenant document with a
+ * fake placeholder). Safe to call on every server start.
+ */
+const SEED_OBJECT_PATH_PREFIX = "/objects/uploads/seed-";
+export async function seedPlaceholderObjectsIdempotent(): Promise<void> {
+  const rows = await db
+    .select({
+      id: attachmentLibraryTable.id,
+      name: attachmentLibraryTable.name,
+      description: attachmentLibraryTable.description,
+      mimeType: attachmentLibraryTable.mimeType,
+      objectPath: attachmentLibraryTable.objectPath,
+    })
+    .from(attachmentLibraryTable)
+    .where(
+      and(
+        eq(attachmentLibraryTable.tenantId, "tn_root"),
+        like(attachmentLibraryTable.objectPath, `${SEED_OBJECT_PATH_PREFIX}%`),
+      ),
+    );
+  if (rows.length === 0) return;
+
+  const svc = new ObjectStorageService();
+  let uploaded = 0;
+  let skipped = 0;
+  for (const r of rows) {
+    if (!r.objectPath.startsWith("/objects/")) {
+      skipped++;
+      continue;
+    }
+    try {
+      if (await svc.objectEntityExists(r.objectPath)) {
+        skipped++;
+        continue;
+      }
+      const isPdf = (r.mimeType ?? "").toLowerCase() === "application/pdf";
+      if (!isPdf) {
+        // We can only generate PDFs as placeholders; non-PDF seed paths are
+        // skipped and will surface a 404 on download (acceptable for non-seed
+        // tenant uploads which legitimately may have been deleted).
+        skipped++;
+        continue;
+      }
+      const buf = buildPlaceholderPdf(r.name, r.description ?? "");
+      await svc.uploadObjectEntity(r.objectPath, buf, "application/pdf");
+      uploaded++;
+    } catch (err) {
+      logger.warn(
+        { err, attachmentId: r.id, path: r.objectPath },
+        "Placeholder upload failed",
+      );
+    }
+  }
+  if (uploaded > 0) {
+    logger.info({ uploaded, skipped }, "Seeded placeholder attachments");
+  }
 }

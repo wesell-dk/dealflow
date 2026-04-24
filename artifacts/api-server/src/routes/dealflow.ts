@@ -1842,7 +1842,10 @@ router.patch('/brands/:id', async (req, res) => {
     const v = body[k];
     if (v !== null && typeof v !== 'string') continue;
     if (v !== null) {
-      if (v.length > 512) { res.status(400).json({ error: `${k} too long` }); return; }
+      // logoUrl may be an inline data: URI (PNG/SVG) which legitimately exceeds
+      // the short text limit. Cap at 256 KB to bound DB row size.
+      const maxLen = k === 'logoUrl' ? 256 * 1024 : 512;
+      if (v.length > maxLen) { res.status(400).json({ error: `${k} too long` }); return; }
       if ((k === 'color' || k === 'primaryColor' || k === 'secondaryColor') && v !== '' && !hexRe.test(v)) {
         res.status(400).json({ error: `${k} must be #RRGGBB hex` }); return;
       }

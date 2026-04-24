@@ -1,6 +1,10 @@
 import app from "./app";
 import { logger } from "./lib/logger";
-import { seedIfEmpty, seedQuoteTemplatesIdempotent } from "./lib/seed";
+import {
+  seedIfEmpty,
+  seedQuoteTemplatesIdempotent,
+  seedPlaceholderObjectsIdempotent,
+} from "./lib/seed";
 import { pruneExpiredSessions } from "./lib/auth";
 import { runAllGenerators } from "./insights/generators";
 import { runRetentionSweep } from "./gdpr/service";
@@ -11,6 +15,10 @@ await seedIfEmpty().catch((err) => {
 
 await seedQuoteTemplatesIdempotent().catch((err) => {
   logger.error({ err }, "Quote-templates seed failed");
+});
+
+await seedPlaceholderObjectsIdempotent().catch((err) => {
+  logger.error({ err }, "Placeholder-attachments seed failed");
 });
 
 await runAllGenerators().catch((err) => {

@@ -44,6 +44,9 @@ export function InlineEditField({
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const wrapRef = useRef<HTMLDivElement>(null);
+  // Tracks when a select-kind commit was just initiated, so the subsequent
+  // dropdown-close (onOpenChange=false) does NOT cancel/revert the value.
+  const committingRef = useRef(false);
 
   useEffect(() => {
     if (editing) return;
@@ -56,15 +59,16 @@ export function InlineEditField({
     setDraft(value == null ? "" : String(value));
   };
 
-  const commit = async () => {
-    if (draft === (value == null ? "" : String(value))) {
+  const commit = async (override?: string) => {
+    const next = override ?? draft;
+    if (next === (value == null ? "" : String(value))) {
       setEditing(false);
       return;
     }
     setSaving(true);
     setError(null);
     try {
-      await onSubmit(draft);
+      await onSubmit(next);
       setEditing(false);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Speichern fehlgeschlagen");
@@ -113,9 +117,22 @@ export function InlineEditField({
       {kind === "select" ? (
         <Select
           value={draft}
-          onValueChange={(v) => setDraft(v)}
+          onValueChange={(v) => {
+            setDraft(v);
+            committingRef.current = true;
+            void commit(v);
+          }}
           open
-          onOpenChange={(o) => { if (!o) void commit(); }}
+          onOpenChange={(o) => {
+            if (o) return;
+            // If a selection just triggered commit(v), don't cancel/revert here.
+            if (committingRef.current) {
+              committingRef.current = false;
+              return;
+            }
+            // Closed without selection (outside-click / Escape) → cancel.
+            stop();
+          }}
         >
           <SelectTrigger className="h-8 min-w-[160px]" aria-label={ariaLabel}>
             <SelectValue placeholder={placeholder} />

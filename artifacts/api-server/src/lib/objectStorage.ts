@@ -152,6 +152,43 @@ export class ObjectStorageService {
     return objectFile;
   }
 
+  /**
+   * Check if an object exists in private storage at the given /objects/... path.
+   */
+  async objectEntityExists(objectPath: string): Promise<boolean> {
+    try {
+      await this.getObjectEntityFile(objectPath);
+      return true;
+    } catch (error) {
+      if (error instanceof ObjectNotFoundError) return false;
+      throw error;
+    }
+  }
+
+  /**
+   * Upload a buffer as a private object entity at the given /objects/<entityId> path.
+   * Used by seeders to materialize placeholder files referenced by seed DB rows.
+   */
+  async uploadObjectEntity(
+    objectPath: string,
+    buffer: Buffer,
+    contentType: string,
+  ): Promise<void> {
+    if (!objectPath.startsWith("/objects/")) {
+      throw new Error(`Invalid object path: ${objectPath}`);
+    }
+    const parts = objectPath.slice(1).split("/");
+    if (parts.length < 2) throw new Error(`Invalid object path: ${objectPath}`);
+    const entityId = parts.slice(1).join("/");
+    let entityDir = this.getPrivateObjectDir();
+    if (!entityDir.endsWith("/")) entityDir = `${entityDir}/`;
+    const objectEntityPath = `${entityDir}${entityId}`;
+    const { bucketName, objectName } = parseObjectPath(objectEntityPath);
+    const bucket = objectStorageClient.bucket(bucketName);
+    const file = bucket.file(objectName);
+    await file.save(buffer, { contentType, resumable: false });
+  }
+
   normalizeObjectEntityPath(rawPath: string): string {
     if (!rawPath.startsWith("https://storage.googleapis.com/")) {
       return rawPath;
