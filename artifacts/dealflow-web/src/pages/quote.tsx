@@ -9,6 +9,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { FileText, Download, Paperclip } from "lucide-react";
+import { QuoteDuplicateButton } from "@/components/quotes/quote-duplicate-button";
 
 export default function Quote() {
   const params = useParams();
@@ -34,6 +35,7 @@ export default function Quote() {
           <Button variant="outline" size="sm" onClick={() => window.open(`/api/quotes/${id}/pdf`, '_blank')}>
             <FileText className="h-4 w-4 mr-2" /> {t("pages.quote.openPdf")}
           </Button>
+          <QuoteDuplicateButton quoteId={quote.id} quoteNumber={quote.number} />
           <Badge variant="outline">{quote.status}</Badge>
         </div>
       </div>

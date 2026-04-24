@@ -30,7 +30,9 @@ import {
   Check,
   FileText,
   Filter,
+  Library,
   Loader2,
+  Package,
   Paperclip,
   Plus,
   Trash2,
@@ -48,6 +50,8 @@ import {
   useReplaceQuoteLineItems,
   useGetQuote,
 } from "@workspace/api-client-react";
+import { PricebookPickerDialog, type PricebookPickedItem } from "@/components/pricing/pricebook-picker-dialog";
+import { BundlePickerDialog } from "@/components/pricing/bundle-picker-dialog";
 
 type Props = {
   open: boolean;
@@ -83,6 +87,8 @@ export function QuoteWizard({ open, onOpenChange, initialDealId }: Props) {
   const [attachmentIds, setAttachmentIds] = useState<string[]>([]);
   const [createdQuoteId, setCreatedQuoteId] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [pricebookPickerOpen, setPricebookPickerOpen] = useState(false);
+  const [bundlePickerOpen, setBundlePickerOpen] = useState(false);
 
   const { data: deals } = useListDeals();
   const { data: dealDetail } = useGetDeal(dealId, {
@@ -255,6 +261,23 @@ export function QuoteWizard({ open, onOpenChange, initialDealId }: Props) {
       ...curr,
       { name: "", quantity: 1, listPrice: 0, unitPrice: 0, discountPct: 0 },
     ]);
+  const addItemsFromPicker = (picked: PricebookPickedItem[]) => {
+    if (!picked.length) return;
+    setItems((curr) => [
+      ...curr,
+      ...picked.map<LineItemForm>((p) => ({
+        name: p.name,
+        description: p.description,
+        quantity: p.quantity,
+        listPrice: p.listPrice,
+        unitPrice: p.unitPrice,
+        discountPct: p.discountPct,
+      })),
+    ]);
+    toast({
+      title: t("quoteWizard.itemsAdded", { count: picked.length }),
+    });
+  };
 
   const lang = i18n.resolvedLanguage ?? "de";
 
@@ -423,6 +446,31 @@ export function QuoteWizard({ open, onOpenChange, initialDealId }: Props) {
           {/* Step 2 — Line Items */}
           {step === 2 && (
             <div className="grid gap-3">
+              <div className="flex flex-wrap items-center gap-2" data-testid="wizard-step2-toolbar">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setPricebookPickerOpen(true)}
+                  data-testid="wizard-add-from-pricebook"
+                >
+                  <Library className="h-4 w-4 mr-1" />
+                  {t("quoteWizard.fromPricebook")}
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setBundlePickerOpen(true)}
+                  data-testid="wizard-add-bundle"
+                >
+                  <Package className="h-4 w-4 mr-1" />
+                  {t("quoteWizard.fromBundle")}
+                </Button>
+                <span className="text-xs text-muted-foreground ml-auto">
+                  {t("quoteWizard.itemCount", { count: items.length })}
+                </span>
+              </div>
               <div className="rounded-md border">
                 <div className="grid grid-cols-12 gap-2 px-3 py-2 text-xs font-medium text-muted-foreground bg-muted/40">
                   <div className="col-span-4">{t("common.name")}</div>
@@ -757,6 +805,17 @@ export function QuoteWizard({ open, onOpenChange, initialDealId }: Props) {
           </div>
         </DialogFooter>
       </DialogContent>
+
+      <PricebookPickerDialog
+        open={pricebookPickerOpen}
+        onOpenChange={setPricebookPickerOpen}
+        onConfirm={addItemsFromPicker}
+      />
+      <BundlePickerDialog
+        open={bundlePickerOpen}
+        onOpenChange={setBundlePickerOpen}
+        onConfirm={addItemsFromPicker}
+      />
     </Dialog>
   );
 }

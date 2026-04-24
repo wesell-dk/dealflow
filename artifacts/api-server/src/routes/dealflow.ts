@@ -51,6 +51,8 @@ import {
   quoteVersionsTable,
   lineItemsTable,
   pricePositionsTable,
+  pricePositionBundlesTable,
+  pricePositionBundleItemsTable,
   priceRulesTable,
   approvalsTable,
   contractsTable,
@@ -5702,6 +5704,511 @@ router.post('/deals/bulk/stage', async (req, res) => {
     await writeAuditFromReq(req, { entityType: 'deal', entityId: id, action: 'bulk_stage', summary: `Stage geändert auf ${parsed.data.stage}` });
   }
   res.json({ updated: targetIds.length, skipped: skipped.length, skippedIds: skipped });
+});
+
+// ── PLATFORM ADMIN — Tenant Provisioning ──
+// Plattformweite Routen für Super-Admins. Diese Routen sind die EINZIGEN,
+// die tenant-übergreifend wirken. Jede andere Route bleibt strikt
+// tenant-isoliert.
+async function requirePlatformAdmin(req: Request, res: Response): Promise<boolean> {
+  const scope = getScope(req);
+  if (!scope.user.isPlatformAdmin) {
+    res.status(403).json({ error: 'platform admin required' });
+    return false;
+  }
+  return true;
+}
+
+const PlatformTenantCreateBody = z.object({
+  name: z.string().trim().min(2).max(120),
+  plan: z.enum(['Starter', 'Growth', 'Business', 'Enterprise']),
+  region: z.enum(['EU', 'US', 'UK', 'APAC']),
+  retentionPolicy: z.object({
+    contactInactiveDays: z.number().int().positive().optional(),
+    letterRespondedDays: z.number().int().positive().optional(),
+    auditLogDays: z.number().int().positive().optional(),
+    accessLogDays: z.number().int().positive().optional(),
+  }).optional(),
+  admin: z.object({
+    name: z.string().trim().min(2).max(120),
+    email: z.string().trim().toLowerCase().email(),
+    password: z.string().min(8).max(200),
+  }),
+});
+
+router.get('/platform/tenants', async (req, res) => {
+  if (!(await requirePlatformAdmin(req, res))) return;
+  const tenants = await db.select().from(tenantsTable).orderBy(asc(tenantsTable.name));
+  if (tenants.length === 0) { res.json([]); return; }
+  const tenantIds = tenants.map(t => t.id);
+  // User-Counts per Tenant
+  const userRows = await db.select({ tenantId: usersTable.tenantId, c: sql<number>`count(*)::int` })
+    .from(usersTable)
+    .where(inArray(usersTable.tenantId, tenantIds))
+    .groupBy(usersTable.tenantId);
+  const userMap = new Map(userRows.map(r => [r.tenantId, r.c]));
+  // Account-Counts per Tenant via companies → accounts is N/A; accounts have no tenantId.
+  // Stattdessen: companies-Count als Größenindikator.
+  const compRows = await db.select({ tenantId: companiesTable.tenantId, c: sql<number>`count(*)::int` })
+    .from(companiesTable)
+    .where(inArray(companiesTable.tenantId, tenantIds))
+    .groupBy(companiesTable.tenantId);
+  const compMap = new Map(compRows.map(r => [r.tenantId, r.c]));
+  res.json(tenants.map(t => ({
+    id: t.id,
+    name: t.name,
+    plan: t.plan,
+    region: t.region,
+    retentionPolicy: t.retentionPolicy,
+    userCount: userMap.get(t.id) ?? 0,
+    companyCount: compMap.get(t.id) ?? 0,
+    createdAt: iso(t.createdAt)!,
+  })));
+});
+
+router.post('/platform/tenants', async (req, res) => {
+  if (!(await requirePlatformAdmin(req, res))) return;
+  const parsed = PlatformTenantCreateBody.safeParse(req.body);
+  if (!parsed.success) { res.status(422).json({ error: 'validation', issues: parsed.error.issues }); return; }
+  const b = parsed.data;
+  // Email-Eindeutigkeit gilt PLATTFORMWEIT (Login-Identifikator).
+  const [existing] = await db.select({ id: usersTable.id }).from(usersTable).where(eq(usersTable.email, b.admin.email));
+  if (existing) { res.status(409).json({ error: 'email already registered' }); return; }
+  const tenantId = `tn_${randomUUID().slice(0, 8)}`;
+  const adminUserId = `u_${randomUUID().slice(0, 8)}`;
+  const { hashPassword } = await import('../lib/auth');
+  // Atomar: Tenant + Admin-User + System-Rollen entweder vollständig oder gar nicht.
+  try {
+    await db.transaction(async (tx) => {
+      await tx.insert(tenantsTable).values({
+        id: tenantId,
+        name: b.name.trim(),
+        plan: b.plan,
+        region: b.region,
+        retentionPolicy: b.retentionPolicy ?? {},
+      });
+      await tx.insert(usersTable).values({
+        id: adminUserId,
+        name: b.admin.name.trim(),
+        email: b.admin.email,
+        role: 'Tenant Admin',
+        scope: tenantId,
+        initials: initials(b.admin.name),
+        avatarColor: null,
+        passwordHash: hashPassword(b.admin.password),
+        isActive: true,
+        tenantId,
+        tenantWide: true,
+        scopeCompanyIds: '[]',
+        scopeBrandIds: '[]',
+        isPlatformAdmin: false,
+      });
+      await tx.insert(rolesTable).values([
+        { id: `ro_tenant_admin_${tenantId.slice(3)}`, name: 'Tenant Admin', description: 'Volle Rechte innerhalb des Mandanten.', isSystem: true, tenantId },
+        { id: `ro_account_exec_${tenantId.slice(3)}`, name: 'Account Executive', description: 'Klassische Sales-Rolle für Deal-Ownership.', isSystem: true, tenantId },
+        { id: `ro_deal_desk_${tenantId.slice(3)}`,    name: 'Deal Desk',         description: 'Pricing- und Deal-Support, tenant-weite Sicht.', isSystem: true, tenantId },
+      ]);
+    });
+  } catch (e: unknown) {
+    const msg = e instanceof Error ? e.message : String(e);
+    // Race auf email-Unique zwischen Precheck und Insert → 409 statt 500.
+    if (/duplicate key|unique/i.test(msg)) {
+      res.status(409).json({ error: 'email already registered' });
+      return;
+    }
+    throw e;
+  }
+  await writeAuditFromReq(req, {
+    entityType: 'tenant', entityId: tenantId, action: 'platform_create',
+    summary: `Mandant angelegt: ${b.name} (${b.plan}, ${b.region})`,
+    after: { name: b.name, plan: b.plan, region: b.region, adminEmail: b.admin.email },
+    actor: getScope(req).user.name,
+  });
+  res.status(201).json({
+    id: tenantId,
+    name: b.name.trim(),
+    plan: b.plan,
+    region: b.region,
+    retentionPolicy: b.retentionPolicy ?? {},
+    userCount: 1,
+    companyCount: 0,
+    createdAt: new Date().toISOString(),
+    adminUserId,
+  });
+});
+
+// ── QUOTE DUPLIZIEREN ──
+// Kopiert Header + alle line_items + sectionsSnapshot der aktuellen Version
+// in ein neues Quote (status=draft, version=1). Behält dealId.
+router.post('/quotes/:id/duplicate', async (req, res) => {
+  const sourceId = req.params.id;
+  const [src] = await db.select().from(quotesTable).where(eq(quotesTable.id, sourceId));
+  if (!src) { res.status(404).json({ error: 'quote not found' }); return; }
+  if (!(await gateDeal(req, res, src.dealId))) return;
+  // Aktuelle Version holen (höchste version)
+  const versions = await db.select().from(quoteVersionsTable)
+    .where(eq(quoteVersionsTable.quoteId, src.id))
+    .orderBy(desc(quoteVersionsTable.version))
+    .limit(1);
+  const srcVer = versions[0];
+  const newQuoteId = `qt_${randomUUID().slice(0, 8)}`;
+  const newQvId = `qv_${randomUUID().slice(0, 8)}`;
+  const newNumber = `${src.number}-COPY-${Math.floor(Math.random() * 9000) + 1000}`;
+  // Atomar: Header + Version + alle Lines + Attachments. Bei Teil-Fehler Rollback.
+  await db.transaction(async (tx) => {
+    await tx.insert(quotesTable).values({
+      id: newQuoteId,
+      dealId: src.dealId,
+      number: newNumber,
+      status: 'draft',
+      currentVersion: 1,
+      currency: src.currency,
+      validUntil: src.validUntil,
+    });
+    await tx.insert(quoteVersionsTable).values({
+      id: newQvId,
+      quoteId: newQuoteId,
+      version: 1,
+      totalAmount: srcVer?.totalAmount ?? '0',
+      discountPct: srcVer?.discountPct ?? '0',
+      marginPct: srcVer?.marginPct ?? '30',
+      status: 'draft',
+      notes: srcVer?.notes ? `Dupliziert aus ${src.number}: ${srcVer.notes}` : `Dupliziert aus ${src.number}`,
+      templateId: srcVer?.templateId ?? null,
+      sectionsSnapshot: srcVer?.sectionsSnapshot ?? [],
+    });
+    if (srcVer) {
+      const srcLines = await tx.select().from(lineItemsTable)
+        .where(eq(lineItemsTable.quoteVersionId, srcVer.id));
+      if (srcLines.length) {
+        await tx.insert(lineItemsTable).values(srcLines.map(l => ({
+          id: `li_${randomUUID().slice(0, 8)}`,
+          quoteVersionId: newQvId,
+          name: l.name,
+          description: l.description,
+          quantity: l.quantity,
+          unitPrice: l.unitPrice,
+          listPrice: l.listPrice,
+          discountPct: l.discountPct,
+          total: l.total,
+        })));
+      }
+      // Auch Anhänge mitkopieren (Library-Asset-Verweise bleiben erhalten)
+      const srcAtts = await tx.select().from(quoteAttachmentsTable)
+        .where(eq(quoteAttachmentsTable.quoteVersionId, srcVer.id));
+      if (srcAtts.length) {
+        await tx.insert(quoteAttachmentsTable).values(srcAtts.map(a => ({
+          id: `qatt_${randomUUID().slice(0, 8)}`,
+          quoteVersionId: newQvId,
+          libraryAssetId: a.libraryAssetId,
+          name: a.name,
+          mimeType: a.mimeType,
+          size: a.size,
+          objectPath: a.objectPath,
+          label: a.label,
+          order: a.order,
+        })));
+      }
+    }
+  });
+  await writeAuditFromReq(req, {
+    entityType: 'quote', entityId: newQuoteId, action: 'duplicate',
+    summary: `Angebot dupliziert aus ${src.number}`,
+    actor: getScope(req).user.name,
+  });
+  res.status(201).json({ id: newQuoteId, number: newNumber, dealId: src.dealId });
+});
+
+// ── PREIS-BUNDLES ──
+// Vorgefertigte Pakete von Preispositionen. Tenant-isoliert; optional
+// brand/company-scoped (NULL = tenant-weit für alle). Werden im QuoteWizard
+// per Klick als Gruppe in das Angebot übernommen.
+type PriceBundleRow = typeof pricePositionBundlesTable.$inferSelect;
+type PriceBundleItemRow = typeof pricePositionBundleItemsTable.$inferSelect;
+type PricePositionRow = typeof pricePositionsTable.$inferSelect;
+
+const PriceBundleItemInputSchema = z.object({
+  pricePositionId: z.string().min(1),
+  quantity: z.number().positive().max(99999),
+  customDiscountPct: z.number().min(0).max(100).default(0),
+  position: z.number().int().min(0).default(0),
+});
+
+const PriceBundleCreateBody = z.object({
+  name: z.string().trim().min(2).max(120),
+  description: z.string().max(2000).optional().default(''),
+  category: z.string().max(60).nullable().optional(),
+  brandId: z.string().nullable().optional(),
+  companyId: z.string().nullable().optional(),
+  items: z.array(PriceBundleItemInputSchema).default([]),
+});
+
+const PriceBundleUpdateBody = z.object({
+  name: z.string().trim().min(2).max(120).optional(),
+  description: z.string().max(2000).optional(),
+  category: z.string().max(60).nullable().optional(),
+  brandId: z.string().nullable().optional(),
+  companyId: z.string().nullable().optional(),
+});
+
+const PriceBundleItemsReplaceBody = z.object({
+  items: z.array(PriceBundleItemInputSchema),
+});
+
+function mapPriceBundle(b: PriceBundleRow, items: PriceBundleItemRow[], positions: PricePositionRow[]) {
+  const posMap = new Map(positions.map(p => [p.id, p]));
+  const sortedItems = items
+    .filter(i => i.bundleId === b.id)
+    .sort((a, c) => a.position - c.position);
+  const hydrated = sortedItems.map(i => {
+    const p = posMap.get(i.pricePositionId);
+    return {
+      id: i.id,
+      pricePositionId: i.pricePositionId,
+      quantity: num(i.quantity),
+      customDiscountPct: num(i.customDiscountPct),
+      position: i.position,
+      sku: p?.sku ?? null,
+      name: p?.name ?? null,
+      listPrice: p ? num(p.listPrice) : null,
+      currency: p?.currency ?? null,
+      category: p?.category ?? null,
+    };
+  });
+  const totalListPrice = hydrated.reduce((s, h) => s + (h.listPrice ?? 0) * h.quantity, 0);
+  return {
+    id: b.id,
+    tenantId: b.tenantId,
+    name: b.name,
+    description: b.description,
+    category: b.category,
+    brandId: b.brandId,
+    companyId: b.companyId,
+    items: hydrated,
+    itemCount: hydrated.length,
+    totalListPrice,
+    currency: hydrated.find(h => h.currency)?.currency ?? null,
+    createdAt: iso(b.createdAt)!,
+  };
+}
+
+async function loadVisibleBundle(req: Request, id: string): Promise<PriceBundleRow | null> {
+  const [b] = await db.select().from(pricePositionBundlesTable).where(eq(pricePositionBundlesTable.id, id));
+  if (!b) return null;
+  if (!(await scopedRowVisibleAsync(req, b))) return null;
+  return b;
+}
+
+// price_positions hat keine eigene tenantId-Spalte — sie wird über die zugehörige
+// company (companies.tenantId) abgeleitet. Diese Helper-Funktion liefert für eine
+// Liste Positionen die effektive tenantId pro Eintrag (oder null falls company fehlt).
+async function positionTenantMap(positions: PricePositionRow[]): Promise<Map<string, string | null>> {
+  const companyIds = [...new Set(positions.map(p => p.companyId).filter(Boolean) as string[])];
+  if (companyIds.length === 0) return new Map(positions.map(p => [p.id, null]));
+  const companies = await db.select({ id: companiesTable.id, tenantId: companiesTable.tenantId })
+    .from(companiesTable).where(inArray(companiesTable.id, companyIds));
+  const cMap = new Map(companies.map(c => [c.id, c.tenantId]));
+  return new Map(positions.map(p => [p.id, p.companyId ? (cMap.get(p.companyId) ?? null) : null]));
+}
+
+async function validateBundleItems(req: Request, items: z.infer<typeof PriceBundleItemInputSchema>[]): Promise<{ ok: true } | { ok: false; status: number; error: string }> {
+  if (items.length === 0) return { ok: true };
+  const scope = getScope(req);
+  const ids = [...new Set(items.map(i => i.pricePositionId))];
+  const positions = await db.select().from(pricePositionsTable).where(inArray(pricePositionsTable.id, ids));
+  if (positions.length !== ids.length) return { ok: false, status: 422, error: 'unknown price_position id' };
+  // Tenant-Zugehörigkeit pro Position über company auflösen — verhindert
+  // Cross-Tenant-Referenz, falls eine fremde price_position-id erraten wird.
+  const tMap = await positionTenantMap(positions);
+  for (const p of positions) {
+    if (tMap.get(p.id) !== scope.tenantId) {
+      return { ok: false, status: 422, error: 'unknown price_position id' };
+    }
+    // Brand/Company-Scope: Position muss im aktiven Brand/Company-Scope des Users liegen.
+    const synthetic = { tenantId: scope.tenantId, brandId: p.brandId, companyId: p.companyId };
+    if (!(await scopedRowVisibleAsync(req, synthetic))) {
+      return { ok: false, status: 403, error: `price_position ${p.id} outside scope` };
+    }
+  }
+  return { ok: true };
+}
+
+// Liefert NUR die Positionen, die der User tatsächlich sehen darf — verhindert
+// dass Bundles als Hintertür auf Positionen außerhalb des Brand/Company-Scopes
+// (oder gar Tenants) dienen.
+async function loadVisiblePositions(req: Request, posIds: string[]): Promise<PricePositionRow[]> {
+  if (posIds.length === 0) return [];
+  const scope = getScope(req);
+  const positions = await db.select().from(pricePositionsTable)
+    .where(inArray(pricePositionsTable.id, posIds));
+  const tMap = await positionTenantMap(positions);
+  const sameTenant = positions.filter(p => tMap.get(p.id) === scope.tenantId);
+  const flags = await Promise.all(sameTenant.map(p => {
+    const synthetic = { tenantId: scope.tenantId, brandId: p.brandId, companyId: p.companyId };
+    return scopedRowVisibleAsync(req, synthetic);
+  }));
+  return sameTenant.filter((_, i) => flags[i]);
+}
+
+router.get('/price-bundles', async (req, res) => {
+  const scope = getScope(req);
+  const bundles = await db.select().from(pricePositionBundlesTable)
+    .where(eq(pricePositionBundlesTable.tenantId, scope.tenantId))
+    .orderBy(asc(pricePositionBundlesTable.name));
+  const visFlags = await Promise.all(bundles.map(b => scopedRowVisibleAsync(req, b)));
+  const visible = bundles.filter((_, i) => visFlags[i]);
+  if (visible.length === 0) { res.json([]); return; }
+  const ids = visible.map(b => b.id);
+  const items = await db.select().from(pricePositionBundleItemsTable)
+    .where(inArray(pricePositionBundleItemsTable.bundleId, ids));
+  const posIds = [...new Set(items.map(i => i.pricePositionId))];
+  const positions = await loadVisiblePositions(req, posIds);
+  res.json(visible.map(b => mapPriceBundle(b, items, positions)));
+});
+
+router.get('/price-bundles/:id', async (req, res) => {
+  const b = await loadVisibleBundle(req, req.params.id);
+  if (!b) { res.status(404).json({ error: 'not found' }); return; }
+  const items = await db.select().from(pricePositionBundleItemsTable)
+    .where(eq(pricePositionBundleItemsTable.bundleId, b.id));
+  const posIds = [...new Set(items.map(i => i.pricePositionId))];
+  const positions = await loadVisiblePositions(req, posIds);
+  res.json(mapPriceBundle(b, items, positions));
+});
+
+router.post('/price-bundles', async (req, res) => {
+  const parsed = PriceBundleCreateBody.safeParse(req.body);
+  if (!parsed.success) { res.status(422).json({ error: 'validation', issues: parsed.error.issues }); return; }
+  const scope = getScope(req);
+  const b = parsed.data;
+  // Brand/Company müssen im Scope des Users sein
+  if (b.brandId || b.companyId) {
+    const synthetic = { tenantId: scope.tenantId, brandId: b.brandId ?? null, companyId: b.companyId ?? null };
+    if (!(await scopedRowVisibleAsync(req, synthetic))) {
+      res.status(403).json({ error: 'brand/company outside scope' });
+      return;
+    }
+  }
+  const itemsCheck = await validateBundleItems(req, b.items);
+  if (!itemsCheck.ok) { res.status(itemsCheck.status).json({ error: itemsCheck.error }); return; }
+  const bundleId = `ppb_${randomUUID().slice(0, 8)}`;
+  await db.insert(pricePositionBundlesTable).values({
+    id: bundleId,
+    tenantId: scope.tenantId,
+    name: b.name.trim(),
+    description: b.description ?? '',
+    category: b.category ?? null,
+    brandId: b.brandId ?? null,
+    companyId: b.companyId ?? null,
+  });
+  if (b.items.length) {
+    await db.insert(pricePositionBundleItemsTable).values(b.items.map((it, idx) => ({
+      id: `ppbi_${randomUUID().slice(0, 8)}`,
+      bundleId,
+      pricePositionId: it.pricePositionId,
+      quantity: String(it.quantity),
+      customDiscountPct: String(it.customDiscountPct),
+      position: it.position ?? idx,
+    })));
+  }
+  await writeAuditFromReq(req, {
+    entityType: 'price_bundle', entityId: bundleId, action: 'create',
+    summary: `Bundle angelegt: ${b.name} (${b.items.length} Positionen)`,
+    actor: scope.user.name,
+  });
+  // Reload and respond hydrated
+  const [row] = await db.select().from(pricePositionBundlesTable).where(eq(pricePositionBundlesTable.id, bundleId));
+  const items = await db.select().from(pricePositionBundleItemsTable).where(eq(pricePositionBundleItemsTable.bundleId, bundleId));
+  const posIds = [...new Set(items.map(i => i.pricePositionId))];
+  const positions = posIds.length
+    ? await db.select().from(pricePositionsTable).where(inArray(pricePositionsTable.id, posIds))
+    : [];
+  res.status(201).json(mapPriceBundle(row!, items, positions));
+});
+
+router.patch('/price-bundles/:id', async (req, res) => {
+  const parsed = PriceBundleUpdateBody.safeParse(req.body);
+  if (!parsed.success) { res.status(422).json({ error: 'validation', issues: parsed.error.issues }); return; }
+  const existing = await loadVisibleBundle(req, req.params.id);
+  if (!existing) { res.status(404).json({ error: 'not found' }); return; }
+  const scope = getScope(req);
+  const b = parsed.data;
+  if ('brandId' in b || 'companyId' in b) {
+    const synthetic = {
+      tenantId: scope.tenantId,
+      brandId: b.brandId !== undefined ? b.brandId : existing.brandId,
+      companyId: b.companyId !== undefined ? b.companyId : existing.companyId,
+    };
+    if (!(await scopedRowVisibleAsync(req, synthetic))) {
+      res.status(403).json({ error: 'brand/company outside scope' });
+      return;
+    }
+  }
+  const patch: Partial<typeof pricePositionBundlesTable.$inferInsert> = {};
+  if (b.name !== undefined) patch.name = b.name.trim();
+  if (b.description !== undefined) patch.description = b.description;
+  if (b.category !== undefined) patch.category = b.category;
+  if (b.brandId !== undefined) patch.brandId = b.brandId;
+  if (b.companyId !== undefined) patch.companyId = b.companyId;
+  if (Object.keys(patch).length) {
+    await db.update(pricePositionBundlesTable).set(patch).where(eq(pricePositionBundlesTable.id, existing.id));
+  }
+  await writeAuditFromReq(req, {
+    entityType: 'price_bundle', entityId: existing.id, action: 'update',
+    summary: `Bundle aktualisiert: ${b.name ?? existing.name}`,
+    actor: scope.user.name,
+  });
+  const [row] = await db.select().from(pricePositionBundlesTable).where(eq(pricePositionBundlesTable.id, existing.id));
+  const items = await db.select().from(pricePositionBundleItemsTable).where(eq(pricePositionBundleItemsTable.bundleId, existing.id));
+  const posIds = [...new Set(items.map(i => i.pricePositionId))];
+  const positions = posIds.length
+    ? await db.select().from(pricePositionsTable).where(inArray(pricePositionsTable.id, posIds))
+    : [];
+  res.json(mapPriceBundle(row!, items, positions));
+});
+
+router.put('/price-bundles/:id/items', async (req, res) => {
+  const parsed = PriceBundleItemsReplaceBody.safeParse(req.body);
+  if (!parsed.success) { res.status(422).json({ error: 'validation', issues: parsed.error.issues }); return; }
+  const existing = await loadVisibleBundle(req, req.params.id);
+  if (!existing) { res.status(404).json({ error: 'not found' }); return; }
+  const itemsCheck = await validateBundleItems(req, parsed.data.items);
+  if (!itemsCheck.ok) { res.status(itemsCheck.status).json({ error: itemsCheck.error }); return; }
+  await db.delete(pricePositionBundleItemsTable).where(eq(pricePositionBundleItemsTable.bundleId, existing.id));
+  if (parsed.data.items.length) {
+    await db.insert(pricePositionBundleItemsTable).values(parsed.data.items.map((it, idx) => ({
+      id: `ppbi_${randomUUID().slice(0, 8)}`,
+      bundleId: existing.id,
+      pricePositionId: it.pricePositionId,
+      quantity: String(it.quantity),
+      customDiscountPct: String(it.customDiscountPct),
+      position: it.position ?? idx,
+    })));
+  }
+  await writeAuditFromReq(req, {
+    entityType: 'price_bundle', entityId: existing.id, action: 'items_replace',
+    summary: `Bundle-Positionen ersetzt (${parsed.data.items.length})`,
+    actor: getScope(req).user.name,
+  });
+  const items = await db.select().from(pricePositionBundleItemsTable).where(eq(pricePositionBundleItemsTable.bundleId, existing.id));
+  const posIds = [...new Set(items.map(i => i.pricePositionId))];
+  const positions = posIds.length
+    ? await db.select().from(pricePositionsTable).where(inArray(pricePositionsTable.id, posIds))
+    : [];
+  res.json(mapPriceBundle(existing, items, positions));
+});
+
+router.delete('/price-bundles/:id', async (req, res) => {
+  const existing = await loadVisibleBundle(req, req.params.id);
+  if (!existing) { res.status(404).json({ error: 'not found' }); return; }
+  await db.delete(pricePositionBundleItemsTable).where(eq(pricePositionBundleItemsTable.bundleId, existing.id));
+  await db.delete(pricePositionBundlesTable).where(eq(pricePositionBundlesTable.id, existing.id));
+  await writeAuditFromReq(req, {
+    entityType: 'price_bundle', entityId: existing.id, action: 'delete',
+    summary: `Bundle gelöscht: ${existing.name}`,
+    actor: getScope(req).user.name,
+  });
+  res.status(204).end();
 });
 
 export default router;

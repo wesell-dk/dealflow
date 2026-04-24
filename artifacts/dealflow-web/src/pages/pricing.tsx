@@ -1,6 +1,17 @@
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
-import { useGetPricingSummary, useListPricePositions, useListPriceRules, resolvePrice, type ResolvedPrice } from "@workspace/api-client-react";
+import { useQueryClient } from "@tanstack/react-query";
+import {
+  useGetPricingSummary,
+  useListPricePositions,
+  useListPriceRules,
+  resolvePrice,
+  type ResolvedPrice,
+  useListPriceBundles,
+  useDeletePriceBundle,
+  getListPriceBundlesQueryKey,
+  type PriceBundle,
+} from "@workspace/api-client-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -8,7 +19,13 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { ArrowRight, Tag, Shield, Percent, Clock, AlertTriangle, Layers, CheckCircle2, Circle } from "lucide-react";
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import { useToast } from "@/hooks/use-toast";
+import { ArrowRight, Tag, Shield, Percent, Clock, AlertTriangle, Layers, CheckCircle2, Circle, Plus, Pencil, Trash2, Package } from "lucide-react";
+import { BundleFormDialog } from "@/components/pricing/bundle-form-dialog";
 
 function ResolvePanel() {
   const { t } = useTranslation();
@@ -87,7 +104,116 @@ function ResolvePanel() {
   );
 }
 
+function BundlesPanel() {
+  const { t } = useTranslation();
+  const { toast } = useToast();
+  const qc = useQueryClient();
+  const { data: bundles, isLoading } = useListPriceBundles();
+  const [createOpen, setCreateOpen] = useState(false);
+  const [editing, setEditing] = useState<PriceBundle | null>(null);
+  const [deleting, setDeleting] = useState<PriceBundle | null>(null);
+  const deleteMut = useDeletePriceBundle();
+
+  const onDelete = async () => {
+    if (!deleting) return;
+    try {
+      await deleteMut.mutateAsync({ id: deleting.id });
+      toast({ title: t("pages.pricing.bundles.deleted"), description: deleting.name });
+      await qc.invalidateQueries({ queryKey: getListPriceBundlesQueryKey() });
+      setDeleting(null);
+    } catch (e: unknown) {
+      toast({ title: t("pages.pricing.bundles.deleteFailed"), description: String(e), variant: "destructive" });
+    }
+  };
+
+  return (
+    <div className="space-y-4" data-testid="bundles-panel">
+      <div className="flex items-center justify-between">
+        <p className="text-sm text-muted-foreground">{t("pages.pricing.bundles.subtitle")}</p>
+        <Button size="sm" onClick={() => setCreateOpen(true)} data-testid="bundles-new-button">
+          <Plus className="h-4 w-4 mr-1" />
+          {t("pages.pricing.bundles.create")}
+        </Button>
+      </div>
+      {isLoading ? (
+        <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
+          {[0,1,2].map(i => <Skeleton key={i} className="h-44 w-full" />)}
+        </div>
+      ) : !bundles || bundles.length === 0 ? (
+        <div className="p-12 text-center border rounded-md text-muted-foreground bg-muted/10">
+          {t("pages.pricing.bundles.empty")}
+        </div>
+      ) : (
+        <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3" data-testid="bundles-grid">
+          {bundles.map(b => (
+            <Card key={b.id} data-testid={`bundle-${b.id}`}>
+              <CardHeader className="pb-2">
+                <div className="flex items-start justify-between gap-2">
+                  <div className="flex items-start gap-2">
+                    <Package className="h-5 w-5 mt-0.5 text-primary" />
+                    <CardTitle className="text-base">{b.name}</CardTitle>
+                  </div>
+                  {b.category && <Badge variant="secondary">{b.category}</Badge>}
+                </div>
+                {b.description && (
+                  <p className="text-xs text-muted-foreground mt-1.5">{b.description}</p>
+                )}
+              </CardHeader>
+              <CardContent className="space-y-2.5 text-sm">
+                <div className="flex justify-between text-xs">
+                  <span className="text-muted-foreground">{t("bundlePicker.itemsCount", { count: b.itemCount })}</span>
+                  <span className="font-bold tabular-nums">
+                    {b.totalListPrice.toLocaleString()} {b.currency ?? ""}
+                  </span>
+                </div>
+                <ul className="text-xs text-muted-foreground space-y-0.5 max-h-24 overflow-y-auto">
+                  {b.items.slice(0, 5).map((it, i) => (
+                    <li key={i} className="flex justify-between gap-2">
+                      <span className="truncate">{it.quantity}× {it.name}</span>
+                      {Number(it.customDiscountPct) > 0 && (
+                        <span className="text-rose-600">-{Number(it.customDiscountPct)}%</span>
+                      )}
+                    </li>
+                  ))}
+                  {b.items.length > 5 && <li className="italic">+{b.items.length - 5}</li>}
+                </ul>
+                <div className="flex gap-2 pt-2 border-t">
+                  <Button variant="outline" size="sm" className="flex-1" onClick={() => setEditing(b)} data-testid={`bundle-edit-${b.id}`}>
+                    <Pencil className="h-3.5 w-3.5 mr-1" /> {t("common.edit")}
+                  </Button>
+                  <Button variant="ghost" size="sm" onClick={() => setDeleting(b)} data-testid={`bundle-delete-${b.id}`}>
+                    <Trash2 className="h-3.5 w-3.5 text-rose-600" />
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      )}
+      <BundleFormDialog open={createOpen} onOpenChange={setCreateOpen} />
+      <BundleFormDialog open={!!editing} onOpenChange={(v) => { if (!v) setEditing(null); }} bundle={editing} />
+      <AlertDialog open={!!deleting} onOpenChange={(v) => { if (!v) setDeleting(null); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>{t("pages.pricing.bundles.deleteConfirmTitle")}</AlertDialogTitle>
+            <AlertDialogDescription>
+              {t("pages.pricing.bundles.deleteConfirmBody", { name: deleting?.name ?? "" })}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>{t("common.cancel")}</AlertDialogCancel>
+            <AlertDialogAction onClick={(e) => { e.preventDefault(); onDelete(); }}>
+              {t("common.delete")}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </div>
+  );
+}
+
 export default function Pricing() {
+  const { t } = useTranslation();
   const { data: summary, isLoading: isLoadingSummary } = useGetPricingSummary();
   const { data: positions, isLoading: isLoadingPositions } = useListPricePositions();
   const { data: rules, isLoading: isLoadingRules } = useListPriceRules();
@@ -148,8 +274,13 @@ export default function Pricing() {
         <TabsList>
           <TabsTrigger value="positions">Price Positions</TabsTrigger>
           <TabsTrigger value="rules">Pricing Rules</TabsTrigger>
+          <TabsTrigger value="bundles" data-testid="tab-bundles">{t("pages.pricing.bundles.tab")}</TabsTrigger>
           <TabsTrigger value="resolve">Resolve</TabsTrigger>
         </TabsList>
+
+        <TabsContent value="bundles" className="mt-4">
+          <BundlesPanel />
+        </TabsContent>
 
         <TabsContent value="resolve" className="mt-4">
           <ResolvePanel />

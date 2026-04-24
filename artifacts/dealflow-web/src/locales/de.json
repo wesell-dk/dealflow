@@ -16,7 +16,8 @@
     "copilot": "Copilot",
     "admin": "Verwaltung",
     "templates": "Vorlagen",
-    "attachments": "Anhänge"
+    "attachments": "Anhänge",
+    "platformAdmin": "Plattform"
   },
   "common": {
     "search": "Deals, Kunden, Angebote suchen…",
@@ -75,7 +76,12 @@
     "number": "Nummer",
     "industry": "Branche",
     "quote": "Angebot",
-    "error": "Fehler"
+    "error": "Fehler",
+    "open": "Öffnen",
+    "description": "Beschreibung"
+  },
+  "actions": {
+    "duplicate": "Duplizieren"
   },
   "pages": {
     "home": {
@@ -112,7 +118,41 @@
     "quotes": {
       "title": "Angebote",
       "subtitle": "Alle Angebote über deine Deals hinweg.",
-      "newQuote": "Neues Angebot"
+      "newQuote": "Neues Angebot",
+      "duplicateConfirmTitle": "Angebot duplizieren?",
+      "duplicateConfirmBody": "Es wird eine vollständige Kopie von Angebot {{number}} als neuer Entwurf erstellt — inklusive Positionen, Sektionen und verknüpfter Anhänge.",
+      "duplicated": "Angebot dupliziert",
+      "duplicateFailed": "Duplizieren fehlgeschlagen"
+    },
+    "platformAdmin": {
+      "title": "Plattform-Verwaltung",
+      "subtitle": "Mandanten anlegen und bestehende Tenants überblicken.",
+      "createTenant": "Mandant anlegen",
+      "createTenantTitle": "Neuen Mandanten anlegen",
+      "createTenantSubtitle": "Tenant-Stammdaten und ersten Admin-Account festlegen.",
+      "createTenantDesc": "Tenant-Stammdaten und ersten Admin-Account festlegen.",
+      "firstAdmin": "Erster Administrator",
+      "validationError": "Bitte Eingaben prüfen",
+      "validationErrorBody": "Name, Admin-Daten und ein Passwort mit mindestens 8 Zeichen sind erforderlich.",
+      "tenantName": "Tenant-Name",
+      "tenantNamePlaceholder": "z.B. Acme Holding AG",
+      "plan": "Plan",
+      "region": "Region",
+      "users": "Nutzer",
+      "companies": "Gesellschaften",
+      "createdAt": "Erstellt",
+      "adminSection": "Erster Administrator",
+      "adminName": "Name",
+      "adminEmail": "E-Mail",
+      "adminPassword": "Initial-Passwort",
+      "adminPasswordHint": "Mindestens 8 Zeichen — wird beim ersten Login geändert.",
+      "submit": "Mandant anlegen",
+      "created": "Mandant angelegt",
+      "createFailed": "Anlegen fehlgeschlagen",
+      "validationName": "Bitte einen Namen angeben.",
+      "validationEmail": "Bitte eine gültige E-Mail-Adresse eingeben.",
+      "validationPassword": "Passwort muss mindestens 8 Zeichen haben.",
+      "empty": "Noch keine Mandanten vorhanden."
     },
     "quote": {
       "lineItems": "Positionen",
@@ -301,7 +341,18 @@
       "resolve": "Auflösen",
       "source": "Quelle",
       "price": "Preis",
-      "noResult": "Keine Preisregel gefunden"
+      "noResult": "Keine Preisregel gefunden",
+      "category": "Kategorie",
+      "bundles": {
+        "tab": "Bündel",
+        "subtitle": "Mehrere Preispositionen zu wiederverwendbaren Paketen kombinieren.",
+        "create": "Bündel anlegen",
+        "empty": "Noch keine Bündel angelegt — lege das erste Bundle an.",
+        "deleted": "Bündel gelöscht",
+        "deleteFailed": "Löschen fehlgeschlagen",
+        "deleteConfirmTitle": "Bündel löschen?",
+        "deleteConfirmBody": "Bündel \"{{name}}\" wird unwiderruflich gelöscht. Bereits in Angeboten verwendete Positionen bleiben erhalten."
+      }
     },
     "priceIncrease": {
       "letterResponse": "Kundenantwort erfassen",
@@ -392,6 +443,12 @@
     "unitPrice": "Verkaufspreis",
     "lineDescription": "Beschreibung",
     "addLine": "Position hinzufügen",
+    "fromPricebook": "Aus Pricebook",
+    "fromBundle": "Bundle hinzufügen",
+    "itemCount_one": "{{count}} Position",
+    "itemCount_other": "{{count}} Positionen",
+    "itemsAdded_one": "{{count}} Position hinzugefügt",
+    "itemsAdded_other": "{{count}} Positionen hinzugefügt",
     "sectionsPreview": "Sektionen aus Vorlage",
     "attachmentsHint": "Wähle Anhänge aus der Bibliothek, die diesem Angebot beigelegt werden.",
     "next": "Weiter",
@@ -408,6 +465,39 @@
       "title": "Branche noch nicht konfiguriert",
       "subtitle": "Für diese Branche existiert noch kein Profil. Standard-Vorlage und Anhänge können trotzdem ausgewählt werden; lege später ein Profil an, um Defaults zu speichern."
     }
+  },
+  "pricebookPicker": {
+    "title": "Aus Pricebook hinzufügen",
+    "subtitle": "Wähle eine oder mehrere Preispositionen aus dem Katalog.",
+    "searchPlaceholder": "SKU oder Name suchen…",
+    "allCategories": "Alle Kategorien",
+    "empty": "Keine Treffer.",
+    "selectedCount_one": "{{count}} ausgewählt",
+    "selectedCount_other": "{{count}} ausgewählt",
+    "applyN_one": "{{count}} Position übernehmen",
+    "applyN_other": "{{count}} Positionen übernehmen"
+  },
+  "bundlePicker": {
+    "title": "Bundle hinzufügen",
+    "subtitle": "Wähle ein Bündel — alle enthaltenen Positionen werden ans Angebot angehängt.",
+    "empty": "Keine Bündel verfügbar — lege zuerst eines unter Preisgestaltung → Bündel an.",
+    "itemsCount_one": "{{count}} Position",
+    "itemsCount_other": "{{count}} Positionen",
+    "totalList": "Listenwert",
+    "addBundle": "Bundle hinzufügen"
+  },
+  "bundleForm": {
+    "createTitle": "Bündel anlegen",
+    "editTitle": "Bündel bearbeiten",
+    "subtitle": "Mehrere Preispositionen mit Mengen und Discounts gruppieren.",
+    "namePlaceholder": "z.B. SaaS Pro Starter-Paket",
+    "items": "Positionen im Bündel",
+    "addPositions": "Positionen aus Pricebook hinzufügen",
+    "noItems": "Noch keine Positionen — füge welche aus dem Pricebook hinzu.",
+    "nameRequired": "Bitte einen Namen angeben.",
+    "created": "Bündel angelegt",
+    "updated": "Bündel aktualisiert",
+    "saveFailed": "Speichern fehlgeschlagen"
   },
   "helpBot": {
     "title": "Hilfe-Assistent",

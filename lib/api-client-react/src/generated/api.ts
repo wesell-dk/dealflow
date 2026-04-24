@@ -120,6 +120,12 @@ import type {
   OrderConfirmationHandoverInput,
   PatchAmendmentInput,
   PerformanceReport,
+  PlatformTenant,
+  PlatformTenantCreate,
+  PriceBundle,
+  PriceBundleCreate,
+  PriceBundleItemsReplace,
+  PriceBundleUpdate,
   PriceIncreaseCampaign,
   PriceIncreaseCampaignDetail,
   PriceIncreaseLetter,
@@ -133,6 +139,7 @@ import type {
   QuoteAttachment,
   QuoteAttachmentInput,
   QuoteDetail,
+  QuoteDuplicateResult,
   QuoteFromTemplateInput,
   QuoteInput,
   QuoteTemplate,
@@ -10543,6 +10550,720 @@ export const useBulkUpdateDealOwner = <
   TContext
 > => {
   return useMutation(getBulkUpdateDealOwnerMutationOptions(options));
+};
+
+/**
+ * @summary List all tenants (platform admin only)
+ */
+export const getListPlatformTenantsUrl = () => {
+  return `/api/v1/platform/tenants`;
+};
+
+export const listPlatformTenants = async (
+  options?: RequestInit,
+): Promise<PlatformTenant[]> => {
+  return customFetch<PlatformTenant[]>(getListPlatformTenantsUrl(), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getListPlatformTenantsQueryKey = () => {
+  return [`/api/v1/platform/tenants`] as const;
+};
+
+export const getListPlatformTenantsQueryOptions = <
+  TData = Awaited<ReturnType<typeof listPlatformTenants>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof listPlatformTenants>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getListPlatformTenantsQueryKey();
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof listPlatformTenants>>
+  > = ({ signal }) => listPlatformTenants({ signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof listPlatformTenants>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type ListPlatformTenantsQueryResult = NonNullable<
+  Awaited<ReturnType<typeof listPlatformTenants>>
+>;
+export type ListPlatformTenantsQueryError = ErrorType<unknown>;
+
+/**
+ * @summary List all tenants (platform admin only)
+ */
+
+export function useListPlatformTenants<
+  TData = Awaited<ReturnType<typeof listPlatformTenants>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof listPlatformTenants>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getListPlatformTenantsQueryOptions(options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Provision new tenant + first admin (platform admin only)
+ */
+export const getCreatePlatformTenantUrl = () => {
+  return `/api/v1/platform/tenants`;
+};
+
+export const createPlatformTenant = async (
+  platformTenantCreate: PlatformTenantCreate,
+  options?: RequestInit,
+): Promise<PlatformTenant> => {
+  return customFetch<PlatformTenant>(getCreatePlatformTenantUrl(), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(platformTenantCreate),
+  });
+};
+
+export const getCreatePlatformTenantMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof createPlatformTenant>>,
+    TError,
+    { data: BodyType<PlatformTenantCreate> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof createPlatformTenant>>,
+  TError,
+  { data: BodyType<PlatformTenantCreate> },
+  TContext
+> => {
+  const mutationKey = ["createPlatformTenant"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof createPlatformTenant>>,
+    { data: BodyType<PlatformTenantCreate> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return createPlatformTenant(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type CreatePlatformTenantMutationResult = NonNullable<
+  Awaited<ReturnType<typeof createPlatformTenant>>
+>;
+export type CreatePlatformTenantMutationBody = BodyType<PlatformTenantCreate>;
+export type CreatePlatformTenantMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Provision new tenant + first admin (platform admin only)
+ */
+export const useCreatePlatformTenant = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof createPlatformTenant>>,
+    TError,
+    { data: BodyType<PlatformTenantCreate> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof createPlatformTenant>>,
+  TError,
+  { data: BodyType<PlatformTenantCreate> },
+  TContext
+> => {
+  return useMutation(getCreatePlatformTenantMutationOptions(options));
+};
+
+/**
+ * @summary Duplicate quote (header + line items + sections)
+ */
+export const getDuplicateQuoteUrl = (id: string) => {
+  return `/api/v1/quotes/${id}/duplicate`;
+};
+
+export const duplicateQuote = async (
+  id: string,
+  options?: RequestInit,
+): Promise<QuoteDuplicateResult> => {
+  return customFetch<QuoteDuplicateResult>(getDuplicateQuoteUrl(id), {
+    ...options,
+    method: "POST",
+  });
+};
+
+export const getDuplicateQuoteMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof duplicateQuote>>,
+    TError,
+    { id: string },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof duplicateQuote>>,
+  TError,
+  { id: string },
+  TContext
+> => {
+  const mutationKey = ["duplicateQuote"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof duplicateQuote>>,
+    { id: string }
+  > = (props) => {
+    const { id } = props ?? {};
+
+    return duplicateQuote(id, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type DuplicateQuoteMutationResult = NonNullable<
+  Awaited<ReturnType<typeof duplicateQuote>>
+>;
+
+export type DuplicateQuoteMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Duplicate quote (header + line items + sections)
+ */
+export const useDuplicateQuote = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof duplicateQuote>>,
+    TError,
+    { id: string },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof duplicateQuote>>,
+  TError,
+  { id: string },
+  TContext
+> => {
+  return useMutation(getDuplicateQuoteMutationOptions(options));
+};
+
+export const getListPriceBundlesUrl = () => {
+  return `/api/v1/price-bundles`;
+};
+
+export const listPriceBundles = async (
+  options?: RequestInit,
+): Promise<PriceBundle[]> => {
+  return customFetch<PriceBundle[]>(getListPriceBundlesUrl(), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getListPriceBundlesQueryKey = () => {
+  return [`/api/v1/price-bundles`] as const;
+};
+
+export const getListPriceBundlesQueryOptions = <
+  TData = Awaited<ReturnType<typeof listPriceBundles>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof listPriceBundles>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getListPriceBundlesQueryKey();
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof listPriceBundles>>
+  > = ({ signal }) => listPriceBundles({ signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof listPriceBundles>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type ListPriceBundlesQueryResult = NonNullable<
+  Awaited<ReturnType<typeof listPriceBundles>>
+>;
+export type ListPriceBundlesQueryError = ErrorType<unknown>;
+
+export function useListPriceBundles<
+  TData = Awaited<ReturnType<typeof listPriceBundles>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof listPriceBundles>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getListPriceBundlesQueryOptions(options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+export const getCreatePriceBundleUrl = () => {
+  return `/api/v1/price-bundles`;
+};
+
+export const createPriceBundle = async (
+  priceBundleCreate: PriceBundleCreate,
+  options?: RequestInit,
+): Promise<PriceBundle> => {
+  return customFetch<PriceBundle>(getCreatePriceBundleUrl(), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(priceBundleCreate),
+  });
+};
+
+export const getCreatePriceBundleMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof createPriceBundle>>,
+    TError,
+    { data: BodyType<PriceBundleCreate> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof createPriceBundle>>,
+  TError,
+  { data: BodyType<PriceBundleCreate> },
+  TContext
+> => {
+  const mutationKey = ["createPriceBundle"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof createPriceBundle>>,
+    { data: BodyType<PriceBundleCreate> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return createPriceBundle(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type CreatePriceBundleMutationResult = NonNullable<
+  Awaited<ReturnType<typeof createPriceBundle>>
+>;
+export type CreatePriceBundleMutationBody = BodyType<PriceBundleCreate>;
+export type CreatePriceBundleMutationError = ErrorType<unknown>;
+
+export const useCreatePriceBundle = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof createPriceBundle>>,
+    TError,
+    { data: BodyType<PriceBundleCreate> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof createPriceBundle>>,
+  TError,
+  { data: BodyType<PriceBundleCreate> },
+  TContext
+> => {
+  return useMutation(getCreatePriceBundleMutationOptions(options));
+};
+
+export const getGetPriceBundleUrl = (id: string) => {
+  return `/api/v1/price-bundles/${id}`;
+};
+
+export const getPriceBundle = async (
+  id: string,
+  options?: RequestInit,
+): Promise<PriceBundle> => {
+  return customFetch<PriceBundle>(getGetPriceBundleUrl(id), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getGetPriceBundleQueryKey = (id: string) => {
+  return [`/api/v1/price-bundles/${id}`] as const;
+};
+
+export const getGetPriceBundleQueryOptions = <
+  TData = Awaited<ReturnType<typeof getPriceBundle>>,
+  TError = ErrorType<unknown>,
+>(
+  id: string,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getPriceBundle>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getGetPriceBundleQueryKey(id);
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof getPriceBundle>>> = ({
+    signal,
+  }) => getPriceBundle(id, { signal, ...requestOptions });
+
+  return {
+    queryKey,
+    queryFn,
+    enabled: !!id,
+    ...queryOptions,
+  } as UseQueryOptions<
+    Awaited<ReturnType<typeof getPriceBundle>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetPriceBundleQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getPriceBundle>>
+>;
+export type GetPriceBundleQueryError = ErrorType<unknown>;
+
+export function useGetPriceBundle<
+  TData = Awaited<ReturnType<typeof getPriceBundle>>,
+  TError = ErrorType<unknown>,
+>(
+  id: string,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getPriceBundle>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetPriceBundleQueryOptions(id, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+export const getUpdatePriceBundleUrl = (id: string) => {
+  return `/api/v1/price-bundles/${id}`;
+};
+
+export const updatePriceBundle = async (
+  id: string,
+  priceBundleUpdate: PriceBundleUpdate,
+  options?: RequestInit,
+): Promise<PriceBundle> => {
+  return customFetch<PriceBundle>(getUpdatePriceBundleUrl(id), {
+    ...options,
+    method: "PATCH",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(priceBundleUpdate),
+  });
+};
+
+export const getUpdatePriceBundleMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof updatePriceBundle>>,
+    TError,
+    { id: string; data: BodyType<PriceBundleUpdate> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof updatePriceBundle>>,
+  TError,
+  { id: string; data: BodyType<PriceBundleUpdate> },
+  TContext
+> => {
+  const mutationKey = ["updatePriceBundle"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof updatePriceBundle>>,
+    { id: string; data: BodyType<PriceBundleUpdate> }
+  > = (props) => {
+    const { id, data } = props ?? {};
+
+    return updatePriceBundle(id, data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type UpdatePriceBundleMutationResult = NonNullable<
+  Awaited<ReturnType<typeof updatePriceBundle>>
+>;
+export type UpdatePriceBundleMutationBody = BodyType<PriceBundleUpdate>;
+export type UpdatePriceBundleMutationError = ErrorType<unknown>;
+
+export const useUpdatePriceBundle = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof updatePriceBundle>>,
+    TError,
+    { id: string; data: BodyType<PriceBundleUpdate> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof updatePriceBundle>>,
+  TError,
+  { id: string; data: BodyType<PriceBundleUpdate> },
+  TContext
+> => {
+  return useMutation(getUpdatePriceBundleMutationOptions(options));
+};
+
+export const getDeletePriceBundleUrl = (id: string) => {
+  return `/api/v1/price-bundles/${id}`;
+};
+
+export const deletePriceBundle = async (
+  id: string,
+  options?: RequestInit,
+): Promise<void> => {
+  return customFetch<void>(getDeletePriceBundleUrl(id), {
+    ...options,
+    method: "DELETE",
+  });
+};
+
+export const getDeletePriceBundleMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof deletePriceBundle>>,
+    TError,
+    { id: string },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof deletePriceBundle>>,
+  TError,
+  { id: string },
+  TContext
+> => {
+  const mutationKey = ["deletePriceBundle"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof deletePriceBundle>>,
+    { id: string }
+  > = (props) => {
+    const { id } = props ?? {};
+
+    return deletePriceBundle(id, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type DeletePriceBundleMutationResult = NonNullable<
+  Awaited<ReturnType<typeof deletePriceBundle>>
+>;
+
+export type DeletePriceBundleMutationError = ErrorType<unknown>;
+
+export const useDeletePriceBundle = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof deletePriceBundle>>,
+    TError,
+    { id: string },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof deletePriceBundle>>,
+  TError,
+  { id: string },
+  TContext
+> => {
+  return useMutation(getDeletePriceBundleMutationOptions(options));
+};
+
+export const getReplacePriceBundleItemsUrl = (id: string) => {
+  return `/api/v1/price-bundles/${id}/items`;
+};
+
+export const replacePriceBundleItems = async (
+  id: string,
+  priceBundleItemsReplace: PriceBundleItemsReplace,
+  options?: RequestInit,
+): Promise<PriceBundle> => {
+  return customFetch<PriceBundle>(getReplacePriceBundleItemsUrl(id), {
+    ...options,
+    method: "PUT",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(priceBundleItemsReplace),
+  });
+};
+
+export const getReplacePriceBundleItemsMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof replacePriceBundleItems>>,
+    TError,
+    { id: string; data: BodyType<PriceBundleItemsReplace> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof replacePriceBundleItems>>,
+  TError,
+  { id: string; data: BodyType<PriceBundleItemsReplace> },
+  TContext
+> => {
+  const mutationKey = ["replacePriceBundleItems"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof replacePriceBundleItems>>,
+    { id: string; data: BodyType<PriceBundleItemsReplace> }
+  > = (props) => {
+    const { id, data } = props ?? {};
+
+    return replacePriceBundleItems(id, data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type ReplacePriceBundleItemsMutationResult = NonNullable<
+  Awaited<ReturnType<typeof replacePriceBundleItems>>
+>;
+export type ReplacePriceBundleItemsMutationBody =
+  BodyType<PriceBundleItemsReplace>;
+export type ReplacePriceBundleItemsMutationError = ErrorType<unknown>;
+
+export const useReplacePriceBundleItems = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof replacePriceBundleItems>>,
+    TError,
+    { id: string; data: BodyType<PriceBundleItemsReplace> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof replacePriceBundleItems>>,
+  TError,
+  { id: string; data: BodyType<PriceBundleItemsReplace> },
+  TContext
+> => {
+  return useMutation(getReplacePriceBundleItemsMutationOptions(options));
 };
 
 export const getBulkUpdateDealStageUrl = () => {

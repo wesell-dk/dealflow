@@ -6,8 +6,13 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
-import { Plus } from "lucide-react";
+import {
+  DropdownMenu, DropdownMenuContent, DropdownMenuItem,
+  DropdownMenuSeparator, DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { Plus, MoreHorizontal, ExternalLink, FileText } from "lucide-react";
 import { QuoteWizard } from "@/components/quote-wizard";
+import { QuoteDuplicateButton } from "@/components/quotes/quote-duplicate-button";
 
 export default function Quotes() {
   const { t } = useTranslation();
@@ -39,11 +44,12 @@ export default function Quotes() {
               <TableHead>{t("common.discount")}</TableHead>
               <TableHead>{t("common.status")}</TableHead>
               <TableHead>{t("common.validUntil")}</TableHead>
+              <TableHead className="w-12 text-right">&nbsp;</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {quotes?.map((quote) => (
-              <TableRow key={quote.id}>
+              <TableRow key={quote.id} data-testid={`quote-row-${quote.id}`}>
                 <TableCell className="font-medium">
                   <Link href={`/quotes/${quote.id}`} className="hover:underline">{quote.number}</Link>
                 </TableCell>
@@ -52,6 +58,40 @@ export default function Quotes() {
                 <TableCell>{quote.discountPct}%</TableCell>
                 <TableCell><Badge variant="outline">{quote.status}</Badge></TableCell>
                 <TableCell>{new Date(quote.validUntil).toLocaleDateString()}</TableCell>
+                <TableCell className="text-right">
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button variant="ghost" size="icon" className="h-8 w-8" data-testid={`quote-menu-${quote.id}`}>
+                        <MoreHorizontal className="h-4 w-4" />
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end">
+                      <DropdownMenuItem asChild>
+                        <Link href={`/quotes/${quote.id}`} data-testid={`quote-open-${quote.id}`}>
+                          <ExternalLink className="h-4 w-4 mr-2" />
+                          {t("common.open")}
+                        </Link>
+                      </DropdownMenuItem>
+                      <DropdownMenuItem
+                        onClick={() => window.open(`/api/quotes/${quote.id}/pdf`, "_blank")}
+                      >
+                        <FileText className="h-4 w-4 mr-2" />
+                        {t("pages.quote.openPdf")}
+                      </DropdownMenuItem>
+                      <DropdownMenuSeparator />
+                      <DropdownMenuItem asChild onSelect={(e) => e.preventDefault()}>
+                        <div className="px-1.5 py-0.5">
+                          <QuoteDuplicateButton
+                            quoteId={quote.id}
+                            quoteNumber={quote.number}
+                            variant="ghost"
+                            size="sm"
+                          />
+                        </div>
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                </TableCell>
               </TableRow>
             ))}
           </TableBody>

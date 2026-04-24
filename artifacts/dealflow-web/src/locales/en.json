@@ -16,7 +16,8 @@
     "copilot": "Copilot",
     "admin": "Admin",
     "templates": "Templates",
-    "attachments": "Attachments"
+    "attachments": "Attachments",
+    "platformAdmin": "Platform"
   },
   "common": {
     "search": "Search deals, accounts, quotes…",
@@ -75,7 +76,12 @@
     "number": "Number",
     "industry": "Industry",
     "quote": "Quote",
-    "error": "Error"
+    "error": "Error",
+    "open": "Open",
+    "description": "Description"
+  },
+  "actions": {
+    "duplicate": "Duplicate"
   },
   "pages": {
     "home": {
@@ -112,7 +118,41 @@
     "quotes": {
       "title": "Quotes",
       "subtitle": "All quotes across your deals.",
-      "newQuote": "New Quote"
+      "newQuote": "New Quote",
+      "duplicateConfirmTitle": "Duplicate quote?",
+      "duplicateConfirmBody": "A full copy of quote {{number}} will be created as a new draft — including line items, sections and linked attachments.",
+      "duplicated": "Quote duplicated",
+      "duplicateFailed": "Duplicate failed"
+    },
+    "platformAdmin": {
+      "title": "Platform Administration",
+      "subtitle": "Provision tenants and review existing customers.",
+      "createTenant": "New Tenant",
+      "createTenantTitle": "Create new tenant",
+      "createTenantSubtitle": "Set tenant master data and the first admin account.",
+      "createTenantDesc": "Set tenant master data and the first admin account.",
+      "firstAdmin": "First administrator",
+      "validationError": "Please check your input",
+      "validationErrorBody": "Tenant name, admin details and a password with at least 8 characters are required.",
+      "tenantName": "Tenant name",
+      "tenantNamePlaceholder": "e.g. Acme Holding Inc.",
+      "plan": "Plan",
+      "region": "Region",
+      "users": "Users",
+      "companies": "Companies",
+      "createdAt": "Created",
+      "adminSection": "First administrator",
+      "adminName": "Name",
+      "adminEmail": "E-mail",
+      "adminPassword": "Initial password",
+      "adminPasswordHint": "At least 8 characters — to be changed at first login.",
+      "submit": "Create tenant",
+      "created": "Tenant created",
+      "createFailed": "Failed to create tenant",
+      "validationName": "Please provide a name.",
+      "validationEmail": "Please enter a valid email address.",
+      "validationPassword": "Password must be at least 8 characters long.",
+      "empty": "No tenants yet."
     },
     "quote": {
       "lineItems": "Line Items",
@@ -301,7 +341,18 @@
       "resolve": "Resolve",
       "source": "Source",
       "price": "Price",
-      "noResult": "No price rule matched"
+      "noResult": "No price rule matched",
+      "category": "Category",
+      "bundles": {
+        "tab": "Bundles",
+        "subtitle": "Combine multiple price positions into reusable packages.",
+        "create": "New Bundle",
+        "empty": "No bundles yet — create your first one.",
+        "deleted": "Bundle deleted",
+        "deleteFailed": "Failed to delete",
+        "deleteConfirmTitle": "Delete bundle?",
+        "deleteConfirmBody": "Bundle \"{{name}}\" will be permanently deleted. Items already used on quotes are preserved."
+      }
     },
     "priceIncrease": {
       "letterResponse": "Record customer response",
@@ -408,6 +459,39 @@
       "title": "Industry profile not configured yet",
       "subtitle": "There is no profile for this industry yet. You can still pick a template and attachments; create a profile later to persist defaults."
     }
+  },
+  "pricebookPicker": {
+    "title": "Add from Pricebook",
+    "subtitle": "Pick one or more price positions from the catalog.",
+    "searchPlaceholder": "Search SKU or name…",
+    "allCategories": "All categories",
+    "empty": "No matches.",
+    "selectedCount_one": "{{count}} selected",
+    "selectedCount_other": "{{count}} selected",
+    "applyN_one": "Add {{count}} position",
+    "applyN_other": "Add {{count}} positions"
+  },
+  "bundlePicker": {
+    "title": "Add Bundle",
+    "subtitle": "Pick a bundle — all included positions will be added to the quote.",
+    "empty": "No bundles available — create one under Pricing → Bundles first.",
+    "itemsCount_one": "{{count}} item",
+    "itemsCount_other": "{{count}} items",
+    "totalList": "List total",
+    "addBundle": "Add bundle"
+  },
+  "bundleForm": {
+    "createTitle": "Create bundle",
+    "editTitle": "Edit bundle",
+    "subtitle": "Group multiple price positions with quantities and discounts.",
+    "namePlaceholder": "e.g. SaaS Pro Starter Pack",
+    "items": "Bundle items",
+    "addPositions": "Add items from pricebook",
+    "noItems": "No items yet — add some from the pricebook.",
+    "nameRequired": "Please provide a name.",
+    "created": "Bundle created",
+    "updated": "Bundle updated",
+    "saveFailed": "Save failed"
   },
   "helpBot": {
     "title": "Help Assistant",

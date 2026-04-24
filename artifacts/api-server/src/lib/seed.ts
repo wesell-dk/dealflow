@@ -39,6 +39,8 @@ import {
   quoteTemplateSectionsTable,
   attachmentLibraryTable,
   industryProfilesTable,
+  pricePositionBundlesTable,
+  pricePositionBundleItemsTable,
 } from "@workspace/db";
 import { hashPassword } from "./auth";
 import { logger } from "./logger";
@@ -134,7 +136,8 @@ export async function seedIfEmpty(): Promise<void> {
     { id: "u_james",  name: "James Whitfield",  email: "james@helix.com",  role: "Regional Director",  scope: "co_helix_uk",  initials: "JW", avatarColor: "#DC2626",
       passwordHash: demoPwHash, isActive: true, tenantId: "tn_root", tenantWide: false, scopeCompanyIds: JSON.stringify(["co_helix_uk"]),                    scopeBrandIds: JSON.stringify([]) },
     { id: "u_priya",  name: "Priya Raman",      email: "priya@helix.com",  role: "Tenant Admin",       scope: "tn_root",      initials: "PR", avatarColor: "#EA580C",
-      passwordHash: demoPwHash, isActive: true, tenantId: "tn_root", tenantWide: true,  scopeCompanyIds: JSON.stringify([]),                                  scopeBrandIds: JSON.stringify([]) },
+      passwordHash: demoPwHash, isActive: true, tenantId: "tn_root", tenantWide: true,  scopeCompanyIds: JSON.stringify([]),                                  scopeBrandIds: JSON.stringify([]),
+      isPlatformAdmin: true },
     { id: "u_tom",    name: "Tom Becker",       email: "tom@helix.com",    role: "Account Executive",  scope: "co_helix_us",  initials: "TB", avatarColor: "#0EA5E9",
       passwordHash: demoPwHash, isActive: true, tenantId: "tn_root", tenantWide: false, scopeCompanyIds: JSON.stringify(["co_helix_us"]),                    scopeBrandIds: JSON.stringify([]) },
   ];
@@ -337,6 +340,27 @@ export async function seedIfEmpty(): Promise<void> {
     version: 2,
     isStandard: true,
   })));
+
+  // Demo-Bundles: vorgefertigte Pakete von Preispositionen
+  await db.insert(pricePositionBundlesTable).values([
+    { id: "ppb_starter",  tenantId: "tn_root", name: "Starter-Plan",      description: "Einstieg: Lizenz + Onboarding + Basistraining.",         category: "Plan",     brandId: "br_helix",     companyId: "co_helix" },
+    { id: "ppb_pro",      tenantId: "tn_root", name: "Professional-Plan", description: "Pro-Lizenz mit Premium-Support und Integrationen.",     category: "Plan",     brandId: "br_helix_pro", companyId: "co_helix" },
+    { id: "ppb_hardware", tenantId: "tn_root", name: "Hardware-Bundle",   description: "Sensorik-Paket für Pipeline + Vessel-Telemetrie.",      category: "Hardware", brandId: "br_helix",     companyId: "co_helix" },
+  ]);
+  await db.insert(pricePositionBundleItemsTable).values([
+    // Starter-Plan
+    { id: "ppbi_001", bundleId: "ppb_starter", pricePositionId: "pp_001", quantity: "1", customDiscountPct: "0", position: 0 },
+    { id: "ppbi_002", bundleId: "ppb_starter", pricePositionId: "pp_003", quantity: "1", customDiscountPct: "0", position: 1 },
+    { id: "ppbi_003", bundleId: "ppb_starter", pricePositionId: "pp_006", quantity: "1", customDiscountPct: "0", position: 2 },
+    // Professional-Plan
+    { id: "ppbi_004", bundleId: "ppb_pro",     pricePositionId: "pp_002", quantity: "1", customDiscountPct: "0", position: 0 },
+    { id: "ppbi_005", bundleId: "ppb_pro",     pricePositionId: "pp_004", quantity: "1", customDiscountPct: "0", position: 1 },
+    { id: "ppbi_006", bundleId: "ppb_pro",     pricePositionId: "pp_005", quantity: "1", customDiscountPct: "5", position: 2 },
+    { id: "ppbi_007", bundleId: "ppb_pro",     pricePositionId: "pp_006", quantity: "1", customDiscountPct: "0", position: 3 },
+    // Hardware-Bundle
+    { id: "ppbi_008", bundleId: "ppb_hardware", pricePositionId: "pp_010", quantity: "5", customDiscountPct: "10", position: 0 },
+    { id: "ppbi_009", bundleId: "ppb_hardware", pricePositionId: "pp_011", quantity: "3", customDiscountPct: "10", position: 1 },
+  ]);
 
   await db.insert(priceRulesTable).values([
     { id: "pr_001", name: "Volume tier > 500k EUR", scope: "global", condition: "deal.value > 500000", effect: "auto-discount up to 8%", priority: 10, status: "active" },

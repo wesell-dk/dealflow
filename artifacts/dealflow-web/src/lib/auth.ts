@@ -47,6 +47,7 @@ export interface CurrentUser {
   avatarColor: string;
   tenantId: string;
   tenantWide: boolean;
+  isPlatformAdmin?: boolean;
   companyIds: string[];
   brandIds: string[];
   allowedScope: AllowedScope;

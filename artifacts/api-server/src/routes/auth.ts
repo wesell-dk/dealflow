@@ -69,6 +69,7 @@ async function publicUser(u: typeof usersTable.$inferSelect) {
     avatarColor: u.avatarColor,
     tenantId: u.tenantId,
     tenantWide: scope.tenantWide,
+    isPlatformAdmin: u.isPlatformAdmin,
     companyIds: scope.companyIds,
     brandIds: scope.brandIds,
     allowedScope: {

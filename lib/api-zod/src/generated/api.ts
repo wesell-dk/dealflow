@@ -3212,6 +3212,214 @@ export const BulkUpdateDealOwnerResponse = zod.object({
   skippedIds: zod.array(zod.string()).optional(),
 });
 
+/**
+ * @summary List all tenants (platform admin only)
+ */
+export const ListPlatformTenantsResponseItem = zod.object({
+  id: zod.string(),
+  name: zod.string(),
+  plan: zod.string(),
+  region: zod.string(),
+  retentionPolicy: zod.record(zod.string(), zod.unknown()).nullish(),
+  userCount: zod.number(),
+  companyCount: zod.number(),
+  createdAt: zod.coerce.date(),
+  adminUserId: zod.string().nullish(),
+});
+export const ListPlatformTenantsResponse = zod.array(
+  ListPlatformTenantsResponseItem,
+);
+
+/**
+ * @summary Provision new tenant + first admin (platform admin only)
+ */
+export const createPlatformTenantBodyAdminPasswordMin = 8;
+
+export const CreatePlatformTenantBody = zod.object({
+  name: zod.string(),
+  plan: zod.enum(["Starter", "Growth", "Business", "Enterprise"]),
+  region: zod.enum(["EU", "US", "UK", "APAC"]),
+  retentionPolicy: zod.record(zod.string(), zod.unknown()).optional(),
+  admin: zod.object({
+    name: zod.string(),
+    email: zod.string().email(),
+    password: zod.string().min(createPlatformTenantBodyAdminPasswordMin),
+  }),
+});
+
+/**
+ * @summary Duplicate quote (header + line items + sections)
+ */
+export const DuplicateQuoteParams = zod.object({
+  id: zod.coerce.string(),
+});
+
+export const ListPriceBundlesResponseItem = zod.object({
+  id: zod.string(),
+  tenantId: zod.string(),
+  name: zod.string(),
+  description: zod.string().optional(),
+  category: zod.string().nullish(),
+  brandId: zod.string().nullish(),
+  companyId: zod.string().nullish(),
+  items: zod.array(
+    zod.object({
+      id: zod.string(),
+      pricePositionId: zod.string(),
+      quantity: zod.number(),
+      customDiscountPct: zod.number(),
+      position: zod.number(),
+      sku: zod.string().nullish(),
+      name: zod.string().nullish(),
+      listPrice: zod.number().nullish(),
+      currency: zod.string().nullish(),
+      category: zod.string().nullish(),
+    }),
+  ),
+  itemCount: zod.number(),
+  totalListPrice: zod.number(),
+  currency: zod.string().nullish(),
+  createdAt: zod.coerce.date(),
+});
+export const ListPriceBundlesResponse = zod.array(ListPriceBundlesResponseItem);
+
+export const CreatePriceBundleBody = zod.object({
+  name: zod.string(),
+  description: zod.string().optional(),
+  category: zod.string().nullish(),
+  brandId: zod.string().nullish(),
+  companyId: zod.string().nullish(),
+  items: zod
+    .array(
+      zod.object({
+        pricePositionId: zod.string(),
+        quantity: zod.number(),
+        customDiscountPct: zod.number().optional(),
+        position: zod.number().optional(),
+      }),
+    )
+    .optional(),
+});
+
+export const GetPriceBundleParams = zod.object({
+  id: zod.coerce.string(),
+});
+
+export const GetPriceBundleResponse = zod.object({
+  id: zod.string(),
+  tenantId: zod.string(),
+  name: zod.string(),
+  description: zod.string().optional(),
+  category: zod.string().nullish(),
+  brandId: zod.string().nullish(),
+  companyId: zod.string().nullish(),
+  items: zod.array(
+    zod.object({
+      id: zod.string(),
+      pricePositionId: zod.string(),
+      quantity: zod.number(),
+      customDiscountPct: zod.number(),
+      position: zod.number(),
+      sku: zod.string().nullish(),
+      name: zod.string().nullish(),
+      listPrice: zod.number().nullish(),
+      currency: zod.string().nullish(),
+      category: zod.string().nullish(),
+    }),
+  ),
+  itemCount: zod.number(),
+  totalListPrice: zod.number(),
+  currency: zod.string().nullish(),
+  createdAt: zod.coerce.date(),
+});
+
+export const UpdatePriceBundleParams = zod.object({
+  id: zod.coerce.string(),
+});
+
+export const UpdatePriceBundleBody = zod.object({
+  name: zod.string().optional(),
+  description: zod.string().optional(),
+  category: zod.string().nullish(),
+  brandId: zod.string().nullish(),
+  companyId: zod.string().nullish(),
+});
+
+export const UpdatePriceBundleResponse = zod.object({
+  id: zod.string(),
+  tenantId: zod.string(),
+  name: zod.string(),
+  description: zod.string().optional(),
+  category: zod.string().nullish(),
+  brandId: zod.string().nullish(),
+  companyId: zod.string().nullish(),
+  items: zod.array(
+    zod.object({
+      id: zod.string(),
+      pricePositionId: zod.string(),
+      quantity: zod.number(),
+      customDiscountPct: zod.number(),
+      position: zod.number(),
+      sku: zod.string().nullish(),
+      name: zod.string().nullish(),
+      listPrice: zod.number().nullish(),
+      currency: zod.string().nullish(),
+      category: zod.string().nullish(),
+    }),
+  ),
+  itemCount: zod.number(),
+  totalListPrice: zod.number(),
+  currency: zod.string().nullish(),
+  createdAt: zod.coerce.date(),
+});
+
+export const DeletePriceBundleParams = zod.object({
+  id: zod.coerce.string(),
+});
+
+export const ReplacePriceBundleItemsParams = zod.object({
+  id: zod.coerce.string(),
+});
+
+export const ReplacePriceBundleItemsBody = zod.object({
+  items: zod.array(
+    zod.object({
+      pricePositionId: zod.string(),
+      quantity: zod.number(),
+      customDiscountPct: zod.number().optional(),
+      position: zod.number().optional(),
+    }),
+  ),
+});
+
+export const ReplacePriceBundleItemsResponse = zod.object({
+  id: zod.string(),
+  tenantId: zod.string(),
+  name: zod.string(),
+  description: zod.string().optional(),
+  category: zod.string().nullish(),
+  brandId: zod.string().nullish(),
+  companyId: zod.string().nullish(),
+  items: zod.array(
+    zod.object({
+      id: zod.string(),
+      pricePositionId: zod.string(),
+      quantity: zod.number(),
+      customDiscountPct: zod.number(),
+      position: zod.number(),
+      sku: zod.string().nullish(),
+      name: zod.string().nullish(),
+      listPrice: zod.number().nullish(),
+      currency: zod.string().nullish(),
+      category: zod.string().nullish(),
+    }),
+  ),
+  itemCount: zod.number(),
+  totalListPrice: zod.number(),
+  currency: zod.string().nullish(),
+  createdAt: zod.coerce.date(),
+});
+
 export const BulkUpdateDealStageBody = zod.object({
   ids: zod.array(zod.string()).min(1),
   stage: zod.string(),

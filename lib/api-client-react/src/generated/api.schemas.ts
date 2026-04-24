@@ -1928,6 +1928,139 @@ export interface GdprRetentionResult {
   applied: GdprRetentionResultApplied;
 }
 
+/**
+ * @nullable
+ */
+export type PlatformTenantRetentionPolicy = { [key: string]: unknown } | null;
+
+export interface PlatformTenant {
+  id: string;
+  name: string;
+  plan: string;
+  region: string;
+  /** @nullable */
+  retentionPolicy?: PlatformTenantRetentionPolicy;
+  userCount: number;
+  companyCount: number;
+  createdAt: string;
+  /** @nullable */
+  adminUserId?: string | null;
+}
+
+export type PlatformTenantCreatePlan =
+  (typeof PlatformTenantCreatePlan)[keyof typeof PlatformTenantCreatePlan];
+
+export const PlatformTenantCreatePlan = {
+  Starter: "Starter",
+  Growth: "Growth",
+  Business: "Business",
+  Enterprise: "Enterprise",
+} as const;
+
+export type PlatformTenantCreateRegion =
+  (typeof PlatformTenantCreateRegion)[keyof typeof PlatformTenantCreateRegion];
+
+export const PlatformTenantCreateRegion = {
+  EU: "EU",
+  US: "US",
+  UK: "UK",
+  APAC: "APAC",
+} as const;
+
+export type PlatformTenantCreateRetentionPolicy = { [key: string]: unknown };
+
+export type PlatformTenantCreateAdmin = {
+  name: string;
+  email: string;
+  /** @minLength 8 */
+  password: string;
+};
+
+export interface PlatformTenantCreate {
+  name: string;
+  plan: PlatformTenantCreatePlan;
+  region: PlatformTenantCreateRegion;
+  retentionPolicy?: PlatformTenantCreateRetentionPolicy;
+  admin: PlatformTenantCreateAdmin;
+}
+
+export interface QuoteDuplicateResult {
+  id: string;
+  number: string;
+  dealId: string;
+}
+
+export interface PriceBundleItem {
+  id: string;
+  pricePositionId: string;
+  quantity: number;
+  customDiscountPct: number;
+  position: number;
+  /** @nullable */
+  sku?: string | null;
+  /** @nullable */
+  name?: string | null;
+  /** @nullable */
+  listPrice?: number | null;
+  /** @nullable */
+  currency?: string | null;
+  /** @nullable */
+  category?: string | null;
+}
+
+export interface PriceBundle {
+  id: string;
+  tenantId: string;
+  name: string;
+  description?: string;
+  /** @nullable */
+  category?: string | null;
+  /** @nullable */
+  brandId?: string | null;
+  /** @nullable */
+  companyId?: string | null;
+  items: PriceBundleItem[];
+  itemCount: number;
+  totalListPrice: number;
+  /** @nullable */
+  currency?: string | null;
+  createdAt: string;
+}
+
+export interface PriceBundleItemInput {
+  pricePositionId: string;
+  quantity: number;
+  customDiscountPct?: number;
+  position?: number;
+}
+
+export interface PriceBundleCreate {
+  name: string;
+  description?: string;
+  /** @nullable */
+  category?: string | null;
+  /** @nullable */
+  brandId?: string | null;
+  /** @nullable */
+  companyId?: string | null;
+  items?: PriceBundleItemInput[];
+}
+
+export interface PriceBundleUpdate {
+  name?: string;
+  description?: string;
+  /** @nullable */
+  category?: string | null;
+  /** @nullable */
+  brandId?: string | null;
+  /** @nullable */
+  companyId?: string | null;
+}
+
+export interface PriceBundleItemsReplace {
+  items: PriceBundleItemInput[];
+}
+
 export type ListCompaniesParams = {
   /**
  * If true, returns the FULL permitted set (ignoring active scope filter).

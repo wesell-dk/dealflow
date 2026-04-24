@@ -23,6 +23,7 @@ import {
   History,
   FileStack,
   Paperclip,
+  Building2,
   User as UserIcon,
 } from "lucide-react";
 import { useGetTenant } from "@workspace/api-client-react";
@@ -51,7 +52,8 @@ import { RecentsDropdown } from "@/components/patterns/recents-dropdown";
 
 function useNavigation() {
   const { t } = useTranslation();
-  return [
+  const { user } = useAuth();
+  const items = [
     { name: t("nav.home"), href: "/", icon: LayoutDashboard },
     { name: t("nav.accounts"), href: "/accounts", icon: Users },
     { name: t("nav.deals"), href: "/deals", icon: Briefcase },
@@ -70,6 +72,10 @@ function useNavigation() {
     { name: t("nav.copilot"), href: "/copilot", icon: Bot },
     { name: t("nav.admin"), href: "/admin", icon: Settings },
   ];
+  if (user?.isPlatformAdmin) {
+    items.push({ name: t("nav.platformAdmin"), href: "/platform-admin", icon: Building2 });
+  }
+  return items;
 }
 
 function Sidebar({ currentPath }: { currentPath: string }) {

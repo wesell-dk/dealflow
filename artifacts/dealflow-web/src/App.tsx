@@ -36,6 +36,7 @@ import Audit from "@/pages/audit";
 import Clauses from "@/pages/clauses";
 import Templates from "@/pages/templates";
 import Attachments from "@/pages/attachments";
+import PlatformAdmin from "@/pages/platform-admin";
 
 const queryClient = new QueryClient();
 
@@ -84,6 +85,7 @@ function ProtectedRoutes() {
         <Route path="/clauses" component={Clauses} />
         <Route path="/templates" component={Templates} />
         <Route path="/attachments" component={Attachments} />
+        <Route path="/platform-admin" component={PlatformAdmin} />
         <Route component={NotFound} />
         </Switch>
       </AppShell>

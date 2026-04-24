@@ -2329,6 +2329,146 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/BulkActionResult" }
+  /platform/tenants:
+    get:
+      operationId: listPlatformTenants
+      tags: [platform]
+      summary: List all tenants (platform admin only)
+      responses:
+        "200":
+          description: ok
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/PlatformTenant" }
+    post:
+      operationId: createPlatformTenant
+      tags: [platform]
+      summary: Provision new tenant + first admin (platform admin only)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/PlatformTenantCreate" }
+      responses:
+        "201":
+          description: created
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PlatformTenant" }
+
+  /quotes/{id}/duplicate:
+    post:
+      operationId: duplicateQuote
+      tags: [quotes]
+      summary: Duplicate quote (header + line items + sections)
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        "201":
+          description: created
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/QuoteDuplicateResult" }
+
+  /price-bundles:
+    get:
+      operationId: listPriceBundles
+      tags: [pricing]
+      responses:
+        "200":
+          description: ok
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/PriceBundle" }
+    post:
+      operationId: createPriceBundle
+      tags: [pricing]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/PriceBundleCreate" }
+      responses:
+        "201":
+          description: created
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PriceBundle" }
+
+  /price-bundles/{id}:
+    get:
+      operationId: getPriceBundle
+      tags: [pricing]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: ok
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PriceBundle" }
+    patch:
+      operationId: updatePriceBundle
+      tags: [pricing]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/PriceBundleUpdate" }
+      responses:
+        "200":
+          description: ok
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PriceBundle" }
+    delete:
+      operationId: deletePriceBundle
+      tags: [pricing]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        "204":
+          description: no content
+
+  /price-bundles/{id}/items:
+    put:
+      operationId: replacePriceBundleItems
+      tags: [pricing]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/PriceBundleItemsReplace" }
+      responses:
+        "200":
+          description: ok
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PriceBundle" }
+
   /deals/bulk/stage:
     post:
       operationId: bulkUpdateDealStage
@@ -4439,3 +4579,138 @@ components:
         applied:
           type: object
           additionalProperties: { type: number }
+
+    PlatformTenant:
+      type: object
+      required: [id, name, plan, region, userCount, companyCount, createdAt]
+      properties:
+        id: { type: string }
+        name: { type: string }
+        plan: { type: string }
+        region: { type: string }
+        retentionPolicy:
+          type: ["object", "null"]
+          additionalProperties: true
+        userCount: { type: integer }
+        companyCount: { type: integer }
+        createdAt: { type: string, format: date-time }
+        adminUserId:
+          type: ["string", "null"]
+
+    PlatformTenantCreate:
+      type: object
+      required: [name, plan, region, admin]
+      properties:
+        name: { type: string }
+        plan:
+          type: string
+          enum: [Starter, Growth, Business, Enterprise]
+        region:
+          type: string
+          enum: [EU, US, UK, APAC]
+        retentionPolicy:
+          type: object
+          additionalProperties: true
+        admin:
+          type: object
+          required: [name, email, password]
+          properties:
+            name: { type: string }
+            email: { type: string, format: email }
+            password: { type: string, minLength: 8 }
+
+    QuoteDuplicateResult:
+      type: object
+      required: [id, number, dealId]
+      properties:
+        id: { type: string }
+        number: { type: string }
+        dealId: { type: string }
+
+    PriceBundleItem:
+      type: object
+      required: [id, pricePositionId, quantity, customDiscountPct, position]
+      properties:
+        id: { type: string }
+        pricePositionId: { type: string }
+        quantity: { type: number }
+        customDiscountPct: { type: number }
+        position: { type: integer }
+        sku:
+          type: ["string", "null"]
+        name:
+          type: ["string", "null"]
+        listPrice:
+          type: ["number", "null"]
+        currency:
+          type: ["string", "null"]
+        category:
+          type: ["string", "null"]
+
+    PriceBundle:
+      type: object
+      required: [id, tenantId, name, items, itemCount, totalListPrice, createdAt]
+      properties:
+        id: { type: string }
+        tenantId: { type: string }
+        name: { type: string }
+        description: { type: string }
+        category:
+          type: ["string", "null"]
+        brandId:
+          type: ["string", "null"]
+        companyId:
+          type: ["string", "null"]
+        items:
+          type: array
+          items: { $ref: "#/components/schemas/PriceBundleItem" }
+        itemCount: { type: integer }
+        totalListPrice: { type: number }
+        currency:
+          type: ["string", "null"]
+        createdAt: { type: string, format: date-time }
+
+    PriceBundleItemInput:
+      type: object
+      required: [pricePositionId, quantity]
+      properties:
+        pricePositionId: { type: string }
+        quantity: { type: number }
+        customDiscountPct: { type: number }
+        position: { type: integer }
+
+    PriceBundleCreate:
+      type: object
+      required: [name]
+      properties:
+        name: { type: string }
+        description: { type: string }
+        category:
+          type: ["string", "null"]
+        brandId:
+          type: ["string", "null"]
+        companyId:
+          type: ["string", "null"]
+        items:
+          type: array
+          items: { $ref: "#/components/schemas/PriceBundleItemInput" }
+
+    PriceBundleUpdate:
+      type: object
+      properties:
+        name: { type: string }
+        description: { type: string }
+        category:
+          type: ["string", "null"]
+        brandId:
+          type: ["string", "null"]
+        companyId:
+          type: ["string", "null"]
+
+    PriceBundleItemsReplace:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items: { $ref: "#/components/schemas/PriceBundleItemInput" }

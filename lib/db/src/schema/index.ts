@@ -79,6 +79,10 @@ export const usersTable = pgTable("users", {
   // Server intersected aktiver Scope IMMER mit den erlaubten Permissions.
   activeScopeCompanyIds: text("active_scope_company_ids"),
   activeScopeBrandIds: text("active_scope_brand_ids"),
+  // Plattform-weite Super-Admin-Berechtigung. Darf neue Mandanten anlegen
+  // und Tenant-übergreifende Plattform-Routen aufrufen. KEIN Cross-Tenant-
+  // Datenzugriff auf Kunden/Deals/etc. — diese bleiben tenant-isoliert.
+  isPlatformAdmin: boolean("is_platform_admin").notNull().default(false),
 });
 
 export const rolesTable = pgTable("roles", {
@@ -324,6 +328,30 @@ export const pricePositionsTable = pgTable("price_positions", {
   companyId: text("company_id").notNull(),
   version: integer("version").notNull().default(1),
   isStandard: boolean("is_standard").notNull().default(true),
+});
+
+// Bundles: vorgefertigte Pakete von Preispositionen (z. B. "Starter-Plan",
+// "Hardware-Bundle XL"). Werden im QuoteWizard mit einem Klick als ganze
+// Gruppe ins Angebot übernommen. Tenant-isoliert; optional brand/company-
+// scoped (NULL = tenant-weit).
+export const pricePositionBundlesTable = pgTable("price_position_bundles", {
+  id: id(),
+  tenantId: text("tenant_id").notNull(),
+  name: text("name").notNull(),
+  description: text("description").notNull().default(""),
+  category: text("category"),
+  brandId: text("brand_id"),
+  companyId: text("company_id"),
+  createdAt: ts("created_at"),
+});
+
+export const pricePositionBundleItemsTable = pgTable("price_position_bundle_items", {
+  id: id(),
+  bundleId: text("bundle_id").notNull(),
+  pricePositionId: text("price_position_id").notNull(),
+  quantity: numeric("quantity").notNull().default("1"),
+  customDiscountPct: numeric("custom_discount_pct").notNull().default("0"),
+  position: integer("position").notNull().default(0),
 });
 
 export const priceRulesTable = pgTable("price_rules", {
