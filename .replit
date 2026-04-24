@@ -18,15 +18,15 @@ author = "agent"
 
 [[workflows.workflow.tasks]]
 task = "workflow.run"
-args = "test-tenant-isolation"
+args = "ci"
 
 [[workflows.workflow]]
-name = "test-tenant-isolation"
+name = "ci"
 author = "agent"
 
 [[workflows.workflow.tasks]]
 task = "shell.exec"
-args = "pnpm --filter @workspace/api-server run test"
+args = "pnpm run ci"
 
 [workflows.workflow.metadata]
 isValidation = true

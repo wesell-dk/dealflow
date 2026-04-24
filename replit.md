@@ -142,16 +142,39 @@ workspaces:
 ## Key Commands
 
 - `pnpm run typecheck` — full typecheck across all packages.
-- `pnpm run build` — typecheck + build everything.
+- `pnpm run build` — typecheck + build everything (no DB needed).
 - `pnpm run test` — run tests across all artifacts (today: API tenant-isolation
   integration tests in `artifacts/api-server/tests/`, run with `node --test` +
-  `tsx`).
+  `tsx`). Requires `DATABASE_URL` (see below).
+- `pnpm run ci` — full CI gate: `build` followed by `test`. This is the
+  registered `ci` validation and is the merge gate. **Requires a reachable
+  `DATABASE_URL`.** It injects neutral `PORT=1` / `BASE_PATH=/` defaults for
+  the per-artifact vite configs, so it runs standalone outside of an artifact
+  workflow. Do not run this from `pnpm install` / dev workflows; it is meant
+  for CI / pre-merge. (Defaults: `PORT=1`, `BASE_PATH=/`. Override if you need
+  the build output to use a specific base.)
 - `pnpm --filter @workspace/api-spec run codegen` — regenerate hooks and Zod
   schemas after editing the OpenAPI spec.
 - `pnpm --filter @workspace/db run push` — push DB schema changes (dev only).
 - `pnpm --filter @workspace/api-server run dev` — run the API server locally.
 - `pnpm --filter @workspace/api-server run start:pm2` — run the API server
   through PM2 (`pm2-runtime`) for production-like execution.
+
+### Test prerequisites
+
+`pnpm run test` and `pnpm run ci` boot the API server in-process and execute
+real DB queries against the configured Postgres. They will throw immediately
+if `DATABASE_URL` is missing (see `lib/db/src/index.ts`). On Replit the
+workspace already provisions `DATABASE_URL`; in any other environment, export
+a Postgres connection string before invoking these scripts:
+
+```bash
+export DATABASE_URL=postgres://user:pass@host:5432/dbname
+pnpm run ci
+```
+
+There is intentionally **no** local fallback (e.g. an in-memory Postgres):
+the tenant-isolation tests must hit the real schema to be meaningful.
 
 ## Artifacts
 
