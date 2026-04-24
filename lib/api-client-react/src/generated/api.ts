@@ -143,7 +143,7 @@ type SecondParameter<T extends (...args: never) => unknown> = Parameters<T>[1];
  * @summary Request a presigned URL for file upload
  */
 export const getRequestUploadUrlUrl = () => {
-  return `/api/storage/uploads/request-url`;
+  return `/api/v1/storage/uploads/request-url`;
 };
 
 export const requestUploadUrl = async (
@@ -229,7 +229,7 @@ export const useRequestUploadUrl = <
  * @summary Health check
  */
 export const getHealthCheckUrl = () => {
-  return `/api/healthz`;
+  return `/api/v1/healthz`;
 };
 
 export const healthCheck = async (
@@ -242,7 +242,7 @@ export const healthCheck = async (
 };
 
 export const getHealthCheckQueryKey = () => {
-  return [`/api/healthz`] as const;
+  return [`/api/v1/healthz`] as const;
 };
 
 export const getHealthCheckQueryOptions = <
@@ -304,7 +304,7 @@ export function useHealthCheck<
  * @summary Get the currently active tenant (single-tenant demo)
  */
 export const getGetTenantUrl = () => {
-  return `/api/orgs/tenant`;
+  return `/api/v1/orgs/tenant`;
 };
 
 export const getTenant = async (options?: RequestInit): Promise<Tenant> => {
@@ -315,7 +315,7 @@ export const getTenant = async (options?: RequestInit): Promise<Tenant> => {
 };
 
 export const getGetTenantQueryKey = () => {
-  return [`/api/orgs/tenant`] as const;
+  return [`/api/v1/orgs/tenant`] as const;
 };
 
 export const getGetTenantQueryOptions = <
@@ -366,7 +366,7 @@ export function useGetTenant<
 }
 
 export const getListCompaniesUrl = () => {
-  return `/api/orgs/companies`;
+  return `/api/v1/orgs/companies`;
 };
 
 export const listCompanies = async (
@@ -379,7 +379,7 @@ export const listCompanies = async (
 };
 
 export const getListCompaniesQueryKey = () => {
-  return [`/api/orgs/companies`] as const;
+  return [`/api/v1/orgs/companies`] as const;
 };
 
 export const getListCompaniesQueryOptions = <
@@ -434,7 +434,7 @@ export function useListCompanies<
 }
 
 export const getListBrandsUrl = () => {
-  return `/api/orgs/brands`;
+  return `/api/v1/orgs/brands`;
 };
 
 export const listBrands = async (options?: RequestInit): Promise<Brand[]> => {
@@ -445,7 +445,7 @@ export const listBrands = async (options?: RequestInit): Promise<Brand[]> => {
 };
 
 export const getListBrandsQueryKey = () => {
-  return [`/api/orgs/brands`] as const;
+  return [`/api/v1/orgs/brands`] as const;
 };
 
 export const getListBrandsQueryOptions = <
@@ -500,7 +500,7 @@ export function useListBrands<
 }
 
 export const getListBrandsWithDefaultsUrl = () => {
-  return `/api/brands`;
+  return `/api/v1/brands`;
 };
 
 export const listBrandsWithDefaults = async (
@@ -513,7 +513,7 @@ export const listBrandsWithDefaults = async (
 };
 
 export const getListBrandsWithDefaultsQueryKey = () => {
-  return [`/api/brands`] as const;
+  return [`/api/v1/brands`] as const;
 };
 
 export const getListBrandsWithDefaultsQueryOptions = <
@@ -569,7 +569,7 @@ export function useListBrandsWithDefaults<
 }
 
 export const getUpdateBrandUrl = (id: string) => {
-  return `/api/brands/${id}`;
+  return `/api/v1/brands/${id}`;
 };
 
 export const updateBrand = async (
@@ -650,7 +650,7 @@ export const useUpdateBrand = <
 };
 
 export const getUpdateBrandDefaultClausesUrl = (id: string) => {
-  return `/api/brands/${id}/default-clauses`;
+  return `/api/v1/brands/${id}/default-clauses`;
 };
 
 export const updateBrandDefaultClauses = async (
@@ -732,7 +732,7 @@ export const useUpdateBrandDefaultClauses = <
 };
 
 export const getListUsersUrl = () => {
-  return `/api/orgs/users`;
+  return `/api/v1/orgs/users`;
 };
 
 export const listUsers = async (options?: RequestInit): Promise<User[]> => {
@@ -743,7 +743,7 @@ export const listUsers = async (options?: RequestInit): Promise<User[]> => {
 };
 
 export const getListUsersQueryKey = () => {
-  return [`/api/orgs/users`] as const;
+  return [`/api/v1/orgs/users`] as const;
 };
 
 export const getListUsersQueryOptions = <
@@ -790,7 +790,7 @@ export function useListUsers<
 }
 
 export const getGetCurrentUserUrl = () => {
-  return `/api/orgs/me`;
+  return `/api/v1/orgs/me`;
 };
 
 export const getCurrentUser = async (options?: RequestInit): Promise<User> => {
@@ -801,7 +801,7 @@ export const getCurrentUser = async (options?: RequestInit): Promise<User> => {
 };
 
 export const getGetCurrentUserQueryKey = () => {
-  return [`/api/orgs/me`] as const;
+  return [`/api/v1/orgs/me`] as const;
 };
 
 export const getGetCurrentUserQueryOptions = <
@@ -856,7 +856,7 @@ export function useGetCurrentUser<
 }
 
 export const getListAdminUsersUrl = () => {
-  return `/api/admin/users`;
+  return `/api/v1/admin/users`;
 };
 
 export const listAdminUsers = async (
@@ -869,7 +869,7 @@ export const listAdminUsers = async (
 };
 
 export const getListAdminUsersQueryKey = () => {
-  return [`/api/admin/users`] as const;
+  return [`/api/v1/admin/users`] as const;
 };
 
 export const getListAdminUsersQueryOptions = <
@@ -924,7 +924,7 @@ export function useListAdminUsers<
 }
 
 export const getCreateAdminUserUrl = () => {
-  return `/api/admin/users`;
+  return `/api/v1/admin/users`;
 };
 
 export const createAdminUser = async (
@@ -1004,7 +1004,7 @@ export const useCreateAdminUser = <
 };
 
 export const getUpdateAdminUserUrl = (id: string) => {
-  return `/api/admin/users/${id}`;
+  return `/api/v1/admin/users/${id}`;
 };
 
 export const updateAdminUser = async (
@@ -1085,7 +1085,7 @@ export const useUpdateAdminUser = <
 };
 
 export const getListRolesUrl = () => {
-  return `/api/admin/roles`;
+  return `/api/v1/admin/roles`;
 };
 
 export const listRoles = async (options?: RequestInit): Promise<Role[]> => {
@@ -1096,7 +1096,7 @@ export const listRoles = async (options?: RequestInit): Promise<Role[]> => {
 };
 
 export const getListRolesQueryKey = () => {
-  return [`/api/admin/roles`] as const;
+  return [`/api/v1/admin/roles`] as const;
 };
 
 export const getListRolesQueryOptions = <
@@ -1143,7 +1143,7 @@ export function useListRoles<
 }
 
 export const getCreateRoleUrl = () => {
-  return `/api/admin/roles`;
+  return `/api/v1/admin/roles`;
 };
 
 export const createRole = async (
@@ -1223,7 +1223,7 @@ export const useCreateRole = <
 };
 
 export const getUpdateRoleUrl = (id: string) => {
-  return `/api/admin/roles/${id}`;
+  return `/api/v1/admin/roles/${id}`;
 };
 
 export const updateRole = async (
@@ -1304,7 +1304,7 @@ export const useUpdateRole = <
 };
 
 export const getDeleteRoleUrl = (id: string) => {
-  return `/api/admin/roles/${id}`;
+  return `/api/v1/admin/roles/${id}`;
 };
 
 export const deleteRole = async (
@@ -1382,7 +1382,7 @@ export const useDeleteRole = <
 };
 
 export const getGetScopeTreeUrl = () => {
-  return `/api/admin/scope-tree`;
+  return `/api/v1/admin/scope-tree`;
 };
 
 export const getScopeTree = async (
@@ -1395,7 +1395,7 @@ export const getScopeTree = async (
 };
 
 export const getGetScopeTreeQueryKey = () => {
-  return [`/api/admin/scope-tree`] as const;
+  return [`/api/v1/admin/scope-tree`] as const;
 };
 
 export const getGetScopeTreeQueryOptions = <
@@ -1450,7 +1450,7 @@ export function useGetScopeTree<
 }
 
 export const getListAccountsUrl = () => {
-  return `/api/accounts`;
+  return `/api/v1/accounts`;
 };
 
 export const listAccounts = async (
@@ -1463,7 +1463,7 @@ export const listAccounts = async (
 };
 
 export const getListAccountsQueryKey = () => {
-  return [`/api/accounts`] as const;
+  return [`/api/v1/accounts`] as const;
 };
 
 export const getListAccountsQueryOptions = <
@@ -1518,7 +1518,7 @@ export function useListAccounts<
 }
 
 export const getCreateAccountUrl = () => {
-  return `/api/accounts`;
+  return `/api/v1/accounts`;
 };
 
 export const createAccount = async (
@@ -1598,7 +1598,7 @@ export const useCreateAccount = <
 };
 
 export const getGetAccountUrl = (id: string) => {
-  return `/api/accounts/${id}`;
+  return `/api/v1/accounts/${id}`;
 };
 
 export const getAccount = async (
@@ -1612,7 +1612,7 @@ export const getAccount = async (
 };
 
 export const getGetAccountQueryKey = (id: string) => {
-  return [`/api/accounts/${id}`] as const;
+  return [`/api/v1/accounts/${id}`] as const;
 };
 
 export const getGetAccountQueryOptions = <
@@ -1689,8 +1689,8 @@ export const getListContactsUrl = (params?: ListContactsParams) => {
   const stringifiedParams = normalizedParams.toString();
 
   return stringifiedParams.length > 0
-    ? `/api/contacts?${stringifiedParams}`
-    : `/api/contacts`;
+    ? `/api/v1/contacts?${stringifiedParams}`
+    : `/api/v1/contacts`;
 };
 
 export const listContacts = async (
@@ -1704,7 +1704,7 @@ export const listContacts = async (
 };
 
 export const getListContactsQueryKey = (params?: ListContactsParams) => {
-  return [`/api/contacts`, ...(params ? [params] : [])] as const;
+  return [`/api/v1/contacts`, ...(params ? [params] : [])] as const;
 };
 
 export const getListContactsQueryOptions = <
@@ -1776,8 +1776,8 @@ export const getListDealsUrl = (params?: ListDealsParams) => {
   const stringifiedParams = normalizedParams.toString();
 
   return stringifiedParams.length > 0
-    ? `/api/deals?${stringifiedParams}`
-    : `/api/deals`;
+    ? `/api/v1/deals?${stringifiedParams}`
+    : `/api/v1/deals`;
 };
 
 export const listDeals = async (
@@ -1791,7 +1791,7 @@ export const listDeals = async (
 };
 
 export const getListDealsQueryKey = (params?: ListDealsParams) => {
-  return [`/api/deals`, ...(params ? [params] : [])] as const;
+  return [`/api/v1/deals`, ...(params ? [params] : [])] as const;
 };
 
 export const getListDealsQueryOptions = <
@@ -1852,7 +1852,7 @@ export function useListDeals<
 }
 
 export const getCreateDealUrl = () => {
-  return `/api/deals`;
+  return `/api/v1/deals`;
 };
 
 export const createDeal = async (
@@ -1935,7 +1935,7 @@ export const useCreateDeal = <
  * @summary Pipeline overview grouped by stage
  */
 export const getGetDealPipelineUrl = () => {
-  return `/api/deals/pipeline`;
+  return `/api/v1/deals/pipeline`;
 };
 
 export const getDealPipeline = async (
@@ -1948,7 +1948,7 @@ export const getDealPipeline = async (
 };
 
 export const getGetDealPipelineQueryKey = () => {
-  return [`/api/deals/pipeline`] as const;
+  return [`/api/v1/deals/pipeline`] as const;
 };
 
 export const getGetDealPipelineQueryOptions = <
@@ -2007,7 +2007,7 @@ export function useGetDealPipeline<
 }
 
 export const getGetDealUrl = (id: string) => {
-  return `/api/deals/${id}`;
+  return `/api/v1/deals/${id}`;
 };
 
 export const getDeal = async (
@@ -2021,7 +2021,7 @@ export const getDeal = async (
 };
 
 export const getGetDealQueryKey = (id: string) => {
-  return [`/api/deals/${id}`] as const;
+  return [`/api/v1/deals/${id}`] as const;
 };
 
 export const getGetDealQueryOptions = <
@@ -2077,7 +2077,7 @@ export function useGetDeal<
 }
 
 export const getUpdateDealUrl = (id: string) => {
-  return `/api/deals/${id}`;
+  return `/api/v1/deals/${id}`;
 };
 
 export const updateDeal = async (
@@ -2158,7 +2158,7 @@ export const useUpdateDeal = <
 };
 
 export const getGetDealTimelineUrl = (id: string) => {
-  return `/api/deals/${id}/timeline`;
+  return `/api/v1/deals/${id}/timeline`;
 };
 
 export const getDealTimeline = async (
@@ -2172,7 +2172,7 @@ export const getDealTimeline = async (
 };
 
 export const getGetDealTimelineQueryKey = (id: string) => {
-  return [`/api/deals/${id}/timeline`] as const;
+  return [`/api/v1/deals/${id}/timeline`] as const;
 };
 
 export const getGetDealTimelineQueryOptions = <
@@ -2249,8 +2249,8 @@ export const getListQuotesUrl = (params?: ListQuotesParams) => {
   const stringifiedParams = normalizedParams.toString();
 
   return stringifiedParams.length > 0
-    ? `/api/quotes?${stringifiedParams}`
-    : `/api/quotes`;
+    ? `/api/v1/quotes?${stringifiedParams}`
+    : `/api/v1/quotes`;
 };
 
 export const listQuotes = async (
@@ -2264,7 +2264,7 @@ export const listQuotes = async (
 };
 
 export const getListQuotesQueryKey = (params?: ListQuotesParams) => {
-  return [`/api/quotes`, ...(params ? [params] : [])] as const;
+  return [`/api/v1/quotes`, ...(params ? [params] : [])] as const;
 };
 
 export const getListQuotesQueryOptions = <
@@ -2325,7 +2325,7 @@ export function useListQuotes<
 }
 
 export const getCreateQuoteUrl = () => {
-  return `/api/quotes`;
+  return `/api/v1/quotes`;
 };
 
 export const createQuote = async (
@@ -2405,7 +2405,7 @@ export const useCreateQuote = <
 };
 
 export const getGetQuoteUrl = (id: string) => {
-  return `/api/quotes/${id}`;
+  return `/api/v1/quotes/${id}`;
 };
 
 export const getQuote = async (
@@ -2419,7 +2419,7 @@ export const getQuote = async (
 };
 
 export const getGetQuoteQueryKey = (id: string) => {
-  return [`/api/quotes/${id}`] as const;
+  return [`/api/v1/quotes/${id}`] as const;
 };
 
 export const getGetQuoteQueryOptions = <
@@ -2483,7 +2483,7 @@ export function useGetQuote<
 }
 
 export const getGetQuotePdfUrl = (id: string) => {
-  return `/api/quotes/${id}/pdf`;
+  return `/api/v1/quotes/${id}/pdf`;
 };
 
 export const getQuotePdf = async (
@@ -2497,7 +2497,7 @@ export const getQuotePdf = async (
 };
 
 export const getGetQuotePdfQueryKey = (id: string) => {
-  return [`/api/quotes/${id}/pdf`] as const;
+  return [`/api/v1/quotes/${id}/pdf`] as const;
 };
 
 export const getGetQuotePdfQueryOptions = <
@@ -2563,7 +2563,7 @@ export function useGetQuotePdf<
 }
 
 export const getCreateQuoteVersionUrl = (id: string) => {
-  return `/api/quotes/${id}/versions`;
+  return `/api/v1/quotes/${id}/versions`;
 };
 
 export const createQuoteVersion = async (
@@ -2644,7 +2644,7 @@ export const useCreateQuoteVersion = <
 };
 
 export const getAcceptQuoteUrl = (id: string) => {
-  return `/api/quotes/${id}/accept`;
+  return `/api/v1/quotes/${id}/accept`;
 };
 
 export const acceptQuote = async (
@@ -2722,7 +2722,7 @@ export const useAcceptQuote = <
 };
 
 export const getListPricePositionsUrl = () => {
-  return `/api/price-positions`;
+  return `/api/v1/price-positions`;
 };
 
 export const listPricePositions = async (
@@ -2735,7 +2735,7 @@ export const listPricePositions = async (
 };
 
 export const getListPricePositionsQueryKey = () => {
-  return [`/api/price-positions`] as const;
+  return [`/api/v1/price-positions`] as const;
 };
 
 export const getListPricePositionsQueryOptions = <
@@ -2790,7 +2790,7 @@ export function useListPricePositions<
 }
 
 export const getCreatePricePositionUrl = () => {
-  return `/api/price-positions`;
+  return `/api/v1/price-positions`;
 };
 
 export const createPricePosition = async (
@@ -2870,7 +2870,7 @@ export const useCreatePricePosition = <
 };
 
 export const getListPriceRulesUrl = () => {
-  return `/api/price-rules`;
+  return `/api/v1/price-rules`;
 };
 
 export const listPriceRules = async (
@@ -2883,7 +2883,7 @@ export const listPriceRules = async (
 };
 
 export const getListPriceRulesQueryKey = () => {
-  return [`/api/price-rules`] as const;
+  return [`/api/v1/price-rules`] as const;
 };
 
 export const getListPriceRulesQueryOptions = <
@@ -2941,7 +2941,7 @@ export function useListPriceRules<
  * @summary KPIs for the pricing workspace
  */
 export const getGetPricingSummaryUrl = () => {
-  return `/api/pricing/summary`;
+  return `/api/v1/pricing/summary`;
 };
 
 export const getPricingSummary = async (
@@ -2954,7 +2954,7 @@ export const getPricingSummary = async (
 };
 
 export const getGetPricingSummaryQueryKey = () => {
-  return [`/api/pricing/summary`] as const;
+  return [`/api/v1/pricing/summary`] as const;
 };
 
 export const getGetPricingSummaryQueryOptions = <
@@ -3024,8 +3024,8 @@ export const getListApprovalsUrl = (params?: ListApprovalsParams) => {
   const stringifiedParams = normalizedParams.toString();
 
   return stringifiedParams.length > 0
-    ? `/api/approvals?${stringifiedParams}`
-    : `/api/approvals`;
+    ? `/api/v1/approvals?${stringifiedParams}`
+    : `/api/v1/approvals`;
 };
 
 export const listApprovals = async (
@@ -3039,7 +3039,7 @@ export const listApprovals = async (
 };
 
 export const getListApprovalsQueryKey = (params?: ListApprovalsParams) => {
-  return [`/api/approvals`, ...(params ? [params] : [])] as const;
+  return [`/api/v1/approvals`, ...(params ? [params] : [])] as const;
 };
 
 export const getListApprovalsQueryOptions = <
@@ -3100,7 +3100,7 @@ export function useListApprovals<
 }
 
 export const getDecideApprovalUrl = (id: string) => {
-  return `/api/approvals/${id}/decide`;
+  return `/api/v1/approvals/${id}/decide`;
 };
 
 export const decideApproval = async (
@@ -3192,8 +3192,8 @@ export const getListContractsUrl = (params?: ListContractsParams) => {
   const stringifiedParams = normalizedParams.toString();
 
   return stringifiedParams.length > 0
-    ? `/api/contracts?${stringifiedParams}`
-    : `/api/contracts`;
+    ? `/api/v1/contracts?${stringifiedParams}`
+    : `/api/v1/contracts`;
 };
 
 export const listContracts = async (
@@ -3207,7 +3207,7 @@ export const listContracts = async (
 };
 
 export const getListContractsQueryKey = (params?: ListContractsParams) => {
-  return [`/api/contracts`, ...(params ? [params] : [])] as const;
+  return [`/api/v1/contracts`, ...(params ? [params] : [])] as const;
 };
 
 export const getListContractsQueryOptions = <
@@ -3268,7 +3268,7 @@ export function useListContracts<
 }
 
 export const getCreateContractUrl = () => {
-  return `/api/contracts`;
+  return `/api/v1/contracts`;
 };
 
 export const createContract = async (
@@ -3348,7 +3348,7 @@ export const useCreateContract = <
 };
 
 export const getGetContractPdfUrl = (id: string) => {
-  return `/api/contracts/${id}/pdf`;
+  return `/api/v1/contracts/${id}/pdf`;
 };
 
 export const getContractPdf = async (
@@ -3362,7 +3362,7 @@ export const getContractPdf = async (
 };
 
 export const getGetContractPdfQueryKey = (id: string) => {
-  return [`/api/contracts/${id}/pdf`] as const;
+  return [`/api/v1/contracts/${id}/pdf`] as const;
 };
 
 export const getGetContractPdfQueryOptions = <
@@ -3428,7 +3428,7 @@ export function useGetContractPdf<
 }
 
 export const getGetContractUrl = (id: string) => {
-  return `/api/contracts/${id}`;
+  return `/api/v1/contracts/${id}`;
 };
 
 export const getContract = async (
@@ -3442,7 +3442,7 @@ export const getContract = async (
 };
 
 export const getGetContractQueryKey = (id: string) => {
-  return [`/api/contracts/${id}`] as const;
+  return [`/api/v1/contracts/${id}`] as const;
 };
 
 export const getGetContractQueryOptions = <
@@ -3508,7 +3508,7 @@ export function useGetContract<
 }
 
 export const getListClauseFamiliesUrl = () => {
-  return `/api/clause-families`;
+  return `/api/v1/clause-families`;
 };
 
 export const listClauseFamilies = async (
@@ -3521,7 +3521,7 @@ export const listClauseFamilies = async (
 };
 
 export const getListClauseFamiliesQueryKey = () => {
-  return [`/api/clause-families`] as const;
+  return [`/api/v1/clause-families`] as const;
 };
 
 export const getListClauseFamiliesQueryOptions = <
@@ -3576,7 +3576,7 @@ export function useListClauseFamilies<
 }
 
 export const getListContractAmendmentsUrl = (id: string) => {
-  return `/api/contracts/${id}/amendments`;
+  return `/api/v1/contracts/${id}/amendments`;
 };
 
 export const listContractAmendments = async (
@@ -3590,7 +3590,7 @@ export const listContractAmendments = async (
 };
 
 export const getListContractAmendmentsQueryKey = (id: string) => {
-  return [`/api/contracts/${id}/amendments`] as const;
+  return [`/api/v1/contracts/${id}/amendments`] as const;
 };
 
 export const getListContractAmendmentsQueryOptions = <
@@ -3657,7 +3657,7 @@ export function useListContractAmendments<
 }
 
 export const getCreateContractAmendmentUrl = (id: string) => {
-  return `/api/contracts/${id}/amendments`;
+  return `/api/v1/contracts/${id}/amendments`;
 };
 
 export const createContractAmendment = async (
@@ -3742,7 +3742,7 @@ export const useCreateContractAmendment = <
 };
 
 export const getGetContractEffectiveStateUrl = (id: string) => {
-  return `/api/contracts/${id}/effective-state`;
+  return `/api/v1/contracts/${id}/effective-state`;
 };
 
 export const getContractEffectiveState = async (
@@ -3759,7 +3759,7 @@ export const getContractEffectiveState = async (
 };
 
 export const getGetContractEffectiveStateQueryKey = (id: string) => {
-  return [`/api/contracts/${id}/effective-state`] as const;
+  return [`/api/v1/contracts/${id}/effective-state`] as const;
 };
 
 export const getGetContractEffectiveStateQueryOptions = <
@@ -3827,7 +3827,7 @@ export function useGetContractEffectiveState<
 }
 
 export const getGetContractAmendmentUrl = (id: string) => {
-  return `/api/amendments/${id}`;
+  return `/api/v1/amendments/${id}`;
 };
 
 export const getContractAmendment = async (
@@ -3841,7 +3841,7 @@ export const getContractAmendment = async (
 };
 
 export const getGetContractAmendmentQueryKey = (id: string) => {
-  return [`/api/amendments/${id}`] as const;
+  return [`/api/v1/amendments/${id}`] as const;
 };
 
 export const getGetContractAmendmentQueryOptions = <
@@ -3908,7 +3908,7 @@ export function useGetContractAmendment<
 }
 
 export const getPatchContractAmendmentUrl = (id: string) => {
-  return `/api/amendments/${id}`;
+  return `/api/v1/amendments/${id}`;
 };
 
 export const patchContractAmendment = async (
@@ -3992,7 +3992,7 @@ export const usePatchContractAmendment = <
 };
 
 export const getListContractClausesUrl = (id: string) => {
-  return `/api/contracts/${id}/clauses`;
+  return `/api/v1/contracts/${id}/clauses`;
 };
 
 export const listContractClauses = async (
@@ -4006,7 +4006,7 @@ export const listContractClauses = async (
 };
 
 export const getListContractClausesQueryKey = (id: string) => {
-  return [`/api/contracts/${id}/clauses`] as const;
+  return [`/api/v1/contracts/${id}/clauses`] as const;
 };
 
 export const getListContractClausesQueryOptions = <
@@ -4072,7 +4072,7 @@ export function useListContractClauses<
 }
 
 export const getPatchContractClauseUrl = (id: string) => {
-  return `/api/contract-clauses/${id}`;
+  return `/api/v1/contract-clauses/${id}`;
 };
 
 export const patchContractClause = async (
@@ -4154,7 +4154,7 @@ export const usePatchContractClause = <
 };
 
 export const getGetClauseDiffUrl = (fromId: string, toId: string) => {
-  return `/api/clauses/${fromId}/diff/${toId}`;
+  return `/api/v1/clauses/${fromId}/diff/${toId}`;
 };
 
 export const getClauseDiff = async (
@@ -4169,7 +4169,7 @@ export const getClauseDiff = async (
 };
 
 export const getGetClauseDiffQueryKey = (fromId: string, toId: string) => {
-  return [`/api/clauses/${fromId}/diff/${toId}`] as const;
+  return [`/api/v1/clauses/${fromId}/diff/${toId}`] as const;
 };
 
 export const getGetClauseDiffQueryOptions = <
@@ -4249,8 +4249,8 @@ export const getListNegotiationsUrl = (params?: ListNegotiationsParams) => {
   const stringifiedParams = normalizedParams.toString();
 
   return stringifiedParams.length > 0
-    ? `/api/negotiations?${stringifiedParams}`
-    : `/api/negotiations`;
+    ? `/api/v1/negotiations?${stringifiedParams}`
+    : `/api/v1/negotiations`;
 };
 
 export const listNegotiations = async (
@@ -4266,7 +4266,7 @@ export const listNegotiations = async (
 export const getListNegotiationsQueryKey = (
   params?: ListNegotiationsParams,
 ) => {
-  return [`/api/negotiations`, ...(params ? [params] : [])] as const;
+  return [`/api/v1/negotiations`, ...(params ? [params] : [])] as const;
 };
 
 export const getListNegotiationsQueryOptions = <
@@ -4328,7 +4328,7 @@ export function useListNegotiations<
 }
 
 export const getGetNegotiationUrl = (id: string) => {
-  return `/api/negotiations/${id}`;
+  return `/api/v1/negotiations/${id}`;
 };
 
 export const getNegotiation = async (
@@ -4342,7 +4342,7 @@ export const getNegotiation = async (
 };
 
 export const getGetNegotiationQueryKey = (id: string) => {
-  return [`/api/negotiations/${id}`] as const;
+  return [`/api/v1/negotiations/${id}`] as const;
 };
 
 export const getGetNegotiationQueryOptions = <
@@ -4408,7 +4408,7 @@ export function useGetNegotiation<
 }
 
 export const getAddCustomerReactionUrl = (id: string) => {
-  return `/api/negotiations/${id}/reactions`;
+  return `/api/v1/negotiations/${id}/reactions`;
 };
 
 export const addCustomerReaction = async (
@@ -4489,7 +4489,7 @@ export const useAddCustomerReaction = <
 };
 
 export const getGetNegotiationImpactUrl = (id: string) => {
-  return `/api/negotiations/${id}/impact`;
+  return `/api/v1/negotiations/${id}/impact`;
 };
 
 export const getNegotiationImpact = async (
@@ -4506,7 +4506,7 @@ export const getNegotiationImpact = async (
 };
 
 export const getGetNegotiationImpactQueryKey = (id: string) => {
-  return [`/api/negotiations/${id}/impact`] as const;
+  return [`/api/v1/negotiations/${id}/impact`] as const;
 };
 
 export const getGetNegotiationImpactQueryOptions = <
@@ -4573,7 +4573,7 @@ export function useGetNegotiationImpact<
 }
 
 export const getCreateCounterproposalUrl = (id: string) => {
-  return `/api/negotiations/${id}/counterproposal`;
+  return `/api/v1/negotiations/${id}/counterproposal`;
 };
 
 export const createCounterproposal = async (
@@ -4657,7 +4657,7 @@ export const getCreateVersionFromReactionUrl = (
   id: string,
   reactionId: string,
 ) => {
-  return `/api/negotiations/${id}/reactions/${reactionId}/create-version`;
+  return `/api/v1/negotiations/${id}/reactions/${reactionId}/create-version`;
 };
 
 export const createVersionFromReaction = async (
@@ -4742,7 +4742,7 @@ export const getRequestApprovalFromReactionUrl = (
   id: string,
   reactionId: string,
 ) => {
-  return `/api/negotiations/${id}/reactions/${reactionId}/request-approval`;
+  return `/api/v1/negotiations/${id}/reactions/${reactionId}/request-approval`;
 };
 
 export const requestApprovalFromReaction = async (
@@ -4853,8 +4853,8 @@ export const getListSignaturePackagesUrl = (
   const stringifiedParams = normalizedParams.toString();
 
   return stringifiedParams.length > 0
-    ? `/api/signatures?${stringifiedParams}`
-    : `/api/signatures`;
+    ? `/api/v1/signatures?${stringifiedParams}`
+    : `/api/v1/signatures`;
 };
 
 export const listSignaturePackages = async (
@@ -4870,7 +4870,7 @@ export const listSignaturePackages = async (
 export const getListSignaturePackagesQueryKey = (
   params?: ListSignaturePackagesParams,
 ) => {
-  return [`/api/signatures`, ...(params ? [params] : [])] as const;
+  return [`/api/v1/signatures`, ...(params ? [params] : [])] as const;
 };
 
 export const getListSignaturePackagesQueryOptions = <
@@ -4933,7 +4933,7 @@ export function useListSignaturePackages<
 }
 
 export const getGetSignaturePackageUrl = (id: string) => {
-  return `/api/signatures/${id}`;
+  return `/api/v1/signatures/${id}`;
 };
 
 export const getSignaturePackage = async (
@@ -4947,7 +4947,7 @@ export const getSignaturePackage = async (
 };
 
 export const getGetSignaturePackageQueryKey = (id: string) => {
-  return [`/api/signatures/${id}`] as const;
+  return [`/api/v1/signatures/${id}`] as const;
 };
 
 export const getGetSignaturePackageQueryOptions = <
@@ -5013,7 +5013,7 @@ export function useGetSignaturePackage<
 }
 
 export const getSendSignatureReminderUrl = (id: string) => {
-  return `/api/signatures/${id}/send-reminder`;
+  return `/api/v1/signatures/${id}/send-reminder`;
 };
 
 export const sendSignatureReminder = async (
@@ -5091,7 +5091,7 @@ export const useSendSignatureReminder = <
 };
 
 export const getEscalateSignaturePackageUrl = (id: string) => {
-  return `/api/signatures/${id}/escalate`;
+  return `/api/v1/signatures/${id}/escalate`;
 };
 
 export const escalateSignaturePackage = async (
@@ -5176,7 +5176,7 @@ export const useEscalateSignaturePackage = <
 };
 
 export const getDeclineSignerUrl = (id: string) => {
-  return `/api/signers/${id}/decline`;
+  return `/api/v1/signers/${id}/decline`;
 };
 
 export const declineSigner = async (
@@ -5257,7 +5257,7 @@ export const useDeclineSigner = <
 };
 
 export const getSignSignerUrl = (id: string) => {
-  return `/api/signers/${id}/sign`;
+  return `/api/v1/signers/${id}/sign`;
 };
 
 export const signSigner = async (
@@ -5335,7 +5335,7 @@ export const useSignSigner = <
 };
 
 export const getListPriceIncreasesUrl = () => {
-  return `/api/price-increases`;
+  return `/api/v1/price-increases`;
 };
 
 export const listPriceIncreases = async (
@@ -5348,7 +5348,7 @@ export const listPriceIncreases = async (
 };
 
 export const getListPriceIncreasesQueryKey = () => {
-  return [`/api/price-increases`] as const;
+  return [`/api/v1/price-increases`] as const;
 };
 
 export const getListPriceIncreasesQueryOptions = <
@@ -5403,7 +5403,7 @@ export function useListPriceIncreases<
 }
 
 export const getGetPriceIncreaseUrl = (id: string) => {
-  return `/api/price-increases/${id}`;
+  return `/api/v1/price-increases/${id}`;
 };
 
 export const getPriceIncrease = async (
@@ -5417,7 +5417,7 @@ export const getPriceIncrease = async (
 };
 
 export const getGetPriceIncreaseQueryKey = (id: string) => {
-  return [`/api/price-increases/${id}`] as const;
+  return [`/api/v1/price-increases/${id}`] as const;
 };
 
 export const getGetPriceIncreaseQueryOptions = <
@@ -5486,7 +5486,7 @@ export function useGetPriceIncrease<
  * @summary Top-level home/today summary
  */
 export const getGetDashboardSummaryUrl = () => {
-  return `/api/reports/dashboard`;
+  return `/api/v1/reports/dashboard`;
 };
 
 export const getDashboardSummary = async (
@@ -5499,7 +5499,7 @@ export const getDashboardSummary = async (
 };
 
 export const getGetDashboardSummaryQueryKey = () => {
-  return [`/api/reports/dashboard`] as const;
+  return [`/api/v1/reports/dashboard`] as const;
 };
 
 export const getGetDashboardSummaryQueryOptions = <
@@ -5561,7 +5561,7 @@ export function useGetDashboardSummary<
  * @summary Sales performance KPIs and trends
  */
 export const getGetPerformanceReportUrl = () => {
-  return `/api/reports/performance`;
+  return `/api/v1/reports/performance`;
 };
 
 export const getPerformanceReport = async (
@@ -5574,7 +5574,7 @@ export const getPerformanceReport = async (
 };
 
 export const getGetPerformanceReportQueryKey = () => {
-  return [`/api/reports/performance`] as const;
+  return [`/api/v1/reports/performance`] as const;
 };
 
 export const getGetPerformanceReportQueryOptions = <
@@ -5636,7 +5636,7 @@ export function useGetPerformanceReport<
  * @summary Pipeline forecast by month
  */
 export const getGetForecastUrl = () => {
-  return `/api/reports/forecast`;
+  return `/api/v1/reports/forecast`;
 };
 
 export const getForecast = async (
@@ -5649,7 +5649,7 @@ export const getForecast = async (
 };
 
 export const getGetForecastQueryKey = () => {
-  return [`/api/reports/forecast`] as const;
+  return [`/api/v1/reports/forecast`] as const;
 };
 
 export const getGetForecastQueryOptions = <
@@ -5724,8 +5724,8 @@ export const getListCopilotInsightsUrl = (
   const stringifiedParams = normalizedParams.toString();
 
   return stringifiedParams.length > 0
-    ? `/api/copilot/insights?${stringifiedParams}`
-    : `/api/copilot/insights`;
+    ? `/api/v1/copilot/insights?${stringifiedParams}`
+    : `/api/v1/copilot/insights`;
 };
 
 export const listCopilotInsights = async (
@@ -5741,7 +5741,7 @@ export const listCopilotInsights = async (
 export const getListCopilotInsightsQueryKey = (
   params?: ListCopilotInsightsParams,
 ) => {
-  return [`/api/copilot/insights`, ...(params ? [params] : [])] as const;
+  return [`/api/v1/copilot/insights`, ...(params ? [params] : [])] as const;
 };
 
 export const getListCopilotInsightsQueryOptions = <
@@ -5808,7 +5808,7 @@ export function useListCopilotInsights<
 }
 
 export const getPatchCopilotInsightUrl = (id: string) => {
-  return `/api/copilot/insights/${id}`;
+  return `/api/v1/copilot/insights/${id}`;
 };
 
 export const patchCopilotInsight = async (
@@ -5890,7 +5890,7 @@ export const usePatchCopilotInsight = <
 };
 
 export const getExecuteCopilotInsightUrl = (id: string) => {
-  return `/api/copilot/insights/${id}/execute`;
+  return `/api/v1/copilot/insights/${id}/execute`;
 };
 
 export const executeCopilotInsight = async (
@@ -5971,7 +5971,7 @@ export const useExecuteCopilotInsight = <
 };
 
 export const getListCopilotThreadsUrl = () => {
-  return `/api/copilot/threads`;
+  return `/api/v1/copilot/threads`;
 };
 
 export const listCopilotThreads = async (
@@ -5984,7 +5984,7 @@ export const listCopilotThreads = async (
 };
 
 export const getListCopilotThreadsQueryKey = () => {
-  return [`/api/copilot/threads`] as const;
+  return [`/api/v1/copilot/threads`] as const;
 };
 
 export const getListCopilotThreadsQueryOptions = <
@@ -6039,7 +6039,7 @@ export function useListCopilotThreads<
 }
 
 export const getCreateCopilotThreadUrl = () => {
-  return `/api/copilot/threads`;
+  return `/api/v1/copilot/threads`;
 };
 
 export const createCopilotThread = async (
@@ -6122,7 +6122,7 @@ export const useCreateCopilotThread = <
  * @summary Cross-domain recent activity feed
  */
 export const getListRecentActivityUrl = () => {
-  return `/api/activity`;
+  return `/api/v1/activity`;
 };
 
 export const listRecentActivity = async (
@@ -6135,7 +6135,7 @@ export const listRecentActivity = async (
 };
 
 export const getListRecentActivityQueryKey = () => {
-  return [`/api/activity`] as const;
+  return [`/api/v1/activity`] as const;
 };
 
 export const getListRecentActivityQueryOptions = <
@@ -6194,7 +6194,7 @@ export function useListRecentActivity<
 }
 
 export const getListCopilotMessagesUrl = (id: string) => {
-  return `/api/copilot/threads/${id}/messages`;
+  return `/api/v1/copilot/threads/${id}/messages`;
 };
 
 export const listCopilotMessages = async (
@@ -6208,7 +6208,7 @@ export const listCopilotMessages = async (
 };
 
 export const getListCopilotMessagesQueryKey = (id: string) => {
-  return [`/api/copilot/threads/${id}/messages`] as const;
+  return [`/api/v1/copilot/threads/${id}/messages`] as const;
 };
 
 export const getListCopilotMessagesQueryOptions = <
@@ -6274,7 +6274,7 @@ export function useListCopilotMessages<
 }
 
 export const getPostCopilotMessageUrl = (id: string) => {
-  return `/api/copilot/threads/${id}/messages`;
+  return `/api/v1/copilot/threads/${id}/messages`;
 };
 
 export const postCopilotMessage = async (
@@ -6358,7 +6358,7 @@ export const usePostCopilotMessage = <
  * @summary Floating help-bot — stateless guidance reply based on app context
  */
 export const getAskHelpBotUrl = () => {
-  return `/api/copilot/help`;
+  return `/api/v1/copilot/help`;
 };
 
 export const askHelpBot = async (
@@ -6452,8 +6452,8 @@ export const getListAuditEntriesUrl = (params?: ListAuditEntriesParams) => {
   const stringifiedParams = normalizedParams.toString();
 
   return stringifiedParams.length > 0
-    ? `/api/audit?${stringifiedParams}`
-    : `/api/audit`;
+    ? `/api/v1/audit?${stringifiedParams}`
+    : `/api/v1/audit`;
 };
 
 export const listAuditEntries = async (
@@ -6469,7 +6469,7 @@ export const listAuditEntries = async (
 export const getListAuditEntriesQueryKey = (
   params?: ListAuditEntriesParams,
 ) => {
-  return [`/api/audit`, ...(params ? [params] : [])] as const;
+  return [`/api/v1/audit`, ...(params ? [params] : [])] as const;
 };
 
 export const getListAuditEntriesQueryOptions = <
@@ -6534,7 +6534,7 @@ export const getListEntityVersionsUrl = (
   entityType: string,
   entityId: string,
 ) => {
-  return `/api/versions/${entityType}/${entityId}`;
+  return `/api/v1/versions/${entityType}/${entityId}`;
 };
 
 export const listEntityVersions = async (
@@ -6555,7 +6555,7 @@ export const getListEntityVersionsQueryKey = (
   entityType: string,
   entityId: string,
 ) => {
-  return [`/api/versions/${entityType}/${entityId}`] as const;
+  return [`/api/v1/versions/${entityType}/${entityId}`] as const;
 };
 
 export const getListEntityVersionsQueryOptions = <
@@ -6630,7 +6630,7 @@ export function useListEntityVersions<
 }
 
 export const getCreateContractVersionUrl = (id: string) => {
-  return `/api/contracts/${id}/versions`;
+  return `/api/v1/contracts/${id}/versions`;
 };
 
 export const createContractVersion = async (
@@ -6711,7 +6711,7 @@ export const useCreateContractVersion = <
 };
 
 export const getCreatePricePositionVersionUrl = (id: string) => {
-  return `/api/price-positions/${id}/versions`;
+  return `/api/v1/price-positions/${id}/versions`;
 };
 
 export const createPricePositionVersion = async (
@@ -6807,8 +6807,8 @@ export const getResolvePriceUrl = (params: ResolvePriceParams) => {
   const stringifiedParams = normalizedParams.toString();
 
   return stringifiedParams.length > 0
-    ? `/api/pricing/resolve?${stringifiedParams}`
-    : `/api/pricing/resolve`;
+    ? `/api/v1/pricing/resolve?${stringifiedParams}`
+    : `/api/v1/pricing/resolve`;
 };
 
 export const resolvePrice = async (
@@ -6822,7 +6822,7 @@ export const resolvePrice = async (
 };
 
 export const getResolvePriceQueryKey = (params?: ResolvePriceParams) => {
-  return [`/api/pricing/resolve`, ...(params ? [params] : [])] as const;
+  return [`/api/v1/pricing/resolve`, ...(params ? [params] : [])] as const;
 };
 
 export const getResolvePriceQueryOptions = <
@@ -6890,7 +6890,7 @@ export const getRespondToPriceIncreaseLetterUrl = (
   id: string,
   letterId: string,
 ) => {
-  return `/api/price-increases/${id}/letters/${letterId}/respond`;
+  return `/api/v1/price-increases/${id}/letters/${letterId}/respond`;
 };
 
 export const respondToPriceIncreaseLetter = async (
@@ -6997,8 +6997,8 @@ export const getListOrderConfirmationsUrl = (
   const stringifiedParams = normalizedParams.toString();
 
   return stringifiedParams.length > 0
-    ? `/api/order-confirmations?${stringifiedParams}`
-    : `/api/order-confirmations`;
+    ? `/api/v1/order-confirmations?${stringifiedParams}`
+    : `/api/v1/order-confirmations`;
 };
 
 export const listOrderConfirmations = async (
@@ -7017,7 +7017,7 @@ export const listOrderConfirmations = async (
 export const getListOrderConfirmationsQueryKey = (
   params?: ListOrderConfirmationsParams,
 ) => {
-  return [`/api/order-confirmations`, ...(params ? [params] : [])] as const;
+  return [`/api/v1/order-confirmations`, ...(params ? [params] : [])] as const;
 };
 
 export const getListOrderConfirmationsQueryOptions = <
@@ -7080,7 +7080,7 @@ export function useListOrderConfirmations<
 }
 
 export const getGetOrderConfirmationUrl = (id: string) => {
-  return `/api/order-confirmations/${id}`;
+  return `/api/v1/order-confirmations/${id}`;
 };
 
 export const getOrderConfirmation = async (
@@ -7094,7 +7094,7 @@ export const getOrderConfirmation = async (
 };
 
 export const getGetOrderConfirmationQueryKey = (id: string) => {
-  return [`/api/order-confirmations/${id}`] as const;
+  return [`/api/v1/order-confirmations/${id}`] as const;
 };
 
 export const getGetOrderConfirmationQueryOptions = <
@@ -7161,7 +7161,7 @@ export function useGetOrderConfirmation<
 }
 
 export const getHandoverOrderConfirmationUrl = (id: string) => {
-  return `/api/order-confirmations/${id}/handover`;
+  return `/api/v1/order-confirmations/${id}/handover`;
 };
 
 export const handoverOrderConfirmation = async (
@@ -7246,7 +7246,7 @@ export const useHandoverOrderConfirmation = <
 };
 
 export const getCompleteOrderConfirmationUrl = (id: string) => {
-  return `/api/order-confirmations/${id}/complete`;
+  return `/api/v1/order-confirmations/${id}/complete`;
 };
 
 export const completeOrderConfirmation = async (
@@ -7338,8 +7338,8 @@ export const getSearchGdprSubjectsUrl = (params?: SearchGdprSubjectsParams) => {
   const stringifiedParams = normalizedParams.toString();
 
   return stringifiedParams.length > 0
-    ? `/api/gdpr/subjects?${stringifiedParams}`
-    : `/api/gdpr/subjects`;
+    ? `/api/v1/gdpr/subjects?${stringifiedParams}`
+    : `/api/v1/gdpr/subjects`;
 };
 
 export const searchGdprSubjects = async (
@@ -7355,7 +7355,7 @@ export const searchGdprSubjects = async (
 export const getSearchGdprSubjectsQueryKey = (
   params?: SearchGdprSubjectsParams,
 ) => {
-  return [`/api/gdpr/subjects`, ...(params ? [params] : [])] as const;
+  return [`/api/v1/gdpr/subjects`, ...(params ? [params] : [])] as const;
 };
 
 export const getSearchGdprSubjectsQueryOptions = <
@@ -7428,8 +7428,8 @@ export const getExportGdprSubjectUrl = (params: ExportGdprSubjectParams) => {
   const stringifiedParams = normalizedParams.toString();
 
   return stringifiedParams.length > 0
-    ? `/api/gdpr/export?${stringifiedParams}`
-    : `/api/gdpr/export`;
+    ? `/api/v1/gdpr/export?${stringifiedParams}`
+    : `/api/v1/gdpr/export`;
 };
 
 export const exportGdprSubject = async (
@@ -7445,7 +7445,7 @@ export const exportGdprSubject = async (
 export const getExportGdprSubjectQueryKey = (
   params?: ExportGdprSubjectParams,
 ) => {
-  return [`/api/gdpr/export`, ...(params ? [params] : [])] as const;
+  return [`/api/v1/gdpr/export`, ...(params ? [params] : [])] as const;
 };
 
 export const getExportGdprSubjectQueryOptions = <
@@ -7507,7 +7507,7 @@ export function useExportGdprSubject<
 }
 
 export const getForgetGdprSubjectUrl = () => {
-  return `/api/gdpr/forget`;
+  return `/api/v1/gdpr/forget`;
 };
 
 export const forgetGdprSubject = async (
@@ -7598,8 +7598,8 @@ export const getListGdprAccessLogUrl = (params?: ListGdprAccessLogParams) => {
   const stringifiedParams = normalizedParams.toString();
 
   return stringifiedParams.length > 0
-    ? `/api/gdpr/access-log?${stringifiedParams}`
-    : `/api/gdpr/access-log`;
+    ? `/api/v1/gdpr/access-log?${stringifiedParams}`
+    : `/api/v1/gdpr/access-log`;
 };
 
 export const listGdprAccessLog = async (
@@ -7615,7 +7615,7 @@ export const listGdprAccessLog = async (
 export const getListGdprAccessLogQueryKey = (
   params?: ListGdprAccessLogParams,
 ) => {
-  return [`/api/gdpr/access-log`, ...(params ? [params] : [])] as const;
+  return [`/api/v1/gdpr/access-log`, ...(params ? [params] : [])] as const;
 };
 
 export const getListGdprAccessLogQueryOptions = <
@@ -7677,7 +7677,7 @@ export function useListGdprAccessLog<
 }
 
 export const getListGdprDeletionLogUrl = () => {
-  return `/api/gdpr/deletion-log`;
+  return `/api/v1/gdpr/deletion-log`;
 };
 
 export const listGdprDeletionLog = async (
@@ -7690,7 +7690,7 @@ export const listGdprDeletionLog = async (
 };
 
 export const getListGdprDeletionLogQueryKey = () => {
-  return [`/api/gdpr/deletion-log`] as const;
+  return [`/api/v1/gdpr/deletion-log`] as const;
 };
 
 export const getListGdprDeletionLogQueryOptions = <
@@ -7745,7 +7745,7 @@ export function useListGdprDeletionLog<
 }
 
 export const getRunGdprRetentionUrl = () => {
-  return `/api/gdpr/retention/run`;
+  return `/api/v1/gdpr/retention/run`;
 };
 
 export const runGdprRetention = async (
@@ -7820,7 +7820,7 @@ export const useRunGdprRetention = <
 };
 
 export const getGetGdprRetentionPolicyUrl = () => {
-  return `/api/gdpr/retention-policy`;
+  return `/api/v1/gdpr/retention-policy`;
 };
 
 export const getGdprRetentionPolicy = async (
@@ -7836,7 +7836,7 @@ export const getGdprRetentionPolicy = async (
 };
 
 export const getGetGdprRetentionPolicyQueryKey = () => {
-  return [`/api/gdpr/retention-policy`] as const;
+  return [`/api/v1/gdpr/retention-policy`] as const;
 };
 
 export const getGetGdprRetentionPolicyQueryOptions = <
@@ -7892,7 +7892,7 @@ export function useGetGdprRetentionPolicy<
 }
 
 export const getUpdateGdprRetentionPolicyUrl = () => {
-  return `/api/gdpr/retention-policy`;
+  return `/api/v1/gdpr/retention-policy`;
 };
 
 export const updateGdprRetentionPolicy = async (

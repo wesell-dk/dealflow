@@ -8,8 +8,9 @@ info:
     Multi-tenant, multi-company, multi-brand. Deal-centric.
 servers:
   - url: /api/v1
+    description: Versioned API path (current)
   - url: /api
-    description: Base API path
+    description: Legacy unversioned API path (deprecated, alias for /api/v1)
 
 tags:
   - name: health
