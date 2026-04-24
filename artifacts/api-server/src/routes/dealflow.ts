@@ -1158,9 +1158,9 @@ const ReplaceLineItemsBody = z.object({
   })),
 });
 
-router.put('/quote-versions/:id/line-items', async (req, res) => {
+async function replaceLineItemsHandler(req: Request, res: Response, qvIdParam: string) {
   if (!validateInline(req, res, { body: ReplaceLineItemsBody })) return;
-  const [qv] = await db.select().from(quoteVersionsTable).where(eq(quoteVersionsTable.id, req.params.id));
+  const [qv] = await db.select().from(quoteVersionsTable).where(eq(quoteVersionsTable.id, qvIdParam));
   if (!qv) { res.status(404).json({ error: 'version not found' }); return; }
   const [q] = await db.select().from(quotesTable).where(eq(quotesTable.id, qv.quoteId));
   if (!q) { res.status(404).json({ error: 'quote not found' }); return; }
@@ -1193,6 +1193,20 @@ router.put('/quote-versions/:id/line-items', async (req, res) => {
     })),
     totalAmount,
   });
+}
+
+router.put('/quote-versions/:id/line-items', (req, res) =>
+  replaceLineItemsHandler(req, res, req.params.id),
+);
+
+// Spec-compatibility alias: PATCH /quotes/:id/versions/:vid/line-items
+router.patch('/quotes/:id/versions/:vid/line-items', async (req, res) => {
+  const [qv] = await db.select().from(quoteVersionsTable).where(eq(quoteVersionsTable.id, req.params.vid));
+  if (!qv || qv.quoteId !== req.params.id) {
+    res.status(404).json({ error: 'version not found' });
+    return;
+  }
+  return replaceLineItemsHandler(req, res, req.params.vid);
 });
 
 function mapQuoteAttachment(a: typeof quoteAttachmentsTable.$inferSelect) {

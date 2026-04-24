@@ -84,7 +84,12 @@ export default function Quote() {
                       <Button
                         variant="outline"
                         size="sm"
-                        onClick={() => window.open(a.objectPath, "_blank")}
+                        onClick={() => {
+                          const path = a.objectPath.startsWith("/objects/")
+                            ? `/api/storage${a.objectPath}`
+                            : a.objectPath;
+                          window.open(path, "_blank");
+                        }}
                       >
                         <Download className="h-4 w-4" />
                       </Button>
