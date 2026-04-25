@@ -6544,11 +6544,21 @@ async function buildSignatureDetail(s: PackageRow) {
   };
 }
 
-async function maybeCompletePackageAndCreateOC(req: Request, pkg: PackageRow, signers: SignerRow[]) {
+async function maybeCompletePackageAndCreateOC(
+  req: Request,
+  pkg: PackageRow,
+  signers: SignerRow[],
+  // Optional override fuer Magic-Link-Aufrufer, die keinen authentifizierten
+  // Scope haben. Wenn gesetzt, werden tenantId + actor explizit verwendet
+  // statt ueber getScope(req) aufgeloest. activeScope wird in dem Fall auf
+  // null gesetzt, weil ein externer Token keinen Filter-Scope traegt.
+  externalCtx?: { tenantId: string; actor: string },
+) {
   const active = signers.filter(sg => sg.status !== 'declined');
   const allSigned = active.length > 0 && active.every(sg => sg.status === 'signed');
   if (!allSigned || signers.length === 0) return;
   if (pkg.status === 'completed' && pkg.orderConfirmationId) return;
+  const ctxTenantId = externalCtx?.tenantId ?? getScope(req).tenantId;
   const dealMap = await getDealMap();
   const deal = dealMap.get(pkg.dealId);
   const year = new Date().getFullYear();
@@ -6573,15 +6583,27 @@ async function maybeCompletePackageAndCreateOC(req: Request, pkg: PackageRow, si
     status: 'completed', orderConfirmationId: ocId,
   }).where(eq(signaturePackagesTable.id, pkg.id));
   await db.insert(timelineEventsTable).values({
-    id: `tl_${randomUUID().slice(0, 8)}`, tenantId: getScope(req).tenantId, type: 'signature',
+    id: `tl_${randomUUID().slice(0, 8)}`, tenantId: ctxTenantId, type: 'signature',
     title: 'Alle Unterschriften vollständig',
     description: `${pkg.title} abgeschlossen; Auftragsbestätigung ${ocId} erstellt.`,
-    actor: 'System', dealId: pkg.dealId,
+    actor: externalCtx ? 'System (Magic-Link)' : 'System', dealId: pkg.dealId,
   });
-  await writeAuditFromReq(req, {    entityType: 'signature_package', entityId: pkg.id,
-    action: 'completed',
-    summary: `Signature-Package ${pkg.title} vollständig; OC ${ocId} erzeugt.`,
-  });
+  if (externalCtx) {
+    await writeAudit({
+      tenantId: externalCtx.tenantId,
+      entityType: 'signature_package',
+      entityId: pkg.id,
+      action: 'completed',
+      summary: `Signature-Package ${pkg.title} vollständig; OC ${ocId} erzeugt.`,
+      actor: externalCtx.actor,
+      activeScope: null,
+    });
+  } else {
+    await writeAuditFromReq(req, {    entityType: 'signature_package', entityId: pkg.id,
+      action: 'completed',
+      summary: `Signature-Package ${pkg.title} vollständig; OC ${ocId} erzeugt.`,
+    });
+  }
   // Fire webhook — contract.signed (tenant-scoped via deal→company).
   const [deal2] = await db.select().from(dealsTable).where(eq(dealsTable.id, pkg.dealId));
   if (deal2) {
@@ -6607,7 +6629,7 @@ async function maybeCompletePackageAndCreateOC(req: Request, pkg: PackageRow, si
       : [];
     for (const ctr of targetContracts) {
       if (ctr.status === 'signed') continue;
-      const tenantIdForCtr = ctr.tenantId ?? co?.tenantId ?? getScope(req).tenantId;
+      const tenantIdForCtr = ctr.tenantId ?? co?.tenantId ?? ctxTenantId;
       await db.update(contractsTable).set({
         status: 'signed',
         signedAt: new Date(),
@@ -6651,14 +6673,28 @@ async function maybeCompletePackageAndCreateOC(req: Request, pkg: PackageRow, si
             }).where(eq(renewalOpportunitiesTable.id, renewalRow.id));
             const [after] = await db.select().from(renewalOpportunitiesTable)
               .where(eq(renewalOpportunitiesTable.id, renewalRow.id));
-            await writeAuditFromReq(req, {
-              entityType: 'renewal_opportunity',
-              entityId: renewalRow.id,
-              action: 'auto_won',
-              summary: `Folgevertrag ${ctr.id} signiert → Renewal automatisch gewonnen`,
-              before,
-              after,
-            });
+            if (externalCtx) {
+              await writeAudit({
+                tenantId: externalCtx.tenantId,
+                entityType: 'renewal_opportunity',
+                entityId: renewalRow.id,
+                action: 'auto_won',
+                summary: `Folgevertrag ${ctr.id} signiert → Renewal automatisch gewonnen`,
+                before,
+                after,
+                actor: externalCtx.actor,
+                activeScope: null,
+              });
+            } else {
+              await writeAuditFromReq(req, {
+                entityType: 'renewal_opportunity',
+                entityId: renewalRow.id,
+                action: 'auto_won',
+                summary: `Folgevertrag ${ctr.id} signiert → Renewal automatisch gewonnen`,
+                before,
+                after,
+              });
+            }
           }
         } catch (err) {
           void err;
@@ -14244,6 +14280,218 @@ router.patch('/external/:token/contract', async (req, res) => {
       jurisdiction: updated!.jurisdiction,
     },
     updatedFields: Object.keys(patch),
+  });
+});
+
+// --- POST /external/:token/sign (Mitzeichnung externer Anwalt) -----------
+// Verbindet die `sign_party`-Capability eines Magic-Link-Collaborators mit
+// dem Vertrag-Signatur-Modul. Schreibt einen Signer-Eintrag in das aktive
+// Signature-Package und protokolliert die Signatur als Audit-Eintrag mit
+// actor=magic-link:<id>.
+//
+// Idempotenz: Eine zweite Signatur durch denselben Collaborator gegen das
+// gleiche Paket wird mit 409 abgewiesen — verhindert versehentliche
+// Doppel-Signaturen, die das Audit-Log verfaelschen wuerden.
+router.post('/external/:token/sign', async (req, res) => {
+  const collab = await gateMagicLink(req, res);
+  if (!collab) return;
+  if (!collab.capabilities.includes('sign_party')) {
+    res.status(403).json({ error: 'sign_party capability missing' }); return;
+  }
+  const body = (req.body ?? {}) as {
+    name?: unknown;
+    signedAt?: unknown;
+    signatureImage?: unknown;
+  };
+  const name = typeof body.name === 'string' ? body.name.trim() : '';
+  if (name.length === 0 || name.length > 200) {
+    res.status(400).json({ error: 'name must be a non-empty string up to 200 chars' });
+    return;
+  }
+  let signedAt = new Date();
+  if (body.signedAt !== undefined && body.signedAt !== null && body.signedAt !== '') {
+    if (typeof body.signedAt !== 'string') {
+      res.status(400).json({ error: 'signedAt must be an ISO date string or omitted' }); return;
+    }
+    const d = new Date(body.signedAt);
+    if (Number.isNaN(d.getTime())) {
+      res.status(400).json({ error: 'signedAt must be a valid ISO date' }); return;
+    }
+    // Hard-cap auf nahe Gegenwart (+/- 1 Tag) — kein Backdating, keine Zukunft.
+    const drift = Math.abs(d.getTime() - Date.now());
+    if (drift > 24 * 60 * 60 * 1000) {
+      res.status(400).json({ error: 'signedAt must be within +/- 24h of now' }); return;
+    }
+    signedAt = d;
+  }
+  // Optional gezeichnete Unterschrift als data:image-URL. Wir speichern das
+  // Bild bewusst NICHT in der DB (Signers-Schema hat dafuer kein Feld); statt-
+  // dessen vermerken wir im Audit-Log Existenz + Groesse, sodass forensische
+  // Pruefungen die Anwesenheit der Zeichnung nachweisen koennen.
+  let signatureImagePresent = false;
+  let signatureImageBytes = 0;
+  if (body.signatureImage !== undefined && body.signatureImage !== null && body.signatureImage !== '') {
+    if (typeof body.signatureImage !== 'string') {
+      res.status(400).json({ error: 'signatureImage must be a data:image URL string' }); return;
+    }
+    if (!body.signatureImage.startsWith('data:image/')) {
+      res.status(400).json({ error: 'signatureImage must be a data:image URL' }); return;
+    }
+    if (body.signatureImage.length > 256 * 1024) {
+      res.status(400).json({ error: 'signatureImage exceeds 256 KiB limit' }); return;
+    }
+    signatureImagePresent = true;
+    signatureImageBytes = body.signatureImage.length;
+  }
+
+  const [c] = await db.select().from(contractsTable)
+    .where(eq(contractsTable.id, collab.contractId));
+  if (!c) { res.status(404).json({ error: 'contract not found' }); return; }
+
+  // Aktives Signature-Package fuer diesen Vertrag finden. Das Mapping ist
+  // bewusst dasselbe wie in maybeCompletePackageAndCreateOC:
+  //   - amendmentId gesetzt -> amend.originalContractId muss = c.id sein
+  //   - amendmentId NULL    -> nur Treffer wenn Deal genau einen Vertrag hat
+  // Mehrdeutige Faelle (mehrere Vertraege, kein Amendment) werden absichtlich
+  // nicht automatisch zugeordnet — der Externe sollte dann gar nicht erst
+  // einen Mitzeichnen-Link bekommen.
+  const candidates = await db.select().from(signaturePackagesTable)
+    .where(and(
+      eq(signaturePackagesTable.dealId, c.dealId),
+      inArray(signaturePackagesTable.status, ['draft', 'in_progress']),
+    ))
+    .orderBy(desc(signaturePackagesTable.createdAt));
+  let pkg: PackageRow | null = null;
+  for (const p of candidates) {
+    if (p.amendmentId) {
+      const [amend] = await db.select().from(contractAmendmentsTable)
+        .where(eq(contractAmendmentsTable.id, p.amendmentId));
+      if (amend?.originalContractId === c.id) { pkg = p; break; }
+    } else {
+      const dealContracts = await db.select().from(contractsTable)
+        .where(eq(contractsTable.dealId, c.dealId));
+      if (dealContracts.length === 1 && dealContracts[0]!.id === c.id) { pkg = p; break; }
+    }
+  }
+  if (!pkg) {
+    res.status(409).json({ error: 'no active signature package for this contract' }); return;
+  }
+
+  const allSigners = await db.select().from(signersTable)
+    .where(eq(signersTable.packageId, pkg.id));
+  const collabEmail = collab.email.toLowerCase();
+  const existing = allSigners.find((sg) => sg.email.toLowerCase() === collabEmail);
+  let signerId: string;
+  if (existing) {
+    if (existing.status === 'signed') {
+      res.status(409).json({ error: 'collaborator already signed this package' }); return;
+    }
+    if (existing.status === 'declined') {
+      res.status(409).json({ error: 'collaborator previously declined this package' }); return;
+    }
+    await db.update(signersTable).set({
+      status: 'signed', signedAt, name,
+    }).where(eq(signersTable.id, existing.id));
+    signerId = existing.id;
+  } else {
+    // Neuer Mitzeichner — wird ans Ende der Reihenfolge gehaengt, damit die
+    // bestehende sequentielle Logik nicht durcheinanderkommt. Status direkt
+    // 'signed', da die Signatur in dieser Anfrage bereits vorliegt.
+    const maxOrder = allSigners.reduce((m, sg) => Math.max(m, sg.order), 0);
+    signerId = `sn_${randomUUID().slice(0, 8)}`;
+    const role = collab.organization
+      ? `Mitzeichner (${collab.organization.slice(0, 100)})`
+      : 'Mitzeichner';
+    await db.insert(signersTable).values({
+      id: signerId,
+      packageId: pkg.id,
+      name,
+      email: collab.email,
+      role,
+      order: maxOrder + 1,
+      status: 'signed',
+      sentAt: new Date(),
+      signedAt,
+      isFallback: false,
+    });
+  }
+
+  // Wenn das Paket noch im Draft-Status war, jetzt auf in_progress heben —
+  // Mitzeichnung zaehlt als aktive Bearbeitung des Pakets.
+  if (pkg.status === 'draft') {
+    await db.update(signaturePackagesTable).set({ status: 'in_progress' })
+      .where(eq(signaturePackagesTable.id, pkg.id));
+  }
+
+  await db.update(externalCollaboratorsTable).set({ lastUsedAt: new Date() })
+    .where(eq(externalCollaboratorsTable.id, collab.id));
+
+  await recordCollabEvent(collab, 'signed', {
+    packageId: pkg.id,
+    signerId,
+    signatureImagePresent,
+  }, req);
+
+  // Audit-Eintrag mit Token-/Collaborator-ID statt User-ID — Reviewer sehen
+  // sofort, dass die Mitzeichnung von extern kam.
+  await writeAudit({
+    tenantId: collab.tenantId,
+    entityType: 'contract',
+    entityId: c.id,
+    action: 'external_signature',
+    actor: magicLinkActor(collab),
+    summary: `Externe Mitzeichnung durch ${name} (${collab.email})`,
+    after: {
+      collaboratorId: collab.id,
+      packageId: pkg.id,
+      signerId,
+      signerName: name,
+      signedAt: signedAt.toISOString(),
+      signatureImagePresent,
+      signatureImageBytes,
+      ip: req.ip ?? null,
+    },
+    activeScope: null,
+  });
+
+  // Wenn diese Mitzeichnung die letzte fehlende Unterschrift war, muss das
+  // Package vollstaendig durchlaufen werden — gleicher Side-Effect-Weg wie
+  // beim internen /signers/:id/sign Endpoint: OC-Erzeugung, Vertragsstatus
+  // = signed, Obligations + Deviations, Renewal auto-won, Webhook
+  // contract.signed, Audit + Timeline. Wir uebergeben einen explizit-typed
+  // externalCtx, weil Magic-Link-Requests keinen authentifizierten Scope
+  // haben und getScope() sonst werfen wuerde.
+  const [pkgAfterSign] = await db.select().from(signaturePackagesTable)
+    .where(eq(signaturePackagesTable.id, pkg.id));
+  const signersAfterSign = await db.select().from(signersTable)
+    .where(eq(signersTable.packageId, pkg.id));
+  await maybeCompletePackageAndCreateOC(
+    req,
+    pkgAfterSign!,
+    signersAfterSign,
+    { tenantId: collab.tenantId, actor: magicLinkActor(collab) },
+  );
+
+  const [refreshedSigner] = await db.select().from(signersTable)
+    .where(eq(signersTable.id, signerId));
+  const [refreshedPkg] = await db.select().from(signaturePackagesTable)
+    .where(eq(signaturePackagesTable.id, pkg.id));
+  res.status(201).json({
+    package: {
+      id: refreshedPkg!.id,
+      status: refreshedPkg!.status,
+      title: refreshedPkg!.title,
+    },
+    signer: {
+      id: refreshedSigner!.id,
+      name: refreshedSigner!.name,
+      email: refreshedSigner!.email,
+      role: refreshedSigner!.role,
+      status: refreshedSigner!.status,
+      signedAt: refreshedSigner!.signedAt
+        ? refreshedSigner!.signedAt.toISOString()
+        : signedAt.toISOString(),
+    },
   });
 });
 

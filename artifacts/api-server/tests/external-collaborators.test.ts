@@ -9,6 +9,9 @@ import {
   contractCommentsTable,
   contractsTable,
   auditLogTable,
+  signersTable,
+  signaturePackagesTable,
+  orderConfirmationsTable,
 } from "@workspace/db";
 import {
   createTestWorld,
@@ -42,6 +45,10 @@ describe("external collaborators — magic-link flow", () => {
   let worldB: TestWorld;
   let alice: AuthedClient;
   let bob: AuthedClient;
+  // Sammelt OC-IDs, die durch externe Mitzeichnung im Test entstehen, damit
+  // sie im after-Hook deterministisch entfernt werden — sonst wuerden sie
+  // ueber Test-Laeufe hinweg im DB-State bleiben.
+  const extraOcIds: string[] = [];
 
   before(async () => {
     await sweepStaleTestData();
@@ -63,6 +70,11 @@ describe("external collaborators — magic-link flow", () => {
     await db.delete(externalCollaboratorsTable).where(
       inArray(externalCollaboratorsTable.tenantId, [worldA.tenantId, worldB.tenantId]),
     );
+    if (extraOcIds.length > 0) {
+      await db.delete(orderConfirmationsTable).where(
+        inArray(orderConfirmationsTable.id, extraOcIds),
+      );
+    }
     await server.close();
     await destroyTestWorlds(worldA, worldB);
     await pool.end();
@@ -714,5 +726,174 @@ describe("external collaborators — magic-link flow", () => {
     const c = r.body as CollabResp;
     assert.ok(c.emailSent && c.emailSent.ok, "Versand muss erfolgreich sein");
     assert.equal(c.emailSent!.provider, "log");
+  });
+
+  // ── Mitzeichnen (Task #109) ─────────────────────────────────────────────
+  it("POST /external/:token/sign ohne sign_party-Capability -> 403", async () => {
+    const created = await alice.post(
+      `/api/v1/contracts/${worldA.contractId}/external-collaborators`,
+      { email: "no-sign-cap@example.com", capabilities: ["view", "comment"] },
+    );
+    assert.equal(created.status, 201);
+    const c = created.body as CollabResp;
+    const r = await fetch(`${server.baseUrl}/api/v1/external/${c.tokenPlaintext}/sign`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ name: "Anna Anwalt" }),
+    });
+    assert.equal(r.status, 403, "ohne sign_party muss /sign mit 403 antworten");
+  });
+
+  it("POST /external/:token/sign mit sign_party: legt Signer an, schreibt Audit + Event", async () => {
+    const created = await alice.post(
+      `/api/v1/contracts/${worldA.contractId}/external-collaborators`,
+      {
+        email: "sign-lawyer@kanzlei.example",
+        name: "Dr. Susi Sign",
+        organization: "Kanzlei Sign & Co.",
+        capabilities: ["view", "sign_party"],
+      },
+    );
+    assert.equal(created.status, 201);
+    const c = created.body as CollabResp;
+    const token = c.tokenPlaintext!;
+
+    const r = await fetch(`${server.baseUrl}/api/v1/external/${token}/sign`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        name: "Dr. Susi Sign",
+        // Minimal valid 1x1 PNG as data URL.
+        signatureImage:
+          "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=",
+      }),
+    });
+    assert.equal(r.status, 201, "Sign-Endpoint muss 201 Created liefern");
+    const body = (await r.json()) as {
+      package: { id: string; status: string; title: string };
+      signer: { id: string; name: string; email: string; role: string; status: string; signedAt: string };
+    };
+    assert.equal(body.signer.status, "signed");
+    assert.equal(body.signer.email, "sign-lawyer@kanzlei.example");
+    assert.equal(body.signer.name, "Dr. Susi Sign");
+    assert.ok(body.signer.role.includes("Mitzeichner"),
+      "Signer-Rolle muss 'Mitzeichner' enthalten, war: " + body.signer.role);
+    assert.ok(body.signer.signedAt, "signedAt muss gesetzt sein");
+    assert.equal(body.package.id, worldA.signaturePackageId,
+      "Signer wurde dem Package des Vertrags zugeordnet");
+
+    // Persisted signer row matches.
+    const signerRows = await db.select().from(signersTable)
+      .where(eq(signersTable.id, body.signer.id));
+    assert.equal(signerRows.length, 1);
+    assert.equal(signerRows[0]!.status, "signed");
+    assert.equal(signerRows[0]!.email, "sign-lawyer@kanzlei.example");
+    assert.equal(signerRows[0]!.packageId, worldA.signaturePackageId);
+
+    // Da dieser Mitzeichner der einzige Signer im Package ist, ist mit der
+    // Mitzeichnung das gesamte Paket vollstaendig — die Vervollstaendigungs-
+    // Pipeline (gleiche wie /signers/:id/sign) muss greifen: Package wird
+    // 'completed', eine Auftragsbestaetigung wird erzeugt, und ein
+    // Completion-Audit (action='completed') landet ebenfalls mit
+    // actor=magic-link:<id> im Log.
+    const [pkg] = await db.select().from(signaturePackagesTable)
+      .where(eq(signaturePackagesTable.id, worldA.signaturePackageId));
+    assert.ok(pkg, "Package muss existieren");
+    assert.equal(pkg!.status, "completed",
+      "Package muss nach finaler Mitzeichnung 'completed' sein, war: " + pkg!.status);
+    assert.ok(pkg!.orderConfirmationId,
+      "Package muss eine OC-ID nach Vervollstaendigung tragen");
+    const ocs = await db.select().from(orderConfirmationsTable)
+      .where(eq(orderConfirmationsTable.id, pkg!.orderConfirmationId!));
+    assert.equal(ocs.length, 1,
+      "Auftragsbestaetigung muss durch externe Mitzeichnung erzeugt worden sein");
+    assert.equal(ocs[0]!.dealId, worldA.dealId);
+
+    const completionAudits = (await db.select().from(auditLogTable)
+      .where(eq(auditLogTable.entityId, worldA.signaturePackageId)))
+      .filter((a) => a.action === "completed");
+    assert.ok(completionAudits.length > 0,
+      "Completion-Audit fuer das Package muss existieren");
+    assert.ok(completionAudits.some((a) => a.actor === `magic-link:${c.id}`),
+      "Completion-Audit muss actor=magic-link:<id> tragen, nicht eine User-ID");
+
+    // OC fuer Cleanup vormerken.
+    extraOcIds.push(pkg!.orderConfirmationId!);
+
+    // Audit-Eintrag mit actor=magic-link:<id> + action=external_signature.
+    const audits = await db.select().from(auditLogTable)
+      .where(eq(auditLogTable.entityId, worldA.contractId));
+    const sigAudits = audits.filter((a) =>
+      a.action === "external_signature" && a.actor === `magic-link:${c.id}`);
+    assert.ok(sigAudits.length > 0,
+      "external_signature Audit muss actor=magic-link:<id> tragen");
+    const last = sigAudits[sigAudits.length - 1]!;
+    assert.ok(last.summary.includes("Dr. Susi Sign"),
+      "Audit-Summary muss Signer-Name enthalten");
+    assert.ok(last.afterJson, "Audit-Eintrag muss after-Snapshot enthalten");
+    const after = JSON.parse(last.afterJson!) as Record<string, unknown>;
+    assert.equal(after.signatureImagePresent, true,
+      "Audit-Payload muss vorhandene Signatur vermerken");
+    assert.ok(typeof after.signatureImageBytes === "number" && (after.signatureImageBytes as number) > 0,
+      "Audit-Payload muss die Bytegroesse der Signatur enthalten");
+    assert.equal(after.collaboratorId, c.id,
+      "Audit-Payload muss Collaborator-ID enthalten");
+    assert.equal(after.packageId, worldA.signaturePackageId,
+      "Audit-Payload muss Package-ID enthalten");
+
+    // Collaborator-Event 'signed' wurde geschrieben.
+    const events = await db.select().from(externalCollaboratorEventsTable)
+      .where(eq(externalCollaboratorEventsTable.collaboratorId, c.id));
+    const signedEvent = events.find((e) => e.action === "signed");
+    assert.ok(signedEvent, "Collaborator-Event 'signed' muss existieren");
+
+    // Idempotenz: zweite Mitzeichnung durch denselben Collaborator -> 409.
+    const dup = await fetch(`${server.baseUrl}/api/v1/external/${token}/sign`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ name: "Dr. Susi Sign" }),
+    });
+    assert.equal(dup.status, 409, "Doppel-Signatur muss mit 409 abgewiesen werden");
+  });
+
+  it("POST /external/:token/sign verweigert leeren oder zu langen Namen + ungueltige Signatur", async () => {
+    const created = await alice.post(
+      `/api/v1/contracts/${worldA.contractId}/external-collaborators`,
+      {
+        email: "validate-lawyer@example.com",
+        capabilities: ["view", "sign_party"],
+      },
+    );
+    assert.equal(created.status, 201);
+    const token = (created.body as CollabResp).tokenPlaintext!;
+
+    const empty = await fetch(`${server.baseUrl}/api/v1/external/${token}/sign`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ name: "   " }),
+    });
+    assert.equal(empty.status, 400, "leerer Name -> 400");
+
+    const tooLong = await fetch(`${server.baseUrl}/api/v1/external/${token}/sign`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ name: "x".repeat(201) }),
+    });
+    assert.equal(tooLong.status, 400, "zu langer Name -> 400");
+
+    const badSig = await fetch(`${server.baseUrl}/api/v1/external/${token}/sign`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ name: "Anna", signatureImage: "not-a-data-url" }),
+    });
+    assert.equal(badSig.status, 400, "ungueltige Signatur -> 400");
+
+    const future = new Date(Date.now() + 5 * 24 * 60 * 60 * 1000).toISOString();
+    const farFuture = await fetch(`${server.baseUrl}/api/v1/external/${token}/sign`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ name: "Anna", signedAt: future }),
+    });
+    assert.equal(farFuture.status, 400, "signedAt > 24h in der Zukunft -> 400");
   });
 });

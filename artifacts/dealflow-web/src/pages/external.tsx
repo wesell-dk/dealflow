@@ -1,11 +1,19 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useRoute } from "wouter";
 import { useTranslation } from "react-i18next";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import { FileText, ShieldAlert, MessageSquare, Lock, Info, Pencil } from "lucide-react";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { FileText, ShieldAlert, MessageSquare, Lock, Info, Pencil, PenLine, CheckCircle2 } from "lucide-react";
 import { toAssetSrc } from "@/lib/asset-url";
 
 type ExtCapability = "view" | "comment" | "edit_fields" | "sign_party";
@@ -61,6 +69,17 @@ export default function ExternalContractPage() {
   const [editDraft, setEditDraft] = useState<Partial<Record<EditableField, string | null>>>({});
   const [savingEdit, setSavingEdit] = useState(false);
   const [editMessage, setEditMessage] = useState<{ kind: "ok" | "err"; text: string } | null>(null);
+  // Mitzeichnen-Modal (nur sichtbar bei capability=sign_party).
+  const [signOpen, setSignOpen] = useState(false);
+  const [signName, setSignName] = useState("");
+  const [signSubmitting, setSignSubmitting] = useState(false);
+  const [signMessage, setSignMessage] = useState<{ kind: "ok" | "err"; text: string } | null>(null);
+  const [signedAt, setSignedAt] = useState<string | null>(null);
+  const [signatureDataUrl, setSignatureDataUrl] = useState<string | null>(null);
+  const padRef = useRef<HTMLCanvasElement | null>(null);
+  const drawingRef = useRef<{ active: boolean; lastX: number; lastY: number }>({
+    active: false, lastX: 0, lastY: 0,
+  });
 
   async function load() {
     setLoading(true);
@@ -94,6 +113,10 @@ export default function ExternalContractPage() {
     () =>
       (data?.collaborator.capabilities.includes("edit_fields") ?? false) &&
       (data?.collaborator.editableFields?.length ?? 0) > 0,
+    [data],
+  );
+  const canSign = useMemo(
+    () => data?.collaborator.capabilities.includes("sign_party") ?? false,
     [data],
   );
 
@@ -135,6 +158,101 @@ export default function ExternalContractPage() {
     } finally {
       setSavingEdit(false);
     }
+  }
+
+  // ── Mitzeichnen: Signatur-Pad-Helfer ──────────────────────────────────
+  function getPadCtx(): CanvasRenderingContext2D | null {
+    const canvas = padRef.current;
+    if (!canvas) return null;
+    return canvas.getContext("2d");
+  }
+  function clearPad() {
+    const canvas = padRef.current;
+    const ctx = getPadCtx();
+    if (!canvas || !ctx) return;
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    setSignatureDataUrl(null);
+  }
+  function relativePoint(canvas: HTMLCanvasElement, ev: PointerEvent | React.PointerEvent): { x: number; y: number } {
+    const rect = canvas.getBoundingClientRect();
+    const x = (ev.clientX - rect.left) * (canvas.width / rect.width);
+    const y = (ev.clientY - rect.top) * (canvas.height / rect.height);
+    return { x, y };
+  }
+  function onPadDown(ev: React.PointerEvent<HTMLCanvasElement>) {
+    const canvas = padRef.current;
+    const ctx = getPadCtx();
+    if (!canvas || !ctx) return;
+    canvas.setPointerCapture(ev.pointerId);
+    const p = relativePoint(canvas, ev);
+    drawingRef.current = { active: true, lastX: p.x, lastY: p.y };
+    ctx.beginPath();
+    ctx.moveTo(p.x, p.y);
+  }
+  function onPadMove(ev: React.PointerEvent<HTMLCanvasElement>) {
+    if (!drawingRef.current.active) return;
+    const canvas = padRef.current;
+    const ctx = getPadCtx();
+    if (!canvas || !ctx) return;
+    const p = relativePoint(canvas, ev);
+    ctx.strokeStyle = "#111827";
+    ctx.lineWidth = 2;
+    ctx.lineCap = "round";
+    ctx.lineJoin = "round";
+    ctx.lineTo(p.x, p.y);
+    ctx.stroke();
+    drawingRef.current.lastX = p.x;
+    drawingRef.current.lastY = p.y;
+  }
+  function onPadUp() {
+    if (!drawingRef.current.active) return;
+    drawingRef.current.active = false;
+    const canvas = padRef.current;
+    if (!canvas) return;
+    setSignatureDataUrl(canvas.toDataURL("image/png"));
+  }
+
+  async function submitSignature() {
+    if (!data) return;
+    const trimmed = signName.trim();
+    if (trimmed.length === 0) {
+      setSignMessage({ kind: "err", text: "Bitte deinen Namen eingeben." });
+      return;
+    }
+    setSignSubmitting(true);
+    setSignMessage(null);
+    try {
+      const r = await fetch(`${API_BASE}/external/${encodeURIComponent(token)}/sign`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          name: trimmed,
+          signatureImage: signatureDataUrl ?? undefined,
+        }),
+      });
+      if (!r.ok) {
+        const txt = await r.text();
+        setSignMessage({ kind: "err", text: txt || `HTTP ${r.status}` });
+      } else {
+        const json = (await r.json()) as { signer: { signedAt: string } };
+        setSignedAt(json.signer.signedAt);
+        setSignMessage({ kind: "ok", text: "Vertrag erfolgreich mitgezeichnet." });
+        setSignOpen(false);
+      }
+    } catch (e) {
+      setSignMessage({ kind: "err", text: String(e) });
+    } finally {
+      setSignSubmitting(false);
+    }
+  }
+
+  function openSignDialog() {
+    setSignName(data?.collaborator.name ?? "");
+    setSignatureDataUrl(null);
+    setSignMessage(null);
+    setSignOpen(true);
+    // Pad nach dem Render leeren — getPadCtx braucht das DOM.
+    setTimeout(() => clearPad(), 0);
   }
 
   async function postComment() {
@@ -344,6 +462,56 @@ export default function ExternalContractPage() {
               </Card>
             )}
 
+            {canSign && (
+              <Card data-testid="ext-sign-card" className="border-primary/40">
+                <CardHeader>
+                  <CardTitle className="text-base flex items-center gap-2">
+                    <PenLine className="h-4 w-4" />
+                    Mitzeichnen als externer Anwalt
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                  {signedAt ? (
+                    <div
+                      className="border rounded-md px-3 py-2 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 flex items-center gap-2 text-sm"
+                      data-testid="ext-sign-confirmation"
+                      role="status"
+                    >
+                      <CheckCircle2 className="h-4 w-4" />
+                      Vertrag mitgezeichnet am {new Date(signedAt).toLocaleString()}.
+                    </div>
+                  ) : (
+                    <p className="text-xs text-muted-foreground">
+                      Du kannst diesen Vertrag als externer Mitzeichner gegenzeichnen.
+                      Deine Unterschrift wird mit deiner E-Mail-Adresse im Audit-Log
+                      protokolliert und an das Signatur-Paket des Vertrags angeheftet.
+                    </p>
+                  )}
+                  {signMessage && !signOpen && (
+                    <p
+                      className={`text-xs ${
+                        signMessage.kind === "ok" ? "text-emerald-600" : "text-destructive"
+                      }`}
+                      data-testid="ext-sign-message"
+                    >
+                      {signMessage.text}
+                    </p>
+                  )}
+                  <div className="flex justify-end">
+                    <Button
+                      size="sm"
+                      onClick={openSignDialog}
+                      disabled={signedAt !== null}
+                      data-testid="ext-sign-open"
+                    >
+                      <PenLine className="h-4 w-4 mr-1" />
+                      {signedAt ? "Bereits mitgezeichnet" : "Mitzeichnen"}
+                    </Button>
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+
             <Card>
               <CardHeader>
                 <CardTitle className="text-base">Klauseln</CardTitle>
@@ -436,6 +604,96 @@ export default function ExternalContractPage() {
           </>
         )}
       </main>
+
+      <Dialog open={signOpen} onOpenChange={(open) => { if (!signSubmitting) setSignOpen(open); }}>
+        <DialogContent data-testid="ext-sign-dialog" className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <PenLine className="h-4 w-4" />
+              Vertrag mitzeichnen
+            </DialogTitle>
+            <DialogDescription>
+              Bitte bestaetige deine Mitzeichnung. Datum und Uhrzeit werden automatisch
+              uebernommen. Die Unterschrift wird mit deiner E-Mail-Adresse{" "}
+              <strong>{data?.collaborator.email}</strong> im Audit-Log festgehalten.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div className="space-y-1">
+              <label className="text-xs font-medium text-muted-foreground">Name</label>
+              <input
+                type="text"
+                className="w-full border rounded px-2 py-1 text-sm bg-background"
+                value={signName}
+                onChange={(e) => setSignName(e.target.value)}
+                placeholder="Vor- und Nachname"
+                data-testid="ext-sign-name"
+                maxLength={200}
+              />
+            </div>
+            <div className="space-y-1">
+              <div className="flex items-center justify-between">
+                <label className="text-xs font-medium text-muted-foreground">
+                  Unterschrift (optional)
+                </label>
+                <button
+                  type="button"
+                  className="text-xs text-muted-foreground underline"
+                  onClick={clearPad}
+                  data-testid="ext-sign-pad-clear"
+                >
+                  zuruecksetzen
+                </button>
+              </div>
+              <canvas
+                ref={padRef}
+                width={420}
+                height={120}
+                className="w-full border rounded bg-white touch-none cursor-crosshair"
+                onPointerDown={onPadDown}
+                onPointerMove={onPadMove}
+                onPointerUp={onPadUp}
+                onPointerCancel={onPadUp}
+                onPointerLeave={onPadUp}
+                data-testid="ext-sign-pad"
+              />
+              <p className="text-[11px] text-muted-foreground">
+                Du kannst hier optional eine Unterschrift zeichnen. Wenn leer, wird nur der
+                Name als Mitzeichnung gespeichert.
+              </p>
+            </div>
+            {signMessage && signOpen && (
+              <p
+                className={`text-xs ${
+                  signMessage.kind === "ok" ? "text-emerald-600" : "text-destructive"
+                }`}
+                data-testid="ext-sign-dialog-message"
+              >
+                {signMessage.text}
+              </p>
+            )}
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setSignOpen(false)}
+              disabled={signSubmitting}
+              data-testid="ext-sign-cancel"
+            >
+              Abbrechen
+            </Button>
+            <Button
+              size="sm"
+              onClick={submitSignature}
+              disabled={signSubmitting || signName.trim().length === 0}
+              data-testid="ext-sign-submit"
+            >
+              {signSubmitting ? "Wird gespeichert..." : "Mitzeichnung bestaetigen"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
