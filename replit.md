@@ -2,7 +2,7 @@
 
 ## Overview
 
-DealFlow One is a Commercial Execution Platform for B2B companies, offering a unified solution for the entire commercial closing process. It integrates CRM, CPQ, document management, and automation into a deal-centric UI, transforming fragmented processes into an intelligent Commercial Flow. The platform serves as a single source of truth for commercial operations, enhancing efficiency and strategic oversight in B2B sales cycles by managing deals, quotes, contracts, approvals, and AI-driven orchestration.
+DealFlow One is a Commercial Execution Platform for B2B companies, offering a unified solution for the entire commercial closing process. It integrates CRM, CPQ, document management, and automation into a deal-centric UI, transforming fragmented processes into an intelligent Commercial Flow. The platform serves as a single source of truth for commercial operations, enhancing efficiency and strategic oversight in B2B sales cycles by managing deals, quotes, contracts, approvals, and AI-driven orchestration. It aims to unify fragmented commercial processes, provide a single source of truth, and enhance strategic oversight through intelligent automation and AI assistance.
 
 ## User Preferences
 
@@ -10,9 +10,9 @@ DealFlow One is a Commercial Execution Platform for B2B companies, offering a un
 
 ## System Architecture
 
-**Design Principles:** The system prioritizes simplicity and clear visual order with role-oriented interfaces. It supports multi-tenant, multi-company, multi-brand operations, scope-based Role-Based Access Control (RBAC), complex pricing logic, contract variants, comprehensive versioning, audit trails, GDPR compliance, event/workflow orchestration, and AI assistance.
+**Design Principles:** The system prioritizes simplicity, clear visual order, and role-oriented interfaces. It supports multi-tenant, multi-company, multi-brand operations, scope-based Role-Based Access Control (RBAC), complex pricing logic, contract variants, comprehensive versioning, audit trails, GDPR compliance, event/workflow orchestration, and AI assistance.
 
-**Organisational Core Model:** Hierarchical structure: Platform > Tenant > Company > Brand, with granular user roles and visibility scopes.
+**Organizational Core Model:** A hierarchical structure comprising Platform > Tenant > Company > Brand, with granular user roles and visibility scopes.
 
 **Permission Model:** Access is defined by Roles (capabilities) and Scope (organizational units).
 
@@ -31,19 +31,18 @@ DealFlow One is a Commercial Execution Platform for B2B companies, offering a un
 - **API Codegen**: Orval (generates React Query hooks and Zod schemas from `openapi.yaml`).
 
 **AI Layer:**
-
 - **Architecture**: A thin, interchangeable AI layer with an Anthropic adapter.
-- **Prompt Registry**: Typed registry with stable keys, model specification, typed input builders, and Zod output schemas for structured output.
-- **Orchestrator**: Central `runStructured()` function handles provider calls, output validation, and error classification.
+- **Prompt Registry**: Typed registry with stable keys, model specification, typed input builders, and Zod output schemas.
+- **Orchestrator**: Central `runStructured()` function for provider calls, output validation, and error classification.
 - **Audit Log**: All AI invocations are logged.
 - **Domain Context Builder**: Ensures scope-validated, typed contexts for entities, maintaining cross-tenant isolation.
-- **Copilot Modes**: Ten defined modes for various commercial tasks (e.g., deal summary, negotiation support, contract drafting).
-- **AI Help-Bot**: A tool-using agent with a defined tool registry for interacting with the system (e.g., `search_accounts`, `create_deal`).
-- **AI Recommendations**: Features persistence of recommendations with confidence scores, allowing for status updates (accepted/rejected/modified) and feedback, along with metrics for acceptance rate and calibration. Each Copilot prompt (deal.summary, pricing.review, approval.readiness, contract.risk, external.contract.extract) emits a structured `confidence` (low/medium/high) plus a one-sentence `confidenceReason`, mapped to a numeric score (0.4/0.65/0.85) for persistence and calibration. Reusable React components: `AIConfidenceBadge` (color-coded pill with optional reason), `AIFeedbackButtons` (one-click accept/modify/reject with collapsible "Begründung hinzufügen" disclosure), and `AiPromptPanel<Mode>` (generic touchpoint card wired into Deal, Quote, Contract and Approval pages). The external-contract intake wizard renders the badge + feedback inline next to the extracted fields. The Reports cockpit "KI-Annahmequote pro Prompt" tile shows per-prompt acceptance rate, weighted quality score (acceptance × Ø-confidence of decided items) and a 7-day trend sparkline alongside the existing admin "AI confidence accuracy" card.
+- **Copilot Modes**: Ten modes for various commercial tasks (e.g., deal summary, negotiation support, contract drafting).
+- **AI Help-Bot**: A tool-using agent with a defined tool registry for system interaction (e.g., `search_accounts`, `create_deal`).
+- **AI Recommendations**: Features persistence of recommendations with confidence scores, status updates (accepted/rejected/modified), and feedback mechanisms for metrics and calibration. Each Copilot prompt includes a structured `confidence` score.
 
 **GDPR & Governance:** Features include per-tenant data isolation, API-level role/scope enforcement, full audit trails, soft-delete, retention policy hooks, exportable user data, and redacted secrets in logs.
 
-**Frontend CRUD & Best Practices:** Robust CRUD operations for core entities (Accounts, Deals) with cache invalidation and scope-aware data handling. Includes saved views, filter chips, bulk selection, inline editing, activity timelines, command palette, recents, column choosers, empty states, pagination, CSV import/export, and dismissible tour banners.
+**Frontend CRUD & Best Practices:** Robust CRUD operations for core entities with cache invalidation and scope-aware data handling. Includes saved views, filter chips, bulk selection, inline editing, activity timelines, command palette, recents, column choosers, empty states, pagination, CSV import/export, and dismissible tour banners.
 
 **Platform Administration & Core Features:**
 - **Platform-Admin**: Functionality for managing tenants.
@@ -84,3 +83,4 @@ DealFlow One is a Commercial Execution Platform for B2B companies, offering a un
 
 - **PostgreSQL**: Primary relational database.
 - **Anthropic AI Integration**: Powers AI Copilot and AI Help-Bot functionalities.
+- **Resend HTTP-API**: Used for sending email invitations (if `RESEND_API_KEY` is set).

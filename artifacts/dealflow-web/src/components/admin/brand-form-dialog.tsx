@@ -47,6 +47,36 @@ const MAX_LOGO_BYTES = 5 * 1024 * 1024;
 const NO_PARENT = "_none_";
 const NO_CONTRACT_TYPE = "_none_";
 
+/**
+ * Parse a stored addressLine like "Siegmund-Hiepe-Str. 28-32, 35578 Wetzlar"
+ * into { street, postalCode, city }. Uses the LAST comma as separator so that
+ * commas in the street part (rare, but possible) don't break parsing.
+ * Falls back gracefully when the input is empty or doesn't match the pattern.
+ */
+export function parseAddressLine(addressLine: string): { street: string; postalCode: string; city: string } {
+  const raw = (addressLine ?? "").trim();
+  if (!raw) return { street: "", postalCode: "", city: "" };
+  const lastComma = raw.lastIndexOf(",");
+  if (lastComma < 0) {
+    // No comma — treat the whole string as street.
+    return { street: raw, postalCode: "", city: "" };
+  }
+  const street = raw.slice(0, lastComma).trim();
+  const tail = raw.slice(lastComma + 1).trim();
+  // Try "PLZ Ort" — leading digits followed by whitespace and the rest.
+  const m = tail.match(/^(\d+)\s+(.+)$/);
+  if (m) return { street, postalCode: m[1], city: m[2].trim() };
+  if (/^\d+$/.test(tail)) return { street, postalCode: tail, city: "" };
+  return { street, postalCode: "", city: tail };
+}
+
+/** Compose three fields back into the single addressLine the API expects. */
+export function composeAddressLine(street: string, postalCode: string, city: string): string {
+  const s = street.trim();
+  const plzCity = [postalCode.trim(), city.trim()].filter(Boolean).join(" ");
+  return [s, plzCity].filter(Boolean).join(", ");
+}
+
 export function BrandFormDialog({ open, onOpenChange, companies, defaultCompanyId, brand }: Props) {
   const { toast } = useToast();
   const qc = useQueryClient();
@@ -63,7 +93,9 @@ export function BrandFormDialog({ open, onOpenChange, companies, defaultCompanyI
   const [primaryColor, setPrimaryColor] = useState("#2D6CDF");
   const [secondaryColor, setSecondaryColor] = useState("");
   const [legalEntityName, setLegalEntityName] = useState("");
-  const [addressLine, setAddressLine] = useState("");
+  const [street, setStreet] = useState("");
+  const [postalCode, setPostalCode] = useState("");
+  const [city, setCity] = useState("");
   const [logoUrl, setLogoUrl] = useState("");
   const [defaultContractTypeId, setDefaultContractTypeId] = useState<string>(NO_CONTRACT_TYPE);
   const [uploading, setUploading] = useState(false);
@@ -85,7 +117,10 @@ export function BrandFormDialog({ open, onOpenChange, companies, defaultCompanyI
       setPrimaryColor(brand?.primaryColor ?? brand?.color ?? "#2D6CDF");
       setSecondaryColor(brand?.secondaryColor ?? "");
       setLegalEntityName(brand?.legalEntityName ?? "");
-      setAddressLine(brand?.addressLine ?? "");
+      const parsed = parseAddressLine(brand?.addressLine ?? "");
+      setStreet(parsed.street);
+      setPostalCode(parsed.postalCode);
+      setCity(parsed.city);
       setLogoUrl(brand?.logoUrl ?? "");
       setDefaultContractTypeId(brand?.defaultContractTypeId ?? NO_CONTRACT_TYPE);
       setPrimaryTouched(false);
@@ -197,6 +232,7 @@ export function BrandFormDialog({ open, onOpenChange, companies, defaultCompanyI
     }
     const parent = parentBrandId === NO_PARENT ? null : parentBrandId;
     const ctDefault = defaultContractTypeId === NO_CONTRACT_TYPE ? null : defaultContractTypeId;
+    const composedAddress = composeAddressLine(street, postalCode, city);
     try {
       if (isEdit && brand) {
         await updateMut.mutateAsync({
@@ -209,7 +245,7 @@ export function BrandFormDialog({ open, onOpenChange, companies, defaultCompanyI
             primaryColor,
             secondaryColor: secondaryColor || null,
             legalEntityName: legalEntityName.trim() || null,
-            addressLine: addressLine.trim() || null,
+            addressLine: composedAddress || null,
             logoUrl: logoUrl.trim() || null,
             parentBrandId: parent,
             defaultContractTypeId: ctDefault,
@@ -228,7 +264,7 @@ export function BrandFormDialog({ open, onOpenChange, companies, defaultCompanyI
             primaryColor,
             secondaryColor: secondaryColor || null,
             legalEntityName: legalEntityName.trim() || null,
-            addressLine: addressLine.trim() || null,
+            addressLine: composedAddress || null,
             logoUrl: logoUrl.trim() || null,
             defaultContractTypeId: ctDefault,
           },
@@ -492,8 +528,34 @@ export function BrandFormDialog({ open, onOpenChange, companies, defaultCompanyI
             <Input id="brand-legal" value={legalEntityName} onChange={e => setLegalEntityName(e.target.value)} placeholder="z. B. Helix Logistics GmbH" />
           </div>
           <div className="space-y-1.5">
-            <Label htmlFor="brand-address">Adresszeile (Impressum)</Label>
-            <Input id="brand-address" value={addressLine} onChange={e => setAddressLine(e.target.value)} placeholder="Musterstraße 1, 10115 Berlin" />
+            <Label>Adresse (Impressum)</Label>
+            <Input
+              id="brand-street"
+              value={street}
+              onChange={e => setStreet(e.target.value)}
+              placeholder="Straße / Hausnummer (z. B. Musterstraße 1)"
+              data-testid="input-brand-street"
+              aria-label="Straße und Hausnummer"
+            />
+            <div className="grid grid-cols-[1fr_2fr] gap-2">
+              <Input
+                id="brand-postal-code"
+                value={postalCode}
+                onChange={e => setPostalCode(e.target.value)}
+                placeholder="PLZ"
+                data-testid="input-brand-postal-code"
+                aria-label="Postleitzahl"
+                inputMode="numeric"
+              />
+              <Input
+                id="brand-city"
+                value={city}
+                onChange={e => setCity(e.target.value)}
+                placeholder="Ort"
+                data-testid="input-brand-city"
+                aria-label="Ort"
+              />
+            </div>
           </div>
         </div>
 

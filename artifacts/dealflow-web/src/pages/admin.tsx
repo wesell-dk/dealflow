@@ -56,7 +56,7 @@ import {
 import { useQueryClient } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
 import { CompanyFormDialog } from "@/components/admin/company-form-dialog";
-import { BrandFormDialog } from "@/components/admin/brand-form-dialog";
+import { BrandFormDialog, parseAddressLine, composeAddressLine } from "@/components/admin/brand-form-dialog";
 import { ApprovalChainsCard } from "@/components/admin/approval-chains-card";
 import { AiRecommendationsMetricsCard } from "@/components/admin/ai-recommendations-metrics-card";
 import {
@@ -675,6 +675,12 @@ function BrandRow({ brand }: { brand: Brand }) {
     defaultContractTypeId: brand.defaultContractTypeId ?? null,
   });
   const contractTypesQ = useListContractTypes();
+  // Address kept in three independent fields for editing; composed back into
+  // `addressLine` on save so the API/PDFs stay byte-identical.
+  const initialAddress = parseAddressLine(brand.addressLine ?? "");
+  const [street, setStreet] = useState(initialAddress.street);
+  const [postalCode, setPostalCode] = useState(initialAddress.postalCode);
+  const [city, setCity] = useState(initialAddress.city);
   const allBrandsQ = useListBrands();
   const NO_PARENT = "_none_";
   const parentCandidates = (allBrandsQ.data ?? []).filter(b => {
@@ -738,7 +744,8 @@ function BrandRow({ brand }: { brand: Brand }) {
       return;
     }
     try {
-      const payload: BrandUpdate = { ...draft };
+      const composedAddress = composeAddressLine(street, postalCode, city);
+      const payload: BrandUpdate = { ...draft, addressLine: composedAddress || null };
       await update.mutateAsync({ id: brand.id, data: payload });
       setEditing(false);
     } catch (e: unknown) {
@@ -1022,8 +1029,31 @@ function BrandRow({ brand }: { brand: Brand }) {
                 <Input value={draft.legalEntityName ?? ""} onChange={e => setDraft({ ...draft, legalEntityName: e.target.value })} />
               </div>
               <div>
-                <Label>Address Line</Label>
-                <Input value={draft.addressLine ?? ""} onChange={e => setDraft({ ...draft, addressLine: e.target.value })} />
+                <Label>Adresse (Impressum)</Label>
+                <Input
+                  value={street}
+                  onChange={e => setStreet(e.target.value)}
+                  placeholder="Straße / Hausnummer (z. B. Musterstraße 1)"
+                  data-testid={`input-brand-street-${brand.id}`}
+                  aria-label="Straße und Hausnummer"
+                />
+                <div className="mt-2 grid grid-cols-[1fr_2fr] gap-2">
+                  <Input
+                    value={postalCode}
+                    onChange={e => setPostalCode(e.target.value)}
+                    placeholder="PLZ"
+                    data-testid={`input-brand-postal-code-${brand.id}`}
+                    aria-label="Postleitzahl"
+                    inputMode="numeric"
+                  />
+                  <Input
+                    value={city}
+                    onChange={e => setCity(e.target.value)}
+                    placeholder="Ort"
+                    data-testid={`input-brand-city-${brand.id}`}
+                    aria-label="Ort"
+                  />
+                </div>
               </div>
               <div className="col-span-2 flex justify-end gap-2">
                 <Button size="sm" onClick={save} disabled={update.isPending || primaryInvalid || secondaryInvalid} data-testid={`button-brand-save-${brand.id}`}>Speichern</Button>
