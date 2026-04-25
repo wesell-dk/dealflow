@@ -7383,11 +7383,19 @@ const bulkDeleteSchema = z.object({
 });
 
 // ─── Account: Best-effort Web-Anreicherung ──────────────────────────────────
-// Holt Impressum/Über-uns einer Website und extrahiert per Regex Adresse/Tel/USt-ID.
-// Land wird über Nominatim (OpenStreetMap, kein API-Key) reverse-geocoded.
-// Bewusst defensiv: 8s Timeout, 256 KB Body-Limit, harmlose User-Agents,
+// Strategie:
+//  1) Startseite laden, dort Impressum-Links (a[href*=impressum|imprint|legal|notice])
+//     UND offizielle Impressum-Pfade (/impressum, /imprint, /legal-notice, ...) sammeln.
+//  2) Für jede Kandidaten-URL HTML laden (max 3 Seiten, parallel) und scannen:
+//      - JSON-LD (Organization / LocalBusiness / PostalAddress) — höchste Priorität
+//      - <address>-Tag im HTML
+//      - Heuristische Regex-Extraktion (USt-ID toleriert Leerzeichen,
+//        Adresse mehrzeilig, Telefon mit "Fon/Tel/T:/Phone"-Markern)
+//  3) Felder mergen: erste nicht-leere Quelle gewinnt (JSON-LD > address > Heuristik).
+//  4) Land via Nominatim (OSM) reverse-geocoden, sonst TLD-Heuristik.
+// Bewusst defensiv: 8s Timeout, 512 KB Body-Limit, harmlose User-Agents,
 // niemals 5xx zurückgeben — leere Felder sind ein gültiges Ergebnis.
-async function fetchWithLimit(url: string, ms = 8000, maxBytes = 256 * 1024): Promise<string | null> {
+async function fetchWithLimit(url: string, ms = 8000, maxBytes = 512 * 1024): Promise<string | null> {
   try {
     const ac = new AbortController();
     const timer = setTimeout(() => ac.abort(), ms);
@@ -7407,17 +7415,25 @@ async function fetchWithLimit(url: string, ms = 8000, maxBytes = 256 * 1024): Pr
   }
 }
 
-function stripTags(html: string): string {
-  return html
-    .replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, ' ')
-    .replace(/<style\b[^>]*>[\s\S]*?<\/style>/gi, ' ')
-    .replace(/<br\s*\/?>/gi, '\n')
-    .replace(/<\/(p|div|li|tr)>/gi, '\n')
-    .replace(/<[^>]+>/g, ' ')
+function decodeEntities(s: string): string {
+  return s
     .replace(/&nbsp;/gi, ' ')
     .replace(/&amp;/gi, '&')
     .replace(/&quot;/gi, '"')
     .replace(/&#39;/gi, "'")
+    .replace(/&lt;/gi, '<')
+    .replace(/&gt;/gi, '>')
+    .replace(/&#(\d+);/g, (_, n) => String.fromCodePoint(Number(n)))
+    .replace(/&#x([0-9a-f]+);/gi, (_, h) => String.fromCodePoint(parseInt(h, 16)));
+}
+
+function stripTags(html: string): string {
+  return decodeEntities(html
+    .replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, ' ')
+    .replace(/<style\b[^>]*>[\s\S]*?<\/style>/gi, ' ')
+    .replace(/<br\s*\/?>/gi, '\n')
+    .replace(/<\/(p|div|li|tr|h[1-6]|address)>/gi, '\n')
+    .replace(/<[^>]+>/g, ' '))
     .replace(/[ \t]+/g, ' ')
     .replace(/\n\s*\n+/g, '\n')
     .trim();
@@ -7426,11 +7442,167 @@ function stripTags(html: string): string {
 function extractTitle(html: string): string | null {
   const m = html.match(/<title[^>]*>([^<]+)<\/title>/i);
   if (!m) return null;
-  return m[1]!.replace(/[|–—-]\s*(Impressum|Imprint|Home|Startseite).*$/i, '').trim() || null;
+  return decodeEntities(m[1]!).replace(/[|–—\-]\s*(Impressum|Imprint|Home|Startseite|Kontakt|Contact).*$/i, '').trim() || null;
 }
 
-function extractEmailLessText(html: string): string {
-  return stripTags(html);
+// Sammelt absolute URLs zu möglichen Impressum-/Legal-Seiten aus Startseiten-HTML.
+function findLegalLinks(html: string, base: URL): string[] {
+  const out = new Set<string>();
+  const re = /<a\b[^>]*href=["']([^"'#]+)["'][^>]*>([\s\S]*?)<\/a>/gi;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(html)) !== null) {
+    const href = m[1]!;
+    const label = stripTags(m[2]!).toLowerCase();
+    const hrefL = href.toLowerCase();
+    const isLegal = /impressum|imprint|legal[-_]?notice|legal[-_]?info|disclaimer|mentions[-_]?legales|aviso[-_]?legal/.test(hrefL)
+      || /\b(impressum|imprint|legal notice|mentions légales|aviso legal)\b/.test(label);
+    if (!isLegal) continue;
+    try {
+      const abs = new URL(href, base);
+      if (abs.protocol !== 'http:' && abs.protocol !== 'https:') continue;
+      if (abs.hostname.toLowerCase() !== base.hostname.toLowerCase()) continue; // gleicher Host
+      out.add(abs.toString().split('#')[0]!);
+      if (out.size >= 5) break;
+    } catch { /* ignore */ }
+  }
+  return [...out];
+}
+
+type EnrichSlot = { name: string | null; country: string | null; billingAddress: string | null;
+  phone: string | null; vatId: string | null; legalEntityName: string | null };
+
+// Extrahiert strukturierte Daten aus JSON-LD <script type="application/ld+json">.
+function parseJsonLd(html: string): Partial<EnrichSlot> {
+  const out: Partial<EnrichSlot> = {};
+  const re = /<script[^>]+type=["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/gi;
+  let m: RegExpExecArray | null;
+  const entities: any[] = [];
+  while ((m = re.exec(html)) !== null) {
+    try {
+      const raw = decodeEntities(m[1]!.trim());
+      const parsed = JSON.parse(raw);
+      const arr = Array.isArray(parsed) ? parsed : [parsed];
+      for (const e of arr) {
+        if (e && typeof e === 'object') entities.push(e);
+        if (e && typeof e === 'object' && Array.isArray((e as any)['@graph'])) {
+          for (const g of (e as any)['@graph']) entities.push(g);
+        }
+      }
+    } catch { /* malformed JSON-LD ist häufig — ignorieren */ }
+  }
+  const wantedTypes = /^(Organization|Corporation|LocalBusiness|Store|GovernmentOrganization|EducationalOrganization|NGO)$/i;
+  const isOrg = (e: any) => {
+    const t = e?.['@type'];
+    if (!t) return false;
+    if (Array.isArray(t)) return t.some(x => typeof x === 'string' && wantedTypes.test(x));
+    return typeof t === 'string' && wantedTypes.test(t);
+  };
+  const formatAddress = (a: any): string | null => {
+    if (!a || typeof a !== 'object') return null;
+    const street = String(a.streetAddress ?? '').trim();
+    const zip = String(a.postalCode ?? '').trim();
+    const city = String(a.addressLocality ?? '').trim();
+    if (!street && !zip && !city) return null;
+    const line2 = [zip, city].filter(Boolean).join(' ').trim();
+    return [street, line2].filter(Boolean).join('\n') || null;
+  };
+  const countryCode = (a: any): string | null => {
+    if (!a) return null;
+    const c = a.addressCountry;
+    if (typeof c === 'string' && c.length === 2) return c.toUpperCase();
+    if (c && typeof c === 'object' && typeof c.name === 'string' && c.name.length === 2) return c.name.toUpperCase();
+    return null;
+  };
+  for (const e of entities) {
+    if (!isOrg(e)) continue;
+    if (!out.legalEntityName && typeof e.legalName === 'string') out.legalEntityName = e.legalName.trim();
+    if (!out.name && typeof e.name === 'string') out.name = e.name.trim();
+    if (!out.phone && typeof e.telephone === 'string') out.phone = e.telephone.trim();
+    if (!out.vatId && typeof e.vatID === 'string') out.vatId = e.vatID.replace(/\s+/g, '').toUpperCase();
+    const addr = e.address;
+    const addrObj = Array.isArray(addr) ? addr[0] : addr;
+    if (!out.billingAddress) {
+      const formatted = formatAddress(addrObj);
+      if (formatted) out.billingAddress = formatted;
+    }
+    if (!out.country) {
+      const cc = countryCode(addrObj);
+      if (cc) out.country = cc;
+    }
+  }
+  return out;
+}
+
+// Liest <address>...</address> und konvertiert zu mehrzeiligem Text.
+function parseAddressTag(html: string): string | null {
+  const m = html.match(/<address\b[^>]*>([\s\S]*?)<\/address>/i);
+  if (!m) return null;
+  const text = stripTags(m[1]!).trim();
+  return text.length > 5 ? text : null;
+}
+
+// Heuristische Regex-Extraktion auf Plaintext.
+function parseHeuristics(html: string): Partial<EnrichSlot> {
+  const out: Partial<EnrichSlot> = {};
+  const text = stripTags(html);
+
+  // USt-ID: Leerzeichen/Punkte zwischen Ziffern erlaubt; danach normalisieren.
+  // DE: 9 Ziffern; AT: ATU + 8; CH: CHE + 9; generisch: zwei Buchstaben + 8-12 Ziffern.
+  const vatPatterns = [
+    /\b(DE)[ ]*((?:\d[ .]?){8}\d)\b/i,
+    /\b(ATU)[ ]*((?:\d[ .]?){7}\d)\b/i,
+    /\b(CHE)[-\s]*((?:\d[ .]?){8}\d)(?:\s?(MWST|TVA|IVA))?\b/i,
+    /\b([A-Z]{2})[ ]*((?:\d[ .]?){7,11}\d)\b/,
+  ];
+  for (const pat of vatPatterns) {
+    const v = text.match(pat);
+    if (v) {
+      const digits = v[2]!.replace(/[ .]/g, '');
+      const suffix = v[3] ? ` ${v[3].toUpperCase()}` : '';
+      out.vatId = `${v[1]!.toUpperCase()}${digits.startsWith('-') ? '' : ''}${digits}${suffix}`;
+      break;
+    }
+  }
+
+  // Telefon: Marker (Tel/Telefon/Fon/T:/Phone/Tel.) UND nackte +49…-Zahlen mit Plausibilität.
+  const phonePatterns = [
+    /(?:Tel(?:efon)?\.?|Fon|Phone|T)[:\s]*((?:\+|00)\d[\d\s().\/\-]{6,}\d)/i,
+    /\b((?:\+|00)\d{1,3}[\s().\/\-]?\d[\d\s().\/\-]{5,}\d)\b/,
+  ];
+  for (const pat of phonePatterns) {
+    const t = text.match(pat);
+    if (t) {
+      const cleaned = t[1]!.replace(/[\s().\/\-]+/g, ' ').replace(/\s+/g, ' ').trim();
+      // Plausibilität: mindestens 6 Ziffern, max 18.
+      const digitCount = cleaned.replace(/\D/g, '').length;
+      if (digitCount >= 7 && digitCount <= 18) { out.phone = cleaned; break; }
+    }
+  }
+
+  // Adresse: anker an PLZ-Block. Wichtig: kein Newline-Sprung in den Captures
+  // (sonst frisst der Greedy-Match die Firmenzeile davor mit). Stadt nur 1-2 Wörter.
+  // Pattern: "<Anker>Strasse Nr<Sep>(D-)?PLZ Stadt".
+  // Sep = Komma oder Newline (keine Ziffern dazwischen).
+  const addrRe = /(?:^|\n)\s*([A-ZÄÖÜ][^\n,]{2,60}?\s+\d+[a-zA-Z]?(?:[-–\s]\d+[a-zA-Z]?)?)\s*[,\n]\s*(?:D[-\s]?)?(\d{4,5})\s+([A-ZÄÖÜ][^\n,]{1,40}?)(?:\s*$|\n|,)/m;
+  const a = text.match(addrRe);
+  if (a) {
+    const street = a[1]!.trim().replace(/\s+/g, ' ');
+    const zip = a[2]!;
+    const city = a[3]!.trim().replace(/\s+/g, ' ');
+    out.billingAddress = `${street}\n${zip} ${city}`;
+  }
+
+  // Legal Entity: typische Markers "Firma:", "Anbieter:", "Inhaber:" oder Erstvorkommen GmbH/AG.
+  const le = text.match(/(?:Firma|Anbieter|Verantwortlich|Inhaber|Betreiber)[:\s]+([A-ZÄÖÜ][\w\säöüß.&,\-]+?(?:GmbH(?:\s*&\s*Co\.?\s*KG)?|AG|UG\s*\(haftungsbeschränkt\)|UG|KG|OHG|e\.K\.|GbR|Ltd|LLC|Inc))/);
+  if (le) out.legalEntityName = le[1]!.trim();
+
+  return out;
+}
+
+function mergeSlot(target: EnrichSlot, src: Partial<EnrichSlot>): void {
+  for (const k of Object.keys(src) as (keyof EnrichSlot)[]) {
+    if (!target[k] && src[k]) target[k] = src[k]!;
+  }
 }
 
 router.post('/accounts/enrich-from-website', async (req, res) => {
@@ -7454,54 +7626,60 @@ router.post('/accounts/enrich-from-website', async (req, res) => {
     res.status(422).json({ error: 'host not allowed' }); return;
   }
 
-  // 1) Try /impressum then /imprint then root.
-  const candidates = [
-    `${url.origin}/impressum`,
-    `${url.origin}/imprint`,
-    `${url.origin}/legal`,
-    `${url.origin}/about`,
-    url.origin + (url.pathname === '/' ? '' : url.pathname),
-    url.origin,
-  ];
-  let html: string | null = null;
+  // 1) Startseite laden, dort echte Impressum-Links extrahieren.
+  const homeUrl = url.origin + (url.pathname === '/' ? '' : url.pathname);
+  const homeHtml = await fetchWithLimit(homeUrl);
+  const linkCandidates = homeHtml ? findLegalLinks(homeHtml, url) : [];
+
+  // 2) Konventionelle Pfade als Backup (falls keine Links gefunden wurden).
+  const conventionalPaths = ['/impressum', '/imprint', '/legal-notice', '/legal', '/about/impressum', '/de/impressum', '/en/imprint'];
+  const fallbackUrls = conventionalPaths.map(p => `${url.origin}${p}`);
+
+  // Reihenfolge: gefundene Links zuerst, dann Konventionen, dedupliziert. Max 4 Pages.
+  const pageList = [...new Set([...linkCandidates, ...fallbackUrls])].slice(0, 4);
+
+  // 3) Parallel laden (mit Concurrency-Limit von 4 ohne separate Lib).
+  const pages: Array<{ url: string; html: string }> = [];
+  if (homeHtml) pages.push({ url: homeUrl, html: homeHtml });
+  const fetched = await Promise.all(pageList.map(async u => {
+    const h = await fetchWithLimit(u);
+    return h && h.length > 200 ? { url: u, html: h } : null;
+  }));
+  for (const f of fetched) if (f) pages.push(f);
+
+  const slot: EnrichSlot = { name: null, country: null, billingAddress: null, phone: null, vatId: null, legalEntityName: null };
   let sourceUrl: string | null = null;
-  for (const cand of candidates) {
-    const h = await fetchWithLimit(cand);
-    if (h && h.length > 200) { html = h; sourceUrl = cand; break; }
+
+  // 4) Impressum-Pages bevorzugen (haben häufig die strukturierten Daten).
+  const orderedPages = pages.slice().sort((a, b) => {
+    const score = (s: string) => /impressum|imprint|legal/i.test(s) ? 0 : 1;
+    return score(a.url) - score(b.url);
+  });
+
+  for (const page of orderedPages) {
+    const before = JSON.stringify(slot);
+    mergeSlot(slot, parseJsonLd(page.html));
+    const addrTag = parseAddressTag(page.html);
+    if (addrTag && !slot.billingAddress) slot.billingAddress = addrTag;
+    mergeSlot(slot, parseHeuristics(page.html));
+    if (!slot.name) slot.name = extractTitle(page.html);
+    if (JSON.stringify(slot) !== before && !sourceUrl) sourceUrl = page.url;
+    // Wenn alle wichtigen Felder gefüllt sind, abbrechen.
+    if (slot.billingAddress && slot.phone && slot.vatId && slot.legalEntityName) break;
   }
 
-  const out: {
-    name: string | null; country: string | null; billingAddress: string | null;
-    phone: string | null; vatId: string | null; legalEntityName: string | null;
-    sourceUrl: string | null;
-  } = { name: null, country: null, billingAddress: null, phone: null, vatId: null, legalEntityName: null, sourceUrl };
+  const out = {
+    name: slot.name,
+    country: slot.country,
+    billingAddress: slot.billingAddress,
+    phone: slot.phone,
+    vatId: slot.vatId,
+    legalEntityName: slot.legalEntityName,
+    sourceUrl,
+  };
 
-  if (html) {
-    const text = extractEmailLessText(html);
-    out.name = extractTitle(html);
-
-    // USt-ID (DE/AT/CH/EU): "DE" + 9 Ziffern, "ATU" + 8 Ziffern, "CHE-" + 9 Ziffern.
-    const vat = text.match(/\b(DE\d{9}|ATU\d{8}|CHE-?\d{3}\.?\d{3}\.?\d{3}(?:\s?(?:MWST|TVA|IVA))?|[A-Z]{2}\d{8,12})\b/i);
-    if (vat) out.vatId = vat[0].toUpperCase().replace(/\s+/g, ' ').trim();
-
-    // Telefon: gängige internationale + deutsche Formate.
-    const tel = text.match(/(?:Tel(?:efon)?\.?|Phone)[:\s]*((?:\+|00)\d[\d\s().\/-]{6,}\d)/i)
-              ?? text.match(/\b(\+\d{1,3}[\s().\/-]?\d[\d\s().\/-]{5,}\d)\b/);
-    if (tel) out.phone = tel[1]!.replace(/[\s().\/-]+/g, ' ').replace(/\s+/g, ' ').trim();
-
-    // Adresse: typischer deutscher PLZ-Block "Strasse 12, 12345 Stadt" oder mehrzeilig.
-    const addr = text.match(/([A-ZÄÖÜ][\wäöüß.\-\s]{2,40}\s+\d+[a-z]?)\s*[,\n]\s*(\d{4,5})\s+([A-ZÄÖÜ][\wäöüß.\-\s]{2,40})/);
-    if (addr) {
-      out.billingAddress = `${addr[1]!.trim()}\n${addr[2]} ${addr[3]!.trim()}`;
-    }
-
-    // Legal Entity: zwischen "Firma:", "Anbieter:" o.ä. — best effort.
-    const le = text.match(/(?:Firma|Anbieter|Verantwortlich|Inhaber)[:\s]+([A-ZÄÖÜ][\w\säöüß.&,\-]+?(?:GmbH|AG|UG|KG|OHG|e\.K\.|GbR|Ltd|LLC|Inc))/);
-    if (le) out.legalEntityName = le[1]!.trim();
-  }
-
-  // 2) Land via Nominatim — basierend auf gefundener Adresse, sonst Domain-TLD-Heuristik.
-  if (out.billingAddress) {
+  // 5) Land via Nominatim — basierend auf gefundener Adresse, sonst Domain-TLD-Heuristik.
+  if (!out.country && out.billingAddress) {
     const q = encodeURIComponent(out.billingAddress.replace(/\n/g, ', '));
     try {
       const ac = new AbortController();
