@@ -2163,6 +2163,13 @@ export interface ClauseChangeResult {
   approvalReason?: string | null;
 }
 
+export interface AddClauseResult {
+  clause: ContractClause;
+  contractRiskLevel: string;
+  contractRiskScore: number;
+  dealName?: string;
+}
+
 export interface ContractAmendment {
   id: string;
   originalContractId: string;
@@ -4300,6 +4307,13 @@ export type ListMyDelegations200 = {
 
 export type ListContractsParams = {
   dealId?: string;
+};
+
+export type AddContractClauseBody = {
+  /** Klauselfamilie, die angehängt werden soll */
+  familyId: string;
+  /** Optionale konkrete Variante; sonst Brand-Default oder erste Variante der Familie */
+  variantId?: string;
 };
 
 export type SetContractTypeCuadExpectationsBody = {

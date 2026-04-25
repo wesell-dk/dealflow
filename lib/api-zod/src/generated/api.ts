@@ -2539,6 +2539,23 @@ export const ListContractClausesResponse = zod.array(
 );
 
 /**
+ * @summary Hängt eine Klausel der angegebenen Familie an den Vertrag an (Brand-Default oder erste Variante)
+ */
+export const AddContractClauseParams = zod.object({
+  id: zod.coerce.string(),
+});
+
+export const AddContractClauseBody = zod.object({
+  familyId: zod.string().describe("Klauselfamilie, die angehängt werden soll"),
+  variantId: zod
+    .string()
+    .optional()
+    .describe(
+      "Optionale konkrete Variante; sonst Brand-Default oder erste Variante der Familie",
+    ),
+});
+
+/**
  * @summary Deterministic CUAD-Vollständigkeits-Check für einen Vertrag
  */
 export const GetContractCuadCoverageParams = zod.object({

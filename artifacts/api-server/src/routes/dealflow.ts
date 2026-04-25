@@ -4931,6 +4931,130 @@ router.get('/contracts/:id/clauses', async (req, res) => {
   }));
 });
 
+router.post('/contracts/:id/clauses', async (req, res) => {
+  if (!validateInline(req, res, { params: Z.AddContractClauseParams, body: Z.AddContractClauseBody })) return;
+  const { familyId, variantId } = req.body as { familyId: string; variantId?: string };
+  const [c] = await db.select().from(contractsTable).where(eq(contractsTable.id, req.params.id));
+  if (!c) { res.status(404).json({ error: 'not found' }); return; }
+  if (!(await gateDeal(req, res, c.dealId))) return;
+
+  const [fam] = await db.select().from(clauseFamiliesTable).where(eq(clauseFamiliesTable.id, familyId));
+  if (!fam) { res.status(400).json({ error: 'family not found' }); return; }
+
+  // Reject if a clause for this family is already on the contract — Quick-Add ist additiv.
+  const existingClauses = await db.select().from(contractClausesTable)
+    .where(eq(contractClausesTable.contractId, c.id));
+  if (existingClauses.some(cl => cl.familyId === familyId)) {
+    res.status(409).json({ error: 'clause for this family already exists on contract' }); return;
+  }
+
+  // Resolve variant: explicit > brand-default > first variant of family.
+  const tenantId = getScope(req).tenantId;
+  const [dealRow] = await db.select().from(dealsTable).where(eq(dealsTable.id, c.dealId));
+  const brandId = dealRow?.brandId ?? null;
+  let brand: typeof brandsTable.$inferSelect | undefined;
+  if (brandId) {
+    const [b] = await db.select().from(brandsTable).where(eq(brandsTable.id, brandId));
+    brand = b;
+  }
+
+  const familyVariants = await db.select().from(clauseVariantsTable)
+    .where(eq(clauseVariantsTable.familyId, familyId))
+    .orderBy(desc(clauseVariantsTable.severityScore), asc(clauseVariantsTable.name));
+  if (familyVariants.length === 0) {
+    res.status(400).json({ error: 'no variants exist for family' }); return;
+  }
+
+  let chosen: typeof clauseVariantsTable.$inferSelect | undefined;
+  if (variantId) {
+    chosen = familyVariants.find(v => v.id === variantId);
+    if (!chosen) { res.status(400).json({ error: 'variant not found in family' }); return; }
+  } else {
+    const brandDefaultId = brand?.defaultClauseVariants
+      ? (brand.defaultClauseVariants as Record<string, string>)[familyId]
+      : undefined;
+    if (brandDefaultId) chosen = familyVariants.find(v => v.id === brandDefaultId);
+    if (!chosen) chosen = familyVariants[0];
+  }
+  if (!chosen) { res.status(500).json({ error: 'failed to resolve variant' }); return; }
+
+  // Apply brand override + locale translation for the snapshot.
+  let snapName = chosen.name;
+  let snapSummary = chosen.summary;
+  let snapSeverity = chosen.severity || severityLabelFromScore(chosen.severityScore);
+  let appliedOverride = false;
+  if (brandId) {
+    const ov = await loadBrandOverride(brandId, chosen.id, tenantId);
+    if (ov) {
+      snapName = ov.name ?? chosen.name;
+      snapSummary = ov.summary ?? chosen.summary;
+      snapSeverity = ov.severity ?? (ov.severityScore != null ? severityLabelFromScore(ov.severityScore) : snapSeverity);
+      appliedOverride = true;
+    }
+  }
+  if (!appliedOverride) {
+    const language = normalizeLocale(c.language);
+    const trMap = await loadVariantTranslations([chosen.id]);
+    const tr = pickClauseTranslation(chosen, trMap.get(chosen.id), language);
+    if (tr.name) snapName = tr.name;
+    if (tr.summary) snapSummary = tr.summary;
+  }
+
+  const newClauseId = `cc_${randomUUID().slice(0, 8)}`;
+  await db.insert(contractClausesTable).values({
+    id: newClauseId,
+    contractId: c.id,
+    familyId: fam.id,
+    activeVariantId: chosen.id,
+    family: fam.name,
+    variant: snapName,
+    severity: snapSeverity,
+    summary: snapSummary,
+  });
+
+  const actor = getScope(req).user;
+  await writeAuditFromReq(req, {
+    entityType: 'contract', entityId: c.id, action: 'clause_added',
+    summary: `Klausel hinzugefügt: ${fam.name} → ${chosen.name}`,
+    after: { clauseId: newClauseId, familyId: fam.id, variantId: chosen.id, name: chosen.name },
+  });
+  await db.insert(timelineEventsTable).values({
+    id: `tl_${randomUUID().slice(0, 8)}`, tenantId, type: 'contract',
+    title: `Klausel hinzugefügt: ${fam.name}`,
+    description: chosen.name,
+    actor: actor.name, dealId: c.dealId,
+  });
+
+  // Recompute risk on the contract.
+  const allClauses = await db.select().from(contractClausesTable)
+    .where(eq(contractClausesTable.contractId, c.id));
+  const allVariants = await db.select().from(clauseVariantsTable);
+  const variantById = new Map(allVariants.map(v => [v.id, v]));
+  const sevWeight: Record<string, number> = { high: 25, medium: 10, low: 3 };
+  const riskScore = Math.min(100, allClauses.reduce((s, cl) => s + (sevWeight[cl.severity] ?? 0), 0));
+  const avgScore = allClauses.length
+    ? allClauses.reduce((s, cl) => s + (cl.activeVariantId ? variantById.get(cl.activeVariantId)?.severityScore ?? 3 : 3), 0) / allClauses.length
+    : 3;
+  const newRiskLevel = avgScore <= 2 ? 'high' : avgScore <= 3.5 ? 'medium' : 'low';
+  if (newRiskLevel !== c.riskLevel) {
+    await db.update(contractsTable).set({ riskLevel: newRiskLevel }).where(eq(contractsTable.id, c.id));
+  }
+
+  const dealMap = await getDealMap();
+  res.status(201).json({
+    clause: {
+      id: newClauseId, contractId: c.id,
+      family: fam.name, variant: snapName,
+      severity: snapSeverity, summary: snapSummary,
+      familyId: fam.id, activeVariantId: chosen.id,
+      severityScore: chosen.severityScore, tone: chosen.tone, body: chosen.body,
+    },
+    contractRiskLevel: newRiskLevel,
+    contractRiskScore: riskScore,
+    dealName: dealMap.get(c.dealId)?.name ?? 'Unknown',
+  });
+});
+
 router.patch('/contract-clauses/:id', async (req, res) => {
   if (!validateInline(req, res, { params: Z.PatchContractClauseParams, body: Z.PatchContractClauseBody })) return;
   const body = (req.body ?? {}) as {

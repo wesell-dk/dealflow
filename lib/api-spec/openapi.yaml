@@ -1743,6 +1743,35 @@ paths:
               schema:
                 type: array
                 items: { $ref: "#/components/schemas/ContractClause" }
+    post:
+      operationId: addContractClause
+      tags: [contracts]
+      summary: Hängt eine Klausel der angegebenen Familie an den Vertrag an (Brand-Default oder erste Variante)
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [familyId]
+              properties:
+                familyId:
+                  type: string
+                  description: Klauselfamilie, die angehängt werden soll
+                variantId:
+                  type: string
+                  description: Optionale konkrete Variante; sonst Brand-Default oder erste Variante der Familie
+      responses:
+        "201":
+          description: created
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AddClauseResult" }
 
   /contracts/{id}/cuad-coverage:
     get:
@@ -6355,6 +6384,15 @@ components:
         softer: { type: boolean }
         approvalId: { type: ["string", "null"] }
         approvalReason: { type: ["string", "null"] }
+
+    AddClauseResult:
+      type: object
+      required: [clause, contractRiskLevel, contractRiskScore]
+      properties:
+        clause: { $ref: "#/components/schemas/ContractClause" }
+        contractRiskLevel: { type: string }
+        contractRiskScore: { type: integer }
+        dealName: { type: string }
 
     # ── Amendments ──
     ContractAmendment:

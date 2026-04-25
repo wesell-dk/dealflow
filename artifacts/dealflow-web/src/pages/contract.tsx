@@ -21,6 +21,8 @@ import {
   useDeriveContractObligations,
   useGetContractClauseCompatibility,
   useGetContractCuadCoverage,
+  useAddContractClause,
+  getGetContractCuadCoverageQueryKey,
   useListExternalCollaborators,
   useCreateExternalCollaborator,
   useRevokeExternalCollaborator,
@@ -1015,6 +1017,10 @@ function CuadCoverageSection({ contractId }: { contractId: string }) {
   const { data, isLoading } = useGetContractCuadCoverage(contractId);
   const { data: families } = useListClauseFamilies();
   const [showAll, setShowAll] = useState(false);
+  const [pendingFamilyId, setPendingFamilyId] = useState<string | null>(null);
+  const qc = useQueryClient();
+  const { toast } = useToast();
+  const addClause = useAddContractClause();
 
   const familyNameById = new Map<string, string>();
   for (const f of families ?? []) familyNameById.set(f.id, f.name);
@@ -1025,6 +1031,27 @@ function CuadCoverageSection({ contractId }: { contractId: string }) {
   const coveredRequired = (cov?.coveredExpected ?? 0);
   const pct = totalRequired > 0 ? Math.round((coveredRequired / totalRequired) * 100) : null;
 
+  const onAddFamily = async (familyId: string) => {
+    setPendingFamilyId(familyId);
+    try {
+      const res = await addClause.mutateAsync({ id: contractId, data: { familyId } });
+      await Promise.all([
+        qc.invalidateQueries({ queryKey: getGetContractCuadCoverageQueryKey(contractId) }),
+        qc.invalidateQueries({ queryKey: getListContractClausesQueryKey(contractId) }),
+        qc.invalidateQueries({ queryKey: getGetContractQueryKey(contractId) }),
+      ]);
+      toast({
+        title: "Klausel hinzugefügt",
+        description: `${res.clause.family} → ${res.clause.variant}`,
+      });
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Unbekannter Fehler";
+      toast({ title: "Hinzufügen fehlgeschlagen", description: msg, variant: "destructive" });
+    } finally {
+      setPendingFamilyId(null);
+    }
+  };
+
   const renderFamilyChips = (ids: string[]) => (
     ids.length ? (
       <div className="flex flex-wrap gap-1 mt-1">
@@ -1033,6 +1060,37 @@ function CuadCoverageSection({ contractId }: { contractId: string }) {
             {familyNameById.get(fid) ?? fid}
           </Badge>
         ))}
+      </div>
+    ) : null
+  );
+
+  const renderSuggestedFamilies = (ids: string[], cuadCategoryId: string) => (
+    ids.length ? (
+      <div className="flex flex-wrap gap-1.5 mt-1">
+        {ids.map(fid => {
+          const isPending = pendingFamilyId === fid && addClause.isPending;
+          return (
+            <div
+              key={fid}
+              className="inline-flex items-center gap-1 border rounded-full pl-2 pr-1 py-0.5 bg-card"
+              data-testid={`cuad-suggest-${cuadCategoryId}-${fid}`}
+            >
+              <span className="text-[11px]">{familyNameById.get(fid) ?? fid}</span>
+              <Button
+                type="button"
+                size="sm"
+                variant="ghost"
+                className="h-5 px-1.5 text-[11px] gap-1"
+                disabled={addClause.isPending}
+                onClick={() => onAddFamily(fid)}
+                data-testid={`cuad-add-${cuadCategoryId}-${fid}`}
+              >
+                <Plus className="h-3 w-3" />
+                {isPending ? "…" : "Hinzufügen"}
+              </Button>
+            </div>
+          );
+        })}
       </div>
     ) : null
   );
@@ -1116,7 +1174,7 @@ function CuadCoverageSection({ contractId }: { contractId: string }) {
                           <div className="text-xs text-muted-foreground">
                             Vorschläge — Klauselfamilie hinzufügen:
                           </div>
-                          {renderFamilyChips(m.suggestedFamilyIds)}
+                          {renderSuggestedFamilies(m.suggestedFamilyIds, m.cuadCategoryId)}
                         </div>
                       )}
                     </div>

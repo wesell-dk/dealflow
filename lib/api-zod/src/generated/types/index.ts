@@ -16,6 +16,8 @@ export * from "./accountInput";
 export * from "./accountPatch";
 export * from "./activeScope";
 export * from "./activeScopeUpdateResult";
+export * from "./addClauseResult";
+export * from "./addContractClauseBody";
 export * from "./adminUser";
 export * from "./adminUserCreate";
 export * from "./adminUserUpdate";

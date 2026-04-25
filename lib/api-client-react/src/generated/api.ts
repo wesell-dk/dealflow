@@ -26,6 +26,8 @@ import type {
   AccountInput,
   AccountPatch,
   ActiveScopeUpdateResult,
+  AddClauseResult,
+  AddContractClauseBody,
   AdminUser,
   AdminUserCreate,
   AdminUserUpdate,
@@ -8139,6 +8141,93 @@ export function useListContractClauses<
 
   return { ...query, queryKey: queryOptions.queryKey };
 }
+
+/**
+ * @summary Hängt eine Klausel der angegebenen Familie an den Vertrag an (Brand-Default oder erste Variante)
+ */
+export const getAddContractClauseUrl = (id: string) => {
+  return `/api/v1/contracts/${id}/clauses`;
+};
+
+export const addContractClause = async (
+  id: string,
+  addContractClauseBody: AddContractClauseBody,
+  options?: RequestInit,
+): Promise<AddClauseResult> => {
+  return customFetch<AddClauseResult>(getAddContractClauseUrl(id), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(addContractClauseBody),
+  });
+};
+
+export const getAddContractClauseMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof addContractClause>>,
+    TError,
+    { id: string; data: BodyType<AddContractClauseBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof addContractClause>>,
+  TError,
+  { id: string; data: BodyType<AddContractClauseBody> },
+  TContext
+> => {
+  const mutationKey = ["addContractClause"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof addContractClause>>,
+    { id: string; data: BodyType<AddContractClauseBody> }
+  > = (props) => {
+    const { id, data } = props ?? {};
+
+    return addContractClause(id, data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type AddContractClauseMutationResult = NonNullable<
+  Awaited<ReturnType<typeof addContractClause>>
+>;
+export type AddContractClauseMutationBody = BodyType<AddContractClauseBody>;
+export type AddContractClauseMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Hängt eine Klausel der angegebenen Familie an den Vertrag an (Brand-Default oder erste Variante)
+ */
+export const useAddContractClause = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof addContractClause>>,
+    TError,
+    { id: string; data: BodyType<AddContractClauseBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof addContractClause>>,
+  TError,
+  { id: string; data: BodyType<AddContractClauseBody> },
+  TContext
+> => {
+  return useMutation(getAddContractClauseMutationOptions(options));
+};
 
 /**
  * @summary Deterministic CUAD-Vollständigkeits-Check für einen Vertrag
