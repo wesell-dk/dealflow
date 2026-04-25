@@ -1,5 +1,5 @@
 import { Router, type IRouter, type Request, type Response } from 'express';
-import { and, asc, desc, eq, inArray, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, inArray, sql, type SQL } from 'drizzle-orm';
 import { randomUUID, randomBytes } from 'node:crypto';
 import { ObjectStorageService } from '../lib/objectStorage';
 import { extractTextFromUpload } from '../lib/extractContractText';
@@ -8512,7 +8512,7 @@ async function loadVisibleRenewal(
 // GET /renewals — gefiltert nach bucket / minRisk / status / brand / account
 router.get('/renewals', async (req, res) => {
   const scope = getScope(req);
-  const filters: any[] = [eq(renewalOpportunitiesTable.tenantId, scope.tenantId)];
+  const filters: SQL[] = [eq(renewalOpportunitiesTable.tenantId, scope.tenantId)];
 
   const status = typeof req.query.status === 'string' ? req.query.status : null;
   if (status && ['open','snoozed','won','lost','cancelled'].includes(status)) {
@@ -8586,7 +8586,7 @@ router.get('/renewals', async (req, res) => {
 // GET /renewals/summary — KPI für Reports-Cockpit
 router.get('/renewals/_summary', async (req, res) => {
   const scope = getScope(req);
-  const filters: any[] = [
+  const filters: SQL[] = [
     eq(renewalOpportunitiesTable.tenantId, scope.tenantId),
     eq(renewalOpportunitiesTable.status, 'open'),
   ];

@@ -9,6 +9,8 @@ import {
   getGetRenewalSummaryQueryKey,
   type RenewalOpportunity,
   type RenewalRiskFactor,
+  type ListRenewalsParams,
+  type RenewalPatch,
 } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
@@ -90,13 +92,13 @@ export default function RenewalsPage() {
   const [notes, setNotes] = useState<string>("");
   const [snoozeDate, setSnoozeDate] = useState<string>("");
 
-  const params: Record<string, string | number | undefined> = { status };
-  if (bucket) params.bucket = bucket;
+  const params: ListRenewalsParams = { status: status as ListRenewalsParams["status"] };
+  if (bucket) params.bucket = bucket as ListRenewalsParams["bucket"];
   const minRiskN = Number(minRisk);
   if (minRisk && !Number.isNaN(minRiskN)) params.minRisk = minRiskN;
 
   const { data: summary, isLoading: isLoadingSummary } = useGetRenewalSummary();
-  const { data: rows, isLoading: isLoadingRows } = useListRenewals(params as any);
+  const { data: rows, isLoading: isLoadingRows } = useListRenewals(params);
   const updateMut = useUpdateRenewal();
   const runMut = useRunRenewalEngine();
 
@@ -118,7 +120,7 @@ export default function RenewalsPage() {
 
   async function patch(action: "snooze" | "won" | "lost" | "cancelled" | "open" | "save") {
     if (!selected) return;
-    const body: any = {};
+    const body: RenewalPatch = {};
     if (action === "snooze") {
       if (!snoozeDate) {
         toast({ title: t("pages.renewals.snoozeRequiresDate"), variant: "destructive" });

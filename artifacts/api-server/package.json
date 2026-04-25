@@ -10,7 +10,9 @@
     "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tests/tsconfig.json --noEmit",
     "test:isolation": "node --import tsx --test --test-reporter=spec tests/tenant-isolation.test.ts tests/validation-negative.test.ts",
     "test:renewals": "node --import tsx --test --test-reporter=spec tests/renewals.test.ts",
-    "test": "pnpm run test:isolation && pnpm run test:renewals"
+    "test:approvals": "node --import tsx --test --test-reporter=spec tests/approval-chains.test.ts",
+    "test:external": "node --import tsx --test --test-reporter=spec tests/external-contracts.test.ts",
+    "test": "pnpm run test:isolation && pnpm run test:renewals && pnpm run test:approvals && pnpm run test:external"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.90.0",
