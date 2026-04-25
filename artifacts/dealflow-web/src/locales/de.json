@@ -680,7 +680,44 @@
       "aiAcceptanceEmpty": "Noch keine entschiedenen KI-Empfehlungen.",
       "aiAcceptanceWqs": "Qualität",
       "aiAcceptanceWqsHint": "Annahmequote × Ø-Konfidenz der entschiedenen Empfehlungen.",
-      "aiAcceptanceTrendLabel": "Entscheidungen 7 Tage"
+      "aiAcceptanceTrendLabel": "Entscheidungen 7 Tage",
+      "trendActions": {
+        "title": "Renewals im {{month}}",
+        "subtitle": "{{count}} Renewals · {{value}} Volumen — direkt aus dem Trendchart bearbeiten.",
+        "openInRenewals": "In Renewals-Liste öffnen",
+        "empty": "Keine Renewals in diesem Monat.",
+        "loading": "Wird geladen…",
+        "row": {
+          "due": "Fällig {{date}}",
+          "notice": "Notice {{date}}",
+          "risk": "Risiko {{score}}"
+        },
+        "row.snooze": "Snooze",
+        "row.handled": "Erledigt",
+        "row.notify": "Owner benachrichtigen",
+        "snooze": {
+          "label": "Wiedervorlage bis",
+          "apply": "Snooze setzen",
+          "cancel": "Abbrechen"
+        },
+        "bulk": {
+          "header": "Sammelaktionen für diesen Monat",
+          "notifyAll": "Alle Owner benachrichtigen",
+          "snoozeAll": "Alle bis Datum snoozen",
+          "snoozeAllPlaceholder": "Datum wählen",
+          "snoozeAllApply": "Snooze auf alle"
+        },
+        "toast": {
+          "notified": "Reminder an {{name}} gesendet",
+          "notifyFailed": "Konnte Owner nicht benachrichtigen",
+          "noOwner": "Diesem Account ist keine verantwortliche Person zugeordnet.",
+          "handled": "Renewal als erledigt markiert",
+          "snoozed": "Renewal verschoben",
+          "snoozeMissingDate": "Bitte zuerst ein Wiedervorlage-Datum wählen.",
+          "bulkNotified": "Reminder an {{count}} Owner gesendet ({{skipped}} übersprungen)",
+          "bulkSnoozed": "{{count}} Renewals verschoben ({{skipped}} übersprungen)"
+        }
+      }
     },
     "pricing": {
       "title": "Preisgestaltung",

@@ -20,4 +20,9 @@ export type ListRenewalsParams = {
   status?: ListRenewalsStatus;
   accountId?: string;
   brandId?: string;
+  /**
+   * Filter auf dueDate = exakt YYYY-MM (Drill-down aus Trendchart).
+   * @pattern ^\d{4}-\d{2}$
+   */
+  dueYm?: string;
 };

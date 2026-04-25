@@ -239,7 +239,10 @@ import type {
   QuoteVersion,
   QuoteVersionInput,
   ReactionInput,
+  RenewalBulkInput,
+  RenewalBulkResult,
   RenewalFollowupResult,
+  RenewalNotifyResult,
   RenewalOpportunity,
   RenewalPatch,
   RenewalRunResult,
@@ -18406,6 +18409,178 @@ export const useIssueRenewalFollowup = <
   TContext
 > => {
   return useMutation(getIssueRenewalFollowupMutationOptions(options));
+};
+
+/**
+ * Schickt eine Renewal-Erinnerung an die für den Account zuständige Person. Owner wird aus account.ownerId aufgelöst (Fallback: contract.salesOwnerId). Wir schreiben Timeline-Event + Audit-Eintrag.
+ * @summary Account-Manager:in über das Renewal benachrichtigen
+ */
+export const getNotifyRenewalOwnerUrl = (id: string) => {
+  return `/api/v1/renewals/${id}/notify-owner`;
+};
+
+export const notifyRenewalOwner = async (
+  id: string,
+  options?: RequestInit,
+): Promise<RenewalNotifyResult> => {
+  return customFetch<RenewalNotifyResult>(getNotifyRenewalOwnerUrl(id), {
+    ...options,
+    method: "POST",
+  });
+};
+
+export const getNotifyRenewalOwnerMutationOptions = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof notifyRenewalOwner>>,
+    TError,
+    { id: string },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof notifyRenewalOwner>>,
+  TError,
+  { id: string },
+  TContext
+> => {
+  const mutationKey = ["notifyRenewalOwner"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof notifyRenewalOwner>>,
+    { id: string }
+  > = (props) => {
+    const { id } = props ?? {};
+
+    return notifyRenewalOwner(id, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type NotifyRenewalOwnerMutationResult = NonNullable<
+  Awaited<ReturnType<typeof notifyRenewalOwner>>
+>;
+
+export type NotifyRenewalOwnerMutationError = ErrorType<void>;
+
+/**
+ * @summary Account-Manager:in über das Renewal benachrichtigen
+ */
+export const useNotifyRenewalOwner = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof notifyRenewalOwner>>,
+    TError,
+    { id: string },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof notifyRenewalOwner>>,
+  TError,
+  { id: string },
+  TContext
+> => {
+  return useMutation(getNotifyRenewalOwnerMutationOptions(options));
+};
+
+/**
+ * Wendet dieselbe Aktion auf mehrere sichtbare Renewals an. Renewals außerhalb des Sichtbarkeits-Scope landen in skippedIds und blockieren die Aktion nicht. action='snooze' verlangt snoozedUntil.
+ * @summary Sammelaktion auf mehrere Renewals (snooze/notify/Status)
+ */
+export const getBulkRenewalActionUrl = () => {
+  return `/api/v1/renewals/_bulk`;
+};
+
+export const bulkRenewalAction = async (
+  renewalBulkInput: RenewalBulkInput,
+  options?: RequestInit,
+): Promise<RenewalBulkResult> => {
+  return customFetch<RenewalBulkResult>(getBulkRenewalActionUrl(), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(renewalBulkInput),
+  });
+};
+
+export const getBulkRenewalActionMutationOptions = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof bulkRenewalAction>>,
+    TError,
+    { data: BodyType<RenewalBulkInput> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof bulkRenewalAction>>,
+  TError,
+  { data: BodyType<RenewalBulkInput> },
+  TContext
+> => {
+  const mutationKey = ["bulkRenewalAction"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof bulkRenewalAction>>,
+    { data: BodyType<RenewalBulkInput> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return bulkRenewalAction(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type BulkRenewalActionMutationResult = NonNullable<
+  Awaited<ReturnType<typeof bulkRenewalAction>>
+>;
+export type BulkRenewalActionMutationBody = BodyType<RenewalBulkInput>;
+export type BulkRenewalActionMutationError = ErrorType<void>;
+
+/**
+ * @summary Sammelaktion auf mehrere Renewals (snooze/notify/Status)
+ */
+export const useBulkRenewalAction = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof bulkRenewalAction>>,
+    TError,
+    { data: BodyType<RenewalBulkInput> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof bulkRenewalAction>>,
+  TError,
+  { data: BodyType<RenewalBulkInput> },
+  TContext
+> => {
+  return useMutation(getBulkRenewalActionMutationOptions(options));
 };
 
 /**

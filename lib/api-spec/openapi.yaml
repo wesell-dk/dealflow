@@ -3985,6 +3985,11 @@ paths:
           name: brandId
           required: false
           schema: { type: string }
+        - in: query
+          name: dueYm
+          required: false
+          description: "Filter auf dueDate = exakt YYYY-MM (Drill-down aus Trendchart)."
+          schema: { type: string, pattern: "^\\d{4}-\\d{2}$" }
       responses:
         "200":
           description: ok
@@ -4112,6 +4117,53 @@ paths:
               schema: { $ref: "#/components/schemas/RenewalFollowupResult" }
         "404": { description: not found }
         "409": { description: renewal not eligible (status != open or already issued) }
+
+  /renewals/{id}/notify-owner:
+    post:
+      operationId: notifyRenewalOwner
+      tags: [renewals]
+      summary: Account-Manager:in über das Renewal benachrichtigen
+      description: >-
+        Schickt eine Renewal-Erinnerung an die für den Account zuständige
+        Person. Owner wird aus account.ownerId aufgelöst (Fallback:
+        contract.salesOwnerId). Wir schreiben Timeline-Event + Audit-Eintrag.
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: ok
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/RenewalNotifyResult" }
+        "404": { description: not found }
+        "422": { description: no owner assigned }
+
+  /renewals/_bulk:
+    post:
+      operationId: bulkRenewalAction
+      tags: [renewals]
+      summary: Sammelaktion auf mehrere Renewals (snooze/notify/Status)
+      description: >-
+        Wendet dieselbe Aktion auf mehrere sichtbare Renewals an. Renewals
+        außerhalb des Sichtbarkeits-Scope landen in skippedIds und blockieren
+        die Aktion nicht. action='snooze' verlangt snoozedUntil.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/RenewalBulkInput" }
+      responses:
+        "200":
+          description: ok
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/RenewalBulkResult" }
+        "400": { description: invalid request }
+        "422": { description: missing parameters }
+
 
   /brands/{brandId}/clause-overrides:
     get:
@@ -8442,6 +8494,60 @@ components:
         count: { type: integer, description: "Anzahl Renewals für diesen Brand/Owner im Bucket" }
         atRiskCount: { type: integer, description: "Anzahl davon mit riskScore >= 70" }
         atRiskValue: { type: number, description: "Summe valueAmount davon mit riskScore >= 70" }
+
+    RenewalNotifyResult:
+      type: object
+      required: [notified, ownerId, ownerName, source]
+      properties:
+        notified: { type: boolean }
+        ownerId: { type: string }
+        ownerName: { type: string }
+        ownerEmail: { type: ["string", "null"] }
+        source:
+          type: string
+          enum: [account, contract]
+          description: "Wo der Owner aufgelöst wurde."
+
+    RenewalBulkInput:
+      type: object
+      required: [ids, action]
+      properties:
+        ids:
+          type: array
+          items: { type: string }
+          minItems: 1
+        action:
+          type: string
+          enum: [snooze, won, lost, cancelled, open, notify]
+        snoozedUntil:
+          type: ["string", "null"]
+          format: date
+          description: "Erforderlich bei action=snooze."
+        notes: { type: ["string", "null"] }
+
+    RenewalBulkNotifiedItem:
+      type: object
+      required: [id, ownerId, ownerName]
+      properties:
+        id: { type: string }
+        ownerId: { type: string }
+        ownerName: { type: string }
+
+    RenewalBulkResult:
+      type: object
+      required: [updated, notified, skipped, skippedIds, skippedReasons]
+      properties:
+        updated: { type: integer }
+        notified:
+          type: array
+          items: { $ref: "#/components/schemas/RenewalBulkNotifiedItem" }
+        skipped: { type: integer }
+        skippedIds:
+          type: array
+          items: { type: string }
+        skippedReasons:
+          type: object
+          additionalProperties: { type: string }
 
     BrandClauseOverride:
       type: object

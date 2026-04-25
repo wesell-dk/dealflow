@@ -680,7 +680,44 @@
       "aiAcceptanceEmpty": "No decided AI recommendations yet.",
       "aiAcceptanceWqs": "Quality",
       "aiAcceptanceWqsHint": "Acceptance rate × average confidence of decided recommendations.",
-      "aiAcceptanceTrendLabel": "Decisions 7 days"
+      "aiAcceptanceTrendLabel": "Decisions 7 days",
+      "trendActions": {
+        "title": "Renewals in {{month}}",
+        "subtitle": "{{count}} renewals · {{value}} volume — act directly from the chart.",
+        "openInRenewals": "Open in renewals list",
+        "empty": "No renewals due in this month.",
+        "loading": "Loading…",
+        "row": {
+          "due": "Due {{date}}",
+          "notice": "Notice {{date}}",
+          "risk": "Risk {{score}}"
+        },
+        "row.snooze": "Snooze",
+        "row.handled": "Handled",
+        "row.notify": "Notify owner",
+        "snooze": {
+          "label": "Snooze until",
+          "apply": "Snooze",
+          "cancel": "Cancel"
+        },
+        "bulk": {
+          "header": "Bulk actions for this month",
+          "notifyAll": "Notify all owners",
+          "snoozeAll": "Snooze all until…",
+          "snoozeAllPlaceholder": "Pick a date",
+          "snoozeAllApply": "Snooze all"
+        },
+        "toast": {
+          "notified": "Reminder sent to {{name}}",
+          "notifyFailed": "Could not notify owner",
+          "noOwner": "No account manager assigned to this account.",
+          "handled": "Renewal marked as handled",
+          "snoozed": "Renewal snoozed",
+          "snoozeMissingDate": "Pick a snooze date first.",
+          "bulkNotified": "Reminder sent to {{count}} owners ({{skipped}} skipped)",
+          "bulkSnoozed": "{{count}} renewals snoozed ({{skipped}} skipped)"
+        }
+      }
     },
     "pricing": {
       "title": "Pricing",

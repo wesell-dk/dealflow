@@ -4052,6 +4052,68 @@ Renewals ohne auflösbaren Owner erscheinen mit `ownerId: null`.
   byOwner?: RenewalTrendBreakdown[];
 }
 
+/**
+ * Wo der Owner aufgelöst wurde.
+ */
+export type RenewalNotifyResultSource =
+  (typeof RenewalNotifyResultSource)[keyof typeof RenewalNotifyResultSource];
+
+export const RenewalNotifyResultSource = {
+  account: "account",
+  contract: "contract",
+} as const;
+
+export interface RenewalNotifyResult {
+  notified: boolean;
+  ownerId: string;
+  ownerName: string;
+  /** @nullable */
+  ownerEmail?: string | null;
+  /** Wo der Owner aufgelöst wurde. */
+  source: RenewalNotifyResultSource;
+}
+
+export type RenewalBulkInputAction =
+  (typeof RenewalBulkInputAction)[keyof typeof RenewalBulkInputAction];
+
+export const RenewalBulkInputAction = {
+  snooze: "snooze",
+  won: "won",
+  lost: "lost",
+  cancelled: "cancelled",
+  open: "open",
+  notify: "notify",
+} as const;
+
+export interface RenewalBulkInput {
+  /** @minItems 1 */
+  ids: string[];
+  action: RenewalBulkInputAction;
+  /**
+   * Erforderlich bei action=snooze.
+   * @nullable
+   */
+  snoozedUntil?: string | null;
+  /** @nullable */
+  notes?: string | null;
+}
+
+export interface RenewalBulkNotifiedItem {
+  id: string;
+  ownerId: string;
+  ownerName: string;
+}
+
+export type RenewalBulkResultSkippedReasons = { [key: string]: string };
+
+export interface RenewalBulkResult {
+  updated: number;
+  notified: RenewalBulkNotifiedItem[];
+  skipped: number;
+  skippedIds: string[];
+  skippedReasons: RenewalBulkResultSkippedReasons;
+}
+
 export interface BrandClauseOverride {
   id: string;
   tenantId: string;
@@ -4923,6 +4985,11 @@ export type ListRenewalsParams = {
   status?: ListRenewalsStatus;
   accountId?: string;
   brandId?: string;
+  /**
+   * Filter auf dueDate = exakt YYYY-MM (Drill-down aus Trendchart).
+   * @pattern ^\d{4}-\d{2}$
+   */
+  dueYm?: string;
 };
 
 export type ListRenewalsBucket =

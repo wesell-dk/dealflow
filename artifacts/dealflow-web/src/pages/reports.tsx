@@ -7,7 +7,15 @@ import {
   useGetDashboardSummary,
   useGetRenewalSummary,
   useGetRenewalTrend,
+  useListRenewals,
+  useNotifyRenewalOwner,
+  useUpdateRenewal,
+  useBulkRenewalAction,
+  getListRenewalsQueryKey,
+  getGetRenewalSummaryQueryKey,
+  getGetRenewalTrendQueryKey,
 } from "@workspace/api-client-react";
+import { useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -18,12 +26,31 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
+import {
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+  SheetDescription,
+} from "@/components/ui/sheet";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import { useToast } from "@/hooks/use-toast";
+import { Bell, CalendarClock, CheckCircle2, Clock, ExternalLink } from "lucide-react";
 import { ResponsiveContainer, ComposedChart, AreaChart, Area, BarChart, Bar, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend } from "recharts";
 import { AiAcceptanceTile } from "@/components/reports/ai-acceptance-tile";
 
 export default function Reports() {
   const { t } = useTranslation();
   const [, navigate] = useLocation();
+  const { toast } = useToast();
+  const qc = useQueryClient();
   const { data: performance, isLoading: isLoadingPerf } = useGetPerformanceReport();
   const { data: forecast, isLoading: isLoadingForecast } = useGetForecast();
   const { data: dashboard } = useGetDashboardSummary();
@@ -40,6 +67,102 @@ export default function Reports() {
     horizonMonths: 12,
     groupBy: trendGroupBy,
   });
+
+  // Trend-Chart Drill-down (Task #120): ausgewählter Monat öffnet ein Sheet mit
+  // Renewals dieses Monats. Renewals werden serverseitig per dueYm-Filter
+  // geladen, damit die Liste exakt zum Chart-Balken passt.
+  const [trendMonth, setTrendMonth] = useState<{ ym: string; label: string } | null>(null);
+  const [bulkSnoozeDate, setBulkSnoozeDate] = useState<string>("");
+  const trendDetailsParams = { status: "open" as const, dueYm: trendMonth?.ym ?? "" };
+  const trendDetails = useListRenewals(trendDetailsParams, {
+    query: {
+      enabled: !!trendMonth,
+      queryKey: getListRenewalsQueryKey(trendDetailsParams),
+    },
+  });
+  const notifyMut = useNotifyRenewalOwner();
+  const updateMut = useUpdateRenewal();
+  const bulkMut = useBulkRenewalAction();
+
+  function refetchRenewals() {
+    qc.invalidateQueries({ queryKey: getListRenewalsQueryKey() });
+    qc.invalidateQueries({ queryKey: getGetRenewalSummaryQueryKey() });
+    qc.invalidateQueries({ queryKey: getGetRenewalTrendQueryKey() });
+  }
+
+  async function notifyOne(id: string) {
+    try {
+      const res = await notifyMut.mutateAsync({ id });
+      toast({ title: t("pages.reports.trendActions.toast.notified", { name: res.ownerName }) });
+    } catch (err: unknown) {
+      const status = (err as { status?: number; response?: { status?: number } } | null)?.status
+        ?? (err as { response?: { status?: number } } | null)?.response?.status;
+      if (status === 422) {
+        toast({
+          title: t("pages.reports.trendActions.toast.notifyFailed"),
+          description: t("pages.reports.trendActions.toast.noOwner"),
+          variant: "destructive",
+        });
+      } else {
+        toast({
+          title: t("pages.reports.trendActions.toast.notifyFailed"),
+          variant: "destructive",
+        });
+      }
+    }
+  }
+
+  async function snoozeOne(id: string, until: string) {
+    if (!until) {
+      toast({
+        title: t("pages.reports.trendActions.toast.snoozeMissingDate"),
+        variant: "destructive",
+      });
+      return;
+    }
+    await updateMut.mutateAsync({ id, data: { status: "snoozed", snoozedUntil: until } });
+    toast({ title: t("pages.reports.trendActions.toast.snoozed") });
+    refetchRenewals();
+  }
+
+  async function markHandled(id: string) {
+    await updateMut.mutateAsync({ id, data: { status: "cancelled" } });
+    toast({ title: t("pages.reports.trendActions.toast.handled") });
+    refetchRenewals();
+  }
+
+  async function bulkNotify(ids: string[]) {
+    if (ids.length === 0) return;
+    const res = await bulkMut.mutateAsync({ data: { ids, action: "notify" } });
+    toast({
+      title: t("pages.reports.trendActions.toast.bulkNotified", {
+        count: res.notified.length,
+        skipped: res.skipped,
+      }),
+    });
+  }
+
+  async function bulkSnooze(ids: string[]) {
+    if (ids.length === 0) return;
+    if (!bulkSnoozeDate) {
+      toast({
+        title: t("pages.reports.trendActions.toast.snoozeMissingDate"),
+        variant: "destructive",
+      });
+      return;
+    }
+    const res = await bulkMut.mutateAsync({
+      data: { ids, action: "snooze", snoozedUntil: bulkSnoozeDate },
+    });
+    toast({
+      title: t("pages.reports.trendActions.toast.bulkSnoozed", {
+        count: res.updated,
+        skipped: res.skipped,
+      }),
+    });
+    refetchRenewals();
+    setBulkSnoozeDate("");
+  }
 
   const renewalTrendCurrencyFmt = useMemo(
     () => new Intl.NumberFormat(undefined, { style: "currency", currency: "EUR", maximumFractionDigits: 0 }),
@@ -272,14 +395,14 @@ export default function Reports() {
         </Card>
       </div>
 
-      {/* Renewal-Pipeline Trend (#99 / #121) */}
+      {/* Renewal-Pipeline Trend (#99 + #120 + #121) */}
       <Card data-testid="card-renewal-trend">
         <CardHeader>
           <div className="flex items-start justify-between gap-3">
             <div>
               <CardTitle>Renewal-Pipeline (12 Monate)</CardTitle>
               <p className="text-sm text-muted-foreground mt-1">
-                Volumen pro Monat über die nächsten 12 Monate. Im Modus „Gesamt" zeigt der gestapelte rote Anteil Renewals mit Risiko ≥ 70; in den Modi „nach Brand" / „nach Owner" wird das Volumen je Monat nach den Top-Brands bzw. ‑Ownern aufgeschlüsselt. Klick auf einen Monat öffnet die Renewals-Liste mit passendem Filter.
+                Volumen pro Monat über die nächsten 12 Monate. Im Modus „Gesamt" zeigt der gestapelte rote Anteil Renewals mit Risiko ≥ 70; in den Modi „nach Brand" / „nach Owner" wird das Volumen je Monat nach den Top-Brands bzw. ‑Ownern aufgeschlüsselt. Klick auf einen Monat öffnet die Aktions-Liste — snoozen, als erledigt markieren oder Owner direkt benachrichtigen.
               </p>
             </div>
             <Select value={trendMode} onValueChange={(v) => setTrendMode(v as "total" | "brand" | "owner")}>
@@ -304,9 +427,16 @@ export default function Reports() {
               <BarChart
                 data={trendMode === "total" ? renewalTrendData : groupedTrendData}
                 onClick={(state: unknown) => {
-                  const s = state as { activePayload?: Array<{ payload?: { ym?: string } }> } | null;
-                  const ym = s?.activePayload?.[0]?.payload?.ym;
-                  if (ym) navigate(`/renewals?ym=${ym}`);
+                  const s = state as {
+                    activePayload?: Array<{ payload?: { ym?: string; monthLabel?: string } }>;
+                  } | null;
+                  const payload = s?.activePayload?.[0]?.payload;
+                  if (payload?.ym) {
+                    setTrendMonth({
+                      ym: payload.ym,
+                      label: payload.monthLabel ?? payload.ym,
+                    });
+                  }
                 }}
               >
                 <CartesianGrid strokeDasharray="3 3" vertical={false} opacity={0.3} />
@@ -503,6 +633,221 @@ export default function Reports() {
           </Table>
         </CardContent>
       </Card>
+
+      <Sheet
+        open={!!trendMonth}
+        onOpenChange={(open) => {
+          if (!open) {
+            setTrendMonth(null);
+            setBulkSnoozeDate("");
+          }
+        }}
+      >
+        <SheetContent className="w-full sm:max-w-2xl overflow-y-auto" data-testid="sheet-trend-actions">
+          <SheetHeader>
+            <SheetTitle>
+              {t("pages.reports.trendActions.title", { month: trendMonth?.label ?? "" })}
+            </SheetTitle>
+            <SheetDescription>
+              {t("pages.reports.trendActions.subtitle", {
+                count: trendDetails.data?.length ?? 0,
+                value: ((trendDetails.data ?? []).reduce(
+                  (sum, r) => sum + (r.valueAmount ?? 0),
+                  0,
+                )).toLocaleString(undefined, {
+                  style: "currency",
+                  currency: trendDetails.data?.[0]?.currency ?? "EUR",
+                  maximumFractionDigits: 0,
+                }),
+              })}
+            </SheetDescription>
+          </SheetHeader>
+
+          <div className="mt-4 flex flex-wrap items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              data-testid="link-open-renewals"
+              onClick={() => {
+                if (trendMonth) navigate(`/renewals?ym=${trendMonth.ym}`);
+              }}
+            >
+              <ExternalLink className="mr-2 h-4 w-4" />
+              {t("pages.reports.trendActions.openInRenewals")}
+            </Button>
+          </div>
+
+          {(trendDetails.data?.length ?? 0) > 0 && (
+            <div className="mt-4 rounded-md border p-3">
+              <div className="text-xs font-semibold uppercase text-muted-foreground">
+                {t("pages.reports.trendActions.bulk.header")}
+              </div>
+              <div className="mt-2 flex flex-wrap items-center gap-2">
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  data-testid="button-bulk-notify"
+                  disabled={bulkMut.isPending}
+                  onClick={() => bulkNotify((trendDetails.data ?? []).map((r) => r.id))}
+                >
+                  <Bell className="mr-2 h-4 w-4" />
+                  {t("pages.reports.trendActions.bulk.notifyAll")}
+                </Button>
+                <Input
+                  type="date"
+                  value={bulkSnoozeDate}
+                  onChange={(e) => setBulkSnoozeDate(e.target.value)}
+                  className="h-9 w-44"
+                  data-testid="input-bulk-snooze-date"
+                  aria-label={t("pages.reports.trendActions.bulk.snoozeAllPlaceholder")}
+                />
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  data-testid="button-bulk-snooze"
+                  disabled={bulkMut.isPending || !bulkSnoozeDate}
+                  onClick={() => bulkSnooze((trendDetails.data ?? []).map((r) => r.id))}
+                >
+                  <CalendarClock className="mr-2 h-4 w-4" />
+                  {t("pages.reports.trendActions.bulk.snoozeAllApply")}
+                </Button>
+              </div>
+            </div>
+          )}
+
+          <div className="mt-4 space-y-2">
+            {trendDetails.isLoading ? (
+              <div className="text-sm text-muted-foreground">
+                {t("pages.reports.trendActions.loading")}
+              </div>
+            ) : (trendDetails.data?.length ?? 0) === 0 ? (
+              <div className="text-sm text-muted-foreground">
+                {t("pages.reports.trendActions.empty")}
+              </div>
+            ) : (
+              (trendDetails.data ?? []).map((r) => (
+                <RenewalActionRow
+                  key={r.id}
+                  r={r}
+                  onNotify={() => notifyOne(r.id)}
+                  onMarkHandled={() => markHandled(r.id)}
+                  onSnooze={(date) => snoozeOne(r.id, date)}
+                />
+              ))
+            )}
+          </div>
+        </SheetContent>
+      </Sheet>
+    </div>
+  );
+}
+
+function RenewalActionRow({
+  r,
+  onNotify,
+  onMarkHandled,
+  onSnooze,
+}: {
+  r: {
+    id: string;
+    accountName?: string | null;
+    contractTitle?: string | null;
+    dueDate: string;
+    noticeDeadline: string;
+    riskScore: number;
+    valueAmount?: number | null;
+    currency?: string | null;
+  };
+  onNotify: () => void;
+  onMarkHandled: () => void;
+  onSnooze: (date: string) => void;
+}) {
+  const { t } = useTranslation();
+  const [snoozeDate, setSnoozeDate] = useState<string>("");
+  const value = (r.valueAmount ?? 0).toLocaleString(undefined, {
+    style: "currency",
+    currency: r.currency ?? "EUR",
+    maximumFractionDigits: 0,
+  });
+  const due = new Date(r.dueDate).toLocaleDateString();
+  const notice = new Date(r.noticeDeadline).toLocaleDateString();
+  const riskTone =
+    r.riskScore >= 70 ? "destructive" : r.riskScore >= 40 ? "default" : "secondary";
+
+  return (
+    <div
+      className="flex flex-col gap-2 rounded-md border p-3 sm:flex-row sm:items-center sm:justify-between"
+      data-testid={`row-renewal-${r.id}`}
+    >
+      <div className="min-w-0 flex-1">
+        <div className="flex items-center gap-2">
+          <span className="truncate font-medium">{r.accountName ?? "—"}</span>
+          <Badge variant={riskTone as "default" | "secondary" | "destructive"}>
+            {t("pages.reports.trendActions.row.risk", { score: r.riskScore })}
+          </Badge>
+        </div>
+        <div className="truncate text-xs text-muted-foreground">
+          {r.contractTitle ?? ""}
+        </div>
+        <div className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-xs text-muted-foreground">
+          <span>{value}</span>
+          <span>{t("pages.reports.trendActions.row.due", { date: due })}</span>
+          <span>{t("pages.reports.trendActions.row.notice", { date: notice })}</span>
+        </div>
+      </div>
+      <div className="flex shrink-0 flex-wrap gap-2">
+        <Popover>
+          <PopoverTrigger asChild>
+            <Button
+              size="sm"
+              variant="outline"
+              data-testid={`button-row-snooze-${r.id}`}
+            >
+              <Clock className="mr-1 h-4 w-4" />
+              {t("pages.reports.trendActions.row.snooze")}
+            </Button>
+          </PopoverTrigger>
+          <PopoverContent align="end" className="w-auto p-3">
+            <label className="block text-xs font-medium text-muted-foreground">
+              {t("pages.reports.trendActions.snooze.label")}
+            </label>
+            <Input
+              type="date"
+              value={snoozeDate}
+              onChange={(e) => setSnoozeDate(e.target.value)}
+              className="mt-1 w-44"
+              data-testid={`input-row-snooze-date-${r.id}`}
+            />
+            <Button
+              size="sm"
+              className="mt-2 w-full"
+              disabled={!snoozeDate}
+              data-testid={`button-row-snooze-apply-${r.id}`}
+              onClick={() => onSnooze(snoozeDate)}
+            >
+              {t("pages.reports.trendActions.snooze.apply")}
+            </Button>
+          </PopoverContent>
+        </Popover>
+        <Button
+          size="sm"
+          variant="outline"
+          data-testid={`button-row-handled-${r.id}`}
+          onClick={onMarkHandled}
+        >
+          <CheckCircle2 className="mr-1 h-4 w-4" />
+          {t("pages.reports.trendActions.row.handled")}
+        </Button>
+        <Button
+          size="sm"
+          variant="default"
+          data-testid={`button-row-notify-${r.id}`}
+          onClick={onNotify}
+        >
+          <Bell className="mr-1 h-4 w-4" />
+          {t("pages.reports.trendActions.row.notify")}
+        </Button>
+      </div>
     </div>
   );
 }

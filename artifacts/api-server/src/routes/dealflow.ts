@@ -12591,6 +12591,17 @@ router.get('/renewals', async (req, res) => {
   if (typeof req.query.brandId === 'string') {
     filters.push(eq(renewalOpportunitiesTable.brandId, req.query.brandId));
   }
+  // dueYm — exact YYYY-MM filter on dueDate. Used by the renewals trend chart
+  // drill-down so the same data slice that fed a chart bar is what the action
+  // sheet operates on.
+  if (typeof req.query.dueYm === 'string' && /^\d{4}-\d{2}$/.test(req.query.dueYm)) {
+    const ym = req.query.dueYm;
+    const [yStr, mStr] = ym.split('-');
+    const startD = new Date(Date.UTC(Number(yStr), Number(mStr) - 1, 1));
+    const endD = new Date(Date.UTC(Number(yStr), Number(mStr), 1));
+    filters.push(sql`${renewalOpportunitiesTable.dueDate} >= ${toDateOnly(startD)}`);
+    filters.push(sql`${renewalOpportunitiesTable.dueDate} < ${toDateOnly(endD)}`);
+  }
 
   const today = toDateOnly(new Date())!;
   const bucket = typeof req.query.bucket === 'string' ? req.query.bucket : null;
@@ -13162,6 +13173,179 @@ router.post('/renewals/:id/issue-followup', async (req, res) => {
   res.status(201).json({
     renewal: await mapRenewal(renewalAfter),
     contract: mapContract(contractAfter!, dealMap.get(contractAfter!.dealId)?.name ?? 'Unknown'),
+  });
+});
+
+// POST /renewals/:id/notify-owner — schickt eine Erinnerung an die/den
+// Account-Manager:in. Owner wird primär aus dem Account aufgelöst; Fallback ist
+// der ownerId des Deals, der zum Vertrag der Renewal gehört. Es wird kein
+// echter Mailversand gemacht — wir schreiben Timeline-Event + Audit, damit
+// andere AMs sehen, dass jemand die Renewal bereits an die zuständige Person
+// eskaliert hat.
+async function resolveRenewalOwner(
+  row: typeof renewalOpportunitiesTable.$inferSelect,
+): Promise<{ ownerId: string; ownerName: string; ownerEmail: string | null; source: 'account' | 'contract' } | null> {
+  const [acc] = await db.select().from(accountsTable).where(eq(accountsTable.id, row.accountId));
+  if (acc?.ownerId) {
+    const [u] = await db.select().from(usersTable).where(eq(usersTable.id, acc.ownerId));
+    if (u) return { ownerId: u.id, ownerName: u.name, ownerEmail: u.email ?? null, source: 'account' };
+  }
+  const [c] = await db.select().from(contractsTable).where(eq(contractsTable.id, row.contractId));
+  if (c?.dealId) {
+    const [d] = await db.select().from(dealsTable).where(eq(dealsTable.id, c.dealId));
+    if (d?.ownerId) {
+      const [u] = await db.select().from(usersTable).where(eq(usersTable.id, d.ownerId));
+      if (u) return { ownerId: u.id, ownerName: u.name, ownerEmail: u.email ?? null, source: 'contract' };
+    }
+  }
+  return null;
+}
+
+router.post('/renewals/:id/notify-owner', async (req, res) => {
+  const scope = getScope(req);
+  const existing = await loadVisibleRenewal(req, req.params.id);
+  if (!existing) {
+    res.status(404).json({ error: 'not found' });
+    return;
+  }
+  const owner = await resolveRenewalOwner(existing);
+  if (!owner) {
+    res.status(422).json({ error: 'no owner assigned to account or contract' });
+    return;
+  }
+  // Timeline am verknüpften Deal anhängen, falls vorhanden — sonst nur Audit.
+  const [contract] = await db.select().from(contractsTable).where(eq(contractsTable.id, existing.contractId));
+  const [acc] = await db.select().from(accountsTable).where(eq(accountsTable.id, existing.accountId));
+  const accountLabel = acc?.name ?? existing.accountId;
+  const contractLabel = contract?.title ?? existing.contractId;
+  const dueDate = existing.dueDate;
+  const noticeDeadline = existing.noticeDeadline;
+  const summary = `Renewal-Reminder an ${owner.ownerName} für ${accountLabel} (${contractLabel}, fällig ${dueDate})`;
+  await db.insert(timelineEventsTable).values({
+    id: `tl_${randomUUID().slice(0, 8)}`,
+    tenantId: scope.tenantId,
+    type: 'reminder',
+    title: 'Renewal-Reminder gesendet',
+    description: `Reminder an ${owner.ownerName}${owner.ownerEmail ? ` (${owner.ownerEmail})` : ''} für ${accountLabel} — Vertrag "${contractLabel}", Notice-Frist ${noticeDeadline}, fällig ${dueDate}.`,
+    actor: scope.user?.name ?? 'System',
+    dealId: contract?.dealId ?? null,
+  });
+  await writeAuditFromReq(req, {
+    entityType: 'renewal_opportunity',
+    entityId: existing.id,
+    action: 'notify_owner',
+    summary,
+    actor: scope.user?.name,
+    after: {
+      ownerId: owner.ownerId,
+      ownerName: owner.ownerName,
+      ownerEmail: owner.ownerEmail,
+      source: owner.source,
+    },
+  });
+  res.json({
+    notified: true,
+    ownerId: owner.ownerId,
+    ownerName: owner.ownerName,
+    ownerEmail: owner.ownerEmail,
+    source: owner.source,
+  });
+});
+
+// POST /renewals/_bulk — Sammelaktionen aus dem Trendchart (Task #120).
+// Unterstützt 'snooze', 'won', 'lost', 'cancelled', 'open' und 'notify'.
+// Nur Renewals, die für den Aufrufer sichtbar sind, werden bearbeitet —
+// alle anderen IDs landen in skippedIds und blockieren die Aktion nicht.
+const RenewalBulkBody = z.object({
+  ids: z.array(z.string().min(1)).min(1).max(200),
+  action: z.enum(['snooze', 'won', 'lost', 'cancelled', 'open', 'notify']),
+  snoozedUntil: z.string().nullable().optional(),
+  notes: z.string().max(2000).nullable().optional(),
+});
+
+router.post('/renewals/_bulk', async (req, res) => {
+  const parsed = RenewalBulkBody.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: 'invalid request', details: parsed.error.issues });
+    return;
+  }
+  const body = parsed.data;
+  if (body.action === 'snooze' && !body.snoozedUntil) {
+    res.status(422).json({ error: 'snoozedUntil required for snooze action' });
+    return;
+  }
+  const scope = getScope(req);
+  const updated: string[] = [];
+  const notified: Array<{ id: string; ownerId: string; ownerName: string }> = [];
+  const skippedIds: string[] = [];
+  const skippedReasons: Record<string, string> = {};
+
+  for (const id of body.ids) {
+    const existing = await loadVisibleRenewal(req, id);
+    if (!existing) {
+      skippedIds.push(id);
+      skippedReasons[id] = 'not visible';
+      continue;
+    }
+    if (body.action === 'notify') {
+      const owner = await resolveRenewalOwner(existing);
+      if (!owner) {
+        skippedIds.push(id);
+        skippedReasons[id] = 'no owner';
+        continue;
+      }
+      const [contract] = await db.select().from(contractsTable).where(eq(contractsTable.id, existing.contractId));
+      const [acc] = await db.select().from(accountsTable).where(eq(accountsTable.id, existing.accountId));
+      await db.insert(timelineEventsTable).values({
+        id: `tl_${randomUUID().slice(0, 8)}`,
+        tenantId: scope.tenantId,
+        type: 'reminder',
+        title: 'Renewal-Reminder gesendet',
+        description: `Reminder an ${owner.ownerName}${owner.ownerEmail ? ` (${owner.ownerEmail})` : ''} für ${acc?.name ?? existing.accountId} — fällig ${existing.dueDate}.`,
+        actor: scope.user?.name ?? 'System',
+        dealId: contract?.dealId ?? null,
+      });
+      await writeAuditFromReq(req, {
+        entityType: 'renewal_opportunity',
+        entityId: existing.id,
+        action: 'notify_owner',
+        summary: `Bulk-Reminder an ${owner.ownerName}`,
+        actor: scope.user?.name,
+        after: { ownerId: owner.ownerId, ownerName: owner.ownerName, source: owner.source },
+      });
+      notified.push({ id: existing.id, ownerId: owner.ownerId, ownerName: owner.ownerName });
+      updated.push(existing.id);
+      continue;
+    }
+    const patch: Partial<typeof renewalOpportunitiesTable.$inferInsert> = { updatedAt: new Date() };
+    patch.status = body.action;
+    if (body.action !== 'open' && body.action !== 'snooze') {
+      patch.decidedAt = new Date();
+      patch.decidedBy = scope.user?.id ?? null;
+    }
+    if (body.action === 'snooze' && body.snoozedUntil !== undefined) {
+      patch.snoozedUntil = body.snoozedUntil;
+    }
+    if (body.notes !== undefined) patch.notes = body.notes;
+    await db.update(renewalOpportunitiesTable)
+      .set(patch)
+      .where(eq(renewalOpportunitiesTable.id, existing.id));
+    await writeAuditFromReq(req, {
+      entityType: 'renewal_opportunity',
+      entityId: existing.id,
+      action: 'bulk_update',
+      summary: `Bulk-Aktion: ${existing.status} → ${body.action}`,
+      actor: scope.user?.name,
+      before: existing,
+    });
+    updated.push(existing.id);
+  }
+  res.json({
+    updated: updated.length,
+    notified,
+    skipped: skippedIds.length,
+    skippedIds,
+    skippedReasons,
   });
 });
 

@@ -6629,6 +6629,8 @@ export const DecideClauseImportSuggestionResponse = zod
 export const listRenewalsQueryMinRiskMin = 0;
 export const listRenewalsQueryMinRiskMax = 100;
 
+export const listRenewalsQueryDueYmRegExp = new RegExp("^\\d{4}-\\d{2}$");
+
 export const ListRenewalsQueryParams = zod.object({
   bucket: zod.enum(["this_month", "next_90", "risk"]).optional(),
   minRisk: zod.coerce
@@ -6641,6 +6643,13 @@ export const ListRenewalsQueryParams = zod.object({
     .optional(),
   accountId: zod.coerce.string().optional(),
   brandId: zod.coerce.string().optional(),
+  dueYm: zod.coerce
+    .string()
+    .regex(listRenewalsQueryDueYmRegExp)
+    .optional()
+    .describe(
+      "Filter auf dueDate = exakt YYYY-MM (Drill-down aus Trendchart).",
+    ),
 });
 
 export const listRenewalsResponseRiskScoreMin = 0;
@@ -6966,6 +6975,53 @@ auf `won` geschaltet.
  */
 export const IssueRenewalFollowupParams = zod.object({
   id: zod.coerce.string(),
+});
+
+/**
+ * Schickt eine Renewal-Erinnerung an die für den Account zuständige Person. Owner wird aus account.ownerId aufgelöst (Fallback: contract.salesOwnerId). Wir schreiben Timeline-Event + Audit-Eintrag.
+ * @summary Account-Manager:in über das Renewal benachrichtigen
+ */
+export const NotifyRenewalOwnerParams = zod.object({
+  id: zod.coerce.string(),
+});
+
+export const NotifyRenewalOwnerResponse = zod.object({
+  notified: zod.boolean(),
+  ownerId: zod.string(),
+  ownerName: zod.string(),
+  ownerEmail: zod.string().nullish(),
+  source: zod
+    .enum(["account", "contract"])
+    .describe("Wo der Owner aufgelöst wurde."),
+});
+
+/**
+ * Wendet dieselbe Aktion auf mehrere sichtbare Renewals an. Renewals außerhalb des Sichtbarkeits-Scope landen in skippedIds und blockieren die Aktion nicht. action='snooze' verlangt snoozedUntil.
+ * @summary Sammelaktion auf mehrere Renewals (snooze/notify/Status)
+ */
+
+export const BulkRenewalActionBody = zod.object({
+  ids: zod.array(zod.string()).min(1),
+  action: zod.enum(["snooze", "won", "lost", "cancelled", "open", "notify"]),
+  snoozedUntil: zod.coerce
+    .date()
+    .nullish()
+    .describe("Erforderlich bei action=snooze."),
+  notes: zod.string().nullish(),
+});
+
+export const BulkRenewalActionResponse = zod.object({
+  updated: zod.number(),
+  notified: zod.array(
+    zod.object({
+      id: zod.string(),
+      ownerId: zod.string(),
+      ownerName: zod.string(),
+    }),
+  ),
+  skipped: zod.number(),
+  skippedIds: zod.array(zod.string()),
+  skippedReasons: zod.record(zod.string(), zod.string()),
 });
 
 /**
