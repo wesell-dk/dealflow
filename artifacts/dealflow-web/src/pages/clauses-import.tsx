@@ -177,9 +177,15 @@ function ListView({ onOpenJob }: { onOpenJob: (id: string) => void }) {
       await qc.invalidateQueries({ queryKey: getListClauseImportsQueryKey() });
       onOpenJob(job.id);
     } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      const isUnsupportedType =
+        /contentType|mimeType/i.test(msg) &&
+        /pdf|docx/i.test(msg);
       toast({
-        title: t("pages.clauseImport.uploadFailed"),
-        description: e instanceof Error ? e.message : String(e),
+        title: isUnsupportedType
+          ? t("pages.clauseImport.filePickError")
+          : t("pages.clauseImport.uploadFailed"),
+        description: isUnsupportedType ? undefined : msg,
         variant: "destructive",
       });
     } finally {
