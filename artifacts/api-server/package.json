@@ -12,7 +12,8 @@
     "test:renewals": "node --import tsx --test --test-reporter=spec tests/renewals.test.ts",
     "test:approvals": "node --import tsx --test --test-reporter=spec tests/approval-chains.test.ts",
     "test:external": "node --import tsx --test --test-reporter=spec tests/external-contracts.test.ts",
-    "test": "pnpm run test:isolation && pnpm run test:renewals && pnpm run test:approvals && pnpm run test:external"
+    "test:clauses": "node --import tsx --test --test-reporter=spec tests/clause-variants.test.ts",
+    "test": "pnpm run test:isolation && pnpm run test:renewals && pnpm run test:approvals && pnpm run test:external && pnpm run test:clauses"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.90.0",

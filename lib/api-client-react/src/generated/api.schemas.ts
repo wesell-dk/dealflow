@@ -2933,6 +2933,119 @@ export interface RenewalSummary {
   atRisk: RenewalBucketStat;
 }
 
+export interface BrandClauseOverride {
+  id: string;
+  tenantId: string;
+  brandId: string;
+  baseVariantId: string;
+  name?: string | null;
+  summary?: string | null;
+  body?: string | null;
+  tone?: string | null;
+  severity?: string | null;
+  /**
+   * @minimum 1
+   * @maximum 5
+   */
+  severityScore?: number | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface BrandClauseOverridePatch {
+  name?: string | null;
+  summary?: string | null;
+  body?: string | null;
+  tone?: string | null;
+  severity?: string | null;
+  /**
+   * @minimum 1
+   * @maximum 5
+   */
+  severityScore?: number | null;
+}
+
+export type ClauseCompatibilityRuleKind =
+  (typeof ClauseCompatibilityRuleKind)[keyof typeof ClauseCompatibilityRuleKind];
+
+export const ClauseCompatibilityRuleKind = {
+  requires: "requires",
+  conflicts: "conflicts",
+} as const;
+
+export interface ClauseCompatibilityRule {
+  id: string;
+  tenantId: string;
+  fromVariantId: string;
+  toVariantId: string;
+  kind: ClauseCompatibilityRuleKind;
+  note?: string | null;
+  createdAt: string;
+}
+
+export type ClauseCompatibilityCreateKind =
+  (typeof ClauseCompatibilityCreateKind)[keyof typeof ClauseCompatibilityCreateKind];
+
+export const ClauseCompatibilityCreateKind = {
+  requires: "requires",
+  conflicts: "conflicts",
+} as const;
+
+export interface ClauseCompatibilityCreate {
+  fromVariantId: string;
+  toVariantId: string;
+  kind: ClauseCompatibilityCreateKind;
+  note?: string | null;
+}
+
+export type ContractClauseCompatibilityStatus =
+  (typeof ContractClauseCompatibilityStatus)[keyof typeof ContractClauseCompatibilityStatus];
+
+export const ContractClauseCompatibilityStatus = {
+  ok: "ok",
+  warning: "warning",
+  conflict: "conflict",
+} as const;
+
+export type ContractClauseCompatibilityConflictsItem = {
+  withVariantId: string;
+  withVariantName: string;
+  withFamilyId: string;
+  withFamilyName: string;
+  note?: string | null;
+};
+
+export type ContractClauseCompatibilityRequiresOpenItem = {
+  requiredVariantId: string;
+  requiredVariantName: string;
+  requiredFamilyId: string;
+  requiredFamilyName: string;
+  note?: string | null;
+};
+
+export type ContractClauseCompatibilityRequiresOkItem = {
+  requiredVariantId: string;
+  requiredVariantName: string;
+  note?: string | null;
+};
+
+export interface ContractClauseCompatibility {
+  contractClauseId: string;
+  familyId?: string | null;
+  familyName: string;
+  activeVariantId?: string | null;
+  activeVariantName?: string;
+  status: ContractClauseCompatibilityStatus;
+  conflicts: ContractClauseCompatibilityConflictsItem[];
+  requiresOpen: ContractClauseCompatibilityRequiresOpenItem[];
+  requiresOk: ContractClauseCompatibilityRequiresOkItem[];
+}
+
+export interface ContractCompatibilityReport {
+  contractId: string;
+  items: ContractClauseCompatibility[];
+}
+
 export type ListCompaniesParams = {
   /**
  * If true, returns the FULL permitted set (ignoring active scope filter).

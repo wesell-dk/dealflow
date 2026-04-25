@@ -95,6 +95,8 @@ import {
   savedViewsTable,
   externalContractsTable,
   renewalOpportunitiesTable,
+  brandClauseVariantOverridesTable,
+  clauseVariantCompatibilityTable,
 } from '@workspace/db';
 import {
   generatePriceRejectionForReaction,
@@ -2356,19 +2358,28 @@ router.post('/contracts', async (req, res) => {
   if (brandForSeed) {
     const brand = brandForSeed;
     if (brand.defaultClauseVariants) {
+      const tenantIdForSeed = getScope(req).tenantId;
       const families = await db.select().from(clauseFamiliesTable);
       const variants = await db.select().from(clauseVariantsTable);
       const vById = new Map(variants.map(v => [v.id, v]));
+      // Lade alle Brand-Overrides einmal
+      const overrides = await db.select().from(brandClauseVariantOverridesTable).where(and(
+        eq(brandClauseVariantOverridesTable.tenantId, tenantIdForSeed),
+        eq(brandClauseVariantOverridesTable.brandId, brand.id),
+      ));
+      const ovByVariant = new Map(overrides.map(o => [o.baseVariantId, o]));
       const rows = families
         .map(f => {
           const vId = (brand.defaultClauseVariants as Record<string, string>)[f.id];
           const v = vId ? vById.get(vId) : undefined;
           if (!v) return null;
-          const sev = v.severityScore <= 2 ? 'high' : v.severityScore === 3 ? 'medium' : 'low';
+          const ov = ovByVariant.get(v.id);
+          const resolved = applyOverride(v, ov, brand.id);
+          const sev = resolved.severity || severityLabelFromScore(resolved.severityScore);
           return {
             id: `cc_${randomUUID().slice(0, 8)}`,
             contractId: id, familyId: f.id, activeVariantId: v.id,
-            family: f.name, variant: v.name, severity: sev, summary: v.summary,
+            family: f.name, variant: resolved.name, severity: sev, summary: resolved.summary,
           };
         })
         .filter((r): r is NonNullable<typeof r> => r !== null);
@@ -3678,11 +3689,23 @@ router.patch('/contract-clauses/:id', async (req, res) => {
   const dealMap = await getDealMap();
   const dealName = dealMap.get(ctr.dealId)?.name ?? 'Unknown';
   const sevLabel = (s: number) => (s <= 2 ? 'high' : s === 3 ? 'medium' : 'low');
+  let snapName = nextVar.name;
+  let snapSeverity = sevLabel(nextScore);
+  let snapSummary = nextVar.summary;
+  const [dealRowForBrand] = await db.select().from(dealsTable).where(eq(dealsTable.id, ctr.dealId));
+  if (dealRowForBrand?.brandId) {
+    const ov = await loadBrandOverride(dealRowForBrand.brandId, nextVar.id, getScope(req).tenantId);
+    if (ov) {
+      snapName = ov.name ?? nextVar.name;
+      snapSummary = ov.summary ?? nextVar.summary;
+      snapSeverity = ov.severity ?? (ov.severityScore != null ? sevLabel(ov.severityScore) : sevLabel(nextScore));
+    }
+  }
   await db.update(contractClausesTable).set({
     activeVariantId: nextVar.id,
-    variant: nextVar.name,
-    severity: sevLabel(nextScore),
-    summary: nextVar.summary,
+    variant: snapName,
+    severity: snapSeverity,
+    summary: snapSummary,
   }).where(eq(contractClausesTable.id, cl.id));
   await writeAuditFromReq(req, {    entityType: 'contract', entityId: ctr.id, action: 'clause_variant_changed',
     summary: `${cl.family}: ${prevVar?.name ?? '—'} → ${nextVar.name} (Δ severityScore ${deltaScore >= 0 ? '+' : ''}${deltaScore})`,
@@ -8712,6 +8735,350 @@ router.patch('/renewals/:id', async (req, res) => {
     after,
   });
   res.json(await mapRenewal(after));
+});
+
+// =============================================================================
+// Brand-spezifische Klausel-Varianten + Kompatibilitäts-Regeln (Task #68)
+// =============================================================================
+
+type ResolvedVariant = {
+  id: string;
+  familyId: string;
+  name: string;
+  summary: string;
+  body: string;
+  tone: string;
+  severity: string;
+  severityScore: number;
+  isOverride: boolean;
+  brandId: string | null;
+};
+
+async function loadBrandOverride(
+  brandId: string,
+  baseVariantId: string,
+  tenantId: string,
+): Promise<typeof brandClauseVariantOverridesTable.$inferSelect | undefined> {
+  const [row] = await db.select().from(brandClauseVariantOverridesTable).where(and(
+    eq(brandClauseVariantOverridesTable.tenantId, tenantId),
+    eq(brandClauseVariantOverridesTable.brandId, brandId),
+    eq(brandClauseVariantOverridesTable.baseVariantId, baseVariantId),
+  ));
+  return row;
+}
+
+function applyOverride(
+  base: typeof clauseVariantsTable.$inferSelect,
+  ov: typeof brandClauseVariantOverridesTable.$inferSelect | undefined,
+  brandId: string | null,
+): ResolvedVariant {
+  return {
+    id: base.id,
+    familyId: base.familyId,
+    name: ov?.name ?? base.name,
+    summary: ov?.summary ?? base.summary,
+    body: ov?.body ?? base.body,
+    tone: ov?.tone ?? base.tone,
+    severity: ov?.severity ?? base.severity,
+    severityScore: ov?.severityScore ?? base.severityScore,
+    isOverride: !!ov,
+    brandId,
+  };
+}
+
+async function resolveVariantForBrand(
+  variantId: string,
+  brandId: string | null,
+  tenantId: string,
+): Promise<ResolvedVariant | null> {
+  const [base] = await db.select().from(clauseVariantsTable).where(eq(clauseVariantsTable.id, variantId));
+  if (!base) return null;
+  if (!brandId) return applyOverride(base, undefined, null);
+  const ov = await loadBrandOverride(brandId, variantId, tenantId);
+  return applyOverride(base, ov, brandId);
+}
+
+function severityLabelFromScore(score: number): string {
+  return score <= 2 ? 'high' : score === 3 ? 'medium' : 'low';
+}
+
+function mapBrandClauseOverride(row: typeof brandClauseVariantOverridesTable.$inferSelect) {
+  return {
+    id: row.id,
+    tenantId: row.tenantId,
+    brandId: row.brandId,
+    baseVariantId: row.baseVariantId,
+    name: row.name ?? null,
+    summary: row.summary ?? null,
+    body: row.body ?? null,
+    tone: row.tone ?? null,
+    severity: row.severity ?? null,
+    severityScore: row.severityScore ?? null,
+    createdAt: (row.createdAt instanceof Date ? row.createdAt : new Date(row.createdAt as unknown as string)).toISOString(),
+    updatedAt: (row.updatedAt instanceof Date ? row.updatedAt : new Date(row.updatedAt as unknown as string)).toISOString(),
+  };
+}
+
+function mapClauseCompatibilityRule(row: typeof clauseVariantCompatibilityTable.$inferSelect) {
+  return {
+    id: row.id,
+    tenantId: row.tenantId,
+    fromVariantId: row.fromVariantId,
+    toVariantId: row.toVariantId,
+    kind: row.kind as 'requires' | 'conflicts',
+    note: row.note ?? null,
+    createdAt: (row.createdAt instanceof Date ? row.createdAt : new Date(row.createdAt as unknown as string)).toISOString(),
+  };
+}
+
+// --- GET /brands/:brandId/clause-overrides --------------------------------
+router.get('/brands/:brandId/clause-overrides', async (req, res) => {
+  const scope = getScope(req);
+  const [brand] = await db.select().from(brandsTable).where(eq(brandsTable.id, req.params.brandId));
+  if (!brand) { res.status(404).json({ error: 'brand not found' }); return; }
+  if (!(await brandVisible(req, brand))) { res.status(403).json({ error: 'forbidden' }); return; }
+  const rows = await db.select().from(brandClauseVariantOverridesTable).where(and(
+    eq(brandClauseVariantOverridesTable.tenantId, scope.tenantId),
+    eq(brandClauseVariantOverridesTable.brandId, brand.id),
+  ));
+  res.json(rows.map(mapBrandClauseOverride));
+});
+
+// --- PUT /brands/:brandId/clause-overrides/:baseVariantId (upsert) --------
+router.put('/brands/:brandId/clause-overrides/:baseVariantId', async (req, res) => {
+  const scope = getScope(req);
+  const [brand] = await db.select().from(brandsTable).where(eq(brandsTable.id, req.params.brandId));
+  if (!brand) { res.status(404).json({ error: 'brand not found' }); return; }
+  if (!(await brandVisible(req, brand))) { res.status(403).json({ error: 'forbidden' }); return; }
+  if (!isTenantAdmin(req)) { res.status(403).json({ error: 'tenant admin required' }); return; }
+  const [base] = await db.select().from(clauseVariantsTable).where(eq(clauseVariantsTable.id, req.params.baseVariantId));
+  if (!base) { res.status(400).json({ error: 'base variant not found' }); return; }
+  const body = (req.body ?? {}) as {
+    name?: string | null;
+    summary?: string | null;
+    body?: string | null;
+    tone?: string | null;
+    severity?: string | null;
+    severityScore?: number | null;
+  };
+  let sevScore: number | null = null;
+  if (body.severityScore != null) {
+    const raw = Number(body.severityScore);
+    if (!Number.isFinite(raw) || !Number.isInteger(raw) || raw < 1 || raw > 5) {
+      res.status(400).json({ error: 'severityScore must be an integer 1..5' }); return;
+    }
+    sevScore = raw;
+  }
+  if (body.severity != null && body.severity !== '' && !['low', 'medium', 'high'].includes(body.severity)) {
+    res.status(400).json({ error: "severity must be one of 'low' | 'medium' | 'high'" }); return;
+  }
+  const existing = await loadBrandOverride(brand.id, base.id, scope.tenantId);
+  const now = new Date();
+  if (existing) {
+    // PATCH-Semantik: nur Felder, die explizit im Body stehen, werden geschrieben.
+    const updates: Partial<typeof brandClauseVariantOverridesTable.$inferInsert> = { updatedAt: now };
+    if ('name' in body) updates.name = body.name ?? null;
+    if ('summary' in body) updates.summary = body.summary ?? null;
+    if ('body' in body) updates.body = body.body ?? null;
+    if ('tone' in body) updates.tone = body.tone ?? null;
+    if ('severity' in body) updates.severity = body.severity ?? null;
+    if ('severityScore' in body) updates.severityScore = sevScore;
+    await db.update(brandClauseVariantOverridesTable).set(updates)
+      .where(eq(brandClauseVariantOverridesTable.id, existing.id));
+    await writeAuditFromReq(req, {
+      entityType: 'brand', entityId: brand.id, action: 'clause_override_updated',
+      summary: `Brand-Override aktualisiert: ${base.name}`,
+      before: { name: existing.name, summary: existing.summary, body: existing.body, tone: existing.tone, severity: existing.severity, severityScore: existing.severityScore },
+      after: { name: body.name ?? null, summary: body.summary ?? null, body: body.body ?? null, tone: body.tone ?? null, severity: body.severity ?? null, severityScore: sevScore },
+    });
+  } else {
+    const id = `bco_${randomUUID().slice(0, 12)}`;
+    await db.insert(brandClauseVariantOverridesTable).values({
+      id,
+      tenantId: scope.tenantId,
+      brandId: brand.id,
+      baseVariantId: base.id,
+      name: body.name ?? null,
+      summary: body.summary ?? null,
+      body: body.body ?? null,
+      tone: body.tone ?? null,
+      severity: body.severity ?? null,
+      severityScore: sevScore,
+    });
+    await writeAuditFromReq(req, {
+      entityType: 'brand', entityId: brand.id, action: 'clause_override_created',
+      summary: `Brand-Override angelegt: ${base.name}`,
+      after: { id, baseVariantId: base.id, name: body.name ?? null },
+    });
+  }
+  const after = await loadBrandOverride(brand.id, base.id, scope.tenantId);
+  res.json(mapBrandClauseOverride(after!));
+});
+
+// --- DELETE /brands/:brandId/clause-overrides/:baseVariantId --------------
+router.delete('/brands/:brandId/clause-overrides/:baseVariantId', async (req, res) => {
+  const scope = getScope(req);
+  const [brand] = await db.select().from(brandsTable).where(eq(brandsTable.id, req.params.brandId));
+  if (!brand) { res.status(404).json({ error: 'brand not found' }); return; }
+  if (!(await brandVisible(req, brand))) { res.status(403).json({ error: 'forbidden' }); return; }
+  if (!isTenantAdmin(req)) { res.status(403).json({ error: 'tenant admin required' }); return; }
+  const existing = await loadBrandOverride(brand.id, req.params.baseVariantId, scope.tenantId);
+  if (!existing) { res.status(404).json({ error: 'override not found' }); return; }
+  await db.delete(brandClauseVariantOverridesTable).where(eq(brandClauseVariantOverridesTable.id, existing.id));
+  await writeAuditFromReq(req, {
+    entityType: 'brand', entityId: brand.id, action: 'clause_override_deleted',
+    summary: `Brand-Override gelöscht: ${existing.baseVariantId}`,
+    before: { id: existing.id, baseVariantId: existing.baseVariantId },
+  });
+  res.status(204).end();
+});
+
+// --- GET /clause-compatibility -------------------------------------------
+router.get('/clause-compatibility', async (req, res) => {
+  const scope = getScope(req);
+  const rows = await db.select().from(clauseVariantCompatibilityTable)
+    .where(eq(clauseVariantCompatibilityTable.tenantId, scope.tenantId));
+  res.json(rows.map(mapClauseCompatibilityRule));
+});
+
+// --- POST /clause-compatibility ------------------------------------------
+router.post('/clause-compatibility', async (req, res) => {
+  if (!isTenantAdmin(req)) { res.status(403).json({ error: 'tenant admin required' }); return; }
+  const scope = getScope(req);
+  const body = (req.body ?? {}) as { fromVariantId?: string; toVariantId?: string; kind?: string; note?: string | null };
+  const fromVariantId = typeof body.fromVariantId === 'string' ? body.fromVariantId : '';
+  const toVariantId = typeof body.toVariantId === 'string' ? body.toVariantId : '';
+  const kind = body.kind === 'requires' || body.kind === 'conflicts' ? body.kind : null;
+  if (!fromVariantId || !toVariantId || !kind) {
+    res.status(400).json({ error: 'fromVariantId, toVariantId and kind (requires|conflicts) are required' }); return;
+  }
+  if (fromVariantId === toVariantId) {
+    res.status(400).json({ error: 'fromVariantId and toVariantId must differ' }); return;
+  }
+  const [fromV] = await db.select().from(clauseVariantsTable).where(eq(clauseVariantsTable.id, fromVariantId));
+  const [toV] = await db.select().from(clauseVariantsTable).where(eq(clauseVariantsTable.id, toVariantId));
+  if (!fromV || !toV) { res.status(400).json({ error: 'variant not found' }); return; }
+  const id = `ccr_${randomUUID().slice(0, 12)}`;
+  try {
+    await db.insert(clauseVariantCompatibilityTable).values({
+      id,
+      tenantId: scope.tenantId,
+      fromVariantId,
+      toVariantId,
+      kind,
+      note: body.note ?? null,
+    });
+  } catch {
+    res.status(409).json({ error: 'duplicate rule' }); return;
+  }
+  await writeAuditFromReq(req, {
+    entityType: 'clause_compatibility', entityId: id, action: 'created',
+    summary: `Kompatibilitäts-Regel: ${fromV.name} ${kind} ${toV.name}`,
+    after: { id, fromVariantId, toVariantId, kind, note: body.note ?? null },
+  });
+  const [after] = await db.select().from(clauseVariantCompatibilityTable).where(eq(clauseVariantCompatibilityTable.id, id));
+  res.status(201).json(mapClauseCompatibilityRule(after!));
+});
+
+// --- DELETE /clause-compatibility/:id ------------------------------------
+router.delete('/clause-compatibility/:id', async (req, res) => {
+  if (!isTenantAdmin(req)) { res.status(403).json({ error: 'tenant admin required' }); return; }
+  const scope = getScope(req);
+  const [row] = await db.select().from(clauseVariantCompatibilityTable).where(and(
+    eq(clauseVariantCompatibilityTable.id, req.params.id),
+    eq(clauseVariantCompatibilityTable.tenantId, scope.tenantId),
+  ));
+  if (!row) { res.status(404).json({ error: 'not found' }); return; }
+  await db.delete(clauseVariantCompatibilityTable).where(eq(clauseVariantCompatibilityTable.id, row.id));
+  await writeAuditFromReq(req, {
+    entityType: 'clause_compatibility', entityId: row.id, action: 'deleted',
+    summary: `Kompatibilitäts-Regel entfernt`,
+    before: { id: row.id, fromVariantId: row.fromVariantId, toVariantId: row.toVariantId, kind: row.kind },
+  });
+  res.status(204).end();
+});
+
+// --- GET /contracts/:id/clauses/_compatibility ---------------------------
+router.get('/contracts/:id/clauses/_compatibility', async (req, res) => {
+  const scope = getScope(req);
+  const [c] = await db.select().from(contractsTable).where(eq(contractsTable.id, req.params.id));
+  if (!c) { res.status(404).json({ error: 'not found' }); return; }
+  if (!(await gateDeal(req, res, c.dealId))) return;
+
+  const clauses = await db.select().from(contractClausesTable).where(eq(contractClausesTable.contractId, c.id));
+  const activeVariantIds = clauses.map(cl => cl.activeVariantId).filter((x): x is string => !!x);
+  if (activeVariantIds.length === 0) {
+    res.json({ contractId: c.id, items: [] });
+    return;
+  }
+  const rules = await db.select().from(clauseVariantCompatibilityTable).where(and(
+    eq(clauseVariantCompatibilityTable.tenantId, scope.tenantId),
+    inArray(clauseVariantCompatibilityTable.fromVariantId, activeVariantIds),
+  ));
+  // Map active variant -> family
+  const variants = await db.select().from(clauseVariantsTable);
+  const variantById = new Map(variants.map(v => [v.id, v]));
+  const familyById = new Map(
+    (await db.select().from(clauseFamiliesTable)).map(f => [f.id, f]),
+  );
+  const activeVarIds = new Set(activeVariantIds);
+
+  const items = clauses.map(cl => {
+    const conflicts: Array<{ withVariantId: string; withVariantName: string; withFamilyId: string; withFamilyName: string; note: string | null }> = [];
+    const requiresOpen: Array<{ requiredVariantId: string; requiredVariantName: string; requiredFamilyId: string; requiredFamilyName: string; note: string | null }> = [];
+    const requiresOk: Array<{ requiredVariantId: string; requiredVariantName: string; note: string | null }> = [];
+
+    if (cl.activeVariantId) {
+      for (const r of rules) {
+        if (r.fromVariantId !== cl.activeVariantId) continue;
+        const targetV = variantById.get(r.toVariantId);
+        if (!targetV) continue;
+        const targetF = familyById.get(targetV.familyId);
+        if (r.kind === 'conflicts') {
+          if (activeVarIds.has(r.toVariantId)) {
+            conflicts.push({
+              withVariantId: r.toVariantId,
+              withVariantName: targetV.name,
+              withFamilyId: targetV.familyId,
+              withFamilyName: targetF?.name ?? targetV.familyId,
+              note: r.note ?? null,
+            });
+          }
+        } else if (r.kind === 'requires') {
+          if (activeVarIds.has(r.toVariantId)) {
+            requiresOk.push({
+              requiredVariantId: r.toVariantId,
+              requiredVariantName: targetV.name,
+              note: r.note ?? null,
+            });
+          } else {
+            requiresOpen.push({
+              requiredVariantId: r.toVariantId,
+              requiredVariantName: targetV.name,
+              requiredFamilyId: targetV.familyId,
+              requiredFamilyName: targetF?.name ?? targetV.familyId,
+              note: r.note ?? null,
+            });
+          }
+        }
+      }
+    }
+    const status: 'ok' | 'warning' | 'conflict' =
+      conflicts.length > 0 ? 'conflict' : (requiresOpen.length > 0 ? 'warning' : 'ok');
+    return {
+      contractClauseId: cl.id,
+      familyId: cl.familyId ?? null,
+      familyName: cl.family,
+      activeVariantId: cl.activeVariantId ?? null,
+      activeVariantName: cl.variant,
+      status,
+      conflicts,
+      requiresOpen,
+      requiresOk,
+    };
+  });
+
+  res.json({ contractId: c.id, items });
 });
 
 export default router;

@@ -15,6 +15,7 @@ import {
   useListObligations,
   useUpdateObligation,
   useDeriveContractObligations,
+  useGetContractClauseCompatibility,
   getGetContractQueryKey,
   getListContractClausesQueryKey,
   getListContractAmendmentsQueryKey,
@@ -101,6 +102,9 @@ export default function Contract() {
   const { data: contract, isLoading: isLoadingContract } = useGetContract(id ?? "");
   const { data: families, isLoading: isLoadingFamilies } = useListClauseFamilies();
   const { data: clauses, isLoading: isLoadingClauses } = useListContractClauses(id ?? "");
+  const { data: compatReport } = useGetContractClauseCompatibility(id ?? "", {
+    query: { enabled: !!id, queryKey: ["contractClauseCompatibility", id] },
+  });
   const patchClause = usePatchContractClause();
 
   const [diff, setDiff] = useState<DiffState>(null);
@@ -124,6 +128,7 @@ export default function Contract() {
       await Promise.all([
         qc.invalidateQueries({ queryKey: getGetContractQueryKey(id) }),
         qc.invalidateQueries({ queryKey: getListContractClausesQueryKey(id) }),
+        qc.invalidateQueries({ queryKey: ["contractClauseCompatibility", id] }),
       ]);
       toast({
         title: t("pages.contracts.variantChanged"),
@@ -235,6 +240,7 @@ export default function Contract() {
             {clauses?.map(clause => {
               const fam = familyMap.get(clause.familyId ?? "");
               const variants = fam?.variants ?? [];
+              const compat = compatReport?.items?.find(c => c.contractClauseId === clause.id);
               return (
                 <Card
                   key={clause.id}
@@ -256,6 +262,7 @@ export default function Contract() {
                         <span className="text-muted-foreground">
                           {t("pages.contracts.score")}: <strong className="tabular-nums">{clause.severityScore ?? "—"}</strong>
                         </span>
+                        {compat && <CompatBadge compat={compat} />}
                       </div>
                     </div>
                     <div className="flex items-center gap-2 shrink-0">
@@ -959,5 +966,63 @@ function ObligationsSection({ contractId, contractStatus }: { contractId: string
         </div>
       )}
     </div>
+  );
+}
+
+type CompatEntry = {
+  contractClauseId: string;
+  status: "ok" | "warning" | "conflict";
+  conflicts?: Array<{ withFamilyName?: string | null; withVariantName?: string | null; note?: string | null }> | null;
+  requiresOpen?: Array<{ requiredFamilyName?: string | null; requiredVariantName?: string | null; note?: string | null }> | null;
+};
+
+function CompatBadge({ compat }: { compat: CompatEntry }) {
+  const { t } = useTranslation();
+  const conflicts = compat.conflicts ?? [];
+  const open = compat.requiresOpen ?? [];
+
+  if (compat.status === "ok") {
+    return (
+      <Badge
+        variant="outline"
+        className="bg-emerald-500/10 text-emerald-600 border-emerald-500/30 text-xs"
+        data-testid={`compat-badge-${compat.contractClauseId}`}
+      >
+        ✓ {t("pages.clauses.compatBadgeOk")}
+      </Badge>
+    );
+  }
+
+  const isConflict = compat.status === "conflict";
+  const lines: string[] = [];
+  conflicts.forEach(c => {
+    lines.push(t("pages.clauses.compatConflictLine", {
+      variant: c.withVariantName ?? "?",
+      family: c.withFamilyName ?? "?",
+    }));
+    if (c.note) lines.push(`— ${c.note}`);
+  });
+  open.forEach(c => {
+    lines.push(t("pages.clauses.compatRequiresOpenLine", {
+      variant: c.requiredVariantName ?? "?",
+      family: c.requiredFamilyName ?? "?",
+    }));
+    if (c.note) lines.push(`— ${c.note}`);
+  });
+
+  return (
+    <Badge
+      variant="outline"
+      className={
+        isConflict
+          ? "bg-rose-500/10 text-rose-600 border-rose-500/30 text-xs cursor-help"
+          : "bg-amber-500/10 text-amber-600 border-amber-500/30 text-xs cursor-help"
+      }
+      title={lines.join("\n")}
+      data-testid={`compat-badge-${compat.contractClauseId}`}
+    >
+      {isConflict ? "✕ " : "⚠ "}
+      {isConflict ? t("pages.clauses.compatBadgeConflict") : t("pages.clauses.compatBadgeWarning")}
+    </Badge>
   );
 }

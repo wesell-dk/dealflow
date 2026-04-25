@@ -82,6 +82,33 @@ Phase-1-Lücken aus `docs/konzept/03_vertragswesen.md` (Kap. 12) geschlossen:
 
 Validierung: Backend-Typecheck grün, dealflow-web Typecheck grün, alle Smoke-Endpunkte 200, e2e-Test (15 Schritte) grün.
 
+## Brand-spezifische Klausel-Varianten + Kompatibilität (Apr 2026, Task #68)
+
+- **Schema** (`lib/db/src/schema/index.ts`): `brandClauseVariantOverridesTable`
+  (Brand-spezifischer Override für Name/Summary/Body/Tone/Severity/SeverityScore
+  je System-Klausel-Variante, Unique(brandId, baseVariantId)) +
+  `clauseVariantCompatibilityTable` (Regeln `requires`/`conflicts` zwischen zwei
+  Varianten, tenant-scoped, Unique(tenantId, fromVariantId, toVariantId, kind)).
+- **Engine** (`artifacts/api-server/src/routes/dealflow.ts`):
+  `resolveVariantForBrand()` mergt Brand-Override über die Base-Variante.
+  Vertrags-Materialisierung (`POST /contracts`) und Variant-Switch
+  (`PATCH /contract-clauses/:id`) snapshotten den Override-Text. Compatibility-
+  Evaluator (`GET /contracts/:id/clauses/_compatibility`) liefert pro Klausel
+  `status` (`ok`/`warning`/`conflict`) plus `conflicts`/`requiresOpen`/`requiresOk`.
+- **Endpoints**: GET/PUT/DELETE `/brands/:brandId/clause-overrides[/...]`
+  (Brand-Admin/Tenant-Admin), GET/POST/DELETE `/clause-compatibility`
+  (Tenant-Admin für Mutationen), GET `/contracts/:id/clauses/_compatibility`.
+  Strikte Validierung: severityScore muss Integer 1..5 sein (kein Clamping),
+  severity nur 'low'/'medium'/'high'.
+- **Frontend** (`artifacts/dealflow-web/src/pages/clauses.tsx`): Neue Karten
+  "Brand-Overrides" (Brand-Selector + per-Variant Edit-Dialog) und
+  "Kompatibilitäts-Regeln" (Tenant-Admin only, Add-/Delete-Dialog).
+  `pages/contract.tsx` zeigt pro Klausel-Zeile eine Compat-Badge mit Tooltip
+  (Konflikt/Requirements). Variant-PATCH invalidiert die Compat-Query.
+- **Tests** (`artifacts/api-server/tests/clause-variants.test.ts`, 11 Tests grün):
+  Override-Snapshot bei Materialisierung + Variant-Switch, Brand-Scope-Isolation,
+  Role-Gates, Compatibility-Evaluator-Statuslogik, Invalid-Input-Reject.
+
 ## External Dependencies
 
 - **PostgreSQL**: Primary database.

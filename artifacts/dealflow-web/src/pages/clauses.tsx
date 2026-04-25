@@ -1,16 +1,36 @@
 import { useTranslation } from "react-i18next";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import {
   useListClauseFamilies,
   useListBrandsWithDefaults,
   useUpdateBrandDefaultClauses,
   getListBrandsWithDefaultsQueryKey,
+  useListBrandClauseOverrides,
+  useUpsertBrandClauseOverride,
+  useDeleteBrandClauseOverride,
+  getListBrandClauseOverridesQueryKey,
+  useListClauseCompatibility,
+  useCreateClauseCompatibility,
+  useDeleteClauseCompatibility,
+  getListClauseCompatibilityQueryKey,
 } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
+import { useAuth } from "@/contexts/auth-context";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
 import {
   Select,
   SelectContent,
@@ -18,7 +38,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Library, Palette, Save } from "lucide-react";
+import { Library, Palette, Save, Pencil, Trash2, Link2, Plus } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
 function toneClass(tone: string) {
@@ -42,6 +62,8 @@ export default function Clauses() {
   const { t } = useTranslation();
   const { toast } = useToast();
   const qc = useQueryClient();
+  const { user } = useAuth();
+  const isTenantAdmin = !!(user?.isPlatformAdmin || user?.role === "Tenant Admin");
   const { data: families, isLoading } = useListClauseFamilies();
   const { data: brands } = useListBrandsWithDefaults();
   const updateBrand = useUpdateBrandDefaultClauses();
@@ -153,6 +175,14 @@ export default function Clauses() {
         </Card>
       )}
 
+      {(brands?.length ?? 0) > 0 && (families?.length ?? 0) > 0 && (
+        <BrandOverridesSection brands={brands ?? []} families={families ?? []} />
+      )}
+
+      {isTenantAdmin && (families?.length ?? 0) > 0 && (
+        <CompatibilityRulesSection families={families ?? []} />
+      )}
+
       {(families?.length ?? 0) === 0 ? (
         <div className="p-8 text-center border rounded-md text-muted-foreground bg-muted/10">
           {t("pages.clauses.empty")}
@@ -208,5 +238,409 @@ export default function Clauses() {
         </div>
       )}
     </div>
+  );
+}
+
+type BrandLite = { id: string; name: string; color?: string | null };
+type FamilyLite = {
+  id: string;
+  name: string;
+  variants: Array<{
+    id: string;
+    name: string;
+    summary?: string | null;
+    body?: string | null;
+    tone: string;
+    severity: string;
+    severityScore: number;
+  }>;
+};
+
+function BrandOverridesSection({
+  brands,
+  families,
+}: {
+  brands: BrandLite[];
+  families: FamilyLite[];
+}) {
+  const { t } = useTranslation();
+  const { toast } = useToast();
+  const qc = useQueryClient();
+  const [brandId, setBrandId] = useState<string>(brands[0]?.id ?? "");
+  const { data: overrides } = useListBrandClauseOverrides(brandId, {
+    query: { enabled: !!brandId, queryKey: getListBrandClauseOverridesQueryKey(brandId) },
+  });
+  const upsert = useUpsertBrandClauseOverride();
+  const remove = useDeleteBrandClauseOverride();
+  const [editing, setEditing] = useState<{ variantId: string; familyName: string; baseName: string } | null>(null);
+  const [form, setForm] = useState<{
+    name: string;
+    summary: string;
+    body: string;
+    tone: string;
+    severity: string;
+    severityScore: string;
+  }>({ name: "", summary: "", body: "", tone: "", severity: "", severityScore: "" });
+
+  const overrideMap = useMemo(() => {
+    const m = new Map<string, NonNullable<typeof overrides>[number]>();
+    (overrides ?? []).forEach(o => m.set(o.baseVariantId, o));
+    return m;
+  }, [overrides]);
+
+  function openEditor(variant: FamilyLite["variants"][number], familyName: string) {
+    const ov = overrideMap.get(variant.id);
+    setEditing({ variantId: variant.id, familyName, baseName: variant.name });
+    setForm({
+      name: ov?.name ?? "",
+      summary: ov?.summary ?? "",
+      body: ov?.body ?? "",
+      tone: ov?.tone ?? "",
+      severity: ov?.severity ?? "",
+      severityScore: ov?.severityScore != null ? String(ov.severityScore) : "",
+    });
+  }
+
+  async function save() {
+    if (!editing || !brandId) return;
+    const patch: Record<string, unknown> = {
+      name: form.name.trim() || null,
+      summary: form.summary.trim() || null,
+      body: form.body.trim() || null,
+      tone: form.tone.trim() || null,
+      severity: form.severity.trim() || null,
+      severityScore: form.severityScore.trim() === "" ? null : Number(form.severityScore),
+    };
+    await upsert.mutateAsync({
+      brandId,
+      baseVariantId: editing.variantId,
+      data: patch as never,
+    });
+    await qc.invalidateQueries({ queryKey: getListBrandClauseOverridesQueryKey(brandId) });
+    toast({ description: t("pages.clauses.overrideSaved") });
+    setEditing(null);
+  }
+
+  async function removeOverride(variantId: string) {
+    if (!brandId) return;
+    await remove.mutateAsync({ brandId, baseVariantId: variantId });
+    await qc.invalidateQueries({ queryKey: getListBrandClauseOverridesQueryKey(brandId) });
+    toast({ description: t("pages.clauses.overrideRemoved") });
+  }
+
+  return (
+    <Card data-testid="brand-overrides-card">
+      <CardHeader className="flex flex-row items-center gap-2 space-y-0">
+        <Pencil className="h-5 w-5 text-muted-foreground" />
+        <div className="flex-1">
+          <CardTitle>{t("pages.clauses.clauseOverrides")}</CardTitle>
+          <p className="text-xs text-muted-foreground mt-1">{t("pages.clauses.clauseOverridesHint")}</p>
+        </div>
+        <div className="w-64">
+          <Select value={brandId} onValueChange={setBrandId}>
+            <SelectTrigger data-testid="override-brand-select">
+              <SelectValue placeholder={t("pages.clauses.selectBrand")} />
+            </SelectTrigger>
+            <SelectContent>
+              {brands.map(b => (
+                <SelectItem key={b.id} value={b.id}>
+                  <span className="flex items-center gap-2">
+                    {b.color && <span className="w-2 h-2 rounded-full" style={{ backgroundColor: b.color }} />}
+                    {b.name}
+                  </span>
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        {families.map(fam => (
+          <div key={fam.id} className="space-y-2">
+            <h4 className="text-sm font-semibold text-muted-foreground">{fam.name}</h4>
+            <div className="grid md:grid-cols-2 gap-2">
+              {fam.variants.map(v => {
+                const ov = overrideMap.get(v.id);
+                return (
+                  <div
+                    key={v.id}
+                    className="flex items-center justify-between gap-2 p-2 border rounded-md text-sm"
+                    data-testid={`override-row-${v.id}`}
+                  >
+                    <div className="flex-1 min-w-0">
+                      <div className="font-medium truncate">{v.name}</div>
+                      <div className="text-xs text-muted-foreground">{v.tone} · {v.severityScore}</div>
+                    </div>
+                    {ov && (
+                      <Badge variant="outline" className="bg-amber-500/10 text-amber-600 border-amber-500/30 text-xs">
+                        {t("pages.clauses.overrideHasOverride")}
+                      </Badge>
+                    )}
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => openEditor(v, fam.name)}
+                      data-testid={`override-edit-${v.id}`}
+                    >
+                      <Pencil className="h-3 w-3" />
+                    </Button>
+                    {ov && (
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        onClick={() => removeOverride(v.id)}
+                        data-testid={`override-remove-${v.id}`}
+                      >
+                        <Trash2 className="h-3 w-3 text-destructive" />
+                      </Button>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        ))}
+      </CardContent>
+
+      <Dialog open={!!editing} onOpenChange={(o) => { if (!o) setEditing(null); }}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>
+              {editing && t("pages.clauses.overrideEditFor", { variant: editing.baseName })}
+            </DialogTitle>
+            <p className="text-xs text-muted-foreground">{t("pages.clauses.overrideUseBaseHint")}</p>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div>
+              <Label className="text-xs">{t("pages.clauses.overrideName")}</Label>
+              <Input
+                value={form.name}
+                onChange={(e) => setForm(f => ({ ...f, name: e.target.value }))}
+                data-testid="override-input-name"
+              />
+            </div>
+            <div>
+              <Label className="text-xs">{t("pages.clauses.overrideSummary")}</Label>
+              <Input
+                value={form.summary}
+                onChange={(e) => setForm(f => ({ ...f, summary: e.target.value }))}
+                data-testid="override-input-summary"
+              />
+            </div>
+            <div>
+              <Label className="text-xs">{t("pages.clauses.overrideBody")}</Label>
+              <Textarea
+                rows={5}
+                value={form.body}
+                onChange={(e) => setForm(f => ({ ...f, body: e.target.value }))}
+                data-testid="override-input-body"
+              />
+            </div>
+            <div className="grid grid-cols-3 gap-2">
+              <div>
+                <Label className="text-xs">{t("pages.clauses.overrideTone")}</Label>
+                <Input
+                  value={form.tone}
+                  onChange={(e) => setForm(f => ({ ...f, tone: e.target.value }))}
+                  placeholder="zart / mittel / hart"
+                  data-testid="override-input-tone"
+                />
+              </div>
+              <div>
+                <Label className="text-xs">{t("pages.clauses.overrideSeverity")}</Label>
+                <Select
+                  value={form.severity || "__none__"}
+                  onValueChange={(v) => setForm(f => ({ ...f, severity: v === "__none__" ? "" : v }))}
+                >
+                  <SelectTrigger data-testid="override-input-severity">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="__none__">—</SelectItem>
+                    <SelectItem value="low">low</SelectItem>
+                    <SelectItem value="medium">medium</SelectItem>
+                    <SelectItem value="high">high</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label className="text-xs">{t("pages.clauses.overrideSeverityScore")}</Label>
+                <Input
+                  type="number"
+                  min={0}
+                  max={100}
+                  value={form.severityScore}
+                  onChange={(e) => setForm(f => ({ ...f, severityScore: e.target.value }))}
+                  data-testid="override-input-score"
+                />
+              </div>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setEditing(null)}>{t("common.cancel")}</Button>
+            <Button onClick={save} disabled={upsert.isPending} data-testid="override-save">
+              <Save className="h-3 w-3 mr-1" />
+              {t("common.save")}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </Card>
+  );
+}
+
+function CompatibilityRulesSection({ families }: { families: FamilyLite[] }) {
+  const { t } = useTranslation();
+  const { toast } = useToast();
+  const qc = useQueryClient();
+  const { data: rules } = useListClauseCompatibility();
+  const create = useCreateClauseCompatibility();
+  const remove = useDeleteClauseCompatibility();
+  const [open, setOpen] = useState(false);
+  const [form, setForm] = useState<{ fromVariantId: string; toVariantId: string; kind: "requires" | "conflicts"; note: string }>({
+    fromVariantId: "",
+    toVariantId: "",
+    kind: "requires",
+    note: "",
+  });
+
+  const variantIndex = useMemo(() => {
+    const m = new Map<string, { name: string; family: string }>();
+    families.forEach(f => f.variants.forEach(v => m.set(v.id, { name: v.name, family: f.name })));
+    return m;
+  }, [families]);
+
+  async function add() {
+    if (!form.fromVariantId || !form.toVariantId) return;
+    await create.mutateAsync({
+      data: {
+        fromVariantId: form.fromVariantId,
+        toVariantId: form.toVariantId,
+        kind: form.kind,
+        note: form.note.trim() || null,
+      } as never,
+    });
+    await qc.invalidateQueries({ queryKey: getListClauseCompatibilityQueryKey() });
+    setOpen(false);
+    setForm({ fromVariantId: "", toVariantId: "", kind: "requires", note: "" });
+  }
+
+  async function del(id: string) {
+    await remove.mutateAsync({ id });
+    await qc.invalidateQueries({ queryKey: getListClauseCompatibilityQueryKey() });
+    toast({ description: t("common.deleted") });
+  }
+
+  return (
+    <Card data-testid="compatibility-rules-card">
+      <CardHeader className="flex flex-row items-center gap-2 space-y-0">
+        <Link2 className="h-5 w-5 text-muted-foreground" />
+        <div className="flex-1">
+          <CardTitle>{t("pages.clauses.compatTitle")}</CardTitle>
+          <p className="text-xs text-muted-foreground mt-1">{t("pages.clauses.compatHint")}</p>
+        </div>
+        <Dialog open={open} onOpenChange={setOpen}>
+          <DialogTrigger asChild>
+            <Button size="sm" data-testid="compat-add-btn">
+              <Plus className="h-3 w-3 mr-1" />
+              {t("pages.clauses.compatAdd")}
+            </Button>
+          </DialogTrigger>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>{t("pages.clauses.compatAdd")}</DialogTitle>
+            </DialogHeader>
+            <div className="space-y-3">
+              <div>
+                <Label className="text-xs">{t("pages.clauses.compatFromVariant")}</Label>
+                <Select value={form.fromVariantId} onValueChange={(v) => setForm(f => ({ ...f, fromVariantId: v }))}>
+                  <SelectTrigger data-testid="compat-from-select"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    {families.map(fam => fam.variants.map(v => (
+                      <SelectItem key={v.id} value={v.id}>{fam.name} · {v.name}</SelectItem>
+                    )))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label className="text-xs">{t("pages.clauses.compatKind")}</Label>
+                <Select value={form.kind} onValueChange={(v) => setForm(f => ({ ...f, kind: v as "requires" | "conflicts" }))}>
+                  <SelectTrigger data-testid="compat-kind-select"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="requires">{t("pages.clauses.compatRequires")}</SelectItem>
+                    <SelectItem value="conflicts">{t("pages.clauses.compatConflicts")}</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label className="text-xs">{t("pages.clauses.compatToVariant")}</Label>
+                <Select value={form.toVariantId} onValueChange={(v) => setForm(f => ({ ...f, toVariantId: v }))}>
+                  <SelectTrigger data-testid="compat-to-select"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    {families.map(fam => fam.variants.map(v => (
+                      <SelectItem key={v.id} value={v.id}>{fam.name} · {v.name}</SelectItem>
+                    )))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label className="text-xs">{t("pages.clauses.compatNote")}</Label>
+                <Input
+                  value={form.note}
+                  onChange={(e) => setForm(f => ({ ...f, note: e.target.value }))}
+                  data-testid="compat-note-input"
+                />
+              </div>
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setOpen(false)}>{t("common.cancel")}</Button>
+              <Button
+                onClick={add}
+                disabled={!form.fromVariantId || !form.toVariantId || create.isPending}
+                data-testid="compat-save-btn"
+              >
+                {t("common.save")}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      </CardHeader>
+      <CardContent>
+        {(rules?.length ?? 0) === 0 ? (
+          <p className="text-sm text-muted-foreground py-2">{t("pages.clauses.compatNone")}</p>
+        ) : (
+          <div className="divide-y border rounded-md">
+            {rules?.map(r => {
+              const from = variantIndex.get(r.fromVariantId);
+              const to = variantIndex.get(r.toVariantId);
+              return (
+                <div key={r.id} className="flex items-center gap-2 px-3 py-2 text-sm" data-testid={`compat-row-${r.id}`}>
+                  <span className="font-medium truncate">{from ? `${from.family} · ${from.name}` : r.fromVariantId}</span>
+                  <Badge
+                    variant="outline"
+                    className={r.kind === "conflicts"
+                      ? "bg-rose-500/10 text-rose-600 border-rose-500/30"
+                      : "bg-amber-500/10 text-amber-600 border-amber-500/30"}
+                  >
+                    {r.kind === "requires" ? t("pages.clauses.compatRequires") : t("pages.clauses.compatConflicts")}
+                  </Badge>
+                  <span className="font-medium truncate">{to ? `${to.family} · ${to.name}` : r.toVariantId}</span>
+                  {r.note && <span className="text-xs text-muted-foreground italic ml-2">{r.note}</span>}
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    className="ml-auto"
+                    onClick={() => del(r.id)}
+                    data-testid={`compat-remove-${r.id}`}
+                  >
+                    <Trash2 className="h-3 w-3 text-destructive" />
+                  </Button>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </CardContent>
+    </Card>
   );
 }

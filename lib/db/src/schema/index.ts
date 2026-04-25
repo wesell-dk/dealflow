@@ -541,6 +541,43 @@ export const clauseVariantsTable = pgTable("clause_variants", {
   }>>(),
 });
 
+// Brand-spezifische Overrides einer System-Klausel-Variante (Tonalität, Text, Severity).
+// Wenn vorhanden, wird beim Materialisieren eines Vertrags der Brand-Override verwendet.
+export const brandClauseVariantOverridesTable = pgTable("brand_clause_variant_overrides", {
+  id: id(),
+  tenantId: text("tenant_id").notNull(),
+  brandId: text("brand_id").notNull(),
+  baseVariantId: text("base_variant_id").notNull(),
+  // Optional: leer = "übernimm Base"
+  name: text("name"),
+  summary: text("summary"),
+  body: text("body"),
+  tone: text("tone"),
+  severity: text("severity"),
+  severityScore: integer("severity_score"),
+  createdAt: ts("created_at"),
+  updatedAt: ts("updated_at"),
+}, (t) => ({
+  byBrandVariant: uniqueIndex("brand_clause_overrides_brand_variant_uq").on(t.brandId, t.baseVariantId),
+  byTenantBrand: index("brand_clause_overrides_tenant_brand_idx").on(t.tenantId, t.brandId),
+}));
+
+// Kompatibilitäts-Regeln zwischen Klausel-Varianten:
+// kind = 'requires' → Wenn fromVariantId ausgewählt ist, MUSS toVariantId ebenfalls aktiv sein.
+// kind = 'conflicts' → fromVariantId und toVariantId dürfen nicht zusammen aktiv sein.
+export const clauseVariantCompatibilityTable = pgTable("clause_variant_compatibility", {
+  id: id(),
+  tenantId: text("tenant_id").notNull(),
+  fromVariantId: text("from_variant_id").notNull(),
+  toVariantId: text("to_variant_id").notNull(),
+  kind: text("kind").notNull(),
+  note: text("note"),
+  createdAt: ts("created_at"),
+}, (t) => ({
+  byTenantFromTo: uniqueIndex("clause_compat_tenant_from_to_kind_uq").on(t.tenantId, t.fromVariantId, t.toVariantId, t.kind),
+  byTenantFrom: index("clause_compat_tenant_from_idx").on(t.tenantId, t.fromVariantId),
+}));
+
 export const clauseDeviationsTable = pgTable("clause_deviations", {
   id: id(),
   tenantId: text("tenant_id").notNull(),

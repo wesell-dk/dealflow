@@ -3244,6 +3244,139 @@ paths:
         "404": { description: not found }
 
 
+  /brands/{brandId}/clause-overrides:
+    get:
+      operationId: listBrandClauseOverrides
+      tags: [clauses]
+      summary: Brand-spezifische Klausel-Overrides auflisten
+      parameters:
+        - in: path
+          name: brandId
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: ok
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/BrandClauseOverride" }
+        "403": { description: forbidden }
+        "404": { description: brand not found }
+
+  /brands/{brandId}/clause-overrides/{baseVariantId}:
+    put:
+      operationId: upsertBrandClauseOverride
+      tags: [clauses]
+      summary: Brand-Override für eine System-Variante anlegen oder aktualisieren (Tenant-Admin)
+      parameters:
+        - in: path
+          name: brandId
+          required: true
+          schema: { type: string }
+        - in: path
+          name: baseVariantId
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/BrandClauseOverridePatch" }
+      responses:
+        "200":
+          description: ok
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/BrandClauseOverride" }
+        "400": { description: invalid }
+        "403": { description: tenant admin required }
+        "404": { description: brand not found }
+    delete:
+      operationId: deleteBrandClauseOverride
+      tags: [clauses]
+      summary: Brand-Override entfernen (Tenant-Admin)
+      parameters:
+        - in: path
+          name: brandId
+          required: true
+          schema: { type: string }
+        - in: path
+          name: baseVariantId
+          required: true
+          schema: { type: string }
+      responses:
+        "204": { description: ok }
+        "403": { description: tenant admin required }
+        "404": { description: not found }
+
+  /clause-compatibility:
+    get:
+      operationId: listClauseCompatibility
+      tags: [clauses]
+      summary: Kompatibilitäts-Regeln zwischen Klausel-Varianten auflisten
+      responses:
+        "200":
+          description: ok
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/ClauseCompatibilityRule" }
+    post:
+      operationId: createClauseCompatibility
+      tags: [clauses]
+      summary: Kompatibilitäts-Regel anlegen (Tenant-Admin)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ClauseCompatibilityCreate" }
+      responses:
+        "201":
+          description: created
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ClauseCompatibilityRule" }
+        "400": { description: invalid }
+        "403": { description: tenant admin required }
+        "409": { description: duplicate }
+
+  /clause-compatibility/{id}:
+    delete:
+      operationId: deleteClauseCompatibility
+      tags: [clauses]
+      summary: Kompatibilitäts-Regel entfernen (Tenant-Admin)
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        "204": { description: ok }
+        "403": { description: tenant admin required }
+        "404": { description: not found }
+
+  /contracts/{id}/clauses/_compatibility:
+    get:
+      operationId: getContractClauseCompatibility
+      tags: [contracts]
+      summary: Kompatibilitäts-Report für alle Klauseln eines Vertrags
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: ok
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ContractCompatibilityReport" }
+        "403": { description: forbidden }
+        "404": { description: not found }
+
 components:
   schemas:
 
@@ -6242,3 +6375,102 @@ components:
         thisMonth: { $ref: "#/components/schemas/RenewalBucketStat" }
         next90: { $ref: "#/components/schemas/RenewalBucketStat" }
         atRisk: { $ref: "#/components/schemas/RenewalBucketStat" }
+
+    BrandClauseOverride:
+      type: object
+      required: [id, tenantId, brandId, baseVariantId, createdAt, updatedAt]
+      properties:
+        id: { type: string }
+        tenantId: { type: string }
+        brandId: { type: string }
+        baseVariantId: { type: string }
+        name: { type: string, nullable: true }
+        summary: { type: string, nullable: true }
+        body: { type: string, nullable: true }
+        tone: { type: string, nullable: true }
+        severity: { type: string, nullable: true }
+        severityScore: { type: integer, nullable: true, minimum: 1, maximum: 5 }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+
+    BrandClauseOverridePatch:
+      type: object
+      properties:
+        name: { type: string, nullable: true }
+        summary: { type: string, nullable: true }
+        body: { type: string, nullable: true }
+        tone: { type: string, nullable: true }
+        severity: { type: string, nullable: true }
+        severityScore: { type: integer, nullable: true, minimum: 1, maximum: 5 }
+
+    ClauseCompatibilityRule:
+      type: object
+      required: [id, tenantId, fromVariantId, toVariantId, kind, createdAt]
+      properties:
+        id: { type: string }
+        tenantId: { type: string }
+        fromVariantId: { type: string }
+        toVariantId: { type: string }
+        kind: { type: string, enum: [requires, conflicts] }
+        note: { type: string, nullable: true }
+        createdAt: { type: string, format: date-time }
+
+    ClauseCompatibilityCreate:
+      type: object
+      required: [fromVariantId, toVariantId, kind]
+      properties:
+        fromVariantId: { type: string }
+        toVariantId: { type: string }
+        kind: { type: string, enum: [requires, conflicts] }
+        note: { type: string, nullable: true }
+
+    ContractClauseCompatibility:
+      type: object
+      required: [contractClauseId, familyName, status, conflicts, requiresOpen, requiresOk]
+      properties:
+        contractClauseId: { type: string }
+        familyId: { type: string, nullable: true }
+        familyName: { type: string }
+        activeVariantId: { type: string, nullable: true }
+        activeVariantName: { type: string }
+        status: { type: string, enum: [ok, warning, conflict] }
+        conflicts:
+          type: array
+          items:
+            type: object
+            required: [withVariantId, withVariantName, withFamilyId, withFamilyName]
+            properties:
+              withVariantId: { type: string }
+              withVariantName: { type: string }
+              withFamilyId: { type: string }
+              withFamilyName: { type: string }
+              note: { type: string, nullable: true }
+        requiresOpen:
+          type: array
+          items:
+            type: object
+            required: [requiredVariantId, requiredVariantName, requiredFamilyId, requiredFamilyName]
+            properties:
+              requiredVariantId: { type: string }
+              requiredVariantName: { type: string }
+              requiredFamilyId: { type: string }
+              requiredFamilyName: { type: string }
+              note: { type: string, nullable: true }
+        requiresOk:
+          type: array
+          items:
+            type: object
+            required: [requiredVariantId, requiredVariantName]
+            properties:
+              requiredVariantId: { type: string }
+              requiredVariantName: { type: string }
+              note: { type: string, nullable: true }
+
+    ContractCompatibilityReport:
+      type: object
+      required: [contractId, items]
+      properties:
+        contractId: { type: string }
+        items:
+          type: array
+          items: { $ref: "#/components/schemas/ContractClauseCompatibility" }

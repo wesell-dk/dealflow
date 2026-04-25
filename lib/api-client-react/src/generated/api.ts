@@ -39,6 +39,8 @@ import type {
   AttachmentLibraryItem,
   AuditEntry,
   Brand,
+  BrandClauseOverride,
+  BrandClauseOverridePatch,
   BrandCreate,
   BrandDefaultsInput,
   BrandUpdate,
@@ -47,6 +49,8 @@ import type {
   BulkOwnerInput,
   BulkStageInput,
   ClauseChangeResult,
+  ClauseCompatibilityCreate,
+  ClauseCompatibilityRule,
   ClauseDeviation,
   ClauseDiff,
   ClauseFamily,
@@ -59,6 +63,7 @@ import type {
   ContractAmendmentDetail,
   ContractClause,
   ContractClausePatchInput,
+  ContractCompatibilityReport,
   ContractDetail,
   ContractInput,
   ContractPlaybook,
@@ -14784,3 +14789,657 @@ export const useUpdateRenewal = <
 > => {
   return useMutation(getUpdateRenewalMutationOptions(options));
 };
+
+/**
+ * @summary Brand-spezifische Klausel-Overrides auflisten
+ */
+export const getListBrandClauseOverridesUrl = (brandId: string) => {
+  return `/api/v1/brands/${brandId}/clause-overrides`;
+};
+
+export const listBrandClauseOverrides = async (
+  brandId: string,
+  options?: RequestInit,
+): Promise<BrandClauseOverride[]> => {
+  return customFetch<BrandClauseOverride[]>(
+    getListBrandClauseOverridesUrl(brandId),
+    {
+      ...options,
+      method: "GET",
+    },
+  );
+};
+
+export const getListBrandClauseOverridesQueryKey = (brandId: string) => {
+  return [`/api/v1/brands/${brandId}/clause-overrides`] as const;
+};
+
+export const getListBrandClauseOverridesQueryOptions = <
+  TData = Awaited<ReturnType<typeof listBrandClauseOverrides>>,
+  TError = ErrorType<void>,
+>(
+  brandId: string,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof listBrandClauseOverrides>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey =
+    queryOptions?.queryKey ?? getListBrandClauseOverridesQueryKey(brandId);
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof listBrandClauseOverrides>>
+  > = ({ signal }) =>
+    listBrandClauseOverrides(brandId, { signal, ...requestOptions });
+
+  return {
+    queryKey,
+    queryFn,
+    enabled: !!brandId,
+    ...queryOptions,
+  } as UseQueryOptions<
+    Awaited<ReturnType<typeof listBrandClauseOverrides>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type ListBrandClauseOverridesQueryResult = NonNullable<
+  Awaited<ReturnType<typeof listBrandClauseOverrides>>
+>;
+export type ListBrandClauseOverridesQueryError = ErrorType<void>;
+
+/**
+ * @summary Brand-spezifische Klausel-Overrides auflisten
+ */
+
+export function useListBrandClauseOverrides<
+  TData = Awaited<ReturnType<typeof listBrandClauseOverrides>>,
+  TError = ErrorType<void>,
+>(
+  brandId: string,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof listBrandClauseOverrides>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getListBrandClauseOverridesQueryOptions(
+    brandId,
+    options,
+  );
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Brand-Override für eine System-Variante anlegen oder aktualisieren (Tenant-Admin)
+ */
+export const getUpsertBrandClauseOverrideUrl = (
+  brandId: string,
+  baseVariantId: string,
+) => {
+  return `/api/v1/brands/${brandId}/clause-overrides/${baseVariantId}`;
+};
+
+export const upsertBrandClauseOverride = async (
+  brandId: string,
+  baseVariantId: string,
+  brandClauseOverridePatch: BrandClauseOverridePatch,
+  options?: RequestInit,
+): Promise<BrandClauseOverride> => {
+  return customFetch<BrandClauseOverride>(
+    getUpsertBrandClauseOverrideUrl(brandId, baseVariantId),
+    {
+      ...options,
+      method: "PUT",
+      headers: { "Content-Type": "application/json", ...options?.headers },
+      body: JSON.stringify(brandClauseOverridePatch),
+    },
+  );
+};
+
+export const getUpsertBrandClauseOverrideMutationOptions = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof upsertBrandClauseOverride>>,
+    TError,
+    {
+      brandId: string;
+      baseVariantId: string;
+      data: BodyType<BrandClauseOverridePatch>;
+    },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof upsertBrandClauseOverride>>,
+  TError,
+  {
+    brandId: string;
+    baseVariantId: string;
+    data: BodyType<BrandClauseOverridePatch>;
+  },
+  TContext
+> => {
+  const mutationKey = ["upsertBrandClauseOverride"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof upsertBrandClauseOverride>>,
+    {
+      brandId: string;
+      baseVariantId: string;
+      data: BodyType<BrandClauseOverridePatch>;
+    }
+  > = (props) => {
+    const { brandId, baseVariantId, data } = props ?? {};
+
+    return upsertBrandClauseOverride(
+      brandId,
+      baseVariantId,
+      data,
+      requestOptions,
+    );
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type UpsertBrandClauseOverrideMutationResult = NonNullable<
+  Awaited<ReturnType<typeof upsertBrandClauseOverride>>
+>;
+export type UpsertBrandClauseOverrideMutationBody =
+  BodyType<BrandClauseOverridePatch>;
+export type UpsertBrandClauseOverrideMutationError = ErrorType<void>;
+
+/**
+ * @summary Brand-Override für eine System-Variante anlegen oder aktualisieren (Tenant-Admin)
+ */
+export const useUpsertBrandClauseOverride = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof upsertBrandClauseOverride>>,
+    TError,
+    {
+      brandId: string;
+      baseVariantId: string;
+      data: BodyType<BrandClauseOverridePatch>;
+    },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof upsertBrandClauseOverride>>,
+  TError,
+  {
+    brandId: string;
+    baseVariantId: string;
+    data: BodyType<BrandClauseOverridePatch>;
+  },
+  TContext
+> => {
+  return useMutation(getUpsertBrandClauseOverrideMutationOptions(options));
+};
+
+/**
+ * @summary Brand-Override entfernen (Tenant-Admin)
+ */
+export const getDeleteBrandClauseOverrideUrl = (
+  brandId: string,
+  baseVariantId: string,
+) => {
+  return `/api/v1/brands/${brandId}/clause-overrides/${baseVariantId}`;
+};
+
+export const deleteBrandClauseOverride = async (
+  brandId: string,
+  baseVariantId: string,
+  options?: RequestInit,
+): Promise<void> => {
+  return customFetch<void>(
+    getDeleteBrandClauseOverrideUrl(brandId, baseVariantId),
+    {
+      ...options,
+      method: "DELETE",
+    },
+  );
+};
+
+export const getDeleteBrandClauseOverrideMutationOptions = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof deleteBrandClauseOverride>>,
+    TError,
+    { brandId: string; baseVariantId: string },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof deleteBrandClauseOverride>>,
+  TError,
+  { brandId: string; baseVariantId: string },
+  TContext
+> => {
+  const mutationKey = ["deleteBrandClauseOverride"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof deleteBrandClauseOverride>>,
+    { brandId: string; baseVariantId: string }
+  > = (props) => {
+    const { brandId, baseVariantId } = props ?? {};
+
+    return deleteBrandClauseOverride(brandId, baseVariantId, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type DeleteBrandClauseOverrideMutationResult = NonNullable<
+  Awaited<ReturnType<typeof deleteBrandClauseOverride>>
+>;
+
+export type DeleteBrandClauseOverrideMutationError = ErrorType<void>;
+
+/**
+ * @summary Brand-Override entfernen (Tenant-Admin)
+ */
+export const useDeleteBrandClauseOverride = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof deleteBrandClauseOverride>>,
+    TError,
+    { brandId: string; baseVariantId: string },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof deleteBrandClauseOverride>>,
+  TError,
+  { brandId: string; baseVariantId: string },
+  TContext
+> => {
+  return useMutation(getDeleteBrandClauseOverrideMutationOptions(options));
+};
+
+/**
+ * @summary Kompatibilitäts-Regeln zwischen Klausel-Varianten auflisten
+ */
+export const getListClauseCompatibilityUrl = () => {
+  return `/api/v1/clause-compatibility`;
+};
+
+export const listClauseCompatibility = async (
+  options?: RequestInit,
+): Promise<ClauseCompatibilityRule[]> => {
+  return customFetch<ClauseCompatibilityRule[]>(
+    getListClauseCompatibilityUrl(),
+    {
+      ...options,
+      method: "GET",
+    },
+  );
+};
+
+export const getListClauseCompatibilityQueryKey = () => {
+  return [`/api/v1/clause-compatibility`] as const;
+};
+
+export const getListClauseCompatibilityQueryOptions = <
+  TData = Awaited<ReturnType<typeof listClauseCompatibility>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof listClauseCompatibility>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey =
+    queryOptions?.queryKey ?? getListClauseCompatibilityQueryKey();
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof listClauseCompatibility>>
+  > = ({ signal }) => listClauseCompatibility({ signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof listClauseCompatibility>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type ListClauseCompatibilityQueryResult = NonNullable<
+  Awaited<ReturnType<typeof listClauseCompatibility>>
+>;
+export type ListClauseCompatibilityQueryError = ErrorType<unknown>;
+
+/**
+ * @summary Kompatibilitäts-Regeln zwischen Klausel-Varianten auflisten
+ */
+
+export function useListClauseCompatibility<
+  TData = Awaited<ReturnType<typeof listClauseCompatibility>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof listClauseCompatibility>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getListClauseCompatibilityQueryOptions(options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Kompatibilitäts-Regel anlegen (Tenant-Admin)
+ */
+export const getCreateClauseCompatibilityUrl = () => {
+  return `/api/v1/clause-compatibility`;
+};
+
+export const createClauseCompatibility = async (
+  clauseCompatibilityCreate: ClauseCompatibilityCreate,
+  options?: RequestInit,
+): Promise<ClauseCompatibilityRule> => {
+  return customFetch<ClauseCompatibilityRule>(
+    getCreateClauseCompatibilityUrl(),
+    {
+      ...options,
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...options?.headers },
+      body: JSON.stringify(clauseCompatibilityCreate),
+    },
+  );
+};
+
+export const getCreateClauseCompatibilityMutationOptions = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof createClauseCompatibility>>,
+    TError,
+    { data: BodyType<ClauseCompatibilityCreate> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof createClauseCompatibility>>,
+  TError,
+  { data: BodyType<ClauseCompatibilityCreate> },
+  TContext
+> => {
+  const mutationKey = ["createClauseCompatibility"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof createClauseCompatibility>>,
+    { data: BodyType<ClauseCompatibilityCreate> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return createClauseCompatibility(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type CreateClauseCompatibilityMutationResult = NonNullable<
+  Awaited<ReturnType<typeof createClauseCompatibility>>
+>;
+export type CreateClauseCompatibilityMutationBody =
+  BodyType<ClauseCompatibilityCreate>;
+export type CreateClauseCompatibilityMutationError = ErrorType<void>;
+
+/**
+ * @summary Kompatibilitäts-Regel anlegen (Tenant-Admin)
+ */
+export const useCreateClauseCompatibility = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof createClauseCompatibility>>,
+    TError,
+    { data: BodyType<ClauseCompatibilityCreate> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof createClauseCompatibility>>,
+  TError,
+  { data: BodyType<ClauseCompatibilityCreate> },
+  TContext
+> => {
+  return useMutation(getCreateClauseCompatibilityMutationOptions(options));
+};
+
+/**
+ * @summary Kompatibilitäts-Regel entfernen (Tenant-Admin)
+ */
+export const getDeleteClauseCompatibilityUrl = (id: string) => {
+  return `/api/v1/clause-compatibility/${id}`;
+};
+
+export const deleteClauseCompatibility = async (
+  id: string,
+  options?: RequestInit,
+): Promise<void> => {
+  return customFetch<void>(getDeleteClauseCompatibilityUrl(id), {
+    ...options,
+    method: "DELETE",
+  });
+};
+
+export const getDeleteClauseCompatibilityMutationOptions = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof deleteClauseCompatibility>>,
+    TError,
+    { id: string },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof deleteClauseCompatibility>>,
+  TError,
+  { id: string },
+  TContext
+> => {
+  const mutationKey = ["deleteClauseCompatibility"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof deleteClauseCompatibility>>,
+    { id: string }
+  > = (props) => {
+    const { id } = props ?? {};
+
+    return deleteClauseCompatibility(id, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type DeleteClauseCompatibilityMutationResult = NonNullable<
+  Awaited<ReturnType<typeof deleteClauseCompatibility>>
+>;
+
+export type DeleteClauseCompatibilityMutationError = ErrorType<void>;
+
+/**
+ * @summary Kompatibilitäts-Regel entfernen (Tenant-Admin)
+ */
+export const useDeleteClauseCompatibility = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof deleteClauseCompatibility>>,
+    TError,
+    { id: string },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof deleteClauseCompatibility>>,
+  TError,
+  { id: string },
+  TContext
+> => {
+  return useMutation(getDeleteClauseCompatibilityMutationOptions(options));
+};
+
+/**
+ * @summary Kompatibilitäts-Report für alle Klauseln eines Vertrags
+ */
+export const getGetContractClauseCompatibilityUrl = (id: string) => {
+  return `/api/v1/contracts/${id}/clauses/_compatibility`;
+};
+
+export const getContractClauseCompatibility = async (
+  id: string,
+  options?: RequestInit,
+): Promise<ContractCompatibilityReport> => {
+  return customFetch<ContractCompatibilityReport>(
+    getGetContractClauseCompatibilityUrl(id),
+    {
+      ...options,
+      method: "GET",
+    },
+  );
+};
+
+export const getGetContractClauseCompatibilityQueryKey = (id: string) => {
+  return [`/api/v1/contracts/${id}/clauses/_compatibility`] as const;
+};
+
+export const getGetContractClauseCompatibilityQueryOptions = <
+  TData = Awaited<ReturnType<typeof getContractClauseCompatibility>>,
+  TError = ErrorType<void>,
+>(
+  id: string,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getContractClauseCompatibility>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey =
+    queryOptions?.queryKey ?? getGetContractClauseCompatibilityQueryKey(id);
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof getContractClauseCompatibility>>
+  > = ({ signal }) =>
+    getContractClauseCompatibility(id, { signal, ...requestOptions });
+
+  return {
+    queryKey,
+    queryFn,
+    enabled: !!id,
+    ...queryOptions,
+  } as UseQueryOptions<
+    Awaited<ReturnType<typeof getContractClauseCompatibility>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetContractClauseCompatibilityQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getContractClauseCompatibility>>
+>;
+export type GetContractClauseCompatibilityQueryError = ErrorType<void>;
+
+/**
+ * @summary Kompatibilitäts-Report für alle Klauseln eines Vertrags
+ */
+
+export function useGetContractClauseCompatibility<
+  TData = Awaited<ReturnType<typeof getContractClauseCompatibility>>,
+  TError = ErrorType<void>,
+>(
+  id: string,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getContractClauseCompatibility>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetContractClauseCompatibilityQueryOptions(
+    id,
+    options,
+  );
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}

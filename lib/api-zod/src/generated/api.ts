@@ -4920,3 +4920,165 @@ export const UpdateRenewalResponse = zod.object({
   createdAt: zod.coerce.date(),
   updatedAt: zod.coerce.date(),
 });
+
+/**
+ * @summary Brand-spezifische Klausel-Overrides auflisten
+ */
+export const ListBrandClauseOverridesParams = zod.object({
+  brandId: zod.coerce.string(),
+});
+
+export const listBrandClauseOverridesResponseSeverityScoreMax = 5;
+
+export const ListBrandClauseOverridesResponseItem = zod.object({
+  id: zod.string(),
+  tenantId: zod.string(),
+  brandId: zod.string(),
+  baseVariantId: zod.string(),
+  name: zod.string().nullish(),
+  summary: zod.string().nullish(),
+  body: zod.string().nullish(),
+  tone: zod.string().nullish(),
+  severity: zod.string().nullish(),
+  severityScore: zod
+    .number()
+    .min(1)
+    .max(listBrandClauseOverridesResponseSeverityScoreMax)
+    .nullish(),
+  createdAt: zod.coerce.date(),
+  updatedAt: zod.coerce.date(),
+});
+export const ListBrandClauseOverridesResponse = zod.array(
+  ListBrandClauseOverridesResponseItem,
+);
+
+/**
+ * @summary Brand-Override für eine System-Variante anlegen oder aktualisieren (Tenant-Admin)
+ */
+export const UpsertBrandClauseOverrideParams = zod.object({
+  brandId: zod.coerce.string(),
+  baseVariantId: zod.coerce.string(),
+});
+
+export const upsertBrandClauseOverrideBodySeverityScoreMax = 5;
+
+export const UpsertBrandClauseOverrideBody = zod.object({
+  name: zod.string().nullish(),
+  summary: zod.string().nullish(),
+  body: zod.string().nullish(),
+  tone: zod.string().nullish(),
+  severity: zod.string().nullish(),
+  severityScore: zod
+    .number()
+    .min(1)
+    .max(upsertBrandClauseOverrideBodySeverityScoreMax)
+    .nullish(),
+});
+
+export const upsertBrandClauseOverrideResponseSeverityScoreMax = 5;
+
+export const UpsertBrandClauseOverrideResponse = zod.object({
+  id: zod.string(),
+  tenantId: zod.string(),
+  brandId: zod.string(),
+  baseVariantId: zod.string(),
+  name: zod.string().nullish(),
+  summary: zod.string().nullish(),
+  body: zod.string().nullish(),
+  tone: zod.string().nullish(),
+  severity: zod.string().nullish(),
+  severityScore: zod
+    .number()
+    .min(1)
+    .max(upsertBrandClauseOverrideResponseSeverityScoreMax)
+    .nullish(),
+  createdAt: zod.coerce.date(),
+  updatedAt: zod.coerce.date(),
+});
+
+/**
+ * @summary Brand-Override entfernen (Tenant-Admin)
+ */
+export const DeleteBrandClauseOverrideParams = zod.object({
+  brandId: zod.coerce.string(),
+  baseVariantId: zod.coerce.string(),
+});
+
+/**
+ * @summary Kompatibilitäts-Regeln zwischen Klausel-Varianten auflisten
+ */
+export const ListClauseCompatibilityResponseItem = zod.object({
+  id: zod.string(),
+  tenantId: zod.string(),
+  fromVariantId: zod.string(),
+  toVariantId: zod.string(),
+  kind: zod.enum(["requires", "conflicts"]),
+  note: zod.string().nullish(),
+  createdAt: zod.coerce.date(),
+});
+export const ListClauseCompatibilityResponse = zod.array(
+  ListClauseCompatibilityResponseItem,
+);
+
+/**
+ * @summary Kompatibilitäts-Regel anlegen (Tenant-Admin)
+ */
+export const CreateClauseCompatibilityBody = zod.object({
+  fromVariantId: zod.string(),
+  toVariantId: zod.string(),
+  kind: zod.enum(["requires", "conflicts"]),
+  note: zod.string().nullish(),
+});
+
+/**
+ * @summary Kompatibilitäts-Regel entfernen (Tenant-Admin)
+ */
+export const DeleteClauseCompatibilityParams = zod.object({
+  id: zod.coerce.string(),
+});
+
+/**
+ * @summary Kompatibilitäts-Report für alle Klauseln eines Vertrags
+ */
+export const GetContractClauseCompatibilityParams = zod.object({
+  id: zod.coerce.string(),
+});
+
+export const GetContractClauseCompatibilityResponse = zod.object({
+  contractId: zod.string(),
+  items: zod.array(
+    zod.object({
+      contractClauseId: zod.string(),
+      familyId: zod.string().nullish(),
+      familyName: zod.string(),
+      activeVariantId: zod.string().nullish(),
+      activeVariantName: zod.string().optional(),
+      status: zod.enum(["ok", "warning", "conflict"]),
+      conflicts: zod.array(
+        zod.object({
+          withVariantId: zod.string(),
+          withVariantName: zod.string(),
+          withFamilyId: zod.string(),
+          withFamilyName: zod.string(),
+          note: zod.string().nullish(),
+        }),
+      ),
+      requiresOpen: zod.array(
+        zod.object({
+          requiredVariantId: zod.string(),
+          requiredVariantName: zod.string(),
+          requiredFamilyId: zod.string(),
+          requiredFamilyName: zod.string(),
+          note: zod.string().nullish(),
+        }),
+      ),
+      requiresOk: zod.array(
+        zod.object({
+          requiredVariantId: zod.string(),
+          requiredVariantName: zod.string(),
+          note: zod.string().nullish(),
+        }),
+      ),
+    }),
+  ),
+});

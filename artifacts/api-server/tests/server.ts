@@ -35,6 +35,7 @@ export interface AuthedClient {
   get(path: string): Promise<{ status: number; body: unknown }>;
   post(path: string, body?: unknown): Promise<{ status: number; body: unknown }>;
   patch(path: string, body?: unknown): Promise<{ status: number; body: unknown }>;
+  put(path: string, body?: unknown): Promise<{ status: number; body: unknown }>;
   delete(path: string): Promise<{ status: number; body: unknown }>;
 }
 
@@ -88,6 +89,7 @@ export async function loginClient(
     },
     post: send("POST"),
     patch: send("PATCH"),
+    put: send("PUT"),
     delete: (path: string) => send("DELETE")(path),
   };
 }
