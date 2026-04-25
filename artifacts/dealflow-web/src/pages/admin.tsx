@@ -1,5 +1,5 @@
 import { useState, useCallback, useRef } from "react";
-import { extractLogoColors } from "@/lib/extract-logo-colors";
+import { extractLogoColors, foregroundFor, isTooLightForPaper } from "@/lib/extract-logo-colors";
 import { useTranslation } from "react-i18next";
 import {
   useGetTenant,
@@ -685,10 +685,34 @@ function BrandRow({ brand }: { brand: Brand }) {
   const primaryTouchedRef = useRef(false);
   const secondaryTouchedRef = useRef(false);
   const uploadTokenRef = useRef(0);
+  // Hex-Validation: Picker liefert immer #RRGGBB, das danebenstehende Text-
+  // Feld erlaubt aber Free-Text. Wir lehnen Ungültiges client-side ab, sonst
+  // kommt eine kryptische 422 vom Backend ohne Recovery-Pfad (User-Frust).
+  const HEX_RE = /^#[0-9a-fA-F]{6}$/;
+  const primaryInvalid = !HEX_RE.test(draft.primaryColor || "");
+  const secondaryInvalid = !!draft.secondaryColor && !HEX_RE.test(draft.secondaryColor);
   const save = async () => {
-    const payload: BrandUpdate = { ...draft };
-    await update.mutateAsync({ id: brand.id, data: payload });
-    setEditing(false);
+    if (primaryInvalid || secondaryInvalid) {
+      toast({
+        title: "Ungültige Farbe",
+        description: "Bitte Hex-Format #RRGGBB verwenden (z. B. #2D6CDF) oder leer lassen.",
+        variant: "destructive",
+      });
+      return;
+    }
+    try {
+      const payload: BrandUpdate = { ...draft };
+      await update.mutateAsync({ id: brand.id, data: payload });
+      setEditing(false);
+    } catch (e: unknown) {
+      const status = (e as { response?: { status?: number } })?.response?.status;
+      const body = (e as { response?: { data?: { error?: string } } })?.response?.data;
+      toast({
+        title: status === 409 ? "Name bereits vergeben" : "Speichern fehlgeschlagen",
+        description: body?.error ?? (e instanceof Error ? e.message : "Unbekannter Fehler"),
+        variant: "destructive",
+      });
+    }
   };
   const onUpload = async (file: File) => {
     const ALLOWED = ["image/png", "image/jpeg", "image/svg+xml", "image/webp"];
@@ -796,23 +820,30 @@ function BrandRow({ brand }: { brand: Brand }) {
                     disabled={uploading}
                     className="hidden"
                   />
-                  <div className="flex items-center gap-3 p-3">
+                  <div className="flex items-center gap-4 p-4">
                     {draft.logoUrl ? (
-                      <img src={draft.logoUrl} alt="Logo-Vorschau" className="h-12 w-12 object-contain rounded border bg-white p-1" />
+                      // Großes Preview damit das Logo wirklich erkennbar ist —
+                      // klein war's vorher kaum aussagekräftig (User-Feedback).
+                      <div className="flex-shrink-0 h-24 w-24 rounded-md border bg-white p-2 flex items-center justify-center">
+                        <img src={draft.logoUrl} alt="Logo-Vorschau" className="max-h-full max-w-full object-contain" />
+                      </div>
                     ) : (
-                      <div className="h-12 w-12 rounded bg-muted flex items-center justify-center text-muted-foreground">
-                        <ImageIcon className="h-5 w-5" />
+                      <div className="flex-shrink-0 h-24 w-24 rounded-md bg-muted flex items-center justify-center text-muted-foreground">
+                        <ImageIcon className="h-8 w-8" />
                       </div>
                     )}
                     <div className="flex-1 min-w-0 text-sm">
                       {uploading ? (
                         <span className="text-muted-foreground">Wird hochgeladen…</span>
                       ) : draft.logoUrl ? (
-                        <span className="text-muted-foreground truncate block">Datei ziehen oder klicken zum Ersetzen</span>
+                        <>
+                          <div className="font-medium">Datei ziehen oder klicken zum Ersetzen</div>
+                          <div className="text-xs text-muted-foreground mt-1">Aktuelles Logo wird unten in der Vorschau gegen Weiß und Dunkelgrau geprüft.</div>
+                        </>
                       ) : (
                         <>
                           <div className="font-medium">Datei hierher ziehen oder klicken</div>
-                          <div className="text-xs text-muted-foreground">PNG, JPEG, SVG, WebP — bis 5 MB</div>
+                          <div className="text-xs text-muted-foreground mt-1">PNG, JPEG, SVG, WebP — bis 5 MB</div>
                         </>
                       )}
                     </div>
@@ -827,6 +858,26 @@ function BrandRow({ brand }: { brand: Brand }) {
                       </Button>
                     )}
                   </div>
+                  {/* Kontrast-Vorschau: Logo + Primärfarbe gegen weißen
+                      DIN-A4-Hintergrund und gegen dunkles Header-Grau. So
+                      sieht der User sofort, ob ein helles/weißes Logo oder
+                      eine helle Primärfarbe auf einem Ausdruck verschwindet. */}
+                  {draft.logoUrl && !uploading && (
+                    <div className="border-t grid grid-cols-2 gap-px bg-muted/30">
+                      <div className="bg-white p-3 flex items-center justify-center gap-3" title="Wirkung auf weißem Papier (DIN A4 / Briefkopf)">
+                        <img src={draft.logoUrl} alt="" className="h-10 w-10 object-contain" />
+                        <span className="px-2 py-1 rounded text-xs font-medium" style={{ background: draft.primaryColor || "#ffffff", color: foregroundFor(draft.primaryColor || "#ffffff") }}>
+                          Primär · auf Weiß
+                        </span>
+                      </div>
+                      <div className="bg-slate-900 p-3 flex items-center justify-center gap-3" title="Wirkung auf dunklem Header (App / Web)">
+                        <img src={draft.logoUrl} alt="" className="h-10 w-10 object-contain" />
+                        <span className="px-2 py-1 rounded text-xs font-medium" style={{ background: draft.primaryColor || "#ffffff", color: foregroundFor(draft.primaryColor || "#ffffff") }}>
+                          Primär · auf Dunkel
+                        </span>
+                      </div>
+                    </div>
+                  )}
                 </div>
                 <Input
                   className="mt-1 text-xs"
@@ -847,12 +898,39 @@ function BrandRow({ brand }: { brand: Brand }) {
                 <Input value={draft.tone ?? ""} onChange={e => setDraft({ ...draft, tone: e.target.value })} />
               </div>
               <div>
-                <Label>Primary Color</Label>
-                <Input type="color" value={draft.primaryColor || "#2D6CDF"} onChange={e => { setDraft({ ...draft, primaryColor: e.target.value }); setPrimaryTouched(true); primaryTouchedRef.current = true; }} />
+                <Label>Primärfarbe</Label>
+                <div className="flex gap-2">
+                  <Input type="color" className="w-14 p-1" value={HEX_RE.test(draft.primaryColor || "") ? (draft.primaryColor as string) : "#2D6CDF"} onChange={e => { setDraft({ ...draft, primaryColor: e.target.value }); setPrimaryTouched(true); primaryTouchedRef.current = true; }} />
+                  <Input className={`flex-1 font-mono text-xs ${primaryInvalid ? "border-destructive" : ""}`} value={draft.primaryColor ?? ""} onChange={e => { setDraft({ ...draft, primaryColor: e.target.value }); setPrimaryTouched(true); primaryTouchedRef.current = true; }} placeholder="#2D6CDF" data-testid={`input-brand-primary-${brand.id}`} />
+                </div>
+                {primaryInvalid && (
+                  <p className="mt-1 text-xs text-destructive">Bitte Hex-Format #RRGGBB eingeben.</p>
+                )}
+                {/* Wenn die Primärfarbe nahezu Weiß ist, würde sie auf weißem
+                    Briefkopf untergehen → wir warnen aktiv und bieten eine
+                    sichere Alternative (Slate-900) an. */}
+                {isTooLightForPaper(draft.primaryColor || "#ffffff") && (
+                  <div className="mt-1 flex items-start gap-2 rounded-md border border-amber-300 bg-amber-50 p-2 text-xs text-amber-900">
+                    <span className="font-medium">⚠ Sehr hell:</span>
+                    <span className="flex-1">
+                      Auf weißem Papier (z. B. Vertragsausdruck) ist diese Farbe kaum sichtbar.
+                      Wähle einen dunkleren Ton.
+                    </span>
+                    <button type="button" className="underline whitespace-nowrap" onClick={() => { setDraft(d => ({ ...d, primaryColor: "#0f172a" })); setPrimaryTouched(true); primaryTouchedRef.current = true; }}>
+                      auf Slate-900 setzen
+                    </button>
+                  </div>
+                )}
               </div>
               <div>
-                <Label>Secondary Color</Label>
-                <Input type="color" value={draft.secondaryColor || "#000000"} onChange={e => { setDraft({ ...draft, secondaryColor: e.target.value }); setSecondaryTouched(true); secondaryTouchedRef.current = true; }} />
+                <Label>Sekundärfarbe</Label>
+                <div className="flex gap-2">
+                  <Input type="color" className="w-14 p-1" value={HEX_RE.test(draft.secondaryColor || "") ? (draft.secondaryColor as string) : "#000000"} onChange={e => { setDraft({ ...draft, secondaryColor: e.target.value }); setSecondaryTouched(true); secondaryTouchedRef.current = true; }} />
+                  <Input className={`flex-1 font-mono text-xs ${secondaryInvalid ? "border-destructive" : ""}`} value={draft.secondaryColor ?? ""} onChange={e => { setDraft({ ...draft, secondaryColor: e.target.value }); setSecondaryTouched(true); secondaryTouchedRef.current = true; }} placeholder="leer = nur Primärfarbe" data-testid={`input-brand-secondary-${brand.id}`} />
+                </div>
+                {secondaryInvalid && (
+                  <p className="mt-1 text-xs text-destructive">Bitte Hex-Format #RRGGBB oder leer lassen.</p>
+                )}
               </div>
               <div>
                 <Label>Legal Entity Name</Label>
@@ -863,7 +941,7 @@ function BrandRow({ brand }: { brand: Brand }) {
                 <Input value={draft.addressLine ?? ""} onChange={e => setDraft({ ...draft, addressLine: e.target.value })} />
               </div>
               <div className="col-span-2 flex justify-end gap-2">
-                <Button size="sm" onClick={save} disabled={update.isPending}>Speichern</Button>
+                <Button size="sm" onClick={save} disabled={update.isPending || primaryInvalid || secondaryInvalid} data-testid={`button-brand-save-${brand.id}`}>Speichern</Button>
               </div>
             </div>
           </TableCell>
@@ -1274,9 +1352,10 @@ function RolesCard() {
 
   const onCreate = async () => {
     setError(null);
-    if (!newName.trim() || !newDesc.trim()) { setError("Name und Beschreibung erforderlich."); return; }
+    // Beschreibung ist optional — User-Feedback: das Pflichtfeld war nervig.
+    if (!newName.trim()) { setError("Name ist erforderlich."); return; }
     try {
-      await createRole.mutateAsync({ data: { name: newName.trim(), description: newDesc.trim() } });
+      await createRole.mutateAsync({ data: { name: newName.trim(), description: newDesc.trim() || "—" } });
       setNewName(""); setNewDesc("");
       roles.refetch();
     } catch (e) {
@@ -1306,23 +1385,31 @@ function RolesCard() {
 
   return (
     <Card>
-      <CardHeader className="flex flex-row items-center gap-2">
-        <Shield className="h-5 w-5 text-primary" />
-        <CardTitle>Rollen-Definitionen</CardTitle>
+      <CardHeader>
+        <div className="flex items-center gap-2">
+          <Shield className="h-5 w-5 text-primary" />
+          <CardTitle>Rollen-Definitionen</CardTitle>
+        </div>
+        <p className="text-sm text-muted-foreground mt-1">
+          Rollen gelten innerhalb deines Mandanten. <span className="font-medium">System-Rollen</span> (Tenant Admin,
+          Account Executive, Deal Desk) sind fix verdrahtet — sie tragen Berechtigungen und können nicht editiert
+          oder gelöscht werden. Lege bei Bedarf eigene <span className="font-medium">Custom-Rollen</span> an
+          (z. B. „Sales Lead DACH" oder „Legal Reviewer").
+        </p>
       </CardHeader>
       <CardContent className="space-y-4">
         <div className="grid grid-cols-1 md:grid-cols-[1fr_2fr_auto] gap-2 items-end">
           <div>
             <Label>Neue Rolle</Label>
-            <Input placeholder="Name" value={newName} onChange={e => setNewName(e.target.value)} />
+            <Input placeholder="Name (z. B. Sales Lead DACH)" value={newName} onChange={e => setNewName(e.target.value)} data-testid="input-role-name" />
           </div>
           <div>
-            <Label>Beschreibung</Label>
-            <Input placeholder="Beschreibung" value={newDesc} onChange={e => setNewDesc(e.target.value)} />
+            <Label>Beschreibung <span className="text-xs text-muted-foreground">(optional)</span></Label>
+            <Input placeholder="Wofür ist diese Rolle zuständig?" value={newDesc} onChange={e => setNewDesc(e.target.value)} data-testid="input-role-desc" />
           </div>
-          <Button onClick={onCreate} disabled={createRole.isPending}>Hinzufügen</Button>
+          <Button onClick={onCreate} disabled={createRole.isPending} data-testid="button-create-role">Hinzufügen</Button>
         </div>
-        {error && <p className="text-sm text-destructive">{error}</p>}
+        {error && <p className="text-sm text-destructive" data-testid="text-role-error">{error}</p>}
         <div className="border rounded-md">
           <Table>
             <TableHeader>
@@ -1363,8 +1450,14 @@ function RolesCard() {
                       </TableCell>
                       <TableCell className="text-right">
                         <div className="flex justify-end gap-2">
-                          <Button size="sm" variant="outline" onClick={() => onEdit(r)} disabled={r.isSystem}>Bearbeiten</Button>
-                          <Button size="sm" variant="outline" onClick={() => onDelete(r)} disabled={r.isSystem}>Löschen</Button>
+                          {/* native title statt Tooltip-Komponente: wirkt auch
+                              auf disabled Buttons und reicht hier völlig. */}
+                          <span title={r.isSystem ? "System-Rolle — nicht editierbar. Lege eine Custom-Rolle an." : ""}>
+                            <Button size="sm" variant="outline" onClick={() => onEdit(r)} disabled={r.isSystem} data-testid={`button-edit-role-${r.id}`}>Bearbeiten</Button>
+                          </span>
+                          <span title={r.isSystem ? "System-Rolle — nicht löschbar." : ""}>
+                            <Button size="sm" variant="outline" onClick={() => onDelete(r)} disabled={r.isSystem} data-testid={`button-delete-role-${r.id}`}>Löschen</Button>
+                          </span>
                         </div>
                       </TableCell>
                     </>
@@ -1761,13 +1854,17 @@ function ContractTypesCard() {
 
   return (
     <Card data-testid="card-contract-types">
-      <CardHeader className="flex flex-row items-center justify-between gap-2">
-        <div className="flex items-center gap-2">
-          <Shield className="h-5 w-5 text-primary" />
+      <CardHeader className="flex flex-row items-start justify-between gap-2">
+        <div className="flex items-start gap-2">
+          <Shield className="h-5 w-5 text-primary mt-0.5" />
           <div>
             <CardTitle>Vertragstypen</CardTitle>
             <p className="text-sm text-muted-foreground mt-1">
-              Definiere Pflicht- und Verbots-Klauseln je Vertragsart (NDA, MSA, Order Form …).
+              Ein Vertragstyp ist eine Vorlage-Kategorie (z. B. <span className="font-medium">NDA</span>,
+              {" "}<span className="font-medium">MSA</span>, <span className="font-medium">Order Form</span>).
+              Du legst pro Typ fest, welche <span className="font-medium">Klauselfamilien zwingend</span> enthalten
+              sein müssen (z. B. „Vertraulichkeit" beim NDA) und welche <span className="font-medium">verboten</span>
+              {" "}sind. Die Klausel-Prüfung im Vertrag warnt automatisch bei Abweichungen.
             </p>
           </div>
         </div>
@@ -1779,8 +1876,20 @@ function ContractTypesCard() {
         {isLoading ? (
           <Skeleton className="h-24 w-full" />
         ) : (types?.length ?? 0) === 0 ? (
-          <div className="p-6 text-center text-sm text-muted-foreground border rounded-md bg-muted/10">
-            Noch keine Vertragstypen angelegt.
+          <div className="p-6 text-center text-sm border rounded-md bg-muted/10 space-y-3">
+            <p className="text-muted-foreground">
+              Noch keine Vertragstypen. Häufige Beispiele:
+            </p>
+            <div className="flex flex-wrap justify-center gap-2 text-xs">
+              <Badge variant="outline" className="font-mono">NDA</Badge>
+              <Badge variant="outline" className="font-mono">MSA</Badge>
+              <Badge variant="outline" className="font-mono">ORDER_FORM</Badge>
+              <Badge variant="outline" className="font-mono">DPA</Badge>
+              <Badge variant="outline" className="font-mono">SOW</Badge>
+            </div>
+            <Button size="sm" onClick={openCreate} data-testid="button-new-contract-type-empty">
+              <Plus className="h-4 w-4 mr-1" /> Ersten Typ anlegen
+            </Button>
           </div>
         ) : (
           <Table>

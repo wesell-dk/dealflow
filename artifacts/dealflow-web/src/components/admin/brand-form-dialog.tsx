@@ -17,7 +17,7 @@ import {
 } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { Loader2, Upload, Image as ImageIcon, X, Sparkles } from "lucide-react";
-import { extractLogoColors } from "@/lib/extract-logo-colors";
+import { extractLogoColors, foregroundFor, isTooLightForPaper } from "@/lib/extract-logo-colors";
 
 interface Props {
   open: boolean;
@@ -299,12 +299,16 @@ export function BrandFormDialog({ open, onOpenChange, companies, defaultCompanyI
                 disabled={uploading}
                 onChange={onFileInput}
               />
-              <div className="flex items-center gap-3 p-4">
+              <div className="flex items-center gap-4 p-4">
                 {logoUrl ? (
-                  <img src={logoUrl} alt="Logo-Vorschau" className="h-14 w-14 object-contain rounded border bg-white p-1" />
+                  // Großes Preview (96 px) statt der vorigen 56 px — bei 14×14
+                  // war das Logo kaum erkennbar.
+                  <div className="flex-shrink-0 h-24 w-24 rounded-md border bg-white p-2 flex items-center justify-center">
+                    <img src={logoUrl} alt="Logo-Vorschau" className="max-h-full max-w-full object-contain" />
+                  </div>
                 ) : (
-                  <div className="h-14 w-14 rounded bg-muted flex items-center justify-center text-muted-foreground">
-                    <ImageIcon className="h-6 w-6" />
+                  <div className="flex-shrink-0 h-24 w-24 rounded-md bg-muted flex items-center justify-center text-muted-foreground">
+                    <ImageIcon className="h-8 w-8" />
                   </div>
                 )}
                 <div className="flex-1 min-w-0">
@@ -315,15 +319,15 @@ export function BrandFormDialog({ open, onOpenChange, companies, defaultCompanyI
                     </p>
                   ) : logoUrl ? (
                     <>
-                      <p className="text-sm font-medium truncate">Logo geladen</p>
-                      <p className="text-xs text-muted-foreground truncate">{logoUrl}</p>
+                      <p className="text-sm font-medium">Logo geladen</p>
+                      <p className="text-xs text-muted-foreground mt-1">Klicken oder Datei ziehen, um zu ersetzen.</p>
                     </>
                   ) : (
                     <>
                       <p className="text-sm font-medium">
                         Datei hierher ziehen oder klicken
                       </p>
-                      <p className="text-xs text-muted-foreground">
+                      <p className="text-xs text-muted-foreground mt-1">
                         PNG, JPEG, SVG, WebP — bis 5 MB
                       </p>
                     </>
@@ -347,15 +351,38 @@ export function BrandFormDialog({ open, onOpenChange, companies, defaultCompanyI
                   </Button>
                 )}
               </div>
+              {/* Kontrast-Preview: Logo + Primärfarbe gegen Weiß und Dunkel,
+                  damit das Druck-/Web-Verhalten sofort sichtbar ist. */}
+              {logoUrl && !uploading && (
+                <div className="border-t grid grid-cols-2 gap-px bg-muted/30">
+                  <div className="bg-white p-3 flex items-center justify-center gap-2" title="Wirkung auf weißem Papier (DIN A4)">
+                    <img src={logoUrl} alt="" className="h-8 w-8 object-contain" />
+                    <span className="px-2 py-1 rounded text-xs font-medium" style={{ background: primaryColor || "#ffffff", color: foregroundFor(primaryColor || "#ffffff") }}>
+                      auf Weiß
+                    </span>
+                  </div>
+                  <div className="bg-slate-900 p-3 flex items-center justify-center gap-2" title="Wirkung auf dunklem Header (App)">
+                    <img src={logoUrl} alt="" className="h-8 w-8 object-contain" />
+                    <span className="px-2 py-1 rounded text-xs font-medium" style={{ background: primaryColor || "#ffffff", color: foregroundFor(primaryColor || "#ffffff") }}>
+                      auf Dunkel
+                    </span>
+                  </div>
+                </div>
+              )}
             </div>
 
-            {/* Manuelle URL-Eingabe als Fallback (z. B. CDN-Link) */}
-            <Input
-              value={logoUrl}
-              onChange={e => setLogoUrl(e.target.value)}
-              placeholder="…oder URL eintragen: https://… / /api/storage/objects/…"
-              className="text-xs"
-            />
+            {/* URL-Eingabe für CDN/externe Logos — collapsed, da im 99 % der
+                Fälle der Drag-&-Drop reicht und die lange objectPath-URL die
+                UI sonst zumüllt. */}
+            <details className="text-xs">
+              <summary className="cursor-pointer text-muted-foreground hover:text-foreground">URL manuell eintragen…</summary>
+              <Input
+                value={logoUrl}
+                onChange={e => setLogoUrl(e.target.value)}
+                placeholder="https://… / /api/storage/objects/…"
+                className="mt-1 font-mono"
+              />
+            </details>
 
             {colorsExtracted && (
               <div className="flex items-center gap-2 text-xs text-muted-foreground" data-testid="brand-colors-extracted">

@@ -12,6 +12,38 @@
  */
 export type ExtractedColors = { primary: string; secondary: string | null };
 
+/**
+ * Helligkeit (Y aus YIQ) eines Hex-Farbwertes, normalisiert auf 0..1.
+ * Wird benutzt, um zu warnen wenn die Primärfarbe so hell ist, dass sie
+ * auf weißem Papier (DIN A4) untergeht — und um automatisch eine lesbare
+ * Vordergrundfarbe zu wählen.
+ */
+export function colorLuminance(hex: string): number {
+  const m = /^#?([0-9a-f]{6})$/i.exec(hex.trim());
+  if (!m) return 1; // unbekannt → defensiv "hell" annehmen
+  const v = parseInt(m[1], 16);
+  const r = (v >> 16) & 0xff;
+  const g = (v >> 8) & 0xff;
+  const b = v & 0xff;
+  return (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+}
+
+/**
+ * Wählt eine lesbare Vordergrundfarbe (Schwarz oder Weiß) für einen
+ * gegebenen Hintergrund-Hex. Schwellwert 0.6 hat sich bewährt.
+ */
+export function foregroundFor(bgHex: string): string {
+  return colorLuminance(bgHex) > 0.6 ? "#0f172a" : "#ffffff";
+}
+
+/**
+ * True, wenn die Farbe auf weißem Papier praktisch unsichtbar wäre.
+ * Wir warnen ab Luminanz > 0.92 — also nahezu Weiß.
+ */
+export function isTooLightForPaper(hex: string): boolean {
+  return colorLuminance(hex) > 0.92;
+}
+
 export async function extractLogoColors(file: File): Promise<ExtractedColors | null> {
   const url = URL.createObjectURL(file);
   try {
