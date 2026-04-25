@@ -7,6 +7,9 @@ import {
   useListClauseFamilies,
   useListContractClauses,
   usePatchContractClause,
+  useCreateClauseSuggestion,
+  getGetClauseSuggestionStatsQueryKey,
+  useGetClauseSuggestionStats,
   useListContractAmendments,
   useCreateContractAmendment,
   useGetContractEffectiveState,
@@ -54,8 +57,12 @@ import {
   DialogHeader,
   DialogTitle,
   DialogDescription,
+  DialogFooter,
 } from "@/components/ui/dialog";
-import { FileText, ShieldAlert, Library, Activity, GitCompare, AlertTriangle, FileStack, Plus, Languages } from "lucide-react";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import { FileText, ShieldAlert, Library, Activity, GitCompare, AlertTriangle, FileStack, Plus, Languages, Pencil, Sparkles, Inbox, RotateCcw } from "lucide-react";
 import { EntityVersions } from "@/components/ui/entity-versions";
 import { useToast } from "@/hooks/use-toast";
 
@@ -129,6 +136,8 @@ export default function Contract() {
 
   const [diff, setDiff] = useState<DiffState>(null);
   const [pending, setPending] = useState<string | null>(null);
+  const [editClause, setEditClause] = useState<ContractClause | null>(null);
+  const [queueClause, setQueueClause] = useState<ContractClause | null>(null);
 
   if (isLoadingContract || isLoadingFamilies || isLoadingClauses) {
     return <div className="p-8"><Skeleton className="h-64 w-full" /></div>;
@@ -310,6 +319,16 @@ export default function Contract() {
                             {t("pages.contracts.translationMissingClause")}
                           </Badge>
                         )}
+                        {clause.edited && (
+                          <Badge
+                            variant="outline"
+                            className="bg-fuchsia-500/10 text-fuchsia-600 border-fuchsia-500/30"
+                            data-testid={`clause-edited-${clause.id}`}
+                          >
+                            <Pencil className="h-3 w-3 mr-1" />
+                            {t("pages.clauseSuggestions.editEdited")}
+                          </Badge>
+                        )}
                       </div>
                     </div>
                     <div className="flex items-center gap-2 shrink-0">
@@ -318,7 +337,7 @@ export default function Contract() {
                         onValueChange={(v) => onVariantChange(clause, v)}
                         disabled={pending === clause.id}
                       >
-                        <SelectTrigger className="w-[280px]" data-testid={`clause-variant-select-${clause.id}`}>
+                        <SelectTrigger className="w-[260px]" data-testid={`clause-variant-select-${clause.id}`}>
                           <SelectValue />
                         </SelectTrigger>
                         <SelectContent>
@@ -333,6 +352,28 @@ export default function Contract() {
                           ))}
                         </SelectContent>
                       </Select>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="h-9 w-9 p-0"
+                        onClick={() => setEditClause(clause)}
+                        title={t("pages.clauseSuggestions.editClauseTitle")}
+                        data-testid={`clause-edit-${clause.id}`}
+                      >
+                        <Pencil className="h-3.5 w-3.5" />
+                      </Button>
+                      {clause.edited && (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="h-9 w-9 p-0"
+                          onClick={() => setQueueClause(clause)}
+                          title={t("pages.clauseSuggestions.queueButton")}
+                          data-testid={`clause-queue-${clause.id}`}
+                        >
+                          <Sparkles className="h-3.5 w-3.5 text-amber-500" />
+                        </Button>
+                      )}
                     </div>
                   </CardHeader>
                   <CardContent className="py-3 px-4 text-sm space-y-3">
@@ -478,7 +519,225 @@ export default function Contract() {
           )}
         </DialogContent>
       </Dialog>
+
+      {editClause && (
+        <EditClauseDialog
+          contractId={id}
+          clause={editClause}
+          onClose={() => setEditClause(null)}
+        />
+      )}
+      {queueClause && (
+        <QueueSuggestionDialog
+          contractId={id}
+          clause={queueClause}
+          families={families ?? []}
+          onClose={() => setQueueClause(null)}
+        />
+      )}
     </div>
+  );
+}
+
+function EditClauseDialog({
+  contractId, clause, onClose,
+}: {
+  contractId: string;
+  clause: ContractClause;
+  onClose: () => void;
+}) {
+  const { t } = useTranslation();
+  const qc = useQueryClient();
+  const { toast } = useToast();
+  const patch = usePatchContractClause();
+  const [name, setName] = useState(clause.variant ?? "");
+  const [summary, setSummary] = useState(clause.summary ?? "");
+  const [body, setBody] = useState(clause.body ?? "");
+  const [reason, setReason] = useState(clause.editedReason ?? "");
+  const [busy, setBusy] = useState(false);
+
+  async function save() {
+    setBusy(true);
+    try {
+      await patch.mutateAsync({
+        id: clause.id,
+        data: {
+          editedName: name,
+          editedSummary: summary,
+          editedBody: body,
+          editedReason: reason || undefined,
+        },
+      });
+      await Promise.all([
+        qc.invalidateQueries({ queryKey: getListContractClausesQueryKey(contractId) }),
+        qc.invalidateQueries({ queryKey: getGetClauseSuggestionStatsQueryKey({ days: 30 }) }),
+      ]);
+      toast({ description: t("pages.clauseSuggestions.queueQueued") });
+      onClose();
+    } catch (e) {
+      toast({ title: "Error", description: String(e), variant: "destructive" });
+      setBusy(false);
+    }
+  }
+
+  async function clear() {
+    setBusy(true);
+    try {
+      await patch.mutateAsync({ id: clause.id, data: { clearEdits: true } });
+      await qc.invalidateQueries({ queryKey: getListContractClausesQueryKey(contractId) });
+      onClose();
+    } catch (e) {
+      toast({ title: "Error", description: String(e), variant: "destructive" });
+      setBusy(false);
+    }
+  }
+
+  return (
+    <Dialog open onOpenChange={(o) => !o && onClose()}>
+      <DialogContent className="max-w-2xl">
+        <DialogHeader>
+          <DialogTitle>{t("pages.clauseSuggestions.editClauseTitle")}</DialogTitle>
+          <DialogDescription>{t("pages.clauseSuggestions.editClauseHint")}</DialogDescription>
+        </DialogHeader>
+        <div className="space-y-3">
+          <div>
+            <Label className="text-xs">{t("pages.clauseSuggestions.editName")}</Label>
+            <Input value={name} onChange={(e) => setName(e.target.value)} data-testid="edit-clause-name" />
+          </div>
+          <div>
+            <Label className="text-xs">{t("pages.clauseSuggestions.editSummary")}</Label>
+            <Textarea
+              value={summary}
+              onChange={(e) => setSummary(e.target.value)}
+              rows={2}
+              data-testid="edit-clause-summary"
+            />
+          </div>
+          <div>
+            <Label className="text-xs">{t("pages.clauseSuggestions.editBody")}</Label>
+            <Textarea
+              value={body}
+              onChange={(e) => setBody(e.target.value)}
+              rows={6}
+              data-testid="edit-clause-body"
+            />
+          </div>
+          <div>
+            <Label className="text-xs">{t("pages.clauseSuggestions.editReason")}</Label>
+            <Input value={reason} onChange={(e) => setReason(e.target.value)} data-testid="edit-clause-reason" />
+          </div>
+        </div>
+        <DialogFooter className="flex justify-between sm:justify-between">
+          <div>
+            {clause.edited && (
+              <Button variant="outline" onClick={clear} disabled={busy} data-testid="edit-clause-clear">
+                <RotateCcw className="h-3.5 w-3.5 mr-1" />
+                {t("pages.clauseSuggestions.editClear")}
+              </Button>
+            )}
+          </div>
+          <div className="flex gap-2">
+            <Button variant="outline" onClick={onClose} disabled={busy}>{t("common.cancel")}</Button>
+            <Button onClick={save} disabled={busy || !name.trim() || !body.trim()} data-testid="edit-clause-save">
+              {busy ? t("common.loading") : t("common.save")}
+            </Button>
+          </div>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function QueueSuggestionDialog({
+  contractId, clause, families, onClose,
+}: {
+  contractId: string;
+  clause: ContractClause;
+  families: ClauseFamily[];
+  onClose: () => void;
+}) {
+  const { t } = useTranslation();
+  const qc = useQueryClient();
+  const { toast } = useToast();
+  const create = useCreateClauseSuggestion();
+  const [familyId, setFamilyId] = useState<string>(clause.familyId ?? families[0]?.id ?? "");
+  const [name, setName] = useState(clause.variant ?? "");
+  const [summary, setSummary] = useState(clause.summary ?? "");
+  const [body, setBody] = useState(clause.body ?? "");
+  const [busy, setBusy] = useState(false);
+
+  async function submit() {
+    if (!familyId) return;
+    setBusy(true);
+    try {
+      await create.mutateAsync({
+        data: {
+          familyId,
+          proposedName: name,
+          proposedSummary: summary,
+          proposedBody: body,
+          contractId,
+          contractClauseId: clause.id,
+          baseVariantId: clause.activeVariantId ?? undefined,
+          sourceType: clause.activeVariantId ? "edit" : "ad-hoc",
+        },
+      });
+      await qc.invalidateQueries({ queryKey: getGetClauseSuggestionStatsQueryKey({ days: 30 }) });
+      toast({ description: t("pages.clauseSuggestions.queueQueued") });
+      onClose();
+    } catch (e) {
+      toast({ title: "Error", description: String(e), variant: "destructive" });
+      setBusy(false);
+    }
+  }
+
+  return (
+    <Dialog open onOpenChange={(o) => !o && onClose()}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>{t("pages.clauseSuggestions.queueDialogTitle")}</DialogTitle>
+          <DialogDescription>{t("pages.clauseSuggestions.queueDialogHint")}</DialogDescription>
+        </DialogHeader>
+        <div className="space-y-3">
+          <div>
+            <Label className="text-xs">{t("pages.clauseSuggestions.queueFamily")}</Label>
+            <Select value={familyId} onValueChange={setFamilyId}>
+              <SelectTrigger data-testid="queue-family">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {families.map(f => (
+                  <SelectItem key={f.id} value={f.id}>{f.name}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div>
+            <Label className="text-xs">{t("pages.clauseSuggestions.queueProposedName")}</Label>
+            <Input value={name} onChange={(e) => setName(e.target.value)} data-testid="queue-name" />
+          </div>
+          <div>
+            <Label className="text-xs">{t("pages.clauseSuggestions.queueProposedSummary")}</Label>
+            <Textarea value={summary} onChange={(e) => setSummary(e.target.value)} rows={2} data-testid="queue-summary" />
+          </div>
+          <div>
+            <Label className="text-xs">{t("pages.clauseSuggestions.queueProposedBody")}</Label>
+            <Textarea value={body} onChange={(e) => setBody(e.target.value)} rows={6} data-testid="queue-body" />
+          </div>
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose} disabled={busy}>{t("common.cancel")}</Button>
+          <Button
+            onClick={submit}
+            disabled={busy || !familyId || !name.trim() || !body.trim() || !summary.trim()}
+            data-testid="queue-submit"
+          >
+            <Inbox className="h-3.5 w-3.5 mr-1" />
+            {busy ? t("common.loading") : t("pages.clauseSuggestions.queueButton")}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
 

@@ -27,4 +27,15 @@ export interface ContractClause {
   translationLocale?: ContractClauseTranslationLocale;
   /** true, wenn für die Vertragssprache keine Übersetzung gepflegt ist und auf die Quell-Sprache zurückgefallen wurde. */
   translationMissing?: boolean;
+  /** true, wenn der Slot ad-hoc editiert wurde und vom aktiven Variantentext abweicht. */
+  edited?: boolean;
+  /**
+   * Begründung der Bearbeitenden für die Ad-hoc-Anpassung (optional).
+   * @nullable
+   */
+  editedReason?: string | null;
+  /** @nullable */
+  editedAt?: Date | null;
+  /** @nullable */
+  editedBy?: string | null;
 }

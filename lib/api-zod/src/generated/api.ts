@@ -2137,6 +2137,20 @@ export const GetContractResponse = zod
             .describe(
               "true, wenn für die Vertragssprache keine Übersetzung gepflegt ist und auf die Quell-Sprache zurückgefallen wurde.",
             ),
+          edited: zod
+            .boolean()
+            .optional()
+            .describe(
+              "true, wenn der Slot ad-hoc editiert wurde und vom aktiven Variantentext abweicht.",
+            ),
+          editedReason: zod
+            .string()
+            .nullish()
+            .describe(
+              "Begründung der Bearbeitenden für die Ad-hoc-Anpassung (optional).",
+            ),
+          editedAt: zod.coerce.date().nullish(),
+          editedBy: zod.string().nullish(),
         }),
       ),
     }),
@@ -2368,6 +2382,20 @@ export const GetContractEffectiveStateResponse = zod.object({
         .describe(
           "true, wenn für die Vertragssprache keine Übersetzung gepflegt ist und auf die Quell-Sprache zurückgefallen wurde.",
         ),
+      edited: zod
+        .boolean()
+        .optional()
+        .describe(
+          "true, wenn der Slot ad-hoc editiert wurde und vom aktiven Variantentext abweicht.",
+        ),
+      editedReason: zod
+        .string()
+        .nullish()
+        .describe(
+          "Begründung der Bearbeitenden für die Ad-hoc-Anpassung (optional).",
+        ),
+      editedAt: zod.coerce.date().nullish(),
+      editedBy: zod.string().nullish(),
     }),
   ),
   appliedAmendments: zod.array(
@@ -2491,6 +2519,20 @@ export const ListContractClausesResponseItem = zod.object({
     .describe(
       "true, wenn für die Vertragssprache keine Übersetzung gepflegt ist und auf die Quell-Sprache zurückgefallen wurde.",
     ),
+  edited: zod
+    .boolean()
+    .optional()
+    .describe(
+      "true, wenn der Slot ad-hoc editiert wurde und vom aktiven Variantentext abweicht.",
+    ),
+  editedReason: zod
+    .string()
+    .nullish()
+    .describe(
+      "Begründung der Bearbeitenden für die Ad-hoc-Anpassung (optional).",
+    ),
+  editedAt: zod.coerce.date().nullish(),
+  editedBy: zod.string().nullish(),
 });
 export const ListContractClausesResponse = zod.array(
   ListContractClausesResponseItem,
@@ -2610,8 +2652,44 @@ export const PatchContractClauseParams = zod.object({
   id: zod.coerce.string(),
 });
 
+export const patchContractClauseBodyEditedNameMax = 200;
+
+export const patchContractClauseBodyEditedSummaryMax = 1000;
+
+export const patchContractClauseBodyEditedBodyMax = 8000;
+
+export const patchContractClauseBodyEditedReasonMax = 500;
+
 export const PatchContractClauseBody = zod.object({
-  variantId: zod.string(),
+  variantId: zod.string().optional(),
+  editedName: zod
+    .string()
+    .max(patchContractClauseBodyEditedNameMax)
+    .nullish()
+    .describe(
+      "Optional ad-hoc Name. Wenn gesetzt, wird der Wert als Snapshot gespeichert.",
+    ),
+  editedSummary: zod
+    .string()
+    .max(patchContractClauseBodyEditedSummaryMax)
+    .nullish(),
+  editedBody: zod
+    .string()
+    .max(patchContractClauseBodyEditedBodyMax)
+    .nullish()
+    .describe(
+      "Optional ad-hoc Volltext. Liegt der Diff zur aktiven Variante über der Tenant-Schwelle, wird ein Klausel-Vorschlag erzeugt.",
+    ),
+  editedReason: zod
+    .string()
+    .max(patchContractClauseBodyEditedReasonMax)
+    .nullish(),
+  clearEdits: zod
+    .boolean()
+    .optional()
+    .describe(
+      "Setzt vorhandene editedBody\/editedName\/editedSummary zurück (Variante wird wieder Quelle der Wahrheit).",
+    ),
 });
 
 export const PatchContractClauseResponse = zod.object({
@@ -2637,6 +2715,20 @@ export const PatchContractClauseResponse = zod.object({
       .describe(
         "true, wenn für die Vertragssprache keine Übersetzung gepflegt ist und auf die Quell-Sprache zurückgefallen wurde.",
       ),
+    edited: zod
+      .boolean()
+      .optional()
+      .describe(
+        "true, wenn der Slot ad-hoc editiert wurde und vom aktiven Variantentext abweicht.",
+      ),
+    editedReason: zod
+      .string()
+      .nullish()
+      .describe(
+        "Begründung der Bearbeitenden für die Ad-hoc-Anpassung (optional).",
+      ),
+    editedAt: zod.coerce.date().nullish(),
+    editedBy: zod.string().nullish(),
   }),
   contractRiskLevel: zod.string(),
   contractRiskScore: zod.number(),
@@ -2645,6 +2737,372 @@ export const PatchContractClauseResponse = zod.object({
   softer: zod.boolean(),
   approvalId: zod.string().nullish(),
   approvalReason: zod.string().nullish(),
+});
+
+export const ListClauseSuggestionsQueryParams = zod.object({
+  status: zod.enum(["open", "accepted", "rejected", "superseded"]).optional(),
+  familyId: zod.coerce.string().optional(),
+  brandId: zod.coerce.string().optional(),
+  sourceType: zod.enum(["ad-hoc", "edit"]).optional(),
+});
+
+export const ListClauseSuggestionsResponseItem = zod.object({
+  id: zod.string(),
+  tenantId: zod.string(),
+  status: zod.enum(["open", "accepted", "rejected", "superseded"]),
+  sourceType: zod.enum(["ad-hoc", "edit"]),
+  contractId: zod.string().nullish(),
+  contractClauseId: zod.string().nullish(),
+  familyId: zod.string().nullish(),
+  familyName: zod.string().nullish(),
+  baseVariantId: zod.string().nullish(),
+  baseVariantName: zod.string().nullish(),
+  brandId: zod.string().nullish(),
+  brandName: zod.string().nullish(),
+  proposedName: zod.string(),
+  proposedSummary: zod.string(),
+  proposedBody: zod.string(),
+  proposedTone: zod.string().nullish(),
+  proposedSeverity: zod.string().nullish(),
+  diffPct: zod.number().nullish(),
+  occurrenceCount: zod.number(),
+  contentHash: zod.string(),
+  authorId: zod.string().nullish(),
+  authorName: zod.string().nullish(),
+  firstSeenAt: zod.coerce.date(),
+  lastSeenAt: zod.coerce.date(),
+  decisionAt: zod.coerce.date().nullish(),
+  decisionBy: zod.string().nullish(),
+  decisionAction: zod
+    .union([
+      zod.literal("new_variant"),
+      zod.literal("replace_variant"),
+      zod.literal("add_translation"),
+      zod.literal("discard"),
+      zod.literal(null),
+    ])
+    .nullish(),
+  decisionNote: zod.string().nullish(),
+  createdVariantId: zod.string().nullish(),
+});
+export const ListClauseSuggestionsResponse = zod.array(
+  ListClauseSuggestionsResponseItem,
+);
+
+export const createClauseSuggestionBodyProposedNameMax = 200;
+
+export const createClauseSuggestionBodyProposedSummaryMax = 1000;
+
+export const createClauseSuggestionBodyProposedBodyMax = 8000;
+
+export const createClauseSuggestionBodyProposedToneMax = 50;
+
+export const createClauseSuggestionBodyProposedSeverityMax = 20;
+
+export const CreateClauseSuggestionBody = zod.object({
+  familyId: zod.string(),
+  contractId: zod.string().nullish(),
+  contractClauseId: zod.string().nullish(),
+  baseVariantId: zod.string().nullish(),
+  brandId: zod.string().nullish(),
+  proposedName: zod
+    .string()
+    .min(1)
+    .max(createClauseSuggestionBodyProposedNameMax),
+  proposedSummary: zod
+    .string()
+    .min(1)
+    .max(createClauseSuggestionBodyProposedSummaryMax),
+  proposedBody: zod
+    .string()
+    .min(1)
+    .max(createClauseSuggestionBodyProposedBodyMax),
+  proposedTone: zod
+    .string()
+    .max(createClauseSuggestionBodyProposedToneMax)
+    .nullish(),
+  proposedSeverity: zod
+    .string()
+    .max(createClauseSuggestionBodyProposedSeverityMax)
+    .nullish(),
+  sourceType: zod.enum(["ad-hoc", "edit"]),
+});
+
+export const CreateClauseSuggestionResponse = zod.object({
+  id: zod.string(),
+  tenantId: zod.string(),
+  status: zod.enum(["open", "accepted", "rejected", "superseded"]),
+  sourceType: zod.enum(["ad-hoc", "edit"]),
+  contractId: zod.string().nullish(),
+  contractClauseId: zod.string().nullish(),
+  familyId: zod.string().nullish(),
+  familyName: zod.string().nullish(),
+  baseVariantId: zod.string().nullish(),
+  baseVariantName: zod.string().nullish(),
+  brandId: zod.string().nullish(),
+  brandName: zod.string().nullish(),
+  proposedName: zod.string(),
+  proposedSummary: zod.string(),
+  proposedBody: zod.string(),
+  proposedTone: zod.string().nullish(),
+  proposedSeverity: zod.string().nullish(),
+  diffPct: zod.number().nullish(),
+  occurrenceCount: zod.number(),
+  contentHash: zod.string(),
+  authorId: zod.string().nullish(),
+  authorName: zod.string().nullish(),
+  firstSeenAt: zod.coerce.date(),
+  lastSeenAt: zod.coerce.date(),
+  decisionAt: zod.coerce.date().nullish(),
+  decisionBy: zod.string().nullish(),
+  decisionAction: zod
+    .union([
+      zod.literal("new_variant"),
+      zod.literal("replace_variant"),
+      zod.literal("add_translation"),
+      zod.literal("discard"),
+      zod.literal(null),
+    ])
+    .nullish(),
+  decisionNote: zod.string().nullish(),
+  createdVariantId: zod.string().nullish(),
+});
+
+export const getClauseSuggestionStatsQueryDaysMax = 365;
+
+export const GetClauseSuggestionStatsQueryParams = zod.object({
+  days: zod.coerce
+    .number()
+    .min(1)
+    .max(getClauseSuggestionStatsQueryDaysMax)
+    .optional(),
+});
+
+export const GetClauseSuggestionStatsResponse = zod.object({
+  open: zod.number(),
+  accepted: zod.number(),
+  rejected: zod.number(),
+  total: zod.number(),
+  since: zod.coerce.date(),
+  byFamily: zod.array(
+    zod.object({
+      familyId: zod.string(),
+      familyName: zod.string(),
+      open: zod.number(),
+      accepted: zod.number(),
+      rejected: zod.number(),
+    }),
+  ),
+  byAction: zod.record(zod.string(), zod.number()),
+});
+
+export const GetClauseSuggestionParams = zod.object({
+  id: zod.coerce.string(),
+});
+
+export const GetClauseSuggestionResponse = zod
+  .object({
+    id: zod.string(),
+    tenantId: zod.string(),
+    status: zod.enum(["open", "accepted", "rejected", "superseded"]),
+    sourceType: zod.enum(["ad-hoc", "edit"]),
+    contractId: zod.string().nullish(),
+    contractClauseId: zod.string().nullish(),
+    familyId: zod.string().nullish(),
+    familyName: zod.string().nullish(),
+    baseVariantId: zod.string().nullish(),
+    baseVariantName: zod.string().nullish(),
+    brandId: zod.string().nullish(),
+    brandName: zod.string().nullish(),
+    proposedName: zod.string(),
+    proposedSummary: zod.string(),
+    proposedBody: zod.string(),
+    proposedTone: zod.string().nullish(),
+    proposedSeverity: zod.string().nullish(),
+    diffPct: zod.number().nullish(),
+    occurrenceCount: zod.number(),
+    contentHash: zod.string(),
+    authorId: zod.string().nullish(),
+    authorName: zod.string().nullish(),
+    firstSeenAt: zod.coerce.date(),
+    lastSeenAt: zod.coerce.date(),
+    decisionAt: zod.coerce.date().nullish(),
+    decisionBy: zod.string().nullish(),
+    decisionAction: zod
+      .union([
+        zod.literal("new_variant"),
+        zod.literal("replace_variant"),
+        zod.literal("add_translation"),
+        zod.literal("discard"),
+        zod.literal(null),
+      ])
+      .nullish(),
+    decisionNote: zod.string().nullish(),
+    createdVariantId: zod.string().nullish(),
+  })
+  .and(
+    zod.object({
+      baseVariantBody: zod.string().nullish(),
+      baseVariantSummary: zod.string().nullish(),
+      baseVariantTone: zod.string().nullish(),
+      familyVariants: zod
+        .array(
+          zod.object({
+            id: zod.string(),
+            name: zod.string(),
+            severity: zod.string(),
+            severityScore: zod.number(),
+            summary: zod.string(),
+            body: zod.string(),
+            tone: zod.string(),
+            translations: zod
+              .array(
+                zod.object({
+                  id: zod.string(),
+                  variantId: zod.string(),
+                  locale: zod.enum(["de", "en"]),
+                  name: zod.string(),
+                  summary: zod.string(),
+                  body: zod.string(),
+                  source: zod
+                    .string()
+                    .nullish()
+                    .describe("z. B. bonterms-mutual-2024"),
+                  license: zod.string().nullish().describe("z. B. CC-BY-4.0"),
+                  sourceUrl: zod.string().nullish(),
+                  createdAt: zod.coerce.date(),
+                  updatedAt: zod.coerce.date(),
+                }),
+              )
+              .optional()
+              .describe("Vorhandene Sprachfassungen je Variante (de\/en\/…)."),
+          }),
+        )
+        .optional(),
+    }),
+  );
+
+export const DecideClauseSuggestionParams = zod.object({
+  id: zod.coerce.string(),
+});
+
+export const decideClauseSuggestionBodyDecisionNoteMax = 500;
+
+export const decideClauseSuggestionBodyToneMax = 50;
+
+export const decideClauseSuggestionBodySeverityMax = 20;
+
+export const decideClauseSuggestionBodySeverityScoreMax = 5;
+
+export const DecideClauseSuggestionBody = zod.object({
+  action: zod.enum([
+    "new_variant",
+    "replace_variant",
+    "add_translation",
+    "discard",
+  ]),
+  decisionNote: zod
+    .string()
+    .max(decideClauseSuggestionBodyDecisionNoteMax)
+    .nullish(),
+  tone: zod.string().max(decideClauseSuggestionBodyToneMax).nullish(),
+  severity: zod.string().max(decideClauseSuggestionBodySeverityMax).nullish(),
+  severityScore: zod
+    .number()
+    .min(1)
+    .max(decideClauseSuggestionBodySeverityScoreMax)
+    .nullish(),
+  replaceVariantId: zod.string().nullish(),
+  locale: zod.enum(["de", "en"]).nullish(),
+  translationVariantId: zod.string().nullish(),
+});
+
+export const DecideClauseSuggestionResponse = zod.object({
+  id: zod.string(),
+  tenantId: zod.string(),
+  status: zod.enum(["open", "accepted", "rejected", "superseded"]),
+  sourceType: zod.enum(["ad-hoc", "edit"]),
+  contractId: zod.string().nullish(),
+  contractClauseId: zod.string().nullish(),
+  familyId: zod.string().nullish(),
+  familyName: zod.string().nullish(),
+  baseVariantId: zod.string().nullish(),
+  baseVariantName: zod.string().nullish(),
+  brandId: zod.string().nullish(),
+  brandName: zod.string().nullish(),
+  proposedName: zod.string(),
+  proposedSummary: zod.string(),
+  proposedBody: zod.string(),
+  proposedTone: zod.string().nullish(),
+  proposedSeverity: zod.string().nullish(),
+  diffPct: zod.number().nullish(),
+  occurrenceCount: zod.number(),
+  contentHash: zod.string(),
+  authorId: zod.string().nullish(),
+  authorName: zod.string().nullish(),
+  firstSeenAt: zod.coerce.date(),
+  lastSeenAt: zod.coerce.date(),
+  decisionAt: zod.coerce.date().nullish(),
+  decisionBy: zod.string().nullish(),
+  decisionAction: zod
+    .union([
+      zod.literal("new_variant"),
+      zod.literal("replace_variant"),
+      zod.literal("add_translation"),
+      zod.literal("discard"),
+      zod.literal(null),
+    ])
+    .nullish(),
+  decisionNote: zod.string().nullish(),
+  createdVariantId: zod.string().nullish(),
+});
+
+export const getClauseSuggestionConfigResponseDiffThresholdPctMin = 0;
+export const getClauseSuggestionConfigResponseDiffThresholdPctMax = 100;
+
+export const getClauseSuggestionConfigResponseRepeatThresholdMax = 100;
+
+export const GetClauseSuggestionConfigResponse = zod.object({
+  diffThresholdPct: zod
+    .number()
+    .min(getClauseSuggestionConfigResponseDiffThresholdPctMin)
+    .max(getClauseSuggestionConfigResponseDiffThresholdPctMax),
+  repeatThreshold: zod
+    .number()
+    .min(1)
+    .max(getClauseSuggestionConfigResponseRepeatThresholdMax),
+});
+
+export const updateClauseSuggestionConfigBodyDiffThresholdPctMin = 0;
+export const updateClauseSuggestionConfigBodyDiffThresholdPctMax = 100;
+
+export const updateClauseSuggestionConfigBodyRepeatThresholdMax = 100;
+
+export const UpdateClauseSuggestionConfigBody = zod.object({
+  diffThresholdPct: zod
+    .number()
+    .min(updateClauseSuggestionConfigBodyDiffThresholdPctMin)
+    .max(updateClauseSuggestionConfigBodyDiffThresholdPctMax),
+  repeatThreshold: zod
+    .number()
+    .min(1)
+    .max(updateClauseSuggestionConfigBodyRepeatThresholdMax),
+});
+
+export const updateClauseSuggestionConfigResponseDiffThresholdPctMin = 0;
+export const updateClauseSuggestionConfigResponseDiffThresholdPctMax = 100;
+
+export const updateClauseSuggestionConfigResponseRepeatThresholdMax = 100;
+
+export const UpdateClauseSuggestionConfigResponse = zod.object({
+  diffThresholdPct: zod
+    .number()
+    .min(updateClauseSuggestionConfigResponseDiffThresholdPctMin)
+    .max(updateClauseSuggestionConfigResponseDiffThresholdPctMax),
+  repeatThreshold: zod
+    .number()
+    .min(1)
+    .max(updateClauseSuggestionConfigResponseRepeatThresholdMax),
 });
 
 export const GetClauseDiffParams = zod.object({

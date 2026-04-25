@@ -33,6 +33,15 @@ export const tenantsTable = pgTable("tenants", {
   // Tenant-weiter Default für Vertragssprache (de/en). Wird genutzt, wenn weder
   // Brand noch der explizite Body-Wert eine Sprache vorgeben.
   defaultLanguage: text("default_language").notNull().default("de"),
+  // Konfiguration für die Klausel-Vorschlags-Pipeline (Task #77).
+  // diffThresholdPct: ab welchem Textunterschied (0-100) zur nächstgelegenen
+  // Variante eine ad-hoc-Bearbeitung als Vorschlag gequeued wird.
+  // repeatThreshold: wie oft eine bereits abgelehnte Variante wieder auftauchen
+  // muss, bis sie erneut in die Inbox darf (Spam-Schutz).
+  clauseSuggestionConfig: jsonb("clause_suggestion_config")
+    .$type<{ diffThresholdPct?: number; repeatThreshold?: number }>()
+    .default({})
+    .notNull(),
   createdAt: ts("created_at"),
 });
 
@@ -754,7 +763,51 @@ export const contractClausesTable = pgTable("contract_clauses", {
   summary: text("summary").notNull(),
   familyId: text("family_id"),
   activeVariantId: text("active_variant_id"),
+  // Ad-hoc Bearbeitungen direkt am Vertragsslot. Wenn gesetzt, hat dieser Text
+  // Vorrang vor dem Variant-Body und triggert ggf. einen Klausel-Vorschlag.
+  // (Task #77 — Lernen aus Vertragsarbeit.)
+  editedName: text("edited_name"),
+  editedSummary: text("edited_summary"),
+  editedBody: text("edited_body"),
+  editedReason: text("edited_reason"),
+  editedAt: timestamp("edited_at", { withTimezone: true }),
+  editedBy: text("edited_by"),
 });
+
+// Klausel-Vorschläge entstehen, wenn während aktiver Vertragsarbeit eine
+// Klausel ad-hoc erfasst oder ein Variant-Body deutlich überarbeitet wird.
+// Reviewer entscheiden in der Inbox, ob die Vorschläge als neue Variante,
+// Ersatz, Übersetzung oder verworfen werden sollen.
+export const clauseSuggestionsTable = pgTable("clause_suggestions", {
+  id: id(),
+  tenantId: text("tenant_id").notNull(),
+  status: text("status").notNull().default("open"),
+  sourceType: text("source_type").notNull(),
+  contractId: text("contract_id"),
+  contractClauseId: text("contract_clause_id"),
+  familyId: text("family_id"),
+  baseVariantId: text("base_variant_id"),
+  brandId: text("brand_id"),
+  proposedName: text("proposed_name").notNull(),
+  proposedSummary: text("proposed_summary").notNull(),
+  proposedBody: text("proposed_body").notNull(),
+  proposedTone: text("proposed_tone"),
+  proposedSeverity: text("proposed_severity"),
+  diffPct: numeric("diff_pct"),
+  occurrenceCount: integer("occurrence_count").notNull().default(1),
+  contentHash: text("content_hash").notNull(),
+  authorId: text("author_id"),
+  authorName: text("author_name"),
+  firstSeenAt: ts("first_seen_at"),
+  lastSeenAt: ts("last_seen_at"),
+  decisionAt: timestamp("decision_at", { withTimezone: true }),
+  decisionBy: text("decision_by"),
+  decisionAction: text("decision_action"),
+  decisionNote: text("decision_note"),
+  createdVariantId: text("created_variant_id"),
+}, (t) => [
+  uniqueIndex("clause_suggestions_hash_uniq").on(t.tenantId, t.contentHash),
+]);
 
 // Negotiations
 export const negotiationsTable = pgTable("negotiations", {

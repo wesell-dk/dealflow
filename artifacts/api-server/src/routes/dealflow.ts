@@ -103,6 +103,7 @@ import {
   brandClauseVariantOverridesTable,
   clauseVariantTranslationsTable,
   clauseVariantCompatibilityTable,
+  clauseSuggestionsTable,
   externalCollaboratorsTable,
   aiRecommendationsTable,
   externalCollaboratorEventsTable,
@@ -4904,36 +4905,166 @@ router.get('/contracts/:id/clauses', async (req, res) => {
   res.json(clauses.map(cl => {
     const active = cl.activeVariantId ? variantById.get(cl.activeVariantId) : undefined;
     const tr = pickClauseTranslation(active, cl.activeVariantId ? trMap.get(cl.activeVariantId) : undefined, language);
+    // Ad-hoc Edits am Slot überschreiben Translation/Variant-Body. Snapshot in `variant`/`summary`
+    // wird beim PATCH bereits gespiegelt; body greift hier auf editedBody zurück.
     return {
       id: cl.id, contractId: cl.contractId, family: cl.family,
-      variant: tr.name ?? cl.variant,
+      variant: cl.editedName ?? tr.name ?? cl.variant,
       severity: cl.severity,
-      summary: tr.summary ?? cl.summary,
+      summary: cl.editedSummary ?? tr.summary ?? cl.summary,
       familyId: cl.familyId ?? null, activeVariantId: cl.activeVariantId ?? null,
       severityScore: active?.severityScore ?? 3,
       tone: active?.tone ?? 'standard',
-      body: tr.body ?? active?.body ?? '',
+      body: cl.editedBody ?? tr.body ?? active?.body ?? '',
       translationLocale: tr.usedLocale,
       translationMissing: tr.missing,
+      edited: !!(cl.editedAt && (cl.editedName || cl.editedSummary || cl.editedBody)),
+      editedReason: cl.editedReason ?? null,
+      editedAt: cl.editedAt ? cl.editedAt.toISOString() : null,
+      editedBy: cl.editedBy ?? null,
     };
   }));
 });
 
 router.patch('/contract-clauses/:id', async (req, res) => {
   if (!validateInline(req, res, { params: Z.PatchContractClauseParams, body: Z.PatchContractClauseBody })) return;
-  const body: { variantId?: string } = req.body ?? {};
+  const body = (req.body ?? {}) as {
+    variantId?: string;
+    editedName?: string | null;
+    editedSummary?: string | null;
+    editedBody?: string | null;
+    editedReason?: string | null;
+    clearEdits?: boolean;
+  };
   const { variantId } = body;
-  if (!variantId) { res.status(400).json({ error: 'variantId required' }); return; }
+  const hasEdits = body.editedName != null || body.editedSummary != null || body.editedBody != null || body.editedReason != null;
+  const isClearOnly = body.clearEdits === true && !variantId && !hasEdits;
+  if (!variantId && !hasEdits && !isClearOnly) {
+    res.status(400).json({ error: 'variantId, editedBody/editedName/editedSummary or clearEdits required' });
+    return;
+  }
   const actor = getScope(req).user;
   const [cl] = await db.select().from(contractClausesTable).where(eq(contractClausesTable.id, req.params.id));
   if (!cl) { res.status(404).json({ error: 'not found' }); return; }
   const [ctr] = await db.select().from(contractsTable).where(eq(contractsTable.id, cl.contractId));
   if (!ctr) { res.status(404).json({ error: 'contract not found' }); return; }
   if (!(await gateDeal(req, res, ctr.dealId))) return;
+
+  // Pfad A: nur Edits ohne Variantenwechsel ── snapshot an contract_clause speichern
+  // und bei ausreichendem Diff einen Klausel-Vorschlag queuen.
+  if (!variantId) {
+    if (isClearOnly) {
+      await db.update(contractClausesTable).set({
+        editedName: null, editedSummary: null, editedBody: null, editedReason: null,
+        editedAt: null, editedBy: null,
+      }).where(eq(contractClausesTable.id, cl.id));
+      await writeAuditFromReq(req, {
+        entityType: 'contract', entityId: ctr.id, action: 'clause_edits_cleared',
+        summary: `${cl.family}: ad-hoc Bearbeitung verworfen`,
+      });
+      const [updated] = await db.select().from(contractClausesTable).where(eq(contractClausesTable.id, cl.id));
+      const [activeVar] = updated!.activeVariantId
+        ? await db.select().from(clauseVariantsTable).where(eq(clauseVariantsTable.id, updated!.activeVariantId))
+        : [undefined];
+      res.json({
+        clause: {
+          id: updated!.id, contractId: updated!.contractId, family: updated!.family,
+          variant: updated!.variant, severity: updated!.severity, summary: updated!.summary,
+          familyId: updated!.familyId ?? null, activeVariantId: updated!.activeVariantId ?? null,
+          severityScore: activeVar?.severityScore ?? 3,
+          tone: activeVar?.tone ?? 'standard',
+          body: activeVar?.body ?? '',
+        },
+        contractRiskLevel: ctr.riskLevel, contractRiskScore: ctr.riskScore ?? 0,
+        dealName: (await getDealMap()).get(ctr.dealId)?.name ?? 'Unknown',
+        deltaScore: 0, softer: false, approvalId: null, approvalReason: null,
+      });
+      return;
+    }
+    // Edit-only Pfad
+    const [activeVar] = cl.activeVariantId
+      ? await db.select().from(clauseVariantsTable).where(eq(clauseVariantsTable.id, cl.activeVariantId))
+      : [undefined];
+    const newName = body.editedName?.trim() || cl.editedName || cl.variant;
+    const newSummary = body.editedSummary?.trim() || cl.editedSummary || cl.summary;
+    const newBody = body.editedBody?.trim() || cl.editedBody || activeVar?.body || '';
+    const setFields: Partial<typeof contractClausesTable.$inferSelect> = {
+      editedAt: new Date(),
+      editedBy: actor.name,
+    };
+    if (body.editedName !== undefined) setFields.editedName = body.editedName?.trim() || null;
+    if (body.editedSummary !== undefined) setFields.editedSummary = body.editedSummary?.trim() || null;
+    if (body.editedBody !== undefined) setFields.editedBody = body.editedBody?.trim() || null;
+    if (body.editedReason !== undefined) setFields.editedReason = body.editedReason?.trim() || null;
+    // Snapshot in die sichtbaren Felder, damit Rendering/PDF den ad-hoc Text zeigt.
+    setFields.variant = newName;
+    setFields.summary = newSummary;
+    await db.update(contractClausesTable).set(setFields).where(eq(contractClausesTable.id, cl.id));
+
+    // Vorschlag queuen, wenn Body-Diff zur aktiven Variante über Tenant-Schwelle.
+    let queuedSuggestionId: string | null = null;
+    if (cl.familyId && activeVar) {
+      const cfg = await loadClauseSuggestionConfig(getScope(req).tenantId);
+      const diffPct = wordDiffPct(activeVar.body, newBody);
+      if (diffPct >= cfg.diffThresholdPct) {
+        const result = await upsertClauseSuggestion(req, {
+          familyId: cl.familyId,
+          contractId: ctr.id,
+          contractClauseId: cl.id,
+          baseVariantId: activeVar.id,
+          brandId: (await db.select().from(dealsTable).where(eq(dealsTable.id, ctr.dealId)))[0]?.brandId ?? null,
+          proposedName: newName,
+          proposedSummary: newSummary,
+          proposedBody: newBody,
+          proposedTone: activeVar.tone,
+          proposedSeverity: activeVar.severity,
+          sourceType: 'edit',
+        });
+        queuedSuggestionId = result.row.id;
+        await writeAuditFromReq(req, {
+          entityType: 'clause_suggestion', entityId: result.row.id,
+          action: result.created ? 'auto_created_from_edit' : (result.revived ? 'auto_revived_from_edit' : 'auto_incremented_from_edit'),
+          summary: `Auto-Vorschlag aus Vertrags-Edit (Diff ${diffPct}%)`,
+          after: { contractId: ctr.id, clauseId: cl.id, diffPct },
+        });
+      }
+    }
+    await writeAuditFromReq(req, {
+      entityType: 'contract', entityId: ctr.id, action: 'clause_edited_inline',
+      summary: `${cl.family}: ad-hoc Bearbeitung gespeichert${queuedSuggestionId ? ' (Vorschlag erzeugt)' : ''}`,
+      before: { name: cl.variant, summary: cl.summary, body: cl.editedBody ?? activeVar?.body ?? '' },
+      after: { name: newName, summary: newSummary, body: newBody, suggestionId: queuedSuggestionId },
+    });
+    const [updated] = await db.select().from(contractClausesTable).where(eq(contractClausesTable.id, cl.id));
+    res.json({
+      clause: {
+        id: updated!.id, contractId: updated!.contractId, family: updated!.family,
+        variant: updated!.variant, severity: updated!.severity, summary: updated!.summary,
+        familyId: updated!.familyId ?? null, activeVariantId: updated!.activeVariantId ?? null,
+        severityScore: activeVar?.severityScore ?? 3,
+        tone: activeVar?.tone ?? 'standard',
+        body: newBody,
+      },
+      contractRiskLevel: ctr.riskLevel, contractRiskScore: ctr.riskScore ?? 0,
+      dealName: (await getDealMap()).get(ctr.dealId)?.name ?? 'Unknown',
+      deltaScore: 0, softer: false,
+      approvalId: null,
+      approvalReason: queuedSuggestionId ? `clause_suggestion:${queuedSuggestionId}` : null,
+    });
+    return;
+  }
+
   const [nextVar] = await db.select().from(clauseVariantsTable).where(eq(clauseVariantsTable.id, variantId));
   if (!nextVar) { res.status(400).json({ error: 'variant not found' }); return; }
   if (cl.familyId && nextVar.familyId !== cl.familyId) {
     res.status(400).json({ error: 'variant belongs to different family' }); return;
+  }
+  // Variantenwechsel verwirft bestehende ad-hoc Edits am Slot, da diese sich auf die alte Variante bezogen.
+  if (cl.editedBody || cl.editedName || cl.editedSummary || cl.editedReason) {
+    await db.update(contractClausesTable).set({
+      editedName: null, editedSummary: null, editedBody: null, editedReason: null,
+      editedAt: null, editedBy: null,
+    }).where(eq(contractClausesTable.id, cl.id));
   }
   const [prevVar] = cl.activeVariantId
     ? await db.select().from(clauseVariantsTable).where(eq(clauseVariantsTable.id, cl.activeVariantId))
@@ -5039,6 +5170,530 @@ router.patch('/contract-clauses/:id', async (req, res) => {
     approvalId,
     approvalReason: approvalId ? 'non-standard clause weakened' : null,
   });
+});
+
+// ── Klausel-Vorschläge (Lernen aus Vertragsarbeit, Task #77) ──
+const CLAUSE_SUGGESTION_DEFAULTS = { diffThresholdPct: 20, repeatThreshold: 3 } as const;
+
+function clauseSuggestionConfigFor(t: typeof tenantsTable.$inferSelect | undefined) {
+  const cfg = (t?.clauseSuggestionConfig ?? {}) as { diffThresholdPct?: number; repeatThreshold?: number };
+  const diffThresholdPct = typeof cfg.diffThresholdPct === 'number'
+    ? Math.max(0, Math.min(100, cfg.diffThresholdPct))
+    : CLAUSE_SUGGESTION_DEFAULTS.diffThresholdPct;
+  const repeatThreshold = typeof cfg.repeatThreshold === 'number'
+    ? Math.max(1, Math.min(100, cfg.repeatThreshold))
+    : CLAUSE_SUGGESTION_DEFAULTS.repeatThreshold;
+  return { diffThresholdPct, repeatThreshold };
+}
+
+async function loadClauseSuggestionConfig(tenantId: string) {
+  const [t] = await db.select().from(tenantsTable).where(eq(tenantsTable.id, tenantId));
+  return clauseSuggestionConfigFor(t);
+}
+
+function normalizeClauseText(s: string): string {
+  return s.normalize('NFKC').toLowerCase().replace(/\s+/g, ' ').trim();
+}
+
+function clauseContentHash(familyId: string, body: string, name: string): string {
+  return createHash('sha256')
+    .update(`${familyId}\n${normalizeClauseText(name)}\n${normalizeClauseText(body)}`)
+    .digest('hex');
+}
+
+// Word-Level Diff in Prozent (0..100) zwischen zwei Texten – konsistent mit
+// dem Frontend-Helper diffWords (LCS-basiert).
+function wordDiffPct(a: string, b: string): number {
+  const aw = a.split(/\s+/).filter(Boolean);
+  const bw = b.split(/\s+/).filter(Boolean);
+  const m = aw.length, n = bw.length;
+  if (m === 0 && n === 0) return 0;
+  if (m === 0 || n === 0) return 100;
+  // LCS Länge via DP (Speicher: 2 Reihen).
+  let prev = new Array(n + 1).fill(0);
+  let curr = new Array(n + 1).fill(0);
+  for (let i = 1; i <= m; i++) {
+    for (let j = 1; j <= n; j++) {
+      curr[j] = aw[i - 1] === bw[j - 1] ? prev[j - 1] + 1 : Math.max(prev[j], curr[j - 1]);
+    }
+    [prev, curr] = [curr, prev];
+    curr.fill(0);
+  }
+  const lcs = prev[n];
+  const denom = Math.max(m, n);
+  return Math.round(((denom - lcs) / denom) * 1000) / 10; // 1 Nachkommastelle
+}
+
+async function nearestVariantInFamily(
+  familyId: string,
+  body: string,
+  hintVariantId?: string | null,
+): Promise<typeof clauseVariantsTable.$inferSelect | undefined> {
+  if (hintVariantId) {
+    const [v] = await db.select().from(clauseVariantsTable).where(eq(clauseVariantsTable.id, hintVariantId));
+    if (v) return v;
+  }
+  const variants = await db.select().from(clauseVariantsTable)
+    .where(eq(clauseVariantsTable.familyId, familyId));
+  if (variants.length === 0) return undefined;
+  let best = variants[0];
+  let bestDiff = wordDiffPct(best.body, body);
+  for (let i = 1; i < variants.length; i++) {
+    const d = wordDiffPct(variants[i].body, body);
+    if (d < bestDiff) { best = variants[i]; bestDiff = d; }
+  }
+  return best;
+}
+
+async function familyNameMap(familyIds: string[]) {
+  if (familyIds.length === 0) return new Map<string, string>();
+  const rows = await db.select().from(clauseFamiliesTable)
+    .where(inArray(clauseFamiliesTable.id, familyIds));
+  return new Map(rows.map(r => [r.id, r.name]));
+}
+
+function mapClauseSuggestion(
+  s: typeof clauseSuggestionsTable.$inferSelect,
+  ctx: {
+    familyName?: string | null;
+    baseVariantName?: string | null;
+    brandName?: string | null;
+  },
+) {
+  return {
+    id: s.id,
+    tenantId: s.tenantId,
+    status: s.status,
+    sourceType: s.sourceType,
+    contractId: s.contractId ?? null,
+    contractClauseId: s.contractClauseId ?? null,
+    familyId: s.familyId ?? null,
+    familyName: ctx.familyName ?? null,
+    baseVariantId: s.baseVariantId ?? null,
+    baseVariantName: ctx.baseVariantName ?? null,
+    brandId: s.brandId ?? null,
+    brandName: ctx.brandName ?? null,
+    proposedName: s.proposedName,
+    proposedSummary: s.proposedSummary,
+    proposedBody: s.proposedBody,
+    proposedTone: s.proposedTone ?? null,
+    proposedSeverity: s.proposedSeverity ?? null,
+    diffPct: s.diffPct != null ? Number(s.diffPct) : null,
+    occurrenceCount: s.occurrenceCount,
+    contentHash: s.contentHash,
+    authorId: s.authorId ?? null,
+    authorName: s.authorName ?? null,
+    firstSeenAt: iso(s.firstSeenAt)!,
+    lastSeenAt: iso(s.lastSeenAt)!,
+    decisionAt: iso(s.decisionAt),
+    decisionBy: s.decisionBy ?? null,
+    decisionAction: s.decisionAction ?? null,
+    decisionNote: s.decisionNote ?? null,
+    createdVariantId: s.createdVariantId ?? null,
+  };
+}
+
+// Kernlogik: Vorschlag anlegen oder hochzählen.
+// Respektiert repeatThreshold für bereits abgelehnte (rejected) Klauseln —
+// erst nach N weiteren Sichtungen taucht der Vorschlag wieder als "open" auf.
+async function upsertClauseSuggestion(
+  req: Request,
+  input: {
+    familyId: string;
+    contractId?: string | null;
+    contractClauseId?: string | null;
+    baseVariantId?: string | null;
+    brandId?: string | null;
+    proposedName: string;
+    proposedSummary: string;
+    proposedBody: string;
+    proposedTone?: string | null;
+    proposedSeverity?: string | null;
+    sourceType: 'ad-hoc' | 'edit';
+  },
+): Promise<{ row: typeof clauseSuggestionsTable.$inferSelect; created: boolean; revived: boolean }> {
+  const scope = getScope(req);
+  const tenantId = scope.tenantId;
+  const cfg = await loadClauseSuggestionConfig(tenantId);
+  const baseVariant = input.baseVariantId
+    ? await nearestVariantInFamily(input.familyId, input.proposedBody, input.baseVariantId)
+    : await nearestVariantInFamily(input.familyId, input.proposedBody);
+  const diffPct = baseVariant ? wordDiffPct(baseVariant.body, input.proposedBody) : 100;
+  const contentHash = clauseContentHash(input.familyId, input.proposedBody, input.proposedName);
+
+  const [existing] = await db.select().from(clauseSuggestionsTable).where(and(
+    eq(clauseSuggestionsTable.tenantId, tenantId),
+    eq(clauseSuggestionsTable.contentHash, contentHash),
+  ));
+
+  if (existing) {
+    const newCount = existing.occurrenceCount + 1;
+    let newStatus = existing.status;
+    let revived = false;
+    if (existing.status === 'rejected' && newCount >= existing.occurrenceCount + cfg.repeatThreshold) {
+      // Nach N weiteren Sichtungen reaktivieren – Reviewer entscheidet erneut.
+      newStatus = 'open';
+      revived = true;
+    }
+    await db.update(clauseSuggestionsTable).set({
+      occurrenceCount: newCount,
+      lastSeenAt: new Date(),
+      status: newStatus,
+      // Latest context wins (zeigt das jüngste Vorkommen).
+      contractId: input.contractId ?? existing.contractId,
+      contractClauseId: input.contractClauseId ?? existing.contractClauseId,
+      brandId: input.brandId ?? existing.brandId,
+      diffPct: String(diffPct),
+      baseVariantId: baseVariant?.id ?? existing.baseVariantId,
+    }).where(eq(clauseSuggestionsTable.id, existing.id));
+    const [refreshed] = await db.select().from(clauseSuggestionsTable)
+      .where(eq(clauseSuggestionsTable.id, existing.id));
+    return { row: refreshed, created: false, revived };
+  }
+
+  const id = `cs_${randomBytes(6).toString('hex')}`;
+  const row = {
+    id,
+    tenantId,
+    status: 'open',
+    sourceType: input.sourceType,
+    contractId: input.contractId ?? null,
+    contractClauseId: input.contractClauseId ?? null,
+    familyId: input.familyId,
+    baseVariantId: baseVariant?.id ?? null,
+    brandId: input.brandId ?? null,
+    proposedName: input.proposedName.trim(),
+    proposedSummary: input.proposedSummary.trim(),
+    proposedBody: input.proposedBody.trim(),
+    proposedTone: input.proposedTone ?? null,
+    proposedSeverity: input.proposedSeverity ?? null,
+    diffPct: String(diffPct),
+    occurrenceCount: 1,
+    contentHash,
+    authorId: scope.user.id,
+    authorName: scope.user.name,
+  };
+  await db.insert(clauseSuggestionsTable).values(row);
+  const [created] = await db.select().from(clauseSuggestionsTable)
+    .where(eq(clauseSuggestionsTable.id, id));
+  return { row: created, created: true, revived: false };
+}
+
+router.get('/tenant/clause-suggestion-config', async (req, res) => {
+  const cfg = await loadClauseSuggestionConfig(getScope(req).tenantId);
+  res.json(cfg);
+});
+
+router.put('/tenant/clause-suggestion-config', async (req, res) => {
+  if (!requireAdmin(req, res)) return;
+  const b = (req.body ?? {}) as { diffThresholdPct?: unknown; repeatThreshold?: unknown };
+  const diff = Number(b.diffThresholdPct);
+  const rep = Number(b.repeatThreshold);
+  if (!Number.isFinite(diff) || diff < 0 || diff > 100) {
+    res.status(422).json({ error: 'diffThresholdPct must be 0..100' }); return;
+  }
+  if (!Number.isFinite(rep) || rep < 1 || rep > 100) {
+    res.status(422).json({ error: 'repeatThreshold must be 1..100' }); return;
+  }
+  const scope = getScope(req);
+  const before = await loadClauseSuggestionConfig(scope.tenantId);
+  await db.update(tenantsTable).set({
+    clauseSuggestionConfig: { diffThresholdPct: Math.round(diff), repeatThreshold: Math.round(rep) },
+  }).where(eq(tenantsTable.id, scope.tenantId));
+  const after = await loadClauseSuggestionConfig(scope.tenantId);
+  await writeAuditFromReq(req, {
+    entityType: 'tenant', entityId: scope.tenantId, action: 'clause_suggestion_config_updated',
+    summary: `Vorschlags-Schwellen aktualisiert (Diff ${after.diffThresholdPct}%, Repeat ${after.repeatThreshold})`,
+    before, after,
+  });
+  res.json(after);
+});
+
+router.get('/clause-suggestions/stats', async (req, res) => {
+  const scope = getScope(req);
+  const days = Math.max(1, Math.min(365, Number(req.query.days ?? 30) || 30));
+  const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
+  const rows = await db.select().from(clauseSuggestionsTable)
+    .where(and(
+      eq(clauseSuggestionsTable.tenantId, scope.tenantId),
+      sql`${clauseSuggestionsTable.firstSeenAt} >= ${since}`,
+    ));
+  const familyIds = Array.from(new Set(rows.map(r => r.familyId).filter((x): x is string => !!x)));
+  const fnm = await familyNameMap(familyIds);
+  let open = 0, accepted = 0, rejected = 0;
+  const byFamily = new Map<string, { familyId: string; familyName: string; open: number; accepted: number; rejected: number }>();
+  const byAction: Record<string, number> = {};
+  for (const r of rows) {
+    if (r.status === 'open') open++;
+    else if (r.status === 'accepted') accepted++;
+    else if (r.status === 'rejected') rejected++;
+    if (r.decisionAction) byAction[r.decisionAction] = (byAction[r.decisionAction] ?? 0) + 1;
+    if (r.familyId) {
+      const cur = byFamily.get(r.familyId) ?? {
+        familyId: r.familyId, familyName: fnm.get(r.familyId) ?? '—',
+        open: 0, accepted: 0, rejected: 0,
+      };
+      if (r.status === 'open') cur.open++;
+      else if (r.status === 'accepted') cur.accepted++;
+      else if (r.status === 'rejected') cur.rejected++;
+      byFamily.set(r.familyId, cur);
+    }
+  }
+  res.json({
+    open, accepted, rejected, total: rows.length,
+    since: since.toISOString(),
+    byFamily: Array.from(byFamily.values()).sort((a, b) => b.open - a.open),
+    byAction,
+  });
+});
+
+router.get('/clause-suggestions', async (req, res) => {
+  const scope = getScope(req);
+  const filters: SQL[] = [eq(clauseSuggestionsTable.tenantId, scope.tenantId)];
+  if (typeof req.query.status === 'string') filters.push(eq(clauseSuggestionsTable.status, req.query.status));
+  if (typeof req.query.familyId === 'string') filters.push(eq(clauseSuggestionsTable.familyId, req.query.familyId));
+  if (typeof req.query.brandId === 'string') filters.push(eq(clauseSuggestionsTable.brandId, req.query.brandId));
+  if (typeof req.query.sourceType === 'string') filters.push(eq(clauseSuggestionsTable.sourceType, req.query.sourceType));
+  const rows = await db.select().from(clauseSuggestionsTable)
+    .where(and(...filters))
+    .orderBy(desc(clauseSuggestionsTable.lastSeenAt));
+  const fnm = await familyNameMap(Array.from(new Set(rows.map(r => r.familyId).filter((x): x is string => !!x))));
+  const variantIds = Array.from(new Set(rows.map(r => r.baseVariantId).filter((x): x is string => !!x)));
+  const variants = variantIds.length
+    ? await db.select().from(clauseVariantsTable).where(inArray(clauseVariantsTable.id, variantIds))
+    : [];
+  const vnm = new Map(variants.map(v => [v.id, v.name]));
+  const brandIds = Array.from(new Set(rows.map(r => r.brandId).filter((x): x is string => !!x)));
+  const brands = brandIds.length
+    ? await db.select().from(brandsTable).where(inArray(brandsTable.id, brandIds))
+    : [];
+  const bnm = new Map(brands.map(b => [b.id, b.name]));
+  res.json(rows.map(r => mapClauseSuggestion(r, {
+    familyName: r.familyId ? fnm.get(r.familyId) : null,
+    baseVariantName: r.baseVariantId ? vnm.get(r.baseVariantId) : null,
+    brandName: r.brandId ? bnm.get(r.brandId) : null,
+  })));
+});
+
+router.post('/clause-suggestions', async (req, res) => {
+  const b = (req.body ?? {}) as Record<string, unknown>;
+  const sourceType = b.sourceType === 'edit' ? 'edit' : 'ad-hoc';
+  const familyId = typeof b.familyId === 'string' ? b.familyId : '';
+  const proposedName = typeof b.proposedName === 'string' ? b.proposedName.trim() : '';
+  const proposedSummary = typeof b.proposedSummary === 'string' ? b.proposedSummary.trim() : '';
+  const proposedBody = typeof b.proposedBody === 'string' ? b.proposedBody.trim() : '';
+  if (!familyId || !proposedName || !proposedSummary || !proposedBody) {
+    res.status(422).json({ error: 'familyId, proposedName, proposedSummary and proposedBody are required' }); return;
+  }
+  const scope = getScope(req);
+  const [fam] = await db.select().from(clauseFamiliesTable).where(eq(clauseFamiliesTable.id, familyId));
+  if (!fam) { res.status(404).json({ error: 'family not found' }); return; }
+  // Falls Contract-Bezug angegeben: Scope prüfen.
+  const contractId = typeof b.contractId === 'string' ? b.contractId : null;
+  if (contractId) {
+    const [c] = await db.select().from(contractsTable).where(eq(contractsTable.id, contractId));
+    if (!c) { res.status(404).json({ error: 'contract not found' }); return; }
+    if (!(await gateDeal(req, res, c.dealId))) return;
+  }
+  const result = await upsertClauseSuggestion(req, {
+    familyId,
+    contractId,
+    contractClauseId: typeof b.contractClauseId === 'string' ? b.contractClauseId : null,
+    baseVariantId: typeof b.baseVariantId === 'string' ? b.baseVariantId : null,
+    brandId: typeof b.brandId === 'string' ? b.brandId : null,
+    proposedName, proposedSummary, proposedBody,
+    proposedTone: typeof b.proposedTone === 'string' ? b.proposedTone : null,
+    proposedSeverity: typeof b.proposedSeverity === 'string' ? b.proposedSeverity : null,
+    sourceType,
+  });
+  await writeAuditFromReq(req, {
+    entityType: 'clause_suggestion', entityId: result.row.id,
+    action: result.created ? 'created' : (result.revived ? 'revived' : 'incremented'),
+    summary: `Klausel-Vorschlag (${fam.name}) ${result.created ? 'angelegt' : result.revived ? 'reaktiviert' : `auf ${result.row.occurrenceCount}× hochgezählt`}`,
+    after: { occurrenceCount: result.row.occurrenceCount, status: result.row.status, sourceType },
+  });
+  const [baseVariant] = result.row.baseVariantId
+    ? await db.select().from(clauseVariantsTable).where(eq(clauseVariantsTable.id, result.row.baseVariantId))
+    : [undefined];
+  const [brand] = result.row.brandId
+    ? await db.select().from(brandsTable).where(eq(brandsTable.id, result.row.brandId))
+    : [undefined];
+  void scope;
+  res.status(result.created ? 201 : 200).json(mapClauseSuggestion(result.row, {
+    familyName: fam.name,
+    baseVariantName: baseVariant?.name ?? null,
+    brandName: brand?.name ?? null,
+  }));
+});
+
+router.get('/clause-suggestions/:id', async (req, res) => {
+  const scope = getScope(req);
+  const [s] = await db.select().from(clauseSuggestionsTable).where(and(
+    eq(clauseSuggestionsTable.id, req.params.id),
+    eq(clauseSuggestionsTable.tenantId, scope.tenantId),
+  ));
+  if (!s) { res.status(404).json({ error: 'not found' }); return; }
+  const [fam] = s.familyId
+    ? await db.select().from(clauseFamiliesTable).where(eq(clauseFamiliesTable.id, s.familyId))
+    : [undefined];
+  const familyVariants = s.familyId
+    ? await db.select().from(clauseVariantsTable).where(eq(clauseVariantsTable.familyId, s.familyId))
+    : [];
+  const baseVariant = s.baseVariantId ? familyVariants.find(v => v.id === s.baseVariantId) : undefined;
+  const [brand] = s.brandId
+    ? await db.select().from(brandsTable).where(eq(brandsTable.id, s.brandId))
+    : [undefined];
+  res.json({
+    ...mapClauseSuggestion(s, {
+      familyName: fam?.name ?? null,
+      baseVariantName: baseVariant?.name ?? null,
+      brandName: brand?.name ?? null,
+    }),
+    baseVariantBody: baseVariant?.body ?? null,
+    baseVariantSummary: baseVariant?.summary ?? null,
+    baseVariantTone: baseVariant?.tone ?? null,
+    familyVariants: familyVariants.map(v => ({
+      id: v.id, name: v.name, severity: v.severity, severityScore: v.severityScore,
+      summary: v.summary, body: v.body, tone: v.tone,
+    })),
+  });
+});
+
+router.patch('/clause-suggestions/:id', async (req, res) => {
+  if (!requireAdmin(req, res)) return;
+  const scope = getScope(req);
+  const [s] = await db.select().from(clauseSuggestionsTable).where(and(
+    eq(clauseSuggestionsTable.id, req.params.id),
+    eq(clauseSuggestionsTable.tenantId, scope.tenantId),
+  ));
+  if (!s) { res.status(404).json({ error: 'not found' }); return; }
+  if (s.status !== 'open') {
+    res.status(409).json({ error: `suggestion is ${s.status}, not decidable` }); return;
+  }
+  const b = (req.body ?? {}) as {
+    action?: string; decisionNote?: string;
+    tone?: string; severity?: string; severityScore?: number;
+    replaceVariantId?: string;
+    locale?: 'de' | 'en'; translationVariantId?: string;
+  };
+  const action = b.action;
+  if (!action || !['new_variant', 'replace_variant', 'add_translation', 'discard'].includes(action)) {
+    res.status(422).json({ error: 'action is required (new_variant|replace_variant|add_translation|discard)' }); return;
+  }
+
+  const familyId = s.familyId;
+  let createdVariantId: string | null = null;
+  let summaryLine = '';
+
+  if (action === 'new_variant') {
+    if (!familyId) { res.status(422).json({ error: 'suggestion has no familyId' }); return; }
+    const newId = `cv_${randomBytes(6).toString('hex')}`;
+    const score = typeof b.severityScore === 'number' ? Math.max(1, Math.min(5, Math.round(b.severityScore))) : 3;
+    const sev = b.severity?.trim() || (score <= 2 ? 'high' : score === 3 ? 'medium' : 'low');
+    await db.insert(clauseVariantsTable).values({
+      id: newId,
+      familyId,
+      name: s.proposedName,
+      severity: sev,
+      severityScore: score,
+      summary: s.proposedSummary,
+      body: s.proposedBody,
+      tone: b.tone?.trim() || s.proposedTone || 'standard',
+    });
+    createdVariantId = newId;
+    summaryLine = `Neue Variante "${s.proposedName}" angelegt`;
+  } else if (action === 'replace_variant') {
+    const targetId = b.replaceVariantId || s.baseVariantId;
+    if (!targetId) { res.status(422).json({ error: 'replaceVariantId required' }); return; }
+    const [target] = await db.select().from(clauseVariantsTable).where(eq(clauseVariantsTable.id, targetId));
+    if (!target) { res.status(404).json({ error: 'variant not found' }); return; }
+    const score = typeof b.severityScore === 'number' ? Math.max(1, Math.min(5, Math.round(b.severityScore))) : target.severityScore;
+    const sev = b.severity?.trim() || target.severity;
+    const before = { name: target.name, summary: target.summary, body: target.body };
+    await db.update(clauseVariantsTable).set({
+      name: s.proposedName,
+      summary: s.proposedSummary,
+      body: s.proposedBody,
+      tone: b.tone?.trim() || s.proposedTone || target.tone,
+      severity: sev,
+      severityScore: score,
+    }).where(eq(clauseVariantsTable.id, target.id));
+    createdVariantId = target.id;
+    summaryLine = `Variante "${target.name}" überschrieben`;
+    await writeAuditFromReq(req, {
+      entityType: 'clause_variant', entityId: target.id, action: 'replaced_from_suggestion',
+      summary: `Variante "${target.name}" durch Vorschlag ersetzt`,
+      before, after: { name: s.proposedName, summary: s.proposedSummary, body: s.proposedBody },
+    });
+  } else if (action === 'add_translation') {
+    const variantId = b.translationVariantId || s.baseVariantId;
+    if (!variantId) { res.status(422).json({ error: 'translationVariantId required' }); return; }
+    const locale = b.locale ?? 'en';
+    if (!['de', 'en'].includes(locale)) {
+      res.status(422).json({ error: 'locale must be de|en' }); return;
+    }
+    const [v] = await db.select().from(clauseVariantsTable).where(eq(clauseVariantsTable.id, variantId));
+    if (!v) { res.status(404).json({ error: 'variant not found' }); return; }
+    const [existingTr] = await db.select().from(clauseVariantTranslationsTable).where(and(
+      eq(clauseVariantTranslationsTable.variantId, variantId),
+      eq(clauseVariantTranslationsTable.locale, locale),
+    ));
+    if (existingTr) {
+      await db.update(clauseVariantTranslationsTable).set({
+        name: s.proposedName,
+        summary: s.proposedSummary,
+        body: s.proposedBody,
+        updatedAt: new Date(),
+      }).where(eq(clauseVariantTranslationsTable.id, existingTr.id));
+    } else {
+      await db.insert(clauseVariantTranslationsTable).values({
+        id: `cvt_${randomBytes(6).toString('hex')}`,
+        variantId,
+        locale,
+        name: s.proposedName,
+        summary: s.proposedSummary,
+        body: s.proposedBody,
+      });
+    }
+    createdVariantId = variantId;
+    summaryLine = `Übersetzung [${locale}] für "${v.name}" gespeichert`;
+  } else {
+    summaryLine = 'Vorschlag verworfen';
+  }
+
+  const newStatus = action === 'discard' ? 'rejected' : 'accepted';
+  await db.update(clauseSuggestionsTable).set({
+    status: newStatus,
+    decisionAt: new Date(),
+    decisionBy: scope.user.name,
+    decisionAction: action,
+    decisionNote: b.decisionNote?.trim() || null,
+    createdVariantId,
+  }).where(eq(clauseSuggestionsTable.id, s.id));
+
+  await writeAuditFromReq(req, {
+    entityType: 'clause_suggestion', entityId: s.id, action: `decided_${action}`,
+    summary: summaryLine,
+    before: { status: s.status },
+    after: { status: newStatus, action, createdVariantId, decisionNote: b.decisionNote ?? null },
+  });
+
+  const [refreshed] = await db.select().from(clauseSuggestionsTable)
+    .where(eq(clauseSuggestionsTable.id, s.id));
+  const [fam] = refreshed.familyId
+    ? await db.select().from(clauseFamiliesTable).where(eq(clauseFamiliesTable.id, refreshed.familyId))
+    : [undefined];
+  const [baseVariant] = refreshed.baseVariantId
+    ? await db.select().from(clauseVariantsTable).where(eq(clauseVariantsTable.id, refreshed.baseVariantId))
+    : [undefined];
+  const [brand] = refreshed.brandId
+    ? await db.select().from(brandsTable).where(eq(brandsTable.id, refreshed.brandId))
+    : [undefined];
+  res.json(mapClauseSuggestion(refreshed, {
+    familyName: fam?.name ?? null,
+    baseVariantName: baseVariant?.name ?? null,
+    brandName: brand?.name ?? null,
+  }));
 });
 
 router.get('/clauses/:fromId/diff/:toId', async (req, res) => {

@@ -9,5 +9,29 @@ Multi-tenant, multi-company, multi-brand. Deal-centric.
  */
 
 export interface ContractClausePatchInput {
-  variantId: string;
+  variantId?: string;
+  /**
+   * Optional ad-hoc Name. Wenn gesetzt, wird der Wert als Snapshot gespeichert.
+   * @maxLength 200
+   * @nullable
+   */
+  editedName?: string | null;
+  /**
+   * @maxLength 1000
+   * @nullable
+   */
+  editedSummary?: string | null;
+  /**
+   * Optional ad-hoc Volltext. Liegt der Diff zur aktiven Variante über der Tenant-Schwelle, wird ein Klausel-Vorschlag erzeugt.
+   * @maxLength 8000
+   * @nullable
+   */
+  editedBody?: string | null;
+  /**
+   * @maxLength 500
+   * @nullable
+   */
+  editedReason?: string | null;
+  /** Setzt vorhandene editedBody/editedName/editedSummary zurück (Variante wird wieder Quelle der Wahrheit). */
+  clearEdits?: boolean;
 }

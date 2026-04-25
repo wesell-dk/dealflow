@@ -1835,6 +1835,17 @@ export interface ContractClause {
   translationLocale?: ContractClauseTranslationLocale;
   /** true, wenn für die Vertragssprache keine Übersetzung gepflegt ist und auf die Quell-Sprache zurückgefallen wurde. */
   translationMissing?: boolean;
+  /** true, wenn der Slot ad-hoc editiert wurde und vom aktiven Variantentext abweicht. */
+  edited?: boolean;
+  /**
+   * Begründung der Bearbeitenden für die Ad-hoc-Anpassung (optional).
+   * @nullable
+   */
+  editedReason?: string | null;
+  /** @nullable */
+  editedAt?: string | null;
+  /** @nullable */
+  editedBy?: string | null;
 }
 
 export type ContractDetail = Contract & {
@@ -1842,7 +1853,113 @@ export type ContractDetail = Contract & {
 };
 
 export interface ContractClausePatchInput {
-  variantId: string;
+  variantId?: string;
+  /**
+   * Optional ad-hoc Name. Wenn gesetzt, wird der Wert als Snapshot gespeichert.
+   * @maxLength 200
+   * @nullable
+   */
+  editedName?: string | null;
+  /**
+   * @maxLength 1000
+   * @nullable
+   */
+  editedSummary?: string | null;
+  /**
+   * Optional ad-hoc Volltext. Liegt der Diff zur aktiven Variante über der Tenant-Schwelle, wird ein Klausel-Vorschlag erzeugt.
+   * @maxLength 8000
+   * @nullable
+   */
+  editedBody?: string | null;
+  /**
+   * @maxLength 500
+   * @nullable
+   */
+  editedReason?: string | null;
+  /** Setzt vorhandene editedBody/editedName/editedSummary zurück (Variante wird wieder Quelle der Wahrheit). */
+  clearEdits?: boolean;
+}
+
+export type ClauseSuggestionStatus =
+  (typeof ClauseSuggestionStatus)[keyof typeof ClauseSuggestionStatus];
+
+export const ClauseSuggestionStatus = {
+  open: "open",
+  accepted: "accepted",
+  rejected: "rejected",
+  superseded: "superseded",
+} as const;
+
+export type ClauseSuggestionSourceType =
+  (typeof ClauseSuggestionSourceType)[keyof typeof ClauseSuggestionSourceType];
+
+export const ClauseSuggestionSourceType = {
+  "ad-hoc": "ad-hoc",
+  edit: "edit",
+} as const;
+
+/**
+ * @nullable
+ */
+export type ClauseSuggestionDecisionAction =
+  | (typeof ClauseSuggestionDecisionAction)[keyof typeof ClauseSuggestionDecisionAction]
+  | null;
+
+export const ClauseSuggestionDecisionAction = {
+  new_variant: "new_variant",
+  replace_variant: "replace_variant",
+  add_translation: "add_translation",
+  discard: "discard",
+} as const;
+
+export interface ClauseSuggestion {
+  id: string;
+  tenantId: string;
+  status: ClauseSuggestionStatus;
+  sourceType: ClauseSuggestionSourceType;
+  /** @nullable */
+  contractId?: string | null;
+  /** @nullable */
+  contractClauseId?: string | null;
+  /** @nullable */
+  familyId?: string | null;
+  /** @nullable */
+  familyName?: string | null;
+  /** @nullable */
+  baseVariantId?: string | null;
+  /** @nullable */
+  baseVariantName?: string | null;
+  /** @nullable */
+  brandId?: string | null;
+  /** @nullable */
+  brandName?: string | null;
+  proposedName: string;
+  proposedSummary: string;
+  proposedBody: string;
+  /** @nullable */
+  proposedTone?: string | null;
+  /** @nullable */
+  proposedSeverity?: string | null;
+  /** @nullable */
+  diffPct?: number | null;
+  occurrenceCount: number;
+  contentHash: string;
+  /** @nullable */
+  authorId?: string | null;
+  /** @nullable */
+  authorName?: string | null;
+  firstSeenAt: string;
+  lastSeenAt: string;
+  /** @nullable */
+  decisionAt?: string | null;
+  /** @nullable */
+  decisionBy?: string | null;
+  /** @nullable */
+  decisionAction?: ClauseSuggestionDecisionAction;
+  /** @nullable */
+  decisionNote?: string | null;
+  /** @nullable */
+  createdVariantId?: string | null;
 }
 
 export type ClauseVariantTranslationLocale =
@@ -1879,6 +1996,122 @@ export interface ClauseVariant {
   tone: string;
   /** Vorhandene Sprachfassungen je Variante (de/en/…). */
   translations?: ClauseVariantTranslation[];
+}
+
+export type ClauseSuggestionDetail = ClauseSuggestion & {
+  /** @nullable */
+  baseVariantBody?: string | null;
+  /** @nullable */
+  baseVariantSummary?: string | null;
+  /** @nullable */
+  baseVariantTone?: string | null;
+  familyVariants?: ClauseVariant[];
+};
+
+export type ClauseSuggestionInputSourceType =
+  (typeof ClauseSuggestionInputSourceType)[keyof typeof ClauseSuggestionInputSourceType];
+
+export const ClauseSuggestionInputSourceType = {
+  "ad-hoc": "ad-hoc",
+  edit: "edit",
+} as const;
+
+export interface ClauseSuggestionInput {
+  familyId: string;
+  contractId?: string | null;
+  contractClauseId?: string | null;
+  baseVariantId?: string | null;
+  brandId?: string | null;
+  /**
+   * @minLength 1
+   * @maxLength 200
+   */
+  proposedName: string;
+  /**
+   * @minLength 1
+   * @maxLength 1000
+   */
+  proposedSummary: string;
+  /**
+   * @minLength 1
+   * @maxLength 8000
+   */
+  proposedBody: string;
+  /** @maxLength 50 */
+  proposedTone?: string | null;
+  /** @maxLength 20 */
+  proposedSeverity?: string | null;
+  sourceType: ClauseSuggestionInputSourceType;
+}
+
+export type ClauseSuggestionDecisionInputAction =
+  (typeof ClauseSuggestionDecisionInputAction)[keyof typeof ClauseSuggestionDecisionInputAction];
+
+export const ClauseSuggestionDecisionInputAction = {
+  new_variant: "new_variant",
+  replace_variant: "replace_variant",
+  add_translation: "add_translation",
+  discard: "discard",
+} as const;
+
+export type ClauseSuggestionDecisionInputLocale =
+  | (typeof ClauseSuggestionDecisionInputLocale)[keyof typeof ClauseSuggestionDecisionInputLocale]
+  | null;
+
+export const ClauseSuggestionDecisionInputLocale = {
+  de: "de",
+  en: "en",
+} as const;
+
+export interface ClauseSuggestionDecisionInput {
+  action: ClauseSuggestionDecisionInputAction;
+  /** @maxLength 500 */
+  decisionNote?: string | null;
+  /** @maxLength 50 */
+  tone?: string | null;
+  /** @maxLength 20 */
+  severity?: string | null;
+  /**
+   * @minimum 1
+   * @maximum 5
+   */
+  severityScore?: number | null;
+  replaceVariantId?: string | null;
+  locale?: ClauseSuggestionDecisionInputLocale;
+  translationVariantId?: string | null;
+}
+
+export interface ClauseSuggestionConfig {
+  /**
+   * @minimum 0
+   * @maximum 100
+   */
+  diffThresholdPct: number;
+  /**
+   * @minimum 1
+   * @maximum 100
+   */
+  repeatThreshold: number;
+}
+
+export type ClauseSuggestionStatsByFamilyItem = {
+  familyId: string;
+  familyName: string;
+  open: number;
+  accepted: number;
+  rejected: number;
+};
+
+export type ClauseSuggestionStatsByAction = { [key: string]: number };
+
+export interface ClauseSuggestionStats {
+  open: number;
+  accepted: number;
+  rejected: number;
+  total: number;
+  since: string;
+  byFamily: ClauseSuggestionStatsByFamilyItem[];
+  byAction: ClauseSuggestionStatsByAction;
 }
 
 export interface ClauseVariantTranslationUpsert {
@@ -4080,6 +4313,39 @@ export type SetContractTypeCuadExpectations200 = {
 
 export type SetClauseFamilyCuadCategoriesBody = {
   cuadCategoryIds: string[];
+};
+
+export type ListClauseSuggestionsParams = {
+  status?: ListClauseSuggestionsStatus;
+  familyId?: string;
+  brandId?: string;
+  sourceType?: ListClauseSuggestionsSourceType;
+};
+
+export type ListClauseSuggestionsStatus =
+  (typeof ListClauseSuggestionsStatus)[keyof typeof ListClauseSuggestionsStatus];
+
+export const ListClauseSuggestionsStatus = {
+  open: "open",
+  accepted: "accepted",
+  rejected: "rejected",
+  superseded: "superseded",
+} as const;
+
+export type ListClauseSuggestionsSourceType =
+  (typeof ListClauseSuggestionsSourceType)[keyof typeof ListClauseSuggestionsSourceType];
+
+export const ListClauseSuggestionsSourceType = {
+  "ad-hoc": "ad-hoc",
+  edit: "edit",
+} as const;
+
+export type GetClauseSuggestionStatsParams = {
+  /**
+   * @minimum 1
+   * @maximum 365
+   */
+  days?: number;
 };
 
 export type ListNegotiationsParams = {

@@ -38,6 +38,7 @@ import OrderConfirmationDetail from "@/pages/order-confirmation";
 import Audit from "@/pages/audit";
 import Clauses from "@/pages/clauses";
 import ClausesImport from "@/pages/clauses-import";
+import ClausesSuggestions from "@/pages/clauses-suggestions";
 import Templates from "@/pages/templates";
 import Attachments from "@/pages/attachments";
 import PlatformAdmin from "@/pages/platform-admin";
@@ -89,6 +90,7 @@ function ProtectedRoutes() {
         <Route path="/order-confirmations/:id" component={OrderConfirmationDetail} />
         <Route path="/audit" component={Audit} />
         <Route path="/clauses/import" component={ClausesImport} />
+        <Route path="/clauses/suggestions" component={ClausesSuggestions} />
         <Route path="/clauses" component={Clauses} />
         <Route path="/templates" component={Templates} />
         <Route path="/attachments" component={Attachments} />

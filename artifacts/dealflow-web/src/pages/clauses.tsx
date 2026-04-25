@@ -24,6 +24,7 @@ import {
   useSetClauseFamilyCuadCategories,
   getGetContractTypeCuadExpectationsQueryKey,
   getGetClauseFamilyCuadCategoriesQueryKey,
+  useGetClauseSuggestionStats,
 } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/contexts/auth-context";
@@ -49,7 +50,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Library, Palette, Save, Pencil, Trash2, Link2, Plus, Languages, FileUp } from "lucide-react";
+import { Library, Palette, Save, Pencil, Trash2, Link2, Plus, Languages, FileUp, Inbox, Sparkles } from "lucide-react";
 import { Link } from "wouter";
 import { useToast } from "@/hooks/use-toast";
 
@@ -127,6 +128,8 @@ export default function Clauses() {
           )}
         </div>
       </div>
+
+      <SuggestionsTile />
 
       {(brands?.length ?? 0) > 0 && (
         <Card data-testid="brand-defaults-card">
@@ -1160,3 +1163,37 @@ function CuadAdminSection({ families }: { families: FamilyLite[] }) {
     </Card>
   );
 }
+
+function SuggestionsTile() {
+  const { t } = useTranslation();
+  const { data: stats } = useGetClauseSuggestionStats({ days: 30 });
+  const open = stats?.open ?? 0;
+  return (
+    <Link href="/clauses/suggestions">
+      <Card
+        className="hover:bg-muted/30 transition cursor-pointer border-amber-500/30"
+        data-testid="suggestions-tile"
+      >
+        <CardContent className="py-4 flex items-center gap-3">
+          <div className="rounded-md bg-amber-500/10 p-2 text-amber-600">
+            <Inbox className="h-5 w-5" />
+          </div>
+          <div className="flex-1">
+            <div className="font-semibold flex items-center gap-2">
+              <Sparkles className="h-4 w-4 text-amber-500" />
+              {t("pages.clauseSuggestions.tileTitle")}
+            </div>
+            <p className="text-xs text-muted-foreground">
+              {t("pages.clauseSuggestions.tileSubtitle")}
+            </p>
+          </div>
+          <div className="text-right">
+            <div className="text-2xl font-bold tabular-nums text-amber-600">{open}</div>
+            <div className="text-xs text-muted-foreground">{t("pages.clauseSuggestions.statOpen")}</div>
+          </div>
+        </CardContent>
+      </Card>
+    </Link>
+  );
+}
+

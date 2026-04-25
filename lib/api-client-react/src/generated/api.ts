@@ -67,6 +67,12 @@ import type {
   ClauseImportSuggestionDecision,
   ClauseImportUploadUrlRequest,
   ClauseImportUploadUrlResponse,
+  ClauseSuggestion,
+  ClauseSuggestionConfig,
+  ClauseSuggestionDecisionInput,
+  ClauseSuggestionDetail,
+  ClauseSuggestionInput,
+  ClauseSuggestionStats,
   ClauseVariantTranslation,
   ClauseVariantTranslationUpsert,
   Company,
@@ -148,6 +154,7 @@ import type {
   GdprRetentionResult,
   GdprSubjectSearch,
   GetAiRecommendationMetricsParams,
+  GetClauseSuggestionStatsParams,
   GetCurrentQuoteParams,
   HealthStatus,
   HelpBotInput,
@@ -161,6 +168,7 @@ import type {
   ListAuditEntriesParams,
   ListBrandsParams,
   ListClauseImportsParams,
+  ListClauseSuggestionsParams,
   ListCompaniesParams,
   ListContactsParams,
   ListContractPlaybooksParams,
@@ -8724,6 +8732,597 @@ export const usePatchContractClause = <
   TContext
 > => {
   return useMutation(getPatchContractClauseMutationOptions(options));
+};
+
+export const getListClauseSuggestionsUrl = (
+  params?: ListClauseSuggestionsParams,
+) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? "null" : value.toString());
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0
+    ? `/api/v1/clause-suggestions?${stringifiedParams}`
+    : `/api/v1/clause-suggestions`;
+};
+
+export const listClauseSuggestions = async (
+  params?: ListClauseSuggestionsParams,
+  options?: RequestInit,
+): Promise<ClauseSuggestion[]> => {
+  return customFetch<ClauseSuggestion[]>(getListClauseSuggestionsUrl(params), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getListClauseSuggestionsQueryKey = (
+  params?: ListClauseSuggestionsParams,
+) => {
+  return [`/api/v1/clause-suggestions`, ...(params ? [params] : [])] as const;
+};
+
+export const getListClauseSuggestionsQueryOptions = <
+  TData = Awaited<ReturnType<typeof listClauseSuggestions>>,
+  TError = ErrorType<unknown>,
+>(
+  params?: ListClauseSuggestionsParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof listClauseSuggestions>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey =
+    queryOptions?.queryKey ?? getListClauseSuggestionsQueryKey(params);
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof listClauseSuggestions>>
+  > = ({ signal }) =>
+    listClauseSuggestions(params, { signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof listClauseSuggestions>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type ListClauseSuggestionsQueryResult = NonNullable<
+  Awaited<ReturnType<typeof listClauseSuggestions>>
+>;
+export type ListClauseSuggestionsQueryError = ErrorType<unknown>;
+
+export function useListClauseSuggestions<
+  TData = Awaited<ReturnType<typeof listClauseSuggestions>>,
+  TError = ErrorType<unknown>,
+>(
+  params?: ListClauseSuggestionsParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof listClauseSuggestions>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getListClauseSuggestionsQueryOptions(params, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+export const getCreateClauseSuggestionUrl = () => {
+  return `/api/v1/clause-suggestions`;
+};
+
+export const createClauseSuggestion = async (
+  clauseSuggestionInput: ClauseSuggestionInput,
+  options?: RequestInit,
+): Promise<ClauseSuggestion> => {
+  return customFetch<ClauseSuggestion>(getCreateClauseSuggestionUrl(), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(clauseSuggestionInput),
+  });
+};
+
+export const getCreateClauseSuggestionMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof createClauseSuggestion>>,
+    TError,
+    { data: BodyType<ClauseSuggestionInput> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof createClauseSuggestion>>,
+  TError,
+  { data: BodyType<ClauseSuggestionInput> },
+  TContext
+> => {
+  const mutationKey = ["createClauseSuggestion"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof createClauseSuggestion>>,
+    { data: BodyType<ClauseSuggestionInput> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return createClauseSuggestion(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type CreateClauseSuggestionMutationResult = NonNullable<
+  Awaited<ReturnType<typeof createClauseSuggestion>>
+>;
+export type CreateClauseSuggestionMutationBody =
+  BodyType<ClauseSuggestionInput>;
+export type CreateClauseSuggestionMutationError = ErrorType<unknown>;
+
+export const useCreateClauseSuggestion = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof createClauseSuggestion>>,
+    TError,
+    { data: BodyType<ClauseSuggestionInput> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof createClauseSuggestion>>,
+  TError,
+  { data: BodyType<ClauseSuggestionInput> },
+  TContext
+> => {
+  return useMutation(getCreateClauseSuggestionMutationOptions(options));
+};
+
+export const getGetClauseSuggestionStatsUrl = (
+  params?: GetClauseSuggestionStatsParams,
+) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? "null" : value.toString());
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0
+    ? `/api/v1/clause-suggestions/stats?${stringifiedParams}`
+    : `/api/v1/clause-suggestions/stats`;
+};
+
+export const getClauseSuggestionStats = async (
+  params?: GetClauseSuggestionStatsParams,
+  options?: RequestInit,
+): Promise<ClauseSuggestionStats> => {
+  return customFetch<ClauseSuggestionStats>(
+    getGetClauseSuggestionStatsUrl(params),
+    {
+      ...options,
+      method: "GET",
+    },
+  );
+};
+
+export const getGetClauseSuggestionStatsQueryKey = (
+  params?: GetClauseSuggestionStatsParams,
+) => {
+  return [
+    `/api/v1/clause-suggestions/stats`,
+    ...(params ? [params] : []),
+  ] as const;
+};
+
+export const getGetClauseSuggestionStatsQueryOptions = <
+  TData = Awaited<ReturnType<typeof getClauseSuggestionStats>>,
+  TError = ErrorType<unknown>,
+>(
+  params?: GetClauseSuggestionStatsParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getClauseSuggestionStats>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey =
+    queryOptions?.queryKey ?? getGetClauseSuggestionStatsQueryKey(params);
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof getClauseSuggestionStats>>
+  > = ({ signal }) =>
+    getClauseSuggestionStats(params, { signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getClauseSuggestionStats>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetClauseSuggestionStatsQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getClauseSuggestionStats>>
+>;
+export type GetClauseSuggestionStatsQueryError = ErrorType<unknown>;
+
+export function useGetClauseSuggestionStats<
+  TData = Awaited<ReturnType<typeof getClauseSuggestionStats>>,
+  TError = ErrorType<unknown>,
+>(
+  params?: GetClauseSuggestionStatsParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getClauseSuggestionStats>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetClauseSuggestionStatsQueryOptions(params, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+export const getGetClauseSuggestionUrl = (id: string) => {
+  return `/api/v1/clause-suggestions/${id}`;
+};
+
+export const getClauseSuggestion = async (
+  id: string,
+  options?: RequestInit,
+): Promise<ClauseSuggestionDetail> => {
+  return customFetch<ClauseSuggestionDetail>(getGetClauseSuggestionUrl(id), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getGetClauseSuggestionQueryKey = (id: string) => {
+  return [`/api/v1/clause-suggestions/${id}`] as const;
+};
+
+export const getGetClauseSuggestionQueryOptions = <
+  TData = Awaited<ReturnType<typeof getClauseSuggestion>>,
+  TError = ErrorType<unknown>,
+>(
+  id: string,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getClauseSuggestion>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getGetClauseSuggestionQueryKey(id);
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof getClauseSuggestion>>
+  > = ({ signal }) => getClauseSuggestion(id, { signal, ...requestOptions });
+
+  return {
+    queryKey,
+    queryFn,
+    enabled: !!id,
+    ...queryOptions,
+  } as UseQueryOptions<
+    Awaited<ReturnType<typeof getClauseSuggestion>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetClauseSuggestionQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getClauseSuggestion>>
+>;
+export type GetClauseSuggestionQueryError = ErrorType<unknown>;
+
+export function useGetClauseSuggestion<
+  TData = Awaited<ReturnType<typeof getClauseSuggestion>>,
+  TError = ErrorType<unknown>,
+>(
+  id: string,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getClauseSuggestion>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetClauseSuggestionQueryOptions(id, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+export const getDecideClauseSuggestionUrl = (id: string) => {
+  return `/api/v1/clause-suggestions/${id}`;
+};
+
+export const decideClauseSuggestion = async (
+  id: string,
+  clauseSuggestionDecisionInput: ClauseSuggestionDecisionInput,
+  options?: RequestInit,
+): Promise<ClauseSuggestion> => {
+  return customFetch<ClauseSuggestion>(getDecideClauseSuggestionUrl(id), {
+    ...options,
+    method: "PATCH",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(clauseSuggestionDecisionInput),
+  });
+};
+
+export const getDecideClauseSuggestionMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof decideClauseSuggestion>>,
+    TError,
+    { id: string; data: BodyType<ClauseSuggestionDecisionInput> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof decideClauseSuggestion>>,
+  TError,
+  { id: string; data: BodyType<ClauseSuggestionDecisionInput> },
+  TContext
+> => {
+  const mutationKey = ["decideClauseSuggestion"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof decideClauseSuggestion>>,
+    { id: string; data: BodyType<ClauseSuggestionDecisionInput> }
+  > = (props) => {
+    const { id, data } = props ?? {};
+
+    return decideClauseSuggestion(id, data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type DecideClauseSuggestionMutationResult = NonNullable<
+  Awaited<ReturnType<typeof decideClauseSuggestion>>
+>;
+export type DecideClauseSuggestionMutationBody =
+  BodyType<ClauseSuggestionDecisionInput>;
+export type DecideClauseSuggestionMutationError = ErrorType<unknown>;
+
+export const useDecideClauseSuggestion = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof decideClauseSuggestion>>,
+    TError,
+    { id: string; data: BodyType<ClauseSuggestionDecisionInput> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof decideClauseSuggestion>>,
+  TError,
+  { id: string; data: BodyType<ClauseSuggestionDecisionInput> },
+  TContext
+> => {
+  return useMutation(getDecideClauseSuggestionMutationOptions(options));
+};
+
+export const getGetClauseSuggestionConfigUrl = () => {
+  return `/api/v1/tenant/clause-suggestion-config`;
+};
+
+export const getClauseSuggestionConfig = async (
+  options?: RequestInit,
+): Promise<ClauseSuggestionConfig> => {
+  return customFetch<ClauseSuggestionConfig>(
+    getGetClauseSuggestionConfigUrl(),
+    {
+      ...options,
+      method: "GET",
+    },
+  );
+};
+
+export const getGetClauseSuggestionConfigQueryKey = () => {
+  return [`/api/v1/tenant/clause-suggestion-config`] as const;
+};
+
+export const getGetClauseSuggestionConfigQueryOptions = <
+  TData = Awaited<ReturnType<typeof getClauseSuggestionConfig>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getClauseSuggestionConfig>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey =
+    queryOptions?.queryKey ?? getGetClauseSuggestionConfigQueryKey();
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof getClauseSuggestionConfig>>
+  > = ({ signal }) => getClauseSuggestionConfig({ signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getClauseSuggestionConfig>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetClauseSuggestionConfigQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getClauseSuggestionConfig>>
+>;
+export type GetClauseSuggestionConfigQueryError = ErrorType<unknown>;
+
+export function useGetClauseSuggestionConfig<
+  TData = Awaited<ReturnType<typeof getClauseSuggestionConfig>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getClauseSuggestionConfig>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetClauseSuggestionConfigQueryOptions(options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+export const getUpdateClauseSuggestionConfigUrl = () => {
+  return `/api/v1/tenant/clause-suggestion-config`;
+};
+
+export const updateClauseSuggestionConfig = async (
+  clauseSuggestionConfig: ClauseSuggestionConfig,
+  options?: RequestInit,
+): Promise<ClauseSuggestionConfig> => {
+  return customFetch<ClauseSuggestionConfig>(
+    getUpdateClauseSuggestionConfigUrl(),
+    {
+      ...options,
+      method: "PUT",
+      headers: { "Content-Type": "application/json", ...options?.headers },
+      body: JSON.stringify(clauseSuggestionConfig),
+    },
+  );
+};
+
+export const getUpdateClauseSuggestionConfigMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof updateClauseSuggestionConfig>>,
+    TError,
+    { data: BodyType<ClauseSuggestionConfig> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof updateClauseSuggestionConfig>>,
+  TError,
+  { data: BodyType<ClauseSuggestionConfig> },
+  TContext
+> => {
+  const mutationKey = ["updateClauseSuggestionConfig"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof updateClauseSuggestionConfig>>,
+    { data: BodyType<ClauseSuggestionConfig> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return updateClauseSuggestionConfig(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type UpdateClauseSuggestionConfigMutationResult = NonNullable<
+  Awaited<ReturnType<typeof updateClauseSuggestionConfig>>
+>;
+export type UpdateClauseSuggestionConfigMutationBody =
+  BodyType<ClauseSuggestionConfig>;
+export type UpdateClauseSuggestionConfigMutationError = ErrorType<unknown>;
+
+export const useUpdateClauseSuggestionConfig = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof updateClauseSuggestionConfig>>,
+    TError,
+    { data: BodyType<ClauseSuggestionConfig> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof updateClauseSuggestionConfig>>,
+  TError,
+  { data: BodyType<ClauseSuggestionConfig> },
+  TContext
+> => {
+  return useMutation(getUpdateClauseSuggestionConfigMutationOptions(options));
 };
 
 export const getGetClauseDiffUrl = (fromId: string, toId: string) => {

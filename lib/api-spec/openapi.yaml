@@ -1887,6 +1887,131 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/ClauseChangeResult" }
 
+  /clause-suggestions:
+    get:
+      operationId: listClauseSuggestions
+      tags: [clauses]
+      parameters:
+        - in: query
+          name: status
+          required: false
+          schema: { type: string, enum: [open, accepted, rejected, superseded] }
+        - in: query
+          name: familyId
+          required: false
+          schema: { type: string }
+        - in: query
+          name: brandId
+          required: false
+          schema: { type: string }
+        - in: query
+          name: sourceType
+          required: false
+          schema: { type: string, enum: [ad-hoc, edit] }
+      responses:
+        "200":
+          description: ok
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/ClauseSuggestion" }
+    post:
+      operationId: createClauseSuggestion
+      tags: [clauses]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ClauseSuggestionInput" }
+      responses:
+        "200":
+          description: ok or incremented
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ClauseSuggestion" }
+        "201":
+          description: created
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ClauseSuggestion" }
+
+  /clause-suggestions/stats:
+    get:
+      operationId: getClauseSuggestionStats
+      tags: [clauses]
+      parameters:
+        - in: query
+          name: days
+          required: false
+          schema: { type: integer, minimum: 1, maximum: 365 }
+      responses:
+        "200":
+          description: ok
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ClauseSuggestionStats" }
+
+  /clause-suggestions/{id}:
+    get:
+      operationId: getClauseSuggestion
+      tags: [clauses]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: ok
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ClauseSuggestionDetail" }
+    patch:
+      operationId: decideClauseSuggestion
+      tags: [clauses]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ClauseSuggestionDecisionInput" }
+      responses:
+        "200":
+          description: ok
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ClauseSuggestion" }
+
+  /tenant/clause-suggestion-config:
+    get:
+      operationId: getClauseSuggestionConfig
+      tags: [clauses]
+      responses:
+        "200":
+          description: ok
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ClauseSuggestionConfig" }
+    put:
+      operationId: updateClauseSuggestionConfig
+      tags: [clauses]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ClauseSuggestionConfig" }
+      responses:
+        "200":
+          description: ok
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ClauseSuggestionConfig" }
+
   /clauses/{fromId}/diff/{toId}:
     get:
       operationId: getClauseDiff
@@ -5955,9 +6080,168 @@ components:
 
     ContractClausePatchInput:
       type: object
-      required: [variantId]
       properties:
         variantId: { type: string }
+        editedName:
+          type: ["string", "null"]
+          maxLength: 200
+          description: "Optional ad-hoc Name. Wenn gesetzt, wird der Wert als Snapshot gespeichert."
+        editedSummary:
+          type: ["string", "null"]
+          maxLength: 1000
+        editedBody:
+          type: ["string", "null"]
+          maxLength: 8000
+          description: "Optional ad-hoc Volltext. Liegt der Diff zur aktiven Variante über der Tenant-Schwelle, wird ein Klausel-Vorschlag erzeugt."
+        editedReason:
+          type: ["string", "null"]
+          maxLength: 500
+        clearEdits:
+          type: boolean
+          description: "Setzt vorhandene editedBody/editedName/editedSummary zurück (Variante wird wieder Quelle der Wahrheit)."
+
+    # ── Klausel-Vorschläge (Lernen aus Vertragsarbeit, Task #77) ──
+    ClauseSuggestion:
+      type: object
+      required:
+        [
+          id,
+          tenantId,
+          status,
+          sourceType,
+          proposedName,
+          proposedSummary,
+          proposedBody,
+          contentHash,
+          occurrenceCount,
+          firstSeenAt,
+          lastSeenAt,
+        ]
+      properties:
+        id: { type: string }
+        tenantId: { type: string }
+        status:
+          type: string
+          enum: [open, accepted, rejected, superseded]
+        sourceType:
+          type: string
+          enum: [ad-hoc, edit]
+        contractId: { type: ["string", "null"] }
+        contractClauseId: { type: ["string", "null"] }
+        familyId: { type: ["string", "null"] }
+        familyName: { type: ["string", "null"] }
+        baseVariantId: { type: ["string", "null"] }
+        baseVariantName: { type: ["string", "null"] }
+        brandId: { type: ["string", "null"] }
+        brandName: { type: ["string", "null"] }
+        proposedName: { type: string }
+        proposedSummary: { type: string }
+        proposedBody: { type: string }
+        proposedTone: { type: ["string", "null"] }
+        proposedSeverity: { type: ["string", "null"] }
+        diffPct: { type: ["number", "null"] }
+        occurrenceCount: { type: integer }
+        contentHash: { type: string }
+        authorId: { type: ["string", "null"] }
+        authorName: { type: ["string", "null"] }
+        firstSeenAt: { type: string, format: date-time }
+        lastSeenAt: { type: string, format: date-time }
+        decisionAt: { type: ["string", "null"], format: date-time }
+        decisionBy: { type: ["string", "null"] }
+        decisionAction:
+          type: ["string", "null"]
+          enum: [new_variant, replace_variant, add_translation, discard, null]
+        decisionNote: { type: ["string", "null"] }
+        createdVariantId: { type: ["string", "null"] }
+
+    ClauseSuggestionDetail:
+      allOf:
+        - $ref: "#/components/schemas/ClauseSuggestion"
+        - type: object
+          properties:
+            baseVariantBody: { type: ["string", "null"] }
+            baseVariantSummary: { type: ["string", "null"] }
+            baseVariantTone: { type: ["string", "null"] }
+            familyVariants:
+              type: array
+              items: { $ref: "#/components/schemas/ClauseVariant" }
+
+    ClauseSuggestionInput:
+      type: object
+      required: [familyId, proposedName, proposedSummary, proposedBody, sourceType]
+      properties:
+        familyId: { type: string }
+        contractId: { type: string, nullable: true }
+        contractClauseId: { type: string, nullable: true }
+        baseVariantId: { type: string, nullable: true }
+        brandId: { type: string, nullable: true }
+        proposedName: { type: string, minLength: 1, maxLength: 200 }
+        proposedSummary: { type: string, minLength: 1, maxLength: 1000 }
+        proposedBody: { type: string, minLength: 1, maxLength: 8000 }
+        proposedTone: { type: string, nullable: true, maxLength: 50 }
+        proposedSeverity: { type: string, nullable: true, maxLength: 20 }
+        sourceType:
+          type: string
+          enum: [ad-hoc, edit]
+
+    ClauseSuggestionDecisionInput:
+      type: object
+      required: [action]
+      properties:
+        action:
+          type: string
+          enum: [new_variant, replace_variant, add_translation, discard]
+        decisionNote: { type: string, nullable: true, maxLength: 500 }
+        # Für new_variant
+        tone: { type: string, nullable: true, maxLength: 50 }
+        severity: { type: string, nullable: true, maxLength: 20 }
+        severityScore: { type: integer, nullable: true, minimum: 1, maximum: 5 }
+        # Für replace_variant
+        replaceVariantId: { type: string, nullable: true }
+        # Für add_translation
+        locale:
+          type: string
+          nullable: true
+          enum: [de, en]
+        translationVariantId: { type: string, nullable: true }
+
+    ClauseSuggestionConfig:
+      type: object
+      required: [diffThresholdPct, repeatThreshold]
+      properties:
+        diffThresholdPct:
+          type: integer
+          minimum: 0
+          maximum: 100
+        repeatThreshold:
+          type: integer
+          minimum: 1
+          maximum: 100
+
+    ClauseSuggestionStats:
+      type: object
+      required: [open, accepted, rejected, total, byFamily, byAction, since]
+      properties:
+        open: { type: integer }
+        accepted: { type: integer }
+        rejected: { type: integer }
+        total: { type: integer }
+        since: { type: string, format: date-time }
+        byFamily:
+          type: array
+          items:
+            type: object
+            required: [familyId, familyName, open, accepted, rejected]
+            properties:
+              familyId: { type: string }
+              familyName: { type: string }
+              open: { type: integer }
+              accepted: { type: integer }
+              rejected: { type: integer }
+        byAction:
+          type: object
+          additionalProperties:
+            type: integer
 
     ClauseVariant:
       type: object
@@ -6037,6 +6321,17 @@ components:
         translationMissing:
           type: boolean
           description: "true, wenn für die Vertragssprache keine Übersetzung gepflegt ist und auf die Quell-Sprache zurückgefallen wurde."
+        edited:
+          type: boolean
+          description: "true, wenn der Slot ad-hoc editiert wurde und vom aktiven Variantentext abweicht."
+        editedReason:
+          type: ["string", "null"]
+          description: "Begründung der Bearbeitenden für die Ad-hoc-Anpassung (optional)."
+        editedAt:
+          type: ["string", "null"]
+          format: date-time
+        editedBy:
+          type: ["string", "null"]
 
     ClauseDiff:
       type: object
