@@ -1,4 +1,4 @@
-import { sql, and, like, eq } from "drizzle-orm";
+import { sql, and, like, eq, or } from "drizzle-orm";
 import {
   db,
   tenantsTable,
@@ -460,7 +460,7 @@ export async function seedIfEmpty(): Promise<void> {
     { id: "cv_juris_1", familyId: "cf_juris", tone: "zart",    severityScore: 1, name: "Sitz des Kunden, deutsches Recht", summary: "Gerichtsstand am Sitz des Kunden, deutsches Recht.", body: "Es gilt deutsches Recht unter Ausschluss des UN-Kaufrechts. Ausschließlicher Gerichtsstand ist der Sitz des Kunden." },
     { id: "cv_juris_2", familyId: "cf_juris", tone: "moderat", severityScore: 2, name: "Frankfurt a.M., Schiedsklausel",  summary: "Schiedsverfahren DIS, Sitz Frankfurt a.M.", body: "Streitigkeiten werden nach der DIS-Schiedsgerichtsordnung entschieden. Schiedsort ist Frankfurt am Main; Verfahrenssprache Deutsch." },
     { id: "cv_juris_3", familyId: "cf_juris", tone: "standard",severityScore: 3, name: "Sitz des Anbieters, deutsches Recht", summary: "Gerichtsstand am Sitz des Anbieters; deutsches Recht.", body: "Ausschließlicher Gerichtsstand ist der Sitz des Anbieters. Es gilt deutsches Recht unter Ausschluss des UN-Kaufrechts." },
-    { id: "cv_juris_4", familyId: "cf_juris", tone: "streng",  severityScore: 4, name: "London, englisches Recht",        summary: "Englisches Recht; Gerichtsstand London.", body: "It is governed by the laws of England and Wales. Exclusive jurisdiction lies with the courts of London." },
+    { id: "cv_juris_4", familyId: "cf_juris", tone: "streng",  severityScore: 4, name: "London, englisches Recht",        summary: "Englisches Recht; Gerichtsstand London.", body: "Es gilt das Recht von England und Wales. Ausschließlicher Gerichtsstand ist London." },
     { id: "cv_juris_5", familyId: "cf_juris", tone: "hart",    severityScore: 5, name: "ICC Schiedsverfahren Singapur",   summary: "ICC-Schiedsverfahren mit Sitz Singapur.", body: "Streitigkeiten werden ausschließlich durch ein Schiedsverfahren nach den ICC-Regeln in Singapur entschieden. Verfahrenssprache Englisch." },
   ];
   await db.insert(clauseVariantsTable).values(variantRows.map(v => ({
@@ -468,55 +468,8 @@ export async function seedIfEmpty(): Promise<void> {
     severity: sevFromScore(v.severityScore), severityScore: v.severityScore, tone: v.tone,
   })));
 
-  // Sprachfassungen: DE spiegelt die Basis-Variante; EN als Bonterms-style Übersetzung.
-  const enTranslations: Record<string, { name: string; summary: string; body: string }> = {
-    cv_liab_1: { name: "Unlimited for IP infringement", summary: "Unlimited liability for IP infringement claims.", body: "Provider shall be liable without limitation for any claims arising out of the infringement of third-party intellectual property rights, including direct and indirect damages." },
-    cv_liab_2: { name: "3× annual fees cap", summary: "Liability capped at 3× annual fees.", body: "Provider's aggregate liability shall be limited to three (3) times the fees paid in the preceding twelve (12) months." },
-    cv_liab_3: { name: "2× annual fees cap", summary: "Standard cap: 2× annual fees.", body: "Aggregate liability is limited to two (2) times the fees paid in the twelve (12) months preceding the claim." },
-    cv_liab_4: { name: "12-month fees cap", summary: "Cap at trailing 12-month fees.", body: "Liability is capped at the fees paid during the twelve (12) months preceding the event giving rise to the claim." },
-    cv_liab_5: { name: "6-month cap, gross negligence excluded", summary: "Hard cap: 6 months; ordinary negligence excluded.", body: "Liability is capped at six (6) months of fees. Liability for ordinary negligence, consequential damages, and lost profits is excluded." },
-    cv_term_1: { name: "Termination for convenience, 30 days", summary: "Customer may terminate at any time with 30 days notice.", body: "Customer may terminate the agreement at any time without cause upon thirty (30) days written notice." },
-    cv_term_2: { name: "12 months with opt-out", summary: "12-month minimum term, opt-out after month 6.", body: "Initial term of twelve (12) months with an opt-out at month six (6) on sixty (60) days notice." },
-    cv_term_3: { name: "24 months with opt-out", summary: "24 months with opt-out at month 12.", body: "Initial term of twenty-four (24) months; one-time opt-out at month twelve (12) on ninety (90) days notice." },
-    cv_term_4: { name: "36 months auto-renewal", summary: "36 months with 12-month auto-renewal.", body: "Initial term of thirty-six (36) months; auto-renewal for successive twelve (12) month terms unless terminated 90 days prior to expiration." },
-    cv_term_5: { name: "60 months, exit fee", summary: "60-month term; early-termination fee 50% of remaining value.", body: "Term of sixty (60) months. Early termination triggers a fee equal to fifty percent (50%) of the remaining contract value." },
-    cv_data_1: { name: "Customer hosting, full audit", summary: "On-prem at customer; unlimited audit rights without notice.", body: "All data processing occurs at customer premises. Customer may audit at any time without prior notice." },
-    cv_data_2: { name: "Customer hosting with audit", summary: "Customer-hosted with annual audit.", body: "Data processing within customer environment. Annual audit right with 30 days prior notice." },
-    cv_data_3: { name: "EU hosting, SCC", summary: "EU data centers, Standard Contractual Clauses.", body: "All personal data is processed in EU data centers. Standard Contractual Clauses (SCC) and TOMs (Annex B) apply." },
-    cv_data_4: { name: "EU hosting + sub-processor whitelist", summary: "EU hosting with approved sub-processors only.", body: "EU hosting; engagement of sub-processors requires customer's prior written approval." },
-    cv_data_5: { name: "Regional EU + liability disclaimer", summary: "EU hosting; data protection liability with customer.", body: "EU hosting; customer remains controller; provider is liable only for intentional GDPR violations." },
-    cv_pay_1:  { name: "Net 90 with early-pay discount", summary: "Net 90 days, 3% discount within 30 days.", body: "Payment due within ninety (90) days net. 3% discount available for payment within thirty (30) days." },
-    cv_pay_2:  { name: "Net 60", summary: "Net 60 days.", body: "Payment due within sixty (60) days net." },
-    cv_pay_3:  { name: "Net 30", summary: "Net 30 days.", body: "Payment due within thirty (30) days net from invoice date." },
-    cv_pay_4:  { name: "Net 14", summary: "Net 14 days, late interest.", body: "Payment due within fourteen (14) days net. Late payment interest of 9% above the base rate applies." },
-    cv_pay_5:  { name: "Prepayment", summary: "Payment before service delivery.", body: "Invoice issued in advance; service delivery commences only upon receipt of payment." },
-    cv_sla_1:  { name: "99.99% with 50% credits", summary: "99.99% uptime, credits up to 50% of monthly fee.", body: "Monthly availability of 99.99%. Service credits up to 50% of the monthly fee for any breach." },
-    cv_sla_2:  { name: "99.95% with 25% credits", summary: "99.95% uptime, 25% credit cap.", body: "Availability of 99.95%; service credits capped at 25% of the monthly fee." },
-    cv_sla_3:  { name: "99.9% with 10% credits", summary: "99.9% uptime, 10% credit cap.", body: "Availability of 99.9%; service credits up to 10% of the monthly fee." },
-    cv_sla_4:  { name: "99.5%, no credits", summary: "99.5% uptime, no credits.", body: "Target availability of 99.5%; no automatic service credits." },
-    cv_sla_5:  { name: "Best effort", summary: "Best-effort availability.", body: "Availability provided on a best-effort basis without warranty or service credits." },
-    cv_ip_1:   { name: "Full assignment incl. derivatives", summary: "All derivatives assigned to customer.", body: "All work product and derivatives created under this agreement are assigned to the customer." },
-    cv_ip_2:   { name: "Assignment of customer-specific derivatives", summary: "Only customer-specific derivatives assigned.", body: "Customer-specific derivatives are assigned; standard components remain with the provider." },
-    cv_ip_3:   { name: "Non-exclusive license", summary: "Non-exclusive usage license.", body: "Customer receives a non-exclusive, non-transferable license to use; IP remains with the provider." },
-    cv_ip_4:   { name: "License with audit", summary: "Non-exclusive with usage audit.", body: "Non-exclusive license; provider has the right to audit usage scope." },
-    cv_ip_5:   { name: "Named-user, no transfer", summary: "Named-user license, no transfer.", body: "License bound to named users; transfer or assignment is excluded." },
-    cv_warr_1: { name: "24 months, no notice obligation", summary: "24-month warranty without notice obligation.", body: "Provider warrants conformity of the deliverables for twenty-four (24) months from acceptance; no notice obligation applies." },
-    cv_warr_2: { name: "18 months, qualified notice", summary: "18-month warranty with notice within 14 days.", body: "Customer shall notify obvious defects in writing within fourteen (14) days; warranty period is eighteen (18) months." },
-    cv_warr_3: { name: "12 months, statutory notice", summary: "12 months, statutory notice rules.", body: "A warranty period of twelve (12) months applies from delivery; statutory notice obligations remain unaffected." },
-    cv_warr_4: { name: "6 months, exclusive cure right", summary: "6 months; cure as the exclusive remedy.", body: "Warranty period of six (6) months. Customer's sole and exclusive remedy is provider's right to cure; reduction or rescission are excluded." },
-    cv_warr_5: { name: "Warranty disclaimer for SaaS updates", summary: "No warranty for provider-issued updates.", body: "Provider disclaims warranty for updates and patches, to the extent permitted by applicable law." },
-    cv_conf_1: { name: "Perpetual, contractual penalty", summary: "Perpetual confidentiality with penalty per breach.", body: "Confidential information shall be kept confidential without time limit. Each breach triggers a contractual penalty of EUR 25,000." },
-    cv_conf_2: { name: "10 years post-term", summary: "10-year survival period.", body: "Confidentiality obligations survive for ten (10) years after termination of the agreement." },
-    cv_conf_3: { name: "5 years post-term", summary: "5-year survival; standard exclusions.", body: "Confidential information shall remain confidential for five (5) years after termination; standard exceptions (publicly known, legally required) apply." },
-    cv_conf_4: { name: "3 years, notice-and-cure", summary: "3-year survival; 30-day cure window.", body: "Confidentiality obligations survive three (3) years after termination. Upon breach, the breaching party receives a 30-day cure period." },
-    cv_conf_5: { name: "Term + 12 months", summary: "Confidentiality during term + 12 months only.", body: "Confidentiality obligations end twelve (12) months after termination; thereafter use is permitted subject to applicable competition law." },
-    cv_juris_1:{ name: "Customer's seat, German law", summary: "Jurisdiction at customer's seat; German law.", body: "This agreement is governed by German law excluding the UN Convention on Contracts for the International Sale of Goods. Exclusive jurisdiction lies with the courts at customer's registered seat." },
-    cv_juris_2:{ name: "Frankfurt, arbitration", summary: "DIS arbitration, seat in Frankfurt am Main.", body: "Disputes shall be finally settled under the DIS Arbitration Rules. Seat of arbitration is Frankfurt am Main; language of proceedings is German." },
-    cv_juris_3:{ name: "Provider's seat, German law", summary: "Jurisdiction at provider's seat; German law.", body: "Exclusive jurisdiction lies with the courts at provider's registered seat. German law applies, excluding the UN Convention on Contracts for the International Sale of Goods." },
-    cv_juris_4:{ name: "London, English law", summary: "English law; jurisdiction in London.", body: "This agreement is governed by the laws of England and Wales. Exclusive jurisdiction lies with the courts of London." },
-    cv_juris_5:{ name: "ICC arbitration Singapore", summary: "ICC arbitration seated in Singapore.", body: "Disputes shall be finally settled by arbitration under the ICC Rules with seat in Singapore. Language of proceedings is English." },
-  };
-
+  // Sprachfassungen: DE spiegelt die Basis-Variante; EN aus dem Legal-Review.
+  const enTranslations = LEGAL_REVIEWED_EN_TRANSLATIONS;
   const translationRows: Array<{
     id: string; variantId: string; locale: string; name: string; summary: string; body: string;
     source: string | null; license: string | null; sourceUrl: string | null;
@@ -529,7 +482,7 @@ export async function seedIfEmpty(): Promise<void> {
       name: v.name,
       summary: v.summary,
       body: v.body,
-      source: "internal-baseline",
+      source: "legal-reviewed",
       license: "Internal",
       sourceUrl: null,
     });
@@ -542,9 +495,9 @@ export async function seedIfEmpty(): Promise<void> {
         name: en.name,
         summary: en.summary,
         body: en.body,
-        source: "bonterms-style",
-        license: "CC-BY-4.0",
-        sourceUrl: "https://bonterms.com",
+        source: "legal-reviewed",
+        license: "Internal",
+        sourceUrl: null,
       });
     }
   }
@@ -1384,6 +1337,70 @@ export async function seedContractMvpAugmentationIdempotent(): Promise<void> {
   logger.info("Contract MVP augmentation completed");
 }
 
+/**
+ * Legal-reviewte englische Sprachfassungen der Standardklauseln.
+ *
+ * Quelle bisher: "bonterms-style" – maschinell aus den deutschen Originalen
+ * generierte Übersetzungen, damit der Sprachumschalter sofort lauffähig ist.
+ *
+ * Diese Texte wurden vom Legal-Team gegen die deutschen Variantenbodies
+ * abgeglichen und an mehreren Stellen für die englischsprachige Vertragspraxis
+ * geschärft (u. a. § 288(2) BGB-Verweis bei Verzugszinsen, vollständige Namen
+ * der DIS- und ICC-Schiedsregeln, präzisere SCC/TOM-Formulierung, sowie
+ * "indefinitely" statt "without time limit" bei der Geheimhaltung).
+ *
+ * Single source of truth – wird sowohl beim Initial-Seed als auch von
+ * `augmentClauseTranslations()` verwendet, damit Augment- und Redaktions-Pass
+ * nicht auseinanderlaufen.
+ */
+const LEGAL_REVIEWED_EN_TRANSLATIONS: Record<string, { name: string; summary: string; body: string }> = {
+  cv_liab_1: { name: "Unlimited for IP infringement", summary: "Unlimited liability for IP infringement claims.", body: "Provider shall be liable without limitation for any claims arising out of the infringement of third-party intellectual property rights, including direct and indirect damages." },
+  cv_liab_2: { name: "3× annual fees cap", summary: "Liability capped at 3× annual fees.", body: "Provider's aggregate liability shall be limited to three (3) times the fees paid in the preceding twelve (12) months." },
+  cv_liab_3: { name: "2× annual fees cap", summary: "Standard cap: 2× annual fees.", body: "Aggregate liability is limited to two (2) times the fees paid in the twelve (12) months preceding the claim." },
+  cv_liab_4: { name: "12-month fees cap", summary: "Cap at trailing 12-month fees.", body: "Liability is capped at the fees paid during the twelve (12) months preceding the event giving rise to the claim." },
+  cv_liab_5: { name: "6-month cap, ordinary negligence excluded", summary: "Hard cap: 6 months; ordinary negligence excluded.", body: "Liability is capped at six (6) months of fees. Liability for ordinary negligence, consequential damages, and lost profits is excluded." },
+  cv_term_1: { name: "Termination for convenience, 30 days", summary: "Customer may terminate at any time with 30 days' notice.", body: "Customer may terminate this agreement at any time without cause upon thirty (30) days' prior written notice." },
+  cv_term_2: { name: "12 months with opt-out", summary: "12-month minimum term, opt-out after month 6.", body: "Initial term of twelve (12) months with a one-time opt-out at month six (6) on sixty (60) days' prior written notice." },
+  cv_term_3: { name: "24 months with opt-out", summary: "24 months with opt-out at month 12.", body: "Initial term of twenty-four (24) months with a one-time opt-out at month twelve (12) on ninety (90) days' prior written notice." },
+  cv_term_4: { name: "36 months auto-renewal", summary: "36 months with 12-month auto-renewal.", body: "Initial term of thirty-six (36) months; automatic renewal for successive twelve (12) month periods unless either party gives written notice of non-renewal at least ninety (90) days prior to expiration." },
+  cv_term_5: { name: "60 months, exit fee", summary: "60-month term; early-termination fee 50% of remaining value.", body: "Term of sixty (60) months. Early termination by Customer triggers a fee equal to fifty percent (50%) of the remaining contract value." },
+  cv_data_1: { name: "Customer hosting, full audit", summary: "On-prem at customer; unlimited audit rights without notice.", body: "All data processing takes place on Customer's premises. Customer may audit at any time without prior notice." },
+  cv_data_2: { name: "Customer hosting with audit", summary: "Customer-hosted with annual audit.", body: "Data processing within the Customer environment. Customer has an annual audit right exercisable upon thirty (30) days' prior written notice." },
+  cv_data_3: { name: "EU hosting, SCC", summary: "EU data centres; Standard Contractual Clauses apply.", body: "All personal data is processed exclusively in EU data centres. The Standard Contractual Clauses (SCC) and the technical and organisational measures (TOMs) set out in Annex B form an integral part of this agreement." },
+  cv_data_4: { name: "EU hosting + sub-processor whitelist", summary: "EU hosting; approved sub-processors only.", body: "All personal data is processed in EU data centres. Engagement of any sub-processor requires Customer's prior written approval." },
+  cv_data_5: { name: "Regional EU + liability disclaimer", summary: "EU hosting; data-protection liability remains with Customer.", body: "Personal data is processed in EU data centres. Customer remains the controller for the purposes of the GDPR. Provider's liability under data-protection law is limited to wilful misconduct." },
+  cv_pay_1:  { name: "Net 90 with early-pay discount", summary: "Net 90 days, 3% discount within 30 days.", body: "Invoices are due within ninety (90) days net of the invoice date. A 3% early-payment discount applies if payment is received within thirty (30) days." },
+  cv_pay_2:  { name: "Net 60", summary: "Net 60 days.", body: "Invoices are due within sixty (60) days net of the invoice date." },
+  cv_pay_3:  { name: "Net 30", summary: "Net 30 days.", body: "Invoices are due within thirty (30) days net of the invoice date." },
+  cv_pay_4:  { name: "Net 14, statutory default interest", summary: "Net 14 days; statutory default interest applies.", body: "Invoices are due within fourteen (14) days net of the invoice date. In the event of default, interest accrues at nine (9) percentage points above the statutory base rate (§ 288(2) BGB)." },
+  cv_pay_5:  { name: "Prepayment", summary: "Payment in advance of service delivery.", body: "Provider issues an invoice in advance; service delivery commences only upon receipt of payment in full." },
+  cv_sla_1:  { name: "99.99% with 50% credits", summary: "99.99% uptime; service credits up to 50% of monthly fee.", body: "Monthly availability target of 99.99%. Service credits of up to fifty percent (50%) of the applicable monthly fee apply for any breach." },
+  cv_sla_2:  { name: "99.95% with 25% credits", summary: "99.95% uptime; 25% credit cap.", body: "Monthly availability target of 99.95%. Service credits are capped at twenty-five percent (25%) of the applicable monthly fee." },
+  cv_sla_3:  { name: "99.9% with 10% credits", summary: "99.9% uptime; 10% credit cap.", body: "Monthly availability target of 99.9%. Service credits are capped at ten percent (10%) of the applicable monthly fee." },
+  cv_sla_4:  { name: "99.5%, no credits", summary: "99.5% uptime; no service credits.", body: "Target availability of 99.5%. No automatic service credits apply." },
+  cv_sla_5:  { name: "Best effort", summary: "Best-effort availability.", body: "Availability is provided on a best-effort basis without warranty or service credits." },
+  cv_ip_1:   { name: "Full assignment incl. derivatives", summary: "All work product and derivatives assigned to Customer.", body: "All work product and derivatives created under this agreement are assigned to Customer upon creation." },
+  cv_ip_2:   { name: "Assignment of customer-specific derivatives", summary: "Only customer-specific derivatives are assigned.", body: "Customer-specific derivatives are assigned to Customer upon creation; standard components remain the property of Provider." },
+  cv_ip_3:   { name: "Non-exclusive license", summary: "Non-exclusive, non-transferable license.", body: "Customer receives a non-exclusive, non-transferable license to use the deliverables. All intellectual property rights remain with Provider." },
+  cv_ip_4:   { name: "License with audit", summary: "Non-exclusive license with usage audit.", body: "Customer receives a non-exclusive license to use the deliverables. Provider has the right to audit the scope of use upon reasonable prior notice." },
+  cv_ip_5:   { name: "Named-user, no transfer", summary: "Named-user license; no transfer.", body: "The license is limited to named users designated by Customer. Transfer or assignment of the license is excluded." },
+  cv_warr_1: { name: "24 months, no notice obligation", summary: "24-month warranty without notice obligation.", body: "Provider warrants conformity of the deliverables for twenty-four (24) months from acceptance. Customer is under no obligation to give notice of defects." },
+  cv_warr_2: { name: "18 months, qualified notice", summary: "18-month warranty; notice within 14 days.", body: "Customer shall give written notice of obvious defects within fourteen (14) days. The warranty period is eighteen (18) months from acceptance." },
+  cv_warr_3: { name: "12 months, statutory notice", summary: "12 months; statutory notice rules apply.", body: "A warranty period of twelve (12) months from delivery applies. The statutory duty to inspect and notify under § 377 HGB remains unaffected." },
+  cv_warr_4: { name: "6 months, exclusive cure right", summary: "6 months; cure as the exclusive remedy.", body: "Warranty period of six (6) months. Customer's sole and exclusive remedy is Provider's right to cure; price reduction and rescission are excluded." },
+  cv_warr_5: { name: "Warranty disclaimer for SaaS updates", summary: "No warranty for provider-issued updates.", body: "Provider disclaims any warranty for updates and patches it provides, to the extent permitted by applicable law." },
+  cv_conf_1: { name: "Indefinite, contractual penalty", summary: "Indefinite confidentiality with penalty per breach.", body: "Confidential Information shall be kept strictly confidential for an indefinite period. Each breach of this obligation triggers a contractual penalty of EUR 25,000." },
+  cv_conf_2: { name: "10 years post-term", summary: "10-year survival of confidentiality.", body: "The confidentiality obligations survive for ten (10) years after termination or expiry of this agreement." },
+  cv_conf_3: { name: "5 years post-term", summary: "5-year survival; standard exclusions.", body: "Confidential Information shall remain confidential for five (5) years after termination or expiry of this agreement. Customary exceptions (publicly known information, legal disclosure obligations) apply." },
+  cv_conf_4: { name: "3 years, notice-and-cure", summary: "3-year survival; 30-day cure window.", body: "The confidentiality obligations survive for three (3) years after termination or expiry. Upon breach, the breaching party shall be granted a thirty (30) day period to cure." },
+  cv_conf_5: { name: "Term + 12 months", summary: "Confidentiality during the term and for 12 months thereafter only.", body: "The confidentiality obligations end twelve (12) months after termination or expiry of this agreement. Thereafter, use is permitted subject to applicable competition law." },
+  cv_juris_1:{ name: "Customer's seat, German law", summary: "Jurisdiction at Customer's seat; German law.", body: "This agreement is governed by the laws of the Federal Republic of Germany, excluding the United Nations Convention on Contracts for the International Sale of Goods. Exclusive jurisdiction lies with the courts at Customer's registered seat." },
+  cv_juris_2:{ name: "Frankfurt, DIS arbitration", summary: "DIS arbitration; seat in Frankfurt am Main.", body: "All disputes arising out of or in connection with this agreement shall be finally settled under the Arbitration Rules of the German Arbitration Institute (DIS). The seat of arbitration is Frankfurt am Main; the language of the proceedings is German." },
+  cv_juris_3:{ name: "Provider's seat, German law", summary: "Jurisdiction at Provider's seat; German law.", body: "This agreement is governed by the laws of the Federal Republic of Germany, excluding the United Nations Convention on Contracts for the International Sale of Goods. Exclusive jurisdiction lies with the courts at Provider's registered seat." },
+  cv_juris_4:{ name: "London, English law", summary: "English law; jurisdiction in London.", body: "This agreement is governed by the laws of England and Wales. The courts of London shall have exclusive jurisdiction." },
+  cv_juris_5:{ name: "ICC arbitration in Singapore", summary: "ICC arbitration seated in Singapore.", body: "All disputes arising out of or in connection with this agreement shall be finally settled under the Rules of Arbitration of the International Chamber of Commerce (ICC), with the seat of arbitration in Singapore. The language of the proceedings is English." },
+};
+
 async function augmentClauseTranslations(): Promise<void> {
   const newFamilies = [
     { id: "cf_warr",  name: "Gewährleistung",     description: "Mängelhaftung, Rüge- und Nachbesserungsrechte." },
@@ -1407,7 +1424,7 @@ async function augmentClauseTranslations(): Promise<void> {
     { id: "cv_juris_1", familyId: "cf_juris", tone: "zart",    severityScore: 1, name: "Sitz des Kunden, deutsches Recht", summary: "Gerichtsstand am Sitz des Kunden, deutsches Recht.", body: "Es gilt deutsches Recht unter Ausschluss des UN-Kaufrechts. Ausschließlicher Gerichtsstand ist der Sitz des Kunden." },
     { id: "cv_juris_2", familyId: "cf_juris", tone: "moderat", severityScore: 2, name: "Frankfurt a.M., Schiedsklausel",  summary: "Schiedsverfahren DIS, Sitz Frankfurt a.M.", body: "Streitigkeiten werden nach der DIS-Schiedsgerichtsordnung entschieden. Schiedsort ist Frankfurt am Main; Verfahrenssprache Deutsch." },
     { id: "cv_juris_3", familyId: "cf_juris", tone: "standard",severityScore: 3, name: "Sitz des Anbieters, deutsches Recht", summary: "Gerichtsstand am Sitz des Anbieters; deutsches Recht.", body: "Ausschließlicher Gerichtsstand ist der Sitz des Anbieters. Es gilt deutsches Recht unter Ausschluss des UN-Kaufrechts." },
-    { id: "cv_juris_4", familyId: "cf_juris", tone: "streng",  severityScore: 4, name: "London, englisches Recht",        summary: "Englisches Recht; Gerichtsstand London.", body: "It is governed by the laws of England and Wales. Exclusive jurisdiction lies with the courts of London." },
+    { id: "cv_juris_4", familyId: "cf_juris", tone: "streng",  severityScore: 4, name: "London, englisches Recht",        summary: "Englisches Recht; Gerichtsstand London.", body: "Es gilt das Recht von England und Wales. Ausschließlicher Gerichtsstand ist London." },
     { id: "cv_juris_5", familyId: "cf_juris", tone: "hart",    severityScore: 5, name: "ICC Schiedsverfahren Singapur",   summary: "ICC-Schiedsverfahren mit Sitz Singapur.", body: "Streitigkeiten werden ausschließlich durch ein Schiedsverfahren nach den ICC-Regeln in Singapur entschieden. Verfahrenssprache Englisch." },
   ];
   await db.insert(clauseVariantsTable).values(newVariants.map(v => ({
@@ -1415,53 +1432,15 @@ async function augmentClauseTranslations(): Promise<void> {
     severity: sevFromScore(v.severityScore), severityScore: v.severityScore, tone: v.tone,
   }))).onConflictDoNothing();
 
-  const enTranslations: Record<string, { name: string; summary: string; body: string }> = {
-    cv_liab_1: { name: "Unlimited for IP infringement", summary: "Unlimited liability for IP infringement claims.", body: "Provider shall be liable without limitation for any claims arising out of the infringement of third-party intellectual property rights, including direct and indirect damages." },
-    cv_liab_2: { name: "3× annual fees cap", summary: "Liability capped at 3× annual fees.", body: "Provider's aggregate liability shall be limited to three (3) times the fees paid in the preceding twelve (12) months." },
-    cv_liab_3: { name: "2× annual fees cap", summary: "Standard cap: 2× annual fees.", body: "Aggregate liability is limited to two (2) times the fees paid in the twelve (12) months preceding the claim." },
-    cv_liab_4: { name: "12-month fees cap", summary: "Cap at trailing 12-month fees.", body: "Liability is capped at the fees paid during the twelve (12) months preceding the event giving rise to the claim." },
-    cv_liab_5: { name: "6-month cap, gross negligence excluded", summary: "Hard cap: 6 months; ordinary negligence excluded.", body: "Liability is capped at six (6) months of fees. Liability for ordinary negligence, consequential damages, and lost profits is excluded." },
-    cv_term_1: { name: "Termination for convenience, 30 days", summary: "Customer may terminate at any time with 30 days notice.", body: "Customer may terminate the agreement at any time without cause upon thirty (30) days written notice." },
-    cv_term_2: { name: "12 months with opt-out", summary: "12-month minimum term, opt-out after month 6.", body: "Initial term of twelve (12) months with an opt-out at month six (6) on sixty (60) days notice." },
-    cv_term_3: { name: "24 months with opt-out", summary: "24 months with opt-out at month 12.", body: "Initial term of twenty-four (24) months; one-time opt-out at month twelve (12) on ninety (90) days notice." },
-    cv_term_4: { name: "36 months auto-renewal", summary: "36 months with 12-month auto-renewal.", body: "Initial term of thirty-six (36) months; auto-renewal for successive twelve (12) month terms unless terminated 90 days prior to expiration." },
-    cv_term_5: { name: "60 months, exit fee", summary: "60-month term; early-termination fee 50% of remaining value.", body: "Term of sixty (60) months. Early termination triggers a fee equal to fifty percent (50%) of the remaining contract value." },
-    cv_data_1: { name: "Customer hosting, full audit", summary: "On-prem at customer; unlimited audit rights without notice.", body: "All data processing occurs at customer premises. Customer may audit at any time without prior notice." },
-    cv_data_2: { name: "Customer hosting with audit", summary: "Customer-hosted with annual audit.", body: "Data processing within customer environment. Annual audit right with 30 days prior notice." },
-    cv_data_3: { name: "EU hosting, SCC", summary: "EU data centers, Standard Contractual Clauses.", body: "All personal data is processed in EU data centers. Standard Contractual Clauses (SCC) and TOMs (Annex B) apply." },
-    cv_data_4: { name: "EU hosting + sub-processor whitelist", summary: "EU hosting with approved sub-processors only.", body: "EU hosting; engagement of sub-processors requires customer's prior written approval." },
-    cv_data_5: { name: "Regional EU + liability disclaimer", summary: "EU hosting; data protection liability with customer.", body: "EU hosting; customer remains controller; provider is liable only for intentional GDPR violations." },
-    cv_pay_1:  { name: "Net 90 with early-pay discount", summary: "Net 90 days, 3% discount within 30 days.", body: "Payment due within ninety (90) days net. 3% discount available for payment within thirty (30) days." },
-    cv_pay_2:  { name: "Net 60", summary: "Net 60 days.", body: "Payment due within sixty (60) days net." },
-    cv_pay_3:  { name: "Net 30", summary: "Net 30 days.", body: "Payment due within thirty (30) days net from invoice date." },
-    cv_pay_4:  { name: "Net 14", summary: "Net 14 days, late interest.", body: "Payment due within fourteen (14) days net. Late payment interest of 9% above the base rate applies." },
-    cv_pay_5:  { name: "Prepayment", summary: "Payment before service delivery.", body: "Invoice issued in advance; service delivery commences only upon receipt of payment." },
-    cv_sla_1:  { name: "99.99% with 50% credits", summary: "99.99% uptime, credits up to 50% of monthly fee.", body: "Monthly availability of 99.99%. Service credits up to 50% of the monthly fee for any breach." },
-    cv_sla_2:  { name: "99.95% with 25% credits", summary: "99.95% uptime, 25% credit cap.", body: "Availability of 99.95%; service credits capped at 25% of the monthly fee." },
-    cv_sla_3:  { name: "99.9% with 10% credits", summary: "99.9% uptime, 10% credit cap.", body: "Availability of 99.9%; service credits up to 10% of the monthly fee." },
-    cv_sla_4:  { name: "99.5%, no credits", summary: "99.5% uptime, no credits.", body: "Target availability of 99.5%; no automatic service credits." },
-    cv_sla_5:  { name: "Best effort", summary: "Best-effort availability.", body: "Availability provided on a best-effort basis without warranty or service credits." },
-    cv_ip_1:   { name: "Full assignment incl. derivatives", summary: "All derivatives assigned to customer.", body: "All work product and derivatives created under this agreement are assigned to the customer." },
-    cv_ip_2:   { name: "Assignment of customer-specific derivatives", summary: "Only customer-specific derivatives assigned.", body: "Customer-specific derivatives are assigned; standard components remain with the provider." },
-    cv_ip_3:   { name: "Non-exclusive license", summary: "Non-exclusive usage license.", body: "Customer receives a non-exclusive, non-transferable license to use; IP remains with the provider." },
-    cv_ip_4:   { name: "License with audit", summary: "Non-exclusive with usage audit.", body: "Non-exclusive license; provider has the right to audit usage scope." },
-    cv_ip_5:   { name: "Named-user, no transfer", summary: "Named-user license, no transfer.", body: "License bound to named users; transfer or assignment is excluded." },
-    cv_warr_1: { name: "24 months, no notice obligation", summary: "24-month warranty without notice obligation.", body: "Provider warrants conformity of the deliverables for twenty-four (24) months from acceptance; no notice obligation applies." },
-    cv_warr_2: { name: "18 months, qualified notice", summary: "18-month warranty with notice within 14 days.", body: "Customer shall notify obvious defects in writing within fourteen (14) days; warranty period is eighteen (18) months." },
-    cv_warr_3: { name: "12 months, statutory notice", summary: "12 months, statutory notice rules.", body: "A warranty period of twelve (12) months applies from delivery; statutory notice obligations remain unaffected." },
-    cv_warr_4: { name: "6 months, exclusive cure right", summary: "6 months; cure as the exclusive remedy.", body: "Warranty period of six (6) months. Customer's sole and exclusive remedy is provider's right to cure; reduction or rescission are excluded." },
-    cv_warr_5: { name: "Warranty disclaimer for SaaS updates", summary: "No warranty for provider-issued updates.", body: "Provider disclaims warranty for updates and patches, to the extent permitted by applicable law." },
-    cv_conf_1: { name: "Perpetual, contractual penalty", summary: "Perpetual confidentiality with penalty per breach.", body: "Confidential information shall be kept confidential without time limit. Each breach triggers a contractual penalty of EUR 25,000." },
-    cv_conf_2: { name: "10 years post-term", summary: "10-year survival period.", body: "Confidentiality obligations survive for ten (10) years after termination of the agreement." },
-    cv_conf_3: { name: "5 years post-term", summary: "5-year survival; standard exclusions.", body: "Confidential information shall remain confidential for five (5) years after termination; standard exceptions (publicly known, legally required) apply." },
-    cv_conf_4: { name: "3 years, notice-and-cure", summary: "3-year survival; 30-day cure window.", body: "Confidentiality obligations survive three (3) years after termination. Upon breach, the breaching party receives a 30-day cure period." },
-    cv_conf_5: { name: "Term + 12 months", summary: "Confidentiality during term + 12 months only.", body: "Confidentiality obligations end twelve (12) months after termination; thereafter use is permitted subject to applicable competition law." },
-    cv_juris_1:{ name: "Customer's seat, German law", summary: "Jurisdiction at customer's seat; German law.", body: "This agreement is governed by German law excluding the UN Convention on Contracts for the International Sale of Goods. Exclusive jurisdiction lies with the courts at customer's registered seat." },
-    cv_juris_2:{ name: "Frankfurt, arbitration", summary: "DIS arbitration, seat in Frankfurt am Main.", body: "Disputes shall be finally settled under the DIS Arbitration Rules. Seat of arbitration is Frankfurt am Main; language of proceedings is German." },
-    cv_juris_3:{ name: "Provider's seat, German law", summary: "Jurisdiction at provider's seat; German law.", body: "Exclusive jurisdiction lies with the courts at provider's registered seat. German law applies, excluding the UN Convention on Contracts for the International Sale of Goods." },
-    cv_juris_4:{ name: "London, English law", summary: "English law; jurisdiction in London.", body: "This agreement is governed by the laws of England and Wales. Exclusive jurisdiction lies with the courts of London." },
-    cv_juris_5:{ name: "ICC arbitration Singapore", summary: "ICC arbitration seated in Singapore.", body: "Disputes shall be finally settled by arbitration under the ICC Rules with seat in Singapore. Language of proceedings is English." },
-  };
+  // Wenn cv_juris_4 zuvor mit englischem Body persistiert wurde, jetzt korrigieren.
+  await db.update(clauseVariantsTable)
+    .set({ body: "Es gilt das Recht von England und Wales. Ausschließlicher Gerichtsstand ist London." })
+    .where(and(
+      eq(clauseVariantsTable.id, "cv_juris_4"),
+      like(clauseVariantsTable.body, "It is governed by the laws of England%"),
+    ));
+
+  const enTranslations = LEGAL_REVIEWED_EN_TRANSLATIONS;
 
   const allVariants = await db.select().from(clauseVariantsTable);
   const existingTranslations = await db.select().from(clauseVariantTranslationsTable);
@@ -1477,7 +1456,7 @@ async function augmentClauseTranslations(): Promise<void> {
         name: v.name,
         summary: v.summary ?? "",
         body: v.body ?? "",
-        source: "internal-baseline",
+        source: "legal-reviewed",
         license: "Internal",
         sourceUrl: null,
       });
@@ -1491,9 +1470,9 @@ async function augmentClauseTranslations(): Promise<void> {
         name: en.name,
         summary: en.summary,
         body: en.body,
-        source: "bonterms-style",
-        license: "CC-BY-4.0",
-        sourceUrl: "https://bonterms.com",
+        source: "legal-reviewed",
+        license: "Internal",
+        sourceUrl: null,
       });
     }
   }
@@ -1501,6 +1480,63 @@ async function augmentClauseTranslations(): Promise<void> {
     await db.insert(clauseVariantTranslationsTable).values(toInsert).onConflictDoNothing();
     logger.info({ count: toInsert.length }, "Clause variant translations augmented");
   }
+
+  // Redaktionspass: Übersetzungen mit den alten Auto-Markern auf die legal-reviewten
+  // Texte/Labels heben. Dadurch übernehmen bereits geseedete DBs die geprüften Inhalte.
+  await redactAutoTranslations();
+}
+
+/**
+ * Hebt bestehende clause_variant_translations-Zeilen, die noch mit den
+ * Augment-Markern "bonterms-style" oder "internal-baseline" gespeichert sind,
+ * auf den final geprüften Stand: aktualisierte Texte (siehe
+ * `LEGAL_REVIEWED_EN_TRANSLATIONS`) und neue Quelle/Lizenz "legal-reviewed" /
+ * "Internal" / leere Source-URL.
+ */
+async function redactAutoTranslations(): Promise<void> {
+  const legacyRows = await db.select().from(clauseVariantTranslationsTable)
+    .where(or(
+      eq(clauseVariantTranslationsTable.source, "bonterms-style"),
+      eq(clauseVariantTranslationsTable.source, "internal-baseline"),
+    ));
+  if (legacyRows.length === 0) return;
+
+  const variantsById = new Map(
+    (await db.select().from(clauseVariantsTable)).map(v => [v.id, v]),
+  );
+
+  let updated = 0;
+  const now = new Date();
+  for (const row of legacyRows) {
+    const next: Partial<typeof clauseVariantTranslationsTable.$inferInsert> = {
+      source: "legal-reviewed",
+      license: "Internal",
+      sourceUrl: null,
+      updatedAt: now,
+    };
+    if (row.locale === "en") {
+      const en = LEGAL_REVIEWED_EN_TRANSLATIONS[row.variantId];
+      if (en) {
+        next.name = en.name;
+        next.summary = en.summary;
+        next.body = en.body;
+      }
+    } else if (row.locale === "de") {
+      // DE-Backfills haben bisher die Variante 1:1 gespiegelt. Nach dem Fix
+      // an cv_juris_4 (deutscher Body) muss die Übersetzung mitgezogen werden.
+      const v = variantsById.get(row.variantId);
+      if (v) {
+        next.name = v.name;
+        next.summary = v.summary ?? "";
+        next.body = v.body ?? "";
+      }
+    }
+    await db.update(clauseVariantTranslationsTable)
+      .set(next)
+      .where(eq(clauseVariantTranslationsTable.id, row.id));
+    updated += 1;
+  }
+  logger.info({ updated }, "Clause variant translations redacted to legal-reviewed");
 }
 
 // CUAD (Contract Understanding Atticus Dataset) — 41 standard categories.
