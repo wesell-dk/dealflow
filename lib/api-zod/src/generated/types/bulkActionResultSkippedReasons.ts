@@ -8,8 +8,4 @@ Multi-tenant, multi-company, multi-brand. Deal-centric.
  * OpenAPI spec version: 0.1.0
  */
 
-export interface BulkDeleteInput {
-  /** @minItems 1 */
-  ids: string[];
-  cascade?: boolean;
-}
+export type BulkActionResultSkippedReasons = { [key: string]: string };

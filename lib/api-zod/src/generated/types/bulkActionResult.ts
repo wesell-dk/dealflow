@@ -7,9 +7,13 @@ Multi-tenant, multi-company, multi-brand. Deal-centric.
 
  * OpenAPI spec version: 0.1.0
  */
+import type { BulkActionResultReferences } from "./bulkActionResultReferences";
+import type { BulkActionResultSkippedReasons } from "./bulkActionResultSkippedReasons";
 
 export interface BulkActionResult {
   updated: number;
   skipped: number;
   skippedIds?: string[];
+  skippedReasons?: BulkActionResultSkippedReasons;
+  references?: BulkActionResultReferences;
 }

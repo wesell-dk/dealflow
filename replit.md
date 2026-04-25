@@ -65,6 +65,7 @@ DealFlow One is a Commercial Execution Platform for B2B companies, unifying the 
   - Account-Detailseite mit Edit-Dialog; Anlage-Form um Website, Telefon, Adresse, USt-ID, Größe und primären Kontakt erweitert; "Website prüfen" reichert per Nominatim/Impressum-Crawl an.
   - Brand-Hierarchie mit `parentBrandId` (inline-Editor, Sub-Marken-Indikator, nested Picker), CompanyDialog-Checkbox "Auch als Standard-Marke anlegen".
   - Deal-Wert ist optional und wird beim ersten akzeptierten Angebot automatisch übernommen.
+- **Account-Cascade-Delete (2026-04 Follow-up)**: `POST /accounts/bulk/delete` akzeptiert optional `cascade:true` und liefert strukturierte `skippedReasons` (`no_permission` | `has_references`) plus `references`-Zähler pro blockiertem Account. Im Cascade-Modus werden Deals (inkl. Deal-Kinder), Kontakte, Letters, Renewals und externe Verträge hart entfernt; Verträge und Verpflichtungen behalten ihre Datensätze, nur die Account-Zuordnung wird genullt (DSGVO/Audit). Frontend (`accounts.tsx`) ersetzt `confirm()` durch zweistufigen `AlertDialog` mit Cascade-Toggle und Folgedialog "Inkl. abhängiger Daten löschen", der die konkreten Zähler pro Account zeigt.
 
 ## External Dependencies
 

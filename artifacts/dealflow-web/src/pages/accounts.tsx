@@ -20,7 +20,11 @@ import { Checkbox } from "@/components/ui/checkbox";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
-import { Building, Plus, ArrowUp, ArrowDown, Trash2, UserCog } from "lucide-react";
+import { Building, Plus, ArrowUp, ArrowDown, Trash2, UserCog, AlertTriangle } from "lucide-react";
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { AccountFormDialog } from "@/components/accounts/account-form-dialog";
 import { SavedViewTabs, type ViewState, type BuiltInView } from "@/components/patterns/saved-view-tabs";
 import { FilterChip, FilterChipsRow } from "@/components/patterns/filter-chips";
@@ -202,16 +206,68 @@ export default function Accounts() {
     }
   }
 
-  async function doBulkDelete() {
-    if (!confirm(`${selected.size} Account(s) wirklich löschen?`)) return;
+  // Lösch-Dialog: zwei Stufen.
+  // 1) Bestätigung mit optionalem Cascade-Toggle.
+  // 2) Wenn der erste Versuch ohne Cascade an verknüpften Daten scheitert,
+  //    zeigen wir die konkreten Zähler und bieten "Mit allem löschen" an —
+  //    statt eines kryptischen "übersprungen"-Toasts.
+  type BlockedRefs = { deals: number; contacts: number; contracts: number; letters: number; renewals: number; obligations: number; externalContracts: number };
+  const [deleteDialog, setDeleteDialog] = useState<
+    | { stage: "confirm"; ids: string[]; cascade: boolean }
+    | { stage: "blocked"; ids: string[]; references: Record<string, BlockedRefs>; deletedCount: number }
+    | null
+  >(null);
+
+  function openBulkDelete() {
+    if (selected.size === 0) return;
+    setDeleteDialog({ stage: "confirm", ids: [...selected], cascade: false });
+  }
+
+  async function runBulkDelete(ids: string[], cascade: boolean) {
     try {
-      const res = await bulkDelete.mutateAsync({ data: { ids: [...selected] } });
+      const res = await bulkDelete.mutateAsync({ data: { ids, cascade } });
       await qc.invalidateQueries({ queryKey: getListAccountsQueryKey() });
-      toast({ title: "Gelöscht", description: `${res.updated} entfernt, ${res.skipped} übersprungen.` });
+      const blockedIds = (res.skippedIds ?? []).filter(
+        id => res.skippedReasons?.[id] === "has_references",
+      );
+      if (!cascade && blockedIds.length > 0) {
+        // Stufe 2: Nutzer entscheidet über Cascade.
+        setDeleteDialog({
+          stage: "blocked",
+          ids: blockedIds,
+          references: (res.references ?? {}) as Record<string, BlockedRefs>,
+          deletedCount: res.updated,
+        });
+        return;
+      }
+      const noPermission = (res.skippedIds ?? []).filter(
+        id => res.skippedReasons?.[id] === "no_permission",
+      ).length;
+      const desc = noPermission > 0
+        ? `${res.updated} entfernt, ${noPermission} ohne Berechtigung übersprungen.`
+        : `${res.updated} entfernt.`;
+      toast({ title: "Gelöscht", description: desc });
       setSelected(new Set());
+      setDeleteDialog(null);
     } catch (e) {
       toast({ title: "Fehler", description: e instanceof Error ? e.message : "", variant: "destructive" });
     }
+  }
+
+  function nameOf(id: string): string {
+    return (accounts ?? []).find((r: Account) => r.id === id)?.name ?? id;
+  }
+
+  function describeRefs(r: BlockedRefs): string {
+    const parts: string[] = [];
+    if (r.deals) parts.push(`${r.deals} Deal${r.deals === 1 ? "" : "s"}`);
+    if (r.contacts) parts.push(`${r.contacts} Kontakt${r.contacts === 1 ? "" : "e"}`);
+    if (r.contracts) parts.push(`${r.contracts} Vertrag${r.contracts === 1 ? "" : "/Verträge"}`);
+    if (r.letters) parts.push(`${r.letters} Preisanpassungs-Schreiben`);
+    if (r.renewals) parts.push(`${r.renewals} Verlängerung${r.renewals === 1 ? "" : "en"}`);
+    if (r.obligations) parts.push(`${r.obligations} Verpflichtung${r.obligations === 1 ? "" : "en"}`);
+    if (r.externalContracts) parts.push(`${r.externalContracts} externe Verträge`);
+    return parts.join(", ");
   }
 
   const hasFilters = Object.keys(view.filters ?? {}).length > 0;
@@ -422,12 +478,107 @@ export default function Accounts() {
             ))}
           </SelectContent>
         </Select>
-        <Button size="sm" variant="ghost" className="h-8 gap-1 text-destructive" onClick={doBulkDelete} data-testid="bulk-delete">
+        <Button size="sm" variant="ghost" className="h-8 gap-1 text-destructive" onClick={openBulkDelete} data-testid="bulk-delete">
           <Trash2 className="h-3.5 w-3.5" /> Löschen
         </Button>
       </BulkActionBar>
 
       <AccountFormDialog open={createOpen} onOpenChange={setCreateOpen} />
+
+      <AlertDialog
+        open={deleteDialog?.stage === "confirm"}
+        onOpenChange={(o) => { if (!o) setDeleteDialog(null); }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              {deleteDialog?.stage === "confirm" && deleteDialog.ids.length === 1
+                ? `Account "${nameOf(deleteDialog.ids[0])}" löschen?`
+                : `${deleteDialog?.stage === "confirm" ? deleteDialog.ids.length : 0} Account(s) löschen?`}
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              Accounts mit verknüpften Deals, Verträgen oder Kontakten können standardmäßig nicht gelöscht werden.
+              Du kannst stattdessen direkt erzwingen, dass alle abhängigen Daten mitgelöscht werden.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <label className="flex items-start gap-2 text-sm cursor-pointer p-3 rounded-md border bg-muted/30">
+            <Checkbox
+              checked={deleteDialog?.stage === "confirm" ? deleteDialog.cascade : false}
+              onCheckedChange={(v) => {
+                if (deleteDialog?.stage === "confirm") {
+                  setDeleteDialog({ ...deleteDialog, cascade: v === true });
+                }
+              }}
+              data-testid="delete-cascade-toggle"
+            />
+            <span>
+              <span className="font-medium">Auch alle verknüpften Daten löschen</span>
+              <span className="block text-xs text-muted-foreground mt-0.5">
+                Deals, Kontakte, Angebote, Renewals und Schreiben werden entfernt. Verträge und Verpflichtungen bleiben erhalten — nur die Account-Zuordnung wird geleert.
+              </span>
+            </span>
+          </label>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Abbrechen</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={(e) => {
+                e.preventDefault();
+                if (deleteDialog?.stage === "confirm") {
+                  void runBulkDelete(deleteDialog.ids, deleteDialog.cascade);
+                }
+              }}
+              data-testid="delete-confirm"
+            >
+              {deleteDialog?.stage === "confirm" && deleteDialog.cascade ? "Endgültig löschen" : "Löschen"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog
+        open={deleteDialog?.stage === "blocked"}
+        onOpenChange={(o) => { if (!o) setDeleteDialog(null); }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center gap-2">
+              <AlertTriangle className="h-4 w-4 text-amber-500" />
+              {deleteDialog?.stage === "blocked" && deleteDialog.ids.length === 1
+                ? `"${nameOf(deleteDialog.ids[0])}" hat noch verknüpfte Daten`
+                : `${deleteDialog?.stage === "blocked" ? deleteDialog.ids.length : 0} Account(s) haben noch verknüpfte Daten`}
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              {deleteDialog?.stage === "blocked" && deleteDialog.deletedCount > 0
+                ? `${deleteDialog.deletedCount} Account(s) wurden bereits gelöscht. Folgende konnten wegen verknüpfter Daten nicht entfernt werden:`
+                : "Der Account konnte nicht gelöscht werden, weil noch verknüpfte Daten existieren:"}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <ul className="text-sm space-y-1.5 max-h-48 overflow-auto pr-2">
+            {deleteDialog?.stage === "blocked" && deleteDialog.ids.map(id => (
+              <li key={id} className="border-l-2 border-amber-500 pl-3">
+                <div className="font-medium">{nameOf(id)}</div>
+                <div className="text-xs text-muted-foreground">{describeRefs(deleteDialog.references[id] ?? { deals: 0, contacts: 0, contracts: 0, letters: 0, renewals: 0, obligations: 0, externalContracts: 0 })}</div>
+              </li>
+            ))}
+          </ul>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Abbrechen</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={(e) => {
+                e.preventDefault();
+                if (deleteDialog?.stage === "blocked") {
+                  void runBulkDelete(deleteDialog.ids, true);
+                }
+              }}
+              data-testid="delete-cascade-confirm"
+            >
+              Inkl. abhängiger Daten löschen
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

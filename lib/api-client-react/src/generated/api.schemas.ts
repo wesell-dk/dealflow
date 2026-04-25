@@ -791,12 +791,29 @@ export interface BulkStageInput {
 export interface BulkDeleteInput {
   /** @minItems 1 */
   ids: string[];
+  cascade?: boolean;
 }
+
+export type BulkActionResultSkippedReasons = { [key: string]: string };
+
+export type BulkActionResultReferences = {
+  [key: string]: {
+    deals?: number;
+    contacts?: number;
+    contracts?: number;
+    letters?: number;
+    renewals?: number;
+    obligations?: number;
+    externalContracts?: number;
+  };
+};
 
 export interface BulkActionResult {
   updated: number;
   skipped: number;
   skippedIds?: string[];
+  skippedReasons?: BulkActionResultSkippedReasons;
+  references?: BulkActionResultReferences;
 }
 
 export interface DealInput {

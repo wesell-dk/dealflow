@@ -7377,7 +7377,10 @@ const bulkOwnerStrictSchema = z.object({
   ownerId: z.string().min(1),
 });
 const bulkStageSchema = z.object({ ids: z.array(z.string()).min(1).max(500), stage: z.string().min(1) });
-const bulkDeleteSchema = z.object({ ids: z.array(z.string()).min(1).max(500) });
+const bulkDeleteSchema = z.object({
+  ids: z.array(z.string()).min(1).max(500),
+  cascade: z.boolean().optional(),
+});
 
 // ─── Account: Best-effort Web-Anreicherung ──────────────────────────────────
 // Holt Impressum/Über-uns einer Website und extrahiert per Regex Adresse/Tel/USt-ID.
@@ -7543,28 +7546,214 @@ router.post('/accounts/bulk/owner', async (req, res) => {
   res.json({ updated: targetIds.length, skipped: skipped.length, skippedIds: skipped });
 });
 
+// Hilfsfunktion: Zählt verknüpfte Datensätze pro Account in den relevanten Tabellen.
+// Wird sowohl beim Block (warum übersprungen?) als auch im Cascade-Pfad verwendet.
+type AccountRefCounts = {
+  deals: number; contacts: number; contracts: number; letters: number;
+  renewals: number; obligations: number; externalContracts: number;
+};
+async function accountReferenceCounts(accountIds: string[]): Promise<Record<string, AccountRefCounts>> {
+  const out: Record<string, AccountRefCounts> = {};
+  for (const id of accountIds) {
+    out[id] = { deals: 0, contacts: 0, contracts: 0, letters: 0, renewals: 0, obligations: 0, externalContracts: 0 };
+  }
+  if (accountIds.length === 0) return out;
+  const [dealRows, contactRows, contractRows, letterRows, renewalRows, obligationRows, externalRows] = await Promise.all([
+    db.select({ accountId: dealsTable.accountId }).from(dealsTable).where(inArray(dealsTable.accountId, accountIds)),
+    db.select({ accountId: contactsTable.accountId }).from(contactsTable).where(inArray(contactsTable.accountId, accountIds)),
+    db.select({ accountId: contractsTable.accountId }).from(contractsTable).where(inArray(contractsTable.accountId, accountIds)),
+    db.select({ accountId: priceIncreaseLettersTable.accountId }).from(priceIncreaseLettersTable).where(inArray(priceIncreaseLettersTable.accountId, accountIds)),
+    db.select({ accountId: renewalOpportunitiesTable.accountId }).from(renewalOpportunitiesTable).where(inArray(renewalOpportunitiesTable.accountId, accountIds)),
+    db.select({ accountId: obligationsTable.accountId }).from(obligationsTable).where(inArray(obligationsTable.accountId, accountIds)),
+    db.select({ accountId: externalContractsTable.accountId }).from(externalContractsTable).where(inArray(externalContractsTable.accountId, accountIds)),
+  ]);
+  for (const r of dealRows) if (r.accountId && out[r.accountId]) out[r.accountId].deals++;
+  for (const r of contactRows) if (r.accountId && out[r.accountId]) out[r.accountId].contacts++;
+  for (const r of contractRows) if (r.accountId && out[r.accountId]) out[r.accountId].contracts++;
+  for (const r of letterRows) if (r.accountId && out[r.accountId]) out[r.accountId].letters++;
+  for (const r of renewalRows) if (r.accountId && out[r.accountId]) out[r.accountId].renewals++;
+  for (const r of obligationRows) if (r.accountId && out[r.accountId]) out[r.accountId].obligations++;
+  for (const r of externalRows) if (r.accountId && out[r.accountId]) out[r.accountId].externalContracts++;
+  return out as Record<string, { deals: number; contacts: number; contracts: number; letters: number; renewals: number; obligations: number; externalContracts: number }>;
+}
+
+// Cascade-Löschung: entfernt einen Account inkl. aller direkt + transitiv abhängigen
+// Datensätze. Reihenfolge ist wichtig — wir haben keine FK-Cascades im Schema, also
+// müssen Kinder vor ihren Eltern weg. Die Funktion erwartet, dass `accountIds` bereits
+// per `allowedAccountIds(req)` tenant-gefiltert wurde, scoped zusätzlich aber jede
+// destruktive Query defensiv mit `tenantId = scope.tenantId` (defense-in-depth).
+async function cascadeDeleteAccounts(req: Request, accountIds: string[]): Promise<void> {
+  if (accountIds.length === 0) return;
+  const scope = getScope(req);
+  const tenantId = scope.tenantId;
+  // Wenn aus irgendeinem Grund kein Tenant-Scope gesetzt ist, brechen wir ab —
+  // ein Cascade ohne Tenant-Bound ist zu gefährlich.
+  if (!tenantId) throw new Error('cascadeDeleteAccounts: missing tenant scope');
+
+  // 1) Deals + alle Deal-Kinder + Enkel einsammeln. Hinweis zur Tenant-Sicherheit:
+  // accountIds wurden bereits per allowedAccountIds(req) tenant-gefiltert. Tabellen
+  // ohne eigene tenantId-Spalte (deals, quotes, negotiations, signature_packages,
+  // order_confirmations, approvals, price_increase_letters) erben den Scope
+  // transitiv über accountId bzw. dealId. Wo eine tenantId-Spalte existiert,
+  // ANDen wir sie zusätzlich als Defense-in-Depth.
+  const dealRows = await db.select({ id: dealsTable.id }).from(dealsTable)
+    .where(inArray(dealsTable.accountId, accountIds));
+  const dealIds = dealRows.map(d => d.id);
+
+  if (dealIds.length > 0) {
+    // 1a) Quote-Hierarchie: line_items + quote_attachments → quote_versions → quotes.
+    const quoteRows = await db.select({ id: quotesTable.id }).from(quotesTable)
+      .where(inArray(quotesTable.dealId, dealIds));
+    const quoteIds = quoteRows.map(q => q.id);
+    if (quoteIds.length > 0) {
+      const versionRows = await db.select({ id: quoteVersionsTable.id }).from(quoteVersionsTable)
+        .where(inArray(quoteVersionsTable.quoteId, quoteIds));
+      const versionIds = versionRows.map(v => v.id);
+      if (versionIds.length > 0) {
+        await Promise.all([
+          db.delete(lineItemsTable).where(inArray(lineItemsTable.quoteVersionId, versionIds)),
+          db.delete(quoteAttachmentsTable).where(inArray(quoteAttachmentsTable.quoteVersionId, versionIds)),
+        ]);
+        await db.delete(quoteVersionsTable).where(inArray(quoteVersionsTable.id, versionIds));
+      }
+      await db.delete(quotesTable).where(inArray(quotesTable.id, quoteIds));
+    }
+
+    // 1b) Negotiations + customer_reactions.
+    const negRows = await db.select({ id: negotiationsTable.id }).from(negotiationsTable)
+      .where(inArray(negotiationsTable.dealId, dealIds));
+    const negIds = negRows.map(n => n.id);
+    if (negIds.length > 0) {
+      await db.delete(customerReactionsTable).where(inArray(customerReactionsTable.negotiationId, negIds));
+      await db.delete(negotiationsTable).where(inArray(negotiationsTable.id, negIds));
+    }
+
+    // 1c) Signature-Packages + signers.
+    const sigRows = await db.select({ id: signaturePackagesTable.id }).from(signaturePackagesTable)
+      .where(inArray(signaturePackagesTable.dealId, dealIds));
+    const sigIds = sigRows.map(s => s.id);
+    if (sigIds.length > 0) {
+      await db.delete(signersTable).where(inArray(signersTable.packageId, sigIds));
+      await db.delete(signaturePackagesTable).where(inArray(signaturePackagesTable.id, sigIds));
+    }
+
+    // 1d) Order-Confirmations + Checks.
+    const ocRows = await db.select({ id: orderConfirmationsTable.id }).from(orderConfirmationsTable)
+      .where(inArray(orderConfirmationsTable.dealId, dealIds));
+    const ocIds = ocRows.map(o => o.id);
+    if (ocIds.length > 0) {
+      await db.delete(orderConfirmationChecksTable).where(inArray(orderConfirmationChecksTable.orderConfirmationId, ocIds));
+      await db.delete(orderConfirmationsTable).where(inArray(orderConfirmationsTable.id, ocIds));
+    }
+
+    // 1e) Übrige direkte Deal-Kinder ohne eigene Kinder. timeline_events und
+    // copilot_insights tragen tenantId — defensiv mit-AND-en.
+    await Promise.all([
+      db.delete(approvalsTable).where(inArray(approvalsTable.dealId, dealIds)),
+      db.delete(timelineEventsTable).where(and(inArray(timelineEventsTable.dealId, dealIds), eq(timelineEventsTable.tenantId, tenantId))),
+      db.delete(copilotInsightsTable).where(and(inArray(copilotInsightsTable.dealId, dealIds), eq(copilotInsightsTable.tenantId, tenantId))),
+    ]);
+
+    // 1f) Deals selbst. Hinweis: Verträge (contracts.dealId notNull) bleiben mit
+    // dangling dealId stehen — das ist gewollt für Audit-/Rechtsspur. Die UI
+    // filtert sie heraus, das Datum bleibt aber recoverbar.
+    await db.delete(dealsTable).where(inArray(dealsTable.id, dealIds));
+  }
+
+  // 2) Externe Verträge: Object-Storage-Files best-effort wegräumen, dann DB-Rows.
+  // Hat tenantId — defensiv mitfiltern.
+  const extRows = await db.select({ id: externalContractsTable.id, objectPath: externalContractsTable.objectPath })
+    .from(externalContractsTable)
+    .where(and(inArray(externalContractsTable.accountId, accountIds), eq(externalContractsTable.tenantId, tenantId)));
+  if (extRows.length > 0) {
+    const svc = new ObjectStorageService();
+    for (const r of extRows) {
+      try {
+        const file = await svc.getObjectEntityFile(r.objectPath);
+        await file.delete({ ignoreNotFound: true });
+      } catch (err) {
+        req.log.warn({ err, objectPath: r.objectPath }, 'cascade: external-contract object delete failed');
+      }
+    }
+    await db.delete(externalContractsTable)
+      .where(and(inArray(externalContractsTable.accountId, accountIds), eq(externalContractsTable.tenantId, tenantId)));
+  }
+
+  // 3) Übrige Tabellen mit notNull(accountId) hart löschen. contacts und
+  // priceIncreaseLetters haben keine eigene tenantId-Spalte — Scope kommt
+  // transitiv über accountIds. renewal_opportunities trägt tenantId.
+  await Promise.all([
+    db.delete(contactsTable).where(inArray(contactsTable.accountId, accountIds)),
+    db.delete(priceIncreaseLettersTable).where(inArray(priceIncreaseLettersTable.accountId, accountIds)),
+    db.delete(renewalOpportunitiesTable).where(and(inArray(renewalOpportunitiesTable.accountId, accountIds), eq(renewalOpportunitiesTable.tenantId, tenantId))),
+  ]);
+
+  // 4) Verträge / Obligations: Account-Bezug leeren (Datensätze überleben für Audit).
+  await Promise.all([
+    db.update(contractsTable).set({ accountId: null })
+      .where(and(inArray(contractsTable.accountId, accountIds), eq(contractsTable.tenantId, tenantId))),
+    db.update(obligationsTable).set({ accountId: null })
+      .where(and(inArray(obligationsTable.accountId, accountIds), eq(obligationsTable.tenantId, tenantId))),
+  ]);
+
+  for (const id of accountIds) {
+    await writeAuditFromReq(req, { entityType: 'account', entityId: id, action: 'cascade_delete', summary: 'Kunde inkl. abhängiger Daten gelöscht' });
+  }
+}
+
 router.post('/accounts/bulk/delete', async (req, res) => {
   const parsed = bulkDeleteSchema.safeParse(req.body);
   if (!parsed.success) { res.status(422).json({ error: 'validation', issues: parsed.error.issues }); return; }
+  const cascade = parsed.data.cascade === true;
   const allowed = await allowedAccountIds(req);
   const targetIds = parsed.data.ids.filter(id => allowed.has(id));
   const skipped = parsed.data.ids.filter(id => !allowed.has(id));
-  // Block deletion if account has deals — surface as skipped.
-  const skipForDeals: string[] = [];
-  if (targetIds.length > 0) {
-    const dealRows = await db.select({ accountId: dealsTable.accountId })
-      .from(dealsTable).where(inArray(dealsTable.accountId, targetIds));
-    const blocked = new Set(dealRows.map(r => r.accountId));
-    for (const id of [...blocked]) skipForDeals.push(id);
+  const skippedReasons: Record<string, string> = {};
+  for (const id of skipped) skippedReasons[id] = 'no_permission';
+
+  if (cascade) {
+    // Cascade: alle Verknüpfungen werden mit-gelöscht oder genullt.
+    if (targetIds.length > 0) {
+      await cascadeDeleteAccounts(req, targetIds);
+      await db.delete(accountsTable).where(inArray(accountsTable.id, targetIds));
+    }
+    res.json({
+      updated: targetIds.length,
+      skipped: skipped.length,
+      skippedIds: skipped,
+      skippedReasons,
+      references: {},
+    });
+    return;
   }
-  const finalIds = targetIds.filter(id => !skipForDeals.includes(id));
+
+  // Default: blocken, wenn verknüpfte Daten existieren — und dem Frontend mitteilen, warum.
+  const refs = await accountReferenceCounts(targetIds);
+  const skipForRefs: string[] = [];
+  const blockedRefs: Record<string, AccountRefCounts> = {};
+  for (const id of targetIds) {
+    const r = refs[id];
+    const total = r.deals + r.contacts + r.contracts + r.letters + r.renewals + r.obligations + r.externalContracts;
+    if (total > 0) {
+      skipForRefs.push(id);
+      skippedReasons[id] = 'has_references';
+      blockedRefs[id] = r;
+    }
+  }
+  const finalIds = targetIds.filter(id => !skipForRefs.includes(id));
   if (finalIds.length > 0) {
     await db.delete(accountsTable).where(inArray(accountsTable.id, finalIds));
     for (const id of finalIds) {
       await writeAuditFromReq(req, { entityType: 'account', entityId: id, action: 'bulk_delete', summary: 'Kunde gelöscht (Bulk)' });
     }
   }
-  res.json({ updated: finalIds.length, skipped: skipped.length + skipForDeals.length, skippedIds: [...skipped, ...skipForDeals] });
+  res.json({
+    updated: finalIds.length,
+    skipped: skipped.length + skipForRefs.length,
+    skippedIds: [...skipped, ...skipForRefs],
+    skippedReasons,
+    references: blockedRefs,
+  });
 });
 
 router.post('/deals/bulk/owner', async (req, res) => {

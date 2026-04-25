@@ -3833,16 +3833,47 @@ export const BulkUpdateAccountOwnerResponse = zod.object({
   updated: zod.number(),
   skipped: zod.number(),
   skippedIds: zod.array(zod.string()).optional(),
+  skippedReasons: zod.record(zod.string(), zod.string()).optional(),
+  references: zod
+    .record(
+      zod.string(),
+      zod.object({
+        deals: zod.number().optional(),
+        contacts: zod.number().optional(),
+        contracts: zod.number().optional(),
+        letters: zod.number().optional(),
+        renewals: zod.number().optional(),
+        obligations: zod.number().optional(),
+        externalContracts: zod.number().optional(),
+      }),
+    )
+    .optional(),
 });
 
 export const BulkDeleteAccountsBody = zod.object({
   ids: zod.array(zod.string()).min(1),
+  cascade: zod.boolean().optional(),
 });
 
 export const BulkDeleteAccountsResponse = zod.object({
   updated: zod.number(),
   skipped: zod.number(),
   skippedIds: zod.array(zod.string()).optional(),
+  skippedReasons: zod.record(zod.string(), zod.string()).optional(),
+  references: zod
+    .record(
+      zod.string(),
+      zod.object({
+        deals: zod.number().optional(),
+        contacts: zod.number().optional(),
+        contracts: zod.number().optional(),
+        letters: zod.number().optional(),
+        renewals: zod.number().optional(),
+        obligations: zod.number().optional(),
+        externalContracts: zod.number().optional(),
+      }),
+    )
+    .optional(),
 });
 
 export const BulkUpdateDealOwnerBody = zod.object({
@@ -3854,6 +3885,21 @@ export const BulkUpdateDealOwnerResponse = zod.object({
   updated: zod.number(),
   skipped: zod.number(),
   skippedIds: zod.array(zod.string()).optional(),
+  skippedReasons: zod.record(zod.string(), zod.string()).optional(),
+  references: zod
+    .record(
+      zod.string(),
+      zod.object({
+        deals: zod.number().optional(),
+        contacts: zod.number().optional(),
+        contracts: zod.number().optional(),
+        letters: zod.number().optional(),
+        renewals: zod.number().optional(),
+        obligations: zod.number().optional(),
+        externalContracts: zod.number().optional(),
+      }),
+    )
+    .optional(),
 });
 
 /**
@@ -4073,6 +4119,21 @@ export const BulkUpdateDealStageResponse = zod.object({
   updated: zod.number(),
   skipped: zod.number(),
   skippedIds: zod.array(zod.string()).optional(),
+  skippedReasons: zod.record(zod.string(), zod.string()).optional(),
+  references: zod
+    .record(
+      zod.string(),
+      zod.object({
+        deals: zod.number().optional(),
+        contacts: zod.number().optional(),
+        contracts: zod.number().optional(),
+        letters: zod.number().optional(),
+        renewals: zod.number().optional(),
+        obligations: zod.number().optional(),
+        externalContracts: zod.number().optional(),
+      }),
+    )
+    .optional(),
 });
 
 export const ListContractTypesResponseItem = zod.object({

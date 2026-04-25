@@ -61,6 +61,8 @@ export * from "./brandDefaultsInput";
 export * from "./brandDefaultsInputDefaults";
 export * from "./brandUpdate";
 export * from "./bulkActionResult";
+export * from "./bulkActionResultReferences";
+export * from "./bulkActionResultSkippedReasons";
 export * from "./bulkDeleteInput";
 export * from "./bulkOwnerInput";
 export * from "./bulkStageInput";

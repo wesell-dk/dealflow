@@ -4436,6 +4436,7 @@ components:
           type: array
           items: { type: string }
           minItems: 1
+        cascade: { type: boolean }
 
     BulkActionResult:
       type: object
@@ -4446,6 +4447,21 @@ components:
         skippedIds:
           type: array
           items: { type: string }
+        skippedReasons:
+          type: object
+          additionalProperties: { type: string }
+        references:
+          type: object
+          additionalProperties:
+            type: object
+            properties:
+              deals: { type: integer }
+              contacts: { type: integer }
+              contracts: { type: integer }
+              letters: { type: integer }
+              renewals: { type: integer }
+              obligations: { type: integer }
+              externalContracts: { type: integer }
 
     Contact:
       type: object
