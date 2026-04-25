@@ -1034,10 +1034,27 @@ const ROLE_PATTERNS: Array<{ regex: RegExp; label: string; decisionMaker: boolea
 // und Adelsprädikaten (van, von, de) — bewusst konservativ, sonst halten wir
 // jede Phrase aus zwei Großbuchstaben-Wörtern für einen Namen.
 const NAME_RE = /\b(?:(?:Dr|Prof|Prof\.?\s*Dr|Mag|Dipl\.-?Ing|Dipl\.-?Kfm)\.?\s+)?[A-ZÄÖÜ][a-zäöüß\-]{1,}(?:\s+(?:van|von|de|del|der|den)\s+)?(?:\s+[A-ZÄÖÜ][a-zäöüß\-]{1,}){1,2}\b/;
+const NAME_RE_G = new RegExp(NAME_RE.source, 'g');
 
 function extractNameFromText(text: string): string | null {
   const m = text.match(NAME_RE);
   return m ? m[0].trim() : null;
+}
+
+// Liefert ALLE Namen aus einer Zeile — wichtig für Listen wie
+// "Geschäftsführer: Cornelia Lellig, Marcel Lellig".
+function extractAllNamesFromText(text: string): string[] {
+  const out: string[] = [];
+  const seen = new Set<string>();
+  for (const m of text.matchAll(NAME_RE_G)) {
+    const n = m[0].trim();
+    const key = n.toLowerCase();
+    if (!seen.has(key)) {
+      seen.add(key);
+      out.push(n);
+    }
+  }
+  return out;
 }
 
 function detectRole(text: string): { label: string; decisionMaker: boolean; match: string } | null {
@@ -1126,37 +1143,50 @@ function findPeopleOnPage(html: string, sourceUrl: string): ScrapedPerson[] {
     const role = detectRole(line);
     if (!role) continue;
 
-    // Name-Kandidaten: gleiche Zeile (Rolle entfernt), Vorzeile, Folgezeile.
+    // Name-Kandidaten — bevorzugt ALLE Namen aus der gleichen Zeile (für
+    // Komma-Listen wie "Geschäftsführer: A, B, C"). Falls die Zeile leer
+    // ist, fallback auf Vor-/Folgezeile (Block-Layout).
     const sameLineSansRole = line.replace(role.match, ' ').replace(/\s{2,}/g, ' ').trim();
-    const candidates = [
-      extractNameFromText(sameLineSansRole),
-      i > 0 ? extractNameFromText(lines[i - 1] ?? '') : null,
-      i < lines.length - 1 ? extractNameFromText(lines[i + 1] ?? '') : null,
-    ].filter((n): n is string => Boolean(n));
-    if (candidates.length === 0) continue;
-    const name = candidates[0]!;
+    let names = extractAllNamesFromText(sameLineSansRole);
+    if (names.length === 0) {
+      const adj = [
+        i > 0 ? extractNameFromText(lines[i - 1] ?? '') : null,
+        i < lines.length - 1 ? extractNameFromText(lines[i + 1] ?? '') : null,
+      ].filter((n): n is string => Boolean(n));
+      if (adj.length === 0) continue;
+      names = [adj[0]!];
+    }
 
     // Kontext-Fenster (5 Zeilen) für E-Mail/Telefon in der Nähe.
     const ctxLines = lines.slice(Math.max(0, i - 2), Math.min(lines.length, i + 3)).join(' ');
-    let email = extractEmailFromText(ctxLines);
-    if (!email) {
-      const m = mailtoByName.get(name.toLowerCase());
-      if (m) email = m;
+    const ctxEmail = extractEmailFromText(ctxLines);
+    const ctxPhone = extractPhoneFromText(ctxLines);
+
+    for (const name of names) {
+      // Pro Name eigene E-Mail-Zuordnung versuchen — wenn mailtoByName einen
+      // Treffer hat, nutzen wir den (zuverlässiger als Kontext-Match).
+      let email = mailtoByName.get(name.toLowerCase()) ?? null;
+      if (!email && names.length === 1) {
+        // Nur bei einem einzelnen Namen ist die Kontext-E-Mail eindeutig
+        // diesem Namen zuordbar. Bei Listen mit mehreren Namen würden
+        // sonst alle dieselbe E-Mail bekommen.
+        email = ctxEmail;
+      }
+      const phone = names.length === 1 ? ctxPhone : null;
+
+      const key = `${name.toLowerCase()}|${email ?? ''}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+
+      found.push({
+        name,
+        role: role.label,
+        email,
+        phone,
+        isDecisionMaker: role.decisionMaker,
+        sourceUrl,
+      });
     }
-    const phone = extractPhoneFromText(ctxLines);
-
-    const key = `${name.toLowerCase()}|${email ?? ''}`;
-    if (seen.has(key)) continue;
-    seen.add(key);
-
-    found.push({
-      name,
-      role: role.label,
-      email,
-      phone,
-      isDecisionMaker: role.decisionMaker,
-      sourceUrl,
-    });
   }
   return found;
 }
@@ -9824,16 +9854,22 @@ function parseHeuristics(html: string): Partial<EnrichSlot> {
     }
   }
 
-  // Telefon: Marker (Tel/Telefon/Fon/T:/Phone/Tel.) UND nackte +49…-Zahlen mit Plausibilität.
+  // Telefon: Marker (Tel/Telefon/Fon/T:/Phone/Tel.) UND nackte +49/0…-Zahlen
+  // mit Plausibilität. WICHTIG: Marker-Pattern erlaubt auch deutsche
+  // Inlandsnotation wie "Telefon: 07471 617 555" (führende 0, kein +/00).
+  // Ohne Marker verlangen wir aus False-Positive-Schutz internationale
+  // Notation (+49 / 0049), sonst würden PLZ + Hausnummer fälschlich als
+  // Telefonnummer matchen.
   const phonePatterns = [
-    /(?:Tel(?:efon)?\.?|Fon|Phone|T)[:\s]*((?:\+|00)\d[\d\s().\/\-]{6,}\d)/i,
+    /(?:Tel(?:efon)?\.?|Fon|Phone|T)[:\s]*((?:\+|00)?\d[\d\s().\/\-]{6,}\d)/i,
     /\b((?:\+|00)\d{1,3}[\s().\/\-]?\d[\d\s().\/\-]{5,}\d)\b/,
   ];
   for (const pat of phonePatterns) {
     const t = text.match(pat);
     if (t) {
       const cleaned = t[1]!.replace(/[\s().\/\-]+/g, ' ').replace(/\s+/g, ' ').trim();
-      // Plausibilität: mindestens 6 Ziffern, max 18.
+      // Plausibilität: mindestens 7 Ziffern (deutsche Nummern haben
+      // mindestens Vorwahl 3-stellig + 4-stellige Rufnummer), max 18.
       const digitCount = cleaned.replace(/\D/g, '').length;
       if (digitCount >= 7 && digitCount <= 18) { out.phone = cleaned; break; }
     }
