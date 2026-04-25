@@ -3009,8 +3009,344 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/ApiError" }
 
+  # ───────────── EXTERNAL CONTRACTS (Bestandsverträge) ─────────────
+
+  /external-contracts/upload-url:
+    post:
+      operationId: requestExternalContractUploadUrl
+      tags: [external-contracts]
+      summary: Signed PUT-URL für PDF/DOCX-Upload (max 20 MB)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ExternalContractUploadUrlRequest" }
+      responses:
+        "200":
+          description: ok
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ExternalContractUploadUrlResponse" }
+        "400": { description: invalid mime/size }
+
+  /external-contracts/extract:
+    post:
+      operationId: extractExternalContractFields
+      tags: [external-contracts]
+      summary: KI-Extraktion der Kerndaten aus einem hochgeladenen Dokument
+      description: |
+        Lädt das Dokument aus Object-Storage, extrahiert den Text-Layer (PDF
+        oder DOCX) und ruft die Extraktions-AI auf. Persistiert NICHT — der
+        User bestätigt im Frontend und ruft danach POST /external-contracts.
+        Bei Provider-/Config-Fehler liefert der Endpoint 200 mit
+        `aiAvailable=false` und einer leeren Suggestion, damit das Frontend
+        manuell weitergehen kann.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ExternalContractExtractRequest" }
+      responses:
+        "200":
+          description: ok
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ExternalContractExtractResponse" }
+        "400": { description: invalid request / unreadable file }
+        "404": { description: object not found }
+
+  /external-contracts:
+    get:
+      operationId: listExternalContracts
+      tags: [external-contracts]
+      summary: Bestandsverträge auflisten (Brand-Scope-konform)
+      parameters:
+        - in: query
+          name: accountId
+          required: false
+          schema: { type: string }
+        - in: query
+          name: brandId
+          required: false
+          schema: { type: string }
+      responses:
+        "200":
+          description: ok
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/ExternalContract" }
+    post:
+      operationId: createExternalContract
+      tags: [external-contracts]
+      summary: Bestandsvertrag persistieren (nach User-Bestätigung)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ExternalContractCreate" }
+      responses:
+        "201":
+          description: created
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ExternalContract" }
+        "400": { description: invalid input }
+        "403": { description: forbidden / scope }
+
+  /external-contracts/{id}:
+    get:
+      operationId: getExternalContract
+      tags: [external-contracts]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: ok
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ExternalContractDetail" }
+        "404": { description: not found }
+    patch:
+      operationId: updateExternalContract
+      tags: [external-contracts]
+      summary: Felder eines Bestandsvertrags korrigieren (Audit pro Änderung)
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ExternalContractPatch" }
+      responses:
+        "200":
+          description: ok
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ExternalContract" }
+        "404": { description: not found }
+    delete:
+      operationId: deleteExternalContract
+      tags: [external-contracts]
+      summary: Bestandsvertrag und Object-Storage-Datei löschen
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        "204": { description: deleted }
+        "404": { description: not found }
+
+
 components:
   schemas:
+
+    # ── External Contracts ──
+    ExternalContractParty:
+      type: object
+      required: [role, name]
+      properties:
+        role:
+          type: string
+          enum: [customer, supplier, our_entity, third_party, unknown]
+        name: { type: string }
+
+    ExternalContractClauseFamily:
+      type: object
+      required: [name, confidence]
+      properties:
+        familyId: { type: ["string", "null"] }
+        name: { type: string }
+        confidence: { type: number, minimum: 0, maximum: 1 }
+
+    ExternalContract:
+      type: object
+      required:
+        [ id, tenantId, accountId, title, fileName, fileSize, mimeType,
+          objectPath, status, autoRenewal, parties,
+          identifiedClauseFamilies, confidence, renewalRelevant,
+          createdAt, updatedAt ]
+      properties:
+        id: { type: string }
+        tenantId: { type: string }
+        accountId: { type: string }
+        accountName: { type: ["string", "null"] }
+        brandId: { type: ["string", "null"] }
+        brandName: { type: ["string", "null"] }
+        contractTypeCode: { type: ["string", "null"] }
+        objectPath: { type: string }
+        fileName: { type: string }
+        fileSize: { type: integer }
+        mimeType: { type: string }
+        status:
+          type: string
+          enum: [draft, confirmed]
+        title: { type: string }
+        parties:
+          type: array
+          items: { $ref: "#/components/schemas/ExternalContractParty" }
+        currency: { type: ["string", "null"] }
+        valueAmount: { type: ["number", "null"] }
+        effectiveFrom: { type: ["string", "null"], format: date }
+        effectiveTo: { type: ["string", "null"], format: date }
+        autoRenewal: { type: boolean }
+        renewalNoticeDays: { type: ["integer", "null"] }
+        terminationNoticeDays: { type: ["integer", "null"] }
+        governingLaw: { type: ["string", "null"] }
+        jurisdiction: { type: ["string", "null"] }
+        identifiedClauseFamilies:
+          type: array
+          items: { $ref: "#/components/schemas/ExternalContractClauseFamily" }
+        confidence:
+          type: object
+          additionalProperties: { type: number, minimum: 0, maximum: 1 }
+        aiInvocationId: { type: ["string", "null"] }
+        notes: { type: ["string", "null"] }
+        uploadedBy: { type: ["string", "null"] }
+        uploadedByName: { type: ["string", "null"] }
+        renewalRelevant:
+          type: boolean
+          description: "true wenn autoRenewal=true und effectiveTo gesetzt ist (Marker für #66)"
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+
+    ExternalContractDetail:
+      allOf:
+        - $ref: "#/components/schemas/ExternalContract"
+        - type: object
+          required: [downloadUrl]
+          properties:
+            downloadUrl:
+              type: string
+              description: Signed download URL (TTL 15min) für Original-Dokument
+
+    ExternalContractUploadUrlRequest:
+      type: object
+      required: [fileName, size, contentType]
+      properties:
+        fileName: { type: string }
+        size: { type: integer }
+        contentType: { type: string }
+
+    ExternalContractUploadUrlResponse:
+      type: object
+      required: [uploadURL, objectPath]
+      properties:
+        uploadURL: { type: string }
+        objectPath: { type: string }
+
+    ExternalContractExtractRequest:
+      type: object
+      required: [objectPath, fileName, mimeType, accountId]
+      properties:
+        objectPath: { type: string }
+        fileName: { type: string }
+        mimeType: { type: string }
+        accountId: { type: string }
+
+    ExternalContractDraftFields:
+      type: object
+      properties:
+        title: { type: ["string", "null"] }
+        contractTypeGuess: { type: ["string", "null"] }
+        parties:
+          type: array
+          items: { $ref: "#/components/schemas/ExternalContractParty" }
+        currency: { type: ["string", "null"] }
+        valueAmount: { type: ["string", "null"] }
+        effectiveFrom: { type: ["string", "null"] }
+        effectiveTo: { type: ["string", "null"] }
+        autoRenewal: { type: boolean }
+        renewalNoticeDays: { type: ["integer", "null"] }
+        terminationNoticeDays: { type: ["integer", "null"] }
+        governingLaw: { type: ["string", "null"] }
+        jurisdiction: { type: ["string", "null"] }
+        identifiedClauseFamilies:
+          type: array
+          items: { $ref: "#/components/schemas/ExternalContractClauseFamily" }
+        confidence:
+          type: object
+          additionalProperties: { type: number }
+        notes:
+          type: array
+          items: { type: string }
+      required: [parties, autoRenewal, identifiedClauseFamilies, confidence, notes]
+
+    ExternalContractExtractResponse:
+      type: object
+      required: [aiAvailable, suggestion]
+      properties:
+        aiAvailable: { type: boolean }
+        invocationId: { type: ["string", "null"] }
+        truncated: { type: boolean }
+        charCount: { type: integer }
+        errorCode: { type: ["string", "null"] }
+        suggestion: { $ref: "#/components/schemas/ExternalContractDraftFields" }
+
+    ExternalContractCreate:
+      type: object
+      required: [accountId, objectPath, fileName, fileSize, mimeType, title, parties, autoRenewal]
+      properties:
+        accountId: { type: string }
+        brandId: { type: ["string", "null"] }
+        contractTypeCode: { type: ["string", "null"] }
+        objectPath: { type: string }
+        fileName: { type: string }
+        fileSize: { type: integer }
+        mimeType: { type: string }
+        title: { type: string }
+        parties:
+          type: array
+          items: { $ref: "#/components/schemas/ExternalContractParty" }
+        currency: { type: ["string", "null"] }
+        valueAmount: { type: ["number", "null"] }
+        effectiveFrom: { type: ["string", "null"], format: date }
+        effectiveTo: { type: ["string", "null"], format: date }
+        autoRenewal: { type: boolean }
+        renewalNoticeDays: { type: ["integer", "null"] }
+        terminationNoticeDays: { type: ["integer", "null"] }
+        governingLaw: { type: ["string", "null"] }
+        jurisdiction: { type: ["string", "null"] }
+        identifiedClauseFamilies:
+          type: array
+          items: { $ref: "#/components/schemas/ExternalContractClauseFamily" }
+        confidence:
+          type: object
+          additionalProperties: { type: number }
+        aiInvocationId: { type: ["string", "null"] }
+        notes: { type: ["string", "null"] }
+
+    ExternalContractPatch:
+      type: object
+      properties:
+        brandId: { type: ["string", "null"] }
+        contractTypeCode: { type: ["string", "null"] }
+        title: { type: string }
+        parties:
+          type: array
+          items: { $ref: "#/components/schemas/ExternalContractParty" }
+        currency: { type: ["string", "null"] }
+        valueAmount: { type: ["number", "null"] }
+        effectiveFrom: { type: ["string", "null"], format: date }
+        effectiveTo: { type: ["string", "null"], format: date }
+        autoRenewal: { type: boolean }
+        renewalNoticeDays: { type: ["integer", "null"] }
+        terminationNoticeDays: { type: ["integer", "null"] }
+        governingLaw: { type: ["string", "null"] }
+        jurisdiction: { type: ["string", "null"] }
+        identifiedClauseFamilies:
+          type: array
+          items: { $ref: "#/components/schemas/ExternalContractClauseFamily" }
+        notes: { type: ["string", "null"] }
+
 
     UploadUrlRequest:
       type: object

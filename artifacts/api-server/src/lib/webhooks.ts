@@ -11,7 +11,8 @@ export type WebhookEvent =
   | "approval.decided"
   | "approval.stage.decided"
   | "price_increase.responded"
-  | "order.completed";
+  | "order.completed"
+  | "external_contract.confirmed";
 
 /**
  * Hosts an admin may explicitly allowlist via env, e.g. for staging callbacks
@@ -314,6 +315,7 @@ export const WEBHOOK_EVENTS: WebhookEvent[] = [
   "approval.stage.decided",
   "price_increase.responded",
   "order.completed",
+  "external_contract.confirmed",
 ];
 
 /**

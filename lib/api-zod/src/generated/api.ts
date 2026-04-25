@@ -4291,3 +4291,454 @@ export const GetCurrentQuoteResponse = zod.object({
   currency: zod.string(),
   acceptedAt: zod.coerce.date().nullable(),
 });
+
+/**
+ * @summary Signed PUT-URL für PDF/DOCX-Upload (max 20 MB)
+ */
+export const RequestExternalContractUploadUrlBody = zod.object({
+  fileName: zod.string(),
+  size: zod.number(),
+  contentType: zod.string(),
+});
+
+export const RequestExternalContractUploadUrlResponse = zod.object({
+  uploadURL: zod.string(),
+  objectPath: zod.string(),
+});
+
+/**
+ * Lädt das Dokument aus Object-Storage, extrahiert den Text-Layer (PDF
+oder DOCX) und ruft die Extraktions-AI auf. Persistiert NICHT — der
+User bestätigt im Frontend und ruft danach POST /external-contracts.
+Bei Provider-/Config-Fehler liefert der Endpoint 200 mit
+`aiAvailable=false` und einer leeren Suggestion, damit das Frontend
+manuell weitergehen kann.
+
+ * @summary KI-Extraktion der Kerndaten aus einem hochgeladenen Dokument
+ */
+export const ExtractExternalContractFieldsBody = zod.object({
+  objectPath: zod.string(),
+  fileName: zod.string(),
+  mimeType: zod.string(),
+  accountId: zod.string(),
+});
+
+export const extractExternalContractFieldsResponseSuggestionIdentifiedClauseFamiliesItemConfidenceMin = 0;
+export const extractExternalContractFieldsResponseSuggestionIdentifiedClauseFamiliesItemConfidenceMax = 1;
+
+export const ExtractExternalContractFieldsResponse = zod.object({
+  aiAvailable: zod.boolean(),
+  invocationId: zod.string().nullish(),
+  truncated: zod.boolean().optional(),
+  charCount: zod.number().optional(),
+  errorCode: zod.string().nullish(),
+  suggestion: zod.object({
+    title: zod.string().nullish(),
+    contractTypeGuess: zod.string().nullish(),
+    parties: zod.array(
+      zod.object({
+        role: zod.enum([
+          "customer",
+          "supplier",
+          "our_entity",
+          "third_party",
+          "unknown",
+        ]),
+        name: zod.string(),
+      }),
+    ),
+    currency: zod.string().nullish(),
+    valueAmount: zod.string().nullish(),
+    effectiveFrom: zod.string().nullish(),
+    effectiveTo: zod.string().nullish(),
+    autoRenewal: zod.boolean(),
+    renewalNoticeDays: zod.number().nullish(),
+    terminationNoticeDays: zod.number().nullish(),
+    governingLaw: zod.string().nullish(),
+    jurisdiction: zod.string().nullish(),
+    identifiedClauseFamilies: zod.array(
+      zod.object({
+        familyId: zod.string().nullish(),
+        name: zod.string(),
+        confidence: zod
+          .number()
+          .min(
+            extractExternalContractFieldsResponseSuggestionIdentifiedClauseFamiliesItemConfidenceMin,
+          )
+          .max(
+            extractExternalContractFieldsResponseSuggestionIdentifiedClauseFamiliesItemConfidenceMax,
+          ),
+      }),
+    ),
+    confidence: zod.record(zod.string(), zod.number()),
+    notes: zod.array(zod.string()),
+  }),
+});
+
+/**
+ * @summary Bestandsverträge auflisten (Brand-Scope-konform)
+ */
+export const ListExternalContractsQueryParams = zod.object({
+  accountId: zod.coerce.string().optional(),
+  brandId: zod.coerce.string().optional(),
+});
+
+export const listExternalContractsResponseIdentifiedClauseFamiliesItemConfidenceMin = 0;
+export const listExternalContractsResponseIdentifiedClauseFamiliesItemConfidenceMax = 1;
+
+export const listExternalContractsResponseConfidenceMinOne = 0;
+export const listExternalContractsResponseConfidenceMaxOne = 1;
+
+export const ListExternalContractsResponseItem = zod.object({
+  id: zod.string(),
+  tenantId: zod.string(),
+  accountId: zod.string(),
+  accountName: zod.string().nullish(),
+  brandId: zod.string().nullish(),
+  brandName: zod.string().nullish(),
+  contractTypeCode: zod.string().nullish(),
+  objectPath: zod.string(),
+  fileName: zod.string(),
+  fileSize: zod.number(),
+  mimeType: zod.string(),
+  status: zod.enum(["draft", "confirmed"]),
+  title: zod.string(),
+  parties: zod.array(
+    zod.object({
+      role: zod.enum([
+        "customer",
+        "supplier",
+        "our_entity",
+        "third_party",
+        "unknown",
+      ]),
+      name: zod.string(),
+    }),
+  ),
+  currency: zod.string().nullish(),
+  valueAmount: zod.number().nullish(),
+  effectiveFrom: zod.coerce.date().nullish(),
+  effectiveTo: zod.coerce.date().nullish(),
+  autoRenewal: zod.boolean(),
+  renewalNoticeDays: zod.number().nullish(),
+  terminationNoticeDays: zod.number().nullish(),
+  governingLaw: zod.string().nullish(),
+  jurisdiction: zod.string().nullish(),
+  identifiedClauseFamilies: zod.array(
+    zod.object({
+      familyId: zod.string().nullish(),
+      name: zod.string(),
+      confidence: zod
+        .number()
+        .min(
+          listExternalContractsResponseIdentifiedClauseFamiliesItemConfidenceMin,
+        )
+        .max(
+          listExternalContractsResponseIdentifiedClauseFamiliesItemConfidenceMax,
+        ),
+    }),
+  ),
+  confidence: zod.record(
+    zod.string(),
+    zod
+      .number()
+      .min(listExternalContractsResponseConfidenceMinOne)
+      .max(listExternalContractsResponseConfidenceMaxOne),
+  ),
+  aiInvocationId: zod.string().nullish(),
+  notes: zod.string().nullish(),
+  uploadedBy: zod.string().nullish(),
+  uploadedByName: zod.string().nullish(),
+  renewalRelevant: zod
+    .boolean()
+    .describe(
+      "true wenn autoRenewal=true und effectiveTo gesetzt ist (Marker für #66)",
+    ),
+  createdAt: zod.coerce.date(),
+  updatedAt: zod.coerce.date(),
+});
+export const ListExternalContractsResponse = zod.array(
+  ListExternalContractsResponseItem,
+);
+
+/**
+ * @summary Bestandsvertrag persistieren (nach User-Bestätigung)
+ */
+export const createExternalContractBodyIdentifiedClauseFamiliesItemConfidenceMin = 0;
+export const createExternalContractBodyIdentifiedClauseFamiliesItemConfidenceMax = 1;
+
+export const CreateExternalContractBody = zod.object({
+  accountId: zod.string(),
+  brandId: zod.string().nullish(),
+  contractTypeCode: zod.string().nullish(),
+  objectPath: zod.string(),
+  fileName: zod.string(),
+  fileSize: zod.number(),
+  mimeType: zod.string(),
+  title: zod.string(),
+  parties: zod.array(
+    zod.object({
+      role: zod.enum([
+        "customer",
+        "supplier",
+        "our_entity",
+        "third_party",
+        "unknown",
+      ]),
+      name: zod.string(),
+    }),
+  ),
+  currency: zod.string().nullish(),
+  valueAmount: zod.number().nullish(),
+  effectiveFrom: zod.coerce.date().nullish(),
+  effectiveTo: zod.coerce.date().nullish(),
+  autoRenewal: zod.boolean(),
+  renewalNoticeDays: zod.number().nullish(),
+  terminationNoticeDays: zod.number().nullish(),
+  governingLaw: zod.string().nullish(),
+  jurisdiction: zod.string().nullish(),
+  identifiedClauseFamilies: zod
+    .array(
+      zod.object({
+        familyId: zod.string().nullish(),
+        name: zod.string(),
+        confidence: zod
+          .number()
+          .min(
+            createExternalContractBodyIdentifiedClauseFamiliesItemConfidenceMin,
+          )
+          .max(
+            createExternalContractBodyIdentifiedClauseFamiliesItemConfidenceMax,
+          ),
+      }),
+    )
+    .optional(),
+  confidence: zod.record(zod.string(), zod.number()).optional(),
+  aiInvocationId: zod.string().nullish(),
+  notes: zod.string().nullish(),
+});
+
+export const GetExternalContractParams = zod.object({
+  id: zod.coerce.string(),
+});
+
+export const getExternalContractResponseOneIdentifiedClauseFamiliesItemConfidenceMin = 0;
+export const getExternalContractResponseOneIdentifiedClauseFamiliesItemConfidenceMax = 1;
+
+export const getExternalContractResponseOneConfidenceMinOne = 0;
+export const getExternalContractResponseOneConfidenceMaxOne = 1;
+
+export const GetExternalContractResponse = zod
+  .object({
+    id: zod.string(),
+    tenantId: zod.string(),
+    accountId: zod.string(),
+    accountName: zod.string().nullish(),
+    brandId: zod.string().nullish(),
+    brandName: zod.string().nullish(),
+    contractTypeCode: zod.string().nullish(),
+    objectPath: zod.string(),
+    fileName: zod.string(),
+    fileSize: zod.number(),
+    mimeType: zod.string(),
+    status: zod.enum(["draft", "confirmed"]),
+    title: zod.string(),
+    parties: zod.array(
+      zod.object({
+        role: zod.enum([
+          "customer",
+          "supplier",
+          "our_entity",
+          "third_party",
+          "unknown",
+        ]),
+        name: zod.string(),
+      }),
+    ),
+    currency: zod.string().nullish(),
+    valueAmount: zod.number().nullish(),
+    effectiveFrom: zod.coerce.date().nullish(),
+    effectiveTo: zod.coerce.date().nullish(),
+    autoRenewal: zod.boolean(),
+    renewalNoticeDays: zod.number().nullish(),
+    terminationNoticeDays: zod.number().nullish(),
+    governingLaw: zod.string().nullish(),
+    jurisdiction: zod.string().nullish(),
+    identifiedClauseFamilies: zod.array(
+      zod.object({
+        familyId: zod.string().nullish(),
+        name: zod.string(),
+        confidence: zod
+          .number()
+          .min(
+            getExternalContractResponseOneIdentifiedClauseFamiliesItemConfidenceMin,
+          )
+          .max(
+            getExternalContractResponseOneIdentifiedClauseFamiliesItemConfidenceMax,
+          ),
+      }),
+    ),
+    confidence: zod.record(
+      zod.string(),
+      zod
+        .number()
+        .min(getExternalContractResponseOneConfidenceMinOne)
+        .max(getExternalContractResponseOneConfidenceMaxOne),
+    ),
+    aiInvocationId: zod.string().nullish(),
+    notes: zod.string().nullish(),
+    uploadedBy: zod.string().nullish(),
+    uploadedByName: zod.string().nullish(),
+    renewalRelevant: zod
+      .boolean()
+      .describe(
+        "true wenn autoRenewal=true und effectiveTo gesetzt ist (Marker für #66)",
+      ),
+    createdAt: zod.coerce.date(),
+    updatedAt: zod.coerce.date(),
+  })
+  .and(
+    zod.object({
+      downloadUrl: zod
+        .string()
+        .describe("Signed download URL (TTL 15min) für Original-Dokument"),
+    }),
+  );
+
+/**
+ * @summary Felder eines Bestandsvertrags korrigieren (Audit pro Änderung)
+ */
+export const UpdateExternalContractParams = zod.object({
+  id: zod.coerce.string(),
+});
+
+export const updateExternalContractBodyIdentifiedClauseFamiliesItemConfidenceMin = 0;
+export const updateExternalContractBodyIdentifiedClauseFamiliesItemConfidenceMax = 1;
+
+export const UpdateExternalContractBody = zod.object({
+  brandId: zod.string().nullish(),
+  contractTypeCode: zod.string().nullish(),
+  title: zod.string().optional(),
+  parties: zod
+    .array(
+      zod.object({
+        role: zod.enum([
+          "customer",
+          "supplier",
+          "our_entity",
+          "third_party",
+          "unknown",
+        ]),
+        name: zod.string(),
+      }),
+    )
+    .optional(),
+  currency: zod.string().nullish(),
+  valueAmount: zod.number().nullish(),
+  effectiveFrom: zod.coerce.date().nullish(),
+  effectiveTo: zod.coerce.date().nullish(),
+  autoRenewal: zod.boolean().optional(),
+  renewalNoticeDays: zod.number().nullish(),
+  terminationNoticeDays: zod.number().nullish(),
+  governingLaw: zod.string().nullish(),
+  jurisdiction: zod.string().nullish(),
+  identifiedClauseFamilies: zod
+    .array(
+      zod.object({
+        familyId: zod.string().nullish(),
+        name: zod.string(),
+        confidence: zod
+          .number()
+          .min(
+            updateExternalContractBodyIdentifiedClauseFamiliesItemConfidenceMin,
+          )
+          .max(
+            updateExternalContractBodyIdentifiedClauseFamiliesItemConfidenceMax,
+          ),
+      }),
+    )
+    .optional(),
+  notes: zod.string().nullish(),
+});
+
+export const updateExternalContractResponseIdentifiedClauseFamiliesItemConfidenceMin = 0;
+export const updateExternalContractResponseIdentifiedClauseFamiliesItemConfidenceMax = 1;
+
+export const updateExternalContractResponseConfidenceMinOne = 0;
+export const updateExternalContractResponseConfidenceMaxOne = 1;
+
+export const UpdateExternalContractResponse = zod.object({
+  id: zod.string(),
+  tenantId: zod.string(),
+  accountId: zod.string(),
+  accountName: zod.string().nullish(),
+  brandId: zod.string().nullish(),
+  brandName: zod.string().nullish(),
+  contractTypeCode: zod.string().nullish(),
+  objectPath: zod.string(),
+  fileName: zod.string(),
+  fileSize: zod.number(),
+  mimeType: zod.string(),
+  status: zod.enum(["draft", "confirmed"]),
+  title: zod.string(),
+  parties: zod.array(
+    zod.object({
+      role: zod.enum([
+        "customer",
+        "supplier",
+        "our_entity",
+        "third_party",
+        "unknown",
+      ]),
+      name: zod.string(),
+    }),
+  ),
+  currency: zod.string().nullish(),
+  valueAmount: zod.number().nullish(),
+  effectiveFrom: zod.coerce.date().nullish(),
+  effectiveTo: zod.coerce.date().nullish(),
+  autoRenewal: zod.boolean(),
+  renewalNoticeDays: zod.number().nullish(),
+  terminationNoticeDays: zod.number().nullish(),
+  governingLaw: zod.string().nullish(),
+  jurisdiction: zod.string().nullish(),
+  identifiedClauseFamilies: zod.array(
+    zod.object({
+      familyId: zod.string().nullish(),
+      name: zod.string(),
+      confidence: zod
+        .number()
+        .min(
+          updateExternalContractResponseIdentifiedClauseFamiliesItemConfidenceMin,
+        )
+        .max(
+          updateExternalContractResponseIdentifiedClauseFamiliesItemConfidenceMax,
+        ),
+    }),
+  ),
+  confidence: zod.record(
+    zod.string(),
+    zod
+      .number()
+      .min(updateExternalContractResponseConfidenceMinOne)
+      .max(updateExternalContractResponseConfidenceMaxOne),
+  ),
+  aiInvocationId: zod.string().nullish(),
+  notes: zod.string().nullish(),
+  uploadedBy: zod.string().nullish(),
+  uploadedByName: zod.string().nullish(),
+  renewalRelevant: zod
+    .boolean()
+    .describe(
+      "true wenn autoRenewal=true und effectiveTo gesetzt ist (Marker für #66)",
+    ),
+  createdAt: zod.coerce.date(),
+  updatedAt: zod.coerce.date(),
+});
+
+/**
+ * @summary Bestandsvertrag und Object-Storage-Datei löschen
+ */
+export const DeleteExternalContractParams = zod.object({
+  id: zod.coerce.string(),
+});

@@ -965,3 +965,49 @@ export const savedViewsTable = pgTable("saved_views", {
   createdAt: ts("created_at"),
   updatedAt: ts("updated_at"),
 });
+
+// External Contracts: Bestandsvertraege, die nicht ueber DealFlow erstellt
+// wurden (vom Vorgaenger-CLM, vom Kunden, vom Anwalt). Persistiert wird die
+// Datei in Object-Storage plus die strukturierten Kerndaten (KI-extrahiert
+// + ggf. nachkorrigiert). confidenceJson haelt pro Feldname einen 0..1-Wert,
+// den die UI als Vertrauensindikator anzeigt.
+export const externalContractsTable = pgTable("external_contracts", {
+  id: id(),
+  tenantId: text("tenant_id").notNull(),
+  accountId: text("account_id").notNull(),
+  brandId: text("brand_id"),
+  contractTypeCode: text("contract_type_code"),
+  objectPath: text("object_path").notNull(),
+  fileName: text("file_name").notNull(),
+  fileSize: integer("file_size").notNull(),
+  mimeType: text("mime_type").notNull(),
+  status: text("status").notNull().default("confirmed"),
+  title: text("title").notNull(),
+  parties: jsonb("parties").$type<Array<{ role: string; name: string }>>().notNull().default([]),
+  currency: text("currency"),
+  valueAmount: numeric("value_amount", { precision: 18, scale: 2 }),
+  effectiveFrom: date("effective_from"),
+  effectiveTo: date("effective_to"),
+  autoRenewal: boolean("auto_renewal").notNull().default(false),
+  renewalNoticeDays: integer("renewal_notice_days"),
+  terminationNoticeDays: integer("termination_notice_days"),
+  governingLaw: text("governing_law"),
+  jurisdiction: text("jurisdiction"),
+  identifiedClauseFamilies: jsonb("identified_clause_families")
+    .$type<Array<{ familyId?: string | null; name: string; confidence: number }>>()
+    .notNull()
+    .default([]),
+  confidenceJson: jsonb("confidence_json")
+    .$type<Record<string, number>>()
+    .notNull()
+    .default({}),
+  aiInvocationId: text("ai_invocation_id"),
+  notes: text("notes"),
+  uploadedBy: text("uploaded_by"),
+  createdAt: ts("created_at"),
+  updatedAt: ts("updated_at"),
+}, (t) => ({
+  byTenantAccount: index("external_contracts_tenant_account_idx").on(t.tenantId, t.accountId),
+  byTenantBrand: index("external_contracts_tenant_brand_idx").on(t.tenantId, t.brandId),
+  byEffectiveTo: index("external_contracts_effective_to_idx").on(t.effectiveTo),
+}));

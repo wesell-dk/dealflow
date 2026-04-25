@@ -97,6 +97,14 @@ import type {
   EscalateSignatureInput,
   ExecuteCopilotInsight200,
   ExportGdprSubjectParams,
+  ExternalContract,
+  ExternalContractCreate,
+  ExternalContractDetail,
+  ExternalContractExtractRequest,
+  ExternalContractExtractResponse,
+  ExternalContractPatch,
+  ExternalContractUploadUrlRequest,
+  ExternalContractUploadUrlResponse,
   ForecastReport,
   GdprAccessLogEntry,
   GdprDeletionLogEntry,
@@ -123,6 +131,7 @@ import type {
   ListCopilotInsightsParams,
   ListCopilotInsightsResponse,
   ListDealsParams,
+  ListExternalContractsParams,
   ListGdprAccessLogParams,
   ListMyDelegations200,
   ListNegotiationsParams,
@@ -13725,3 +13734,631 @@ export function useGetCurrentQuote<
 
   return { ...query, queryKey: queryOptions.queryKey };
 }
+
+/**
+ * @summary Signed PUT-URL für PDF/DOCX-Upload (max 20 MB)
+ */
+export const getRequestExternalContractUploadUrlUrl = () => {
+  return `/api/v1/external-contracts/upload-url`;
+};
+
+export const requestExternalContractUploadUrl = async (
+  externalContractUploadUrlRequest: ExternalContractUploadUrlRequest,
+  options?: RequestInit,
+): Promise<ExternalContractUploadUrlResponse> => {
+  return customFetch<ExternalContractUploadUrlResponse>(
+    getRequestExternalContractUploadUrlUrl(),
+    {
+      ...options,
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...options?.headers },
+      body: JSON.stringify(externalContractUploadUrlRequest),
+    },
+  );
+};
+
+export const getRequestExternalContractUploadUrlMutationOptions = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof requestExternalContractUploadUrl>>,
+    TError,
+    { data: BodyType<ExternalContractUploadUrlRequest> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof requestExternalContractUploadUrl>>,
+  TError,
+  { data: BodyType<ExternalContractUploadUrlRequest> },
+  TContext
+> => {
+  const mutationKey = ["requestExternalContractUploadUrl"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof requestExternalContractUploadUrl>>,
+    { data: BodyType<ExternalContractUploadUrlRequest> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return requestExternalContractUploadUrl(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type RequestExternalContractUploadUrlMutationResult = NonNullable<
+  Awaited<ReturnType<typeof requestExternalContractUploadUrl>>
+>;
+export type RequestExternalContractUploadUrlMutationBody =
+  BodyType<ExternalContractUploadUrlRequest>;
+export type RequestExternalContractUploadUrlMutationError = ErrorType<void>;
+
+/**
+ * @summary Signed PUT-URL für PDF/DOCX-Upload (max 20 MB)
+ */
+export const useRequestExternalContractUploadUrl = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof requestExternalContractUploadUrl>>,
+    TError,
+    { data: BodyType<ExternalContractUploadUrlRequest> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof requestExternalContractUploadUrl>>,
+  TError,
+  { data: BodyType<ExternalContractUploadUrlRequest> },
+  TContext
+> => {
+  return useMutation(
+    getRequestExternalContractUploadUrlMutationOptions(options),
+  );
+};
+
+/**
+ * Lädt das Dokument aus Object-Storage, extrahiert den Text-Layer (PDF
+oder DOCX) und ruft die Extraktions-AI auf. Persistiert NICHT — der
+User bestätigt im Frontend und ruft danach POST /external-contracts.
+Bei Provider-/Config-Fehler liefert der Endpoint 200 mit
+`aiAvailable=false` und einer leeren Suggestion, damit das Frontend
+manuell weitergehen kann.
+
+ * @summary KI-Extraktion der Kerndaten aus einem hochgeladenen Dokument
+ */
+export const getExtractExternalContractFieldsUrl = () => {
+  return `/api/v1/external-contracts/extract`;
+};
+
+export const extractExternalContractFields = async (
+  externalContractExtractRequest: ExternalContractExtractRequest,
+  options?: RequestInit,
+): Promise<ExternalContractExtractResponse> => {
+  return customFetch<ExternalContractExtractResponse>(
+    getExtractExternalContractFieldsUrl(),
+    {
+      ...options,
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...options?.headers },
+      body: JSON.stringify(externalContractExtractRequest),
+    },
+  );
+};
+
+export const getExtractExternalContractFieldsMutationOptions = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof extractExternalContractFields>>,
+    TError,
+    { data: BodyType<ExternalContractExtractRequest> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof extractExternalContractFields>>,
+  TError,
+  { data: BodyType<ExternalContractExtractRequest> },
+  TContext
+> => {
+  const mutationKey = ["extractExternalContractFields"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof extractExternalContractFields>>,
+    { data: BodyType<ExternalContractExtractRequest> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return extractExternalContractFields(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type ExtractExternalContractFieldsMutationResult = NonNullable<
+  Awaited<ReturnType<typeof extractExternalContractFields>>
+>;
+export type ExtractExternalContractFieldsMutationBody =
+  BodyType<ExternalContractExtractRequest>;
+export type ExtractExternalContractFieldsMutationError = ErrorType<void>;
+
+/**
+ * @summary KI-Extraktion der Kerndaten aus einem hochgeladenen Dokument
+ */
+export const useExtractExternalContractFields = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof extractExternalContractFields>>,
+    TError,
+    { data: BodyType<ExternalContractExtractRequest> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof extractExternalContractFields>>,
+  TError,
+  { data: BodyType<ExternalContractExtractRequest> },
+  TContext
+> => {
+  return useMutation(getExtractExternalContractFieldsMutationOptions(options));
+};
+
+/**
+ * @summary Bestandsverträge auflisten (Brand-Scope-konform)
+ */
+export const getListExternalContractsUrl = (
+  params?: ListExternalContractsParams,
+) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? "null" : value.toString());
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0
+    ? `/api/v1/external-contracts?${stringifiedParams}`
+    : `/api/v1/external-contracts`;
+};
+
+export const listExternalContracts = async (
+  params?: ListExternalContractsParams,
+  options?: RequestInit,
+): Promise<ExternalContract[]> => {
+  return customFetch<ExternalContract[]>(getListExternalContractsUrl(params), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getListExternalContractsQueryKey = (
+  params?: ListExternalContractsParams,
+) => {
+  return [`/api/v1/external-contracts`, ...(params ? [params] : [])] as const;
+};
+
+export const getListExternalContractsQueryOptions = <
+  TData = Awaited<ReturnType<typeof listExternalContracts>>,
+  TError = ErrorType<unknown>,
+>(
+  params?: ListExternalContractsParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof listExternalContracts>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey =
+    queryOptions?.queryKey ?? getListExternalContractsQueryKey(params);
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof listExternalContracts>>
+  > = ({ signal }) =>
+    listExternalContracts(params, { signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof listExternalContracts>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type ListExternalContractsQueryResult = NonNullable<
+  Awaited<ReturnType<typeof listExternalContracts>>
+>;
+export type ListExternalContractsQueryError = ErrorType<unknown>;
+
+/**
+ * @summary Bestandsverträge auflisten (Brand-Scope-konform)
+ */
+
+export function useListExternalContracts<
+  TData = Awaited<ReturnType<typeof listExternalContracts>>,
+  TError = ErrorType<unknown>,
+>(
+  params?: ListExternalContractsParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof listExternalContracts>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getListExternalContractsQueryOptions(params, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Bestandsvertrag persistieren (nach User-Bestätigung)
+ */
+export const getCreateExternalContractUrl = () => {
+  return `/api/v1/external-contracts`;
+};
+
+export const createExternalContract = async (
+  externalContractCreate: ExternalContractCreate,
+  options?: RequestInit,
+): Promise<ExternalContract> => {
+  return customFetch<ExternalContract>(getCreateExternalContractUrl(), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(externalContractCreate),
+  });
+};
+
+export const getCreateExternalContractMutationOptions = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof createExternalContract>>,
+    TError,
+    { data: BodyType<ExternalContractCreate> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof createExternalContract>>,
+  TError,
+  { data: BodyType<ExternalContractCreate> },
+  TContext
+> => {
+  const mutationKey = ["createExternalContract"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof createExternalContract>>,
+    { data: BodyType<ExternalContractCreate> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return createExternalContract(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type CreateExternalContractMutationResult = NonNullable<
+  Awaited<ReturnType<typeof createExternalContract>>
+>;
+export type CreateExternalContractMutationBody =
+  BodyType<ExternalContractCreate>;
+export type CreateExternalContractMutationError = ErrorType<void>;
+
+/**
+ * @summary Bestandsvertrag persistieren (nach User-Bestätigung)
+ */
+export const useCreateExternalContract = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof createExternalContract>>,
+    TError,
+    { data: BodyType<ExternalContractCreate> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof createExternalContract>>,
+  TError,
+  { data: BodyType<ExternalContractCreate> },
+  TContext
+> => {
+  return useMutation(getCreateExternalContractMutationOptions(options));
+};
+
+export const getGetExternalContractUrl = (id: string) => {
+  return `/api/v1/external-contracts/${id}`;
+};
+
+export const getExternalContract = async (
+  id: string,
+  options?: RequestInit,
+): Promise<ExternalContractDetail> => {
+  return customFetch<ExternalContractDetail>(getGetExternalContractUrl(id), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getGetExternalContractQueryKey = (id: string) => {
+  return [`/api/v1/external-contracts/${id}`] as const;
+};
+
+export const getGetExternalContractQueryOptions = <
+  TData = Awaited<ReturnType<typeof getExternalContract>>,
+  TError = ErrorType<void>,
+>(
+  id: string,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getExternalContract>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getGetExternalContractQueryKey(id);
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof getExternalContract>>
+  > = ({ signal }) => getExternalContract(id, { signal, ...requestOptions });
+
+  return {
+    queryKey,
+    queryFn,
+    enabled: !!id,
+    ...queryOptions,
+  } as UseQueryOptions<
+    Awaited<ReturnType<typeof getExternalContract>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetExternalContractQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getExternalContract>>
+>;
+export type GetExternalContractQueryError = ErrorType<void>;
+
+export function useGetExternalContract<
+  TData = Awaited<ReturnType<typeof getExternalContract>>,
+  TError = ErrorType<void>,
+>(
+  id: string,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getExternalContract>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetExternalContractQueryOptions(id, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Felder eines Bestandsvertrags korrigieren (Audit pro Änderung)
+ */
+export const getUpdateExternalContractUrl = (id: string) => {
+  return `/api/v1/external-contracts/${id}`;
+};
+
+export const updateExternalContract = async (
+  id: string,
+  externalContractPatch: ExternalContractPatch,
+  options?: RequestInit,
+): Promise<ExternalContract> => {
+  return customFetch<ExternalContract>(getUpdateExternalContractUrl(id), {
+    ...options,
+    method: "PATCH",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(externalContractPatch),
+  });
+};
+
+export const getUpdateExternalContractMutationOptions = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof updateExternalContract>>,
+    TError,
+    { id: string; data: BodyType<ExternalContractPatch> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof updateExternalContract>>,
+  TError,
+  { id: string; data: BodyType<ExternalContractPatch> },
+  TContext
+> => {
+  const mutationKey = ["updateExternalContract"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof updateExternalContract>>,
+    { id: string; data: BodyType<ExternalContractPatch> }
+  > = (props) => {
+    const { id, data } = props ?? {};
+
+    return updateExternalContract(id, data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type UpdateExternalContractMutationResult = NonNullable<
+  Awaited<ReturnType<typeof updateExternalContract>>
+>;
+export type UpdateExternalContractMutationBody =
+  BodyType<ExternalContractPatch>;
+export type UpdateExternalContractMutationError = ErrorType<void>;
+
+/**
+ * @summary Felder eines Bestandsvertrags korrigieren (Audit pro Änderung)
+ */
+export const useUpdateExternalContract = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof updateExternalContract>>,
+    TError,
+    { id: string; data: BodyType<ExternalContractPatch> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof updateExternalContract>>,
+  TError,
+  { id: string; data: BodyType<ExternalContractPatch> },
+  TContext
+> => {
+  return useMutation(getUpdateExternalContractMutationOptions(options));
+};
+
+/**
+ * @summary Bestandsvertrag und Object-Storage-Datei löschen
+ */
+export const getDeleteExternalContractUrl = (id: string) => {
+  return `/api/v1/external-contracts/${id}`;
+};
+
+export const deleteExternalContract = async (
+  id: string,
+  options?: RequestInit,
+): Promise<void> => {
+  return customFetch<void>(getDeleteExternalContractUrl(id), {
+    ...options,
+    method: "DELETE",
+  });
+};
+
+export const getDeleteExternalContractMutationOptions = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof deleteExternalContract>>,
+    TError,
+    { id: string },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof deleteExternalContract>>,
+  TError,
+  { id: string },
+  TContext
+> => {
+  const mutationKey = ["deleteExternalContract"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof deleteExternalContract>>,
+    { id: string }
+  > = (props) => {
+    const { id } = props ?? {};
+
+    return deleteExternalContract(id, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type DeleteExternalContractMutationResult = NonNullable<
+  Awaited<ReturnType<typeof deleteExternalContract>>
+>;
+
+export type DeleteExternalContractMutationError = ErrorType<void>;
+
+/**
+ * @summary Bestandsvertrag und Object-Storage-Datei löschen
+ */
+export const useDeleteExternalContract = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof deleteExternalContract>>,
+    TError,
+    { id: string },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof deleteExternalContract>>,
+  TError,
+  { id: string },
+  TContext
+> => {
+  return useMutation(getDeleteExternalContractMutationOptions(options));
+};

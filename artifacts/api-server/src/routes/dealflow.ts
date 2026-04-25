@@ -2,6 +2,7 @@ import { Router, type IRouter, type Request, type Response } from 'express';
 import { and, asc, desc, eq, inArray, sql } from 'drizzle-orm';
 import { randomUUID, randomBytes } from 'node:crypto';
 import { ObjectStorageService } from '../lib/objectStorage';
+import { extractTextFromUpload } from '../lib/extractContractText';
 import { validateInline } from '../middlewares/validate';
 import * as Z from '@workspace/api-zod';
 import { z } from 'zod';
@@ -92,6 +93,7 @@ import {
   industryProfilesTable,
   uploadedObjectsTable,
   savedViewsTable,
+  externalContractsTable,
 } from '@workspace/db';
 import {
   generatePriceRejectionForReaction,
@@ -7596,6 +7598,605 @@ router.delete('/price-bundles/:id', async (req, res) => {
   });
   res.status(204).end();
 });
+
+// ── EXTERNAL CONTRACTS (Bestandsverträge mit KI-gestützter Erfassung) ──
+//
+// Externe Verträge sind Bestandsdokumente, die NICHT über DealFlow erzeugt
+// wurden (Vorgänger-CLM, Kunde, Anwalt). Sie liegen als PDF/DOCX in
+// Object-Storage und werden hier mit den von der KI extrahierten Kerndaten
+// (Titel, Laufzeit, Kündigungsfrist, Wert, Parteien, identifizierte
+// Klausel-Familien) registriert. Anders als contractsTable: kein Klausel-
+// Workflow, keine Approvals — der Vertrag ist ja bereits unterschrieben.
+//
+// Renewal-Engine (kommt voll erst in #66) konsumiert effectiveTo +
+// autoRenewal; hier liefern wir bereits den Marker `renewalRelevant`.
+//
+// Brand-Scope:
+//   - tenantId hart gefiltert
+//   - bei eingeschränktem Brand-Scope: nur Verträge passender brandIds
+//     (oder ohne brandId, wenn Account erlaubt)
+//
+// Audit:
+//   - upload-url: kein Audit (nur Vorbereitung)
+//   - extract: kein Audit (nicht persistiert; AI-Provider hat eigenes Audit)
+//   - create: action='create', summary=Titel+Datei
+//   - patch: action='update', before/after snapshot, pro Request 1 Eintrag
+//   - delete: action='delete', before-Snapshot
+const ExternalPartySchema = z.object({
+  role: z.enum(['customer', 'supplier', 'our_entity', 'third_party', 'unknown']),
+  name: z.string().min(1).max(200),
+});
+const ExternalClauseFamilySchema = z.object({
+  familyId: z.string().nullable().optional(),
+  name: z.string().min(1).max(120),
+  confidence: z.number().min(0).max(1),
+});
+
+const ExternalContractCreateBody = z.object({
+  accountId: z.string().min(1),
+  brandId: z.string().nullable().optional(),
+  contractTypeCode: z.string().nullable().optional(),
+  objectPath: z.string().min(1),
+  fileName: z.string().min(1).max(240),
+  fileSize: z.number().int().nonnegative(),
+  mimeType: z.string().min(1).max(200),
+  title: z.string().min(1).max(240),
+  parties: z.array(ExternalPartySchema).max(20),
+  currency: z.string().min(3).max(8).nullable().optional(),
+  valueAmount: z.union([z.number(), z.string()]).nullable().optional(),
+  effectiveFrom: z.string().nullable().optional(),
+  effectiveTo: z.string().nullable().optional(),
+  autoRenewal: z.boolean(),
+  renewalNoticeDays: z.number().int().min(0).max(3650).nullable().optional(),
+  terminationNoticeDays: z.number().int().min(0).max(3650).nullable().optional(),
+  governingLaw: z.string().nullable().optional(),
+  jurisdiction: z.string().nullable().optional(),
+  identifiedClauseFamilies: z.array(ExternalClauseFamilySchema).max(40).optional(),
+  confidence: z.record(z.string(), z.number().min(0).max(1)).optional(),
+  aiInvocationId: z.string().nullable().optional(),
+  notes: z.string().nullable().optional(),
+});
+
+const ExternalContractPatchBody = z.object({
+  brandId: z.string().nullable().optional(),
+  contractTypeCode: z.string().nullable().optional(),
+  title: z.string().min(1).max(240).optional(),
+  parties: z.array(ExternalPartySchema).max(20).optional(),
+  currency: z.string().min(3).max(8).nullable().optional(),
+  valueAmount: z.union([z.number(), z.string()]).nullable().optional(),
+  effectiveFrom: z.string().nullable().optional(),
+  effectiveTo: z.string().nullable().optional(),
+  autoRenewal: z.boolean().optional(),
+  renewalNoticeDays: z.number().int().min(0).max(3650).nullable().optional(),
+  terminationNoticeDays: z.number().int().min(0).max(3650).nullable().optional(),
+  governingLaw: z.string().nullable().optional(),
+  jurisdiction: z.string().nullable().optional(),
+  identifiedClauseFamilies: z.array(ExternalClauseFamilySchema).max(40).optional(),
+  notes: z.string().nullable().optional(),
+});
+
+const SUPPORTED_EXT_CONTRACT_MIME = new Set<string>([
+  'application/pdf',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+]);
+const MAX_EXT_CONTRACT_BYTES = 20 * 1024 * 1024;
+
+function externalContractRenewalRelevant(
+  row: typeof externalContractsTable.$inferSelect,
+): boolean {
+  return Boolean(row.autoRenewal && row.effectiveTo);
+}
+
+async function mapExternalContract(
+  row: typeof externalContractsTable.$inferSelect,
+  ctx?: {
+    accs?: Map<string, typeof accountsTable.$inferSelect>;
+    brands?: Map<string, typeof brandsTable.$inferSelect>;
+    users?: Map<string, typeof usersTable.$inferSelect>;
+  },
+) {
+  const accs = ctx?.accs ?? (await getAccountMap());
+  const brands = ctx?.brands ?? (await getBrandMap());
+  const users = ctx?.users ?? (await getUserMap(row.tenantId));
+  return {
+    id: row.id,
+    tenantId: row.tenantId,
+    accountId: row.accountId,
+    accountName: accs.get(row.accountId)?.name ?? null,
+    brandId: row.brandId,
+    brandName: row.brandId ? (brands.get(row.brandId)?.name ?? null) : null,
+    contractTypeCode: row.contractTypeCode,
+    objectPath: row.objectPath,
+    fileName: row.fileName,
+    fileSize: row.fileSize,
+    mimeType: row.mimeType,
+    status: row.status,
+    title: row.title,
+    parties: row.parties ?? [],
+    currency: row.currency,
+    valueAmount: row.valueAmount == null ? null : Number(row.valueAmount),
+    effectiveFrom: row.effectiveFrom ?? null,
+    effectiveTo: row.effectiveTo ?? null,
+    autoRenewal: row.autoRenewal,
+    renewalNoticeDays: row.renewalNoticeDays,
+    terminationNoticeDays: row.terminationNoticeDays,
+    governingLaw: row.governingLaw,
+    jurisdiction: row.jurisdiction,
+    identifiedClauseFamilies: row.identifiedClauseFamilies ?? [],
+    confidence: row.confidenceJson ?? {},
+    aiInvocationId: row.aiInvocationId,
+    notes: row.notes,
+    uploadedBy: row.uploadedBy,
+    uploadedByName: row.uploadedBy ? (users.get(row.uploadedBy)?.name ?? null) : null,
+    renewalRelevant: externalContractRenewalRelevant(row),
+    createdAt: iso(row.createdAt)!,
+    updatedAt: iso(row.updatedAt)!,
+  };
+}
+
+// Visibility: tenant + brand-scope. accountId muss in scope sein, weil
+// jeder externe Vertrag an einen Account hängt.
+async function loadVisibleExternalContract(
+  req: Request,
+  id: string,
+): Promise<typeof externalContractsTable.$inferSelect | null> {
+  const scope = getScope(req);
+  const [row] = await db
+    .select()
+    .from(externalContractsTable)
+    .where(and(
+      eq(externalContractsTable.id, id),
+      eq(externalContractsTable.tenantId, scope.tenantId),
+    ));
+  if (!row) return null;
+  const accStatus = await entityScopeStatus(req, 'account', row.accountId);
+  if (accStatus !== 'ok') return null;
+  if (row.brandId) {
+    const brands = await allowedBrandIds(req);
+    if (!scope.tenantWide || hasActiveScopeFilter(scope)) {
+      if (!brands.includes(row.brandId)) return null;
+    }
+  }
+  return row;
+}
+
+// 1) signed PUT URL — registriert Datei in uploadedObjectsTable, damit der
+//    spätere POST /external-contracts den objectPath als "tenant-owned"
+//    erkennt (analog AttachmentLibrary).
+router.post('/external-contracts/upload-url', async (req, res) => {
+  const scope = getScope(req);
+  const Body = z.object({
+    fileName: z.string().min(1).max(240),
+    size: z.number().int().positive(),
+    contentType: z.string().min(1).max(200),
+  });
+  const parsed = Body.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: 'invalid request', details: parsed.error.issues });
+    return;
+  }
+  const { size, contentType } = parsed.data;
+  if (!SUPPORTED_EXT_CONTRACT_MIME.has(contentType)) {
+    res.status(400).json({ error: 'contentType must be application/pdf or DOCX' });
+    return;
+  }
+  if (size <= 0 || size > MAX_EXT_CONTRACT_BYTES) {
+    res.status(400).json({ error: `size must be 1..${MAX_EXT_CONTRACT_BYTES} bytes` });
+    return;
+  }
+  try {
+    const svc = new ObjectStorageService();
+    const uploadURL = await svc.getObjectEntityUploadURL();
+    const objectPath = svc.normalizeObjectEntityPath(uploadURL);
+    await db.insert(uploadedObjectsTable).values({
+      objectPath,
+      tenantId: scope.tenantId,
+      userId: scope.user?.id ?? null,
+      kind: 'document',
+      contentType,
+      size,
+    }).onConflictDoNothing();
+    res.json({ uploadURL, objectPath });
+  } catch (err) {
+    req.log.error({ err }, 'external-contract upload-url failed');
+    res.status(500).json({ error: 'failed to generate upload url' });
+  }
+});
+
+// 2) KI-Extraktion. Best-effort: Bei jedem Fehler liefern wir 200 mit
+//    aiAvailable=false + leerer Suggestion, damit das Frontend nicht
+//    abstürzt und der User manuell weitermachen kann.
+router.post('/external-contracts/extract', async (req, res) => {
+  const scope = getScope(req);
+  const Body = z.object({
+    objectPath: z.string().min(1),
+    fileName: z.string().min(1).max(240),
+    mimeType: z.string().min(1).max(200),
+    accountId: z.string().min(1),
+  });
+  const parsed = Body.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: 'invalid request', details: parsed.error.issues });
+    return;
+  }
+  const { objectPath, fileName, mimeType, accountId } = parsed.data;
+  if (!await assertOwnedObjectPath(req, res, scope, objectPath)) return;
+  const accStatus = await entityScopeStatus(req, 'account', accountId);
+  if (accStatus !== 'ok') {
+    res.status(accStatus === 'missing' ? 404 : 403)
+      .json({ error: accStatus === 'missing' ? 'account not found' : 'forbidden' });
+    return;
+  }
+  if (!SUPPORTED_EXT_CONTRACT_MIME.has(mimeType)) {
+    res.status(400).json({ error: 'mimeType must be PDF or DOCX' });
+    return;
+  }
+
+  const emptySuggestion = {
+    title: null,
+    contractTypeGuess: null,
+    parties: [] as Array<{ role: string; name: string }>,
+    currency: null,
+    valueAmount: null,
+    effectiveFrom: null,
+    effectiveTo: null,
+    autoRenewal: false,
+    renewalNoticeDays: null,
+    terminationNoticeDays: null,
+    governingLaw: null,
+    jurisdiction: null,
+    identifiedClauseFamilies: [] as Array<{ name: string; confidence: number }>,
+    confidence: {} as Record<string, number>,
+    notes: [] as string[],
+  };
+
+  let buffer: Buffer;
+  try {
+    const svc = new ObjectStorageService();
+    const file = await svc.getObjectEntityFile(objectPath);
+    const [buf] = await file.download();
+    buffer = buf;
+  } catch (err) {
+    req.log.warn({ err, objectPath }, 'external-contract extract: download failed');
+    res.status(404).json({ error: 'object not found' });
+    return;
+  }
+
+  let extractedText: string;
+  let truncated = false;
+  let charCount = 0;
+  try {
+    const out = await extractTextFromUpload(buffer, mimeType);
+    extractedText = out.text;
+    truncated = out.truncated;
+    charCount = out.charCount;
+  } catch (err) {
+    req.log.warn({ err }, 'external-contract extract: text extraction failed');
+    res.json({
+      aiAvailable: false,
+      invocationId: null,
+      truncated: false,
+      charCount: 0,
+      errorCode: 'text_extraction_failed',
+      suggestion: { ...emptySuggestion, notes: ['Aus dem Dokument konnte kein Text extrahiert werden (gescanntes PDF? OCR ist out-of-scope).'] },
+    });
+    return;
+  }
+
+  if (!isAIConfigured()) {
+    res.json({
+      aiAvailable: false,
+      invocationId: null,
+      truncated,
+      charCount,
+      errorCode: 'config_error',
+      suggestion: { ...emptySuggestion, notes: ['KI-Provider ist nicht konfiguriert — bitte Felder manuell ausfüllen.'] },
+    });
+    return;
+  }
+
+  try {
+    const result = await runStructured<
+      { rawText: string; fileName: string },
+      {
+        title: string;
+        contractTypeGuess: string;
+        parties: Array<{ role: string; name: string }>;
+        currency: string | null;
+        valueAmount: string | null;
+        effectiveFrom: string | null;
+        effectiveTo: string | null;
+        autoRenewal: boolean;
+        renewalNoticeDays: number | null;
+        terminationNoticeDays: number | null;
+        governingLaw: string | null;
+        jurisdiction: string | null;
+        identifiedClauseFamilies: Array<{ name: string; confidence: number }>;
+        confidence: Record<string, number>;
+        notes: string[];
+      }
+    >({
+      promptKey: 'external.contract.extract',
+      input: { rawText: extractedText, fileName },
+      scope,
+      entityRef: { entityType: 'external_contract', entityId: objectPath },
+    });
+    res.json({
+      aiAvailable: true,
+      invocationId: result.invocationId,
+      truncated,
+      charCount,
+      errorCode: null,
+      suggestion: result.output,
+    });
+  } catch (err) {
+    if (err instanceof AIOrchestrationError) {
+      req.log.warn({ err: err.message, code: err.code }, 'external-contract extract: AI failed');
+      res.json({
+        aiAvailable: false,
+        invocationId: null,
+        truncated,
+        charCount,
+        errorCode: err.code,
+        suggestion: { ...emptySuggestion, notes: ['KI-Extraktion fehlgeschlagen — bitte Felder manuell prüfen.'] },
+      });
+      return;
+    }
+    throw err;
+  }
+});
+
+// 3) GET list — Brand-Scope-konform
+router.get('/external-contracts', async (req, res) => {
+  const scope = getScope(req);
+  const filters = [eq(externalContractsTable.tenantId, scope.tenantId)];
+  if (req.query.accountId) {
+    filters.push(eq(externalContractsTable.accountId, String(req.query.accountId)));
+  }
+  if (req.query.brandId) {
+    filters.push(eq(externalContractsTable.brandId, String(req.query.brandId)));
+  }
+  const rows = await db.select().from(externalContractsTable)
+    .where(and(...filters))
+    .orderBy(desc(externalContractsTable.createdAt));
+  // Brand-Scope-Filter
+  let visible = rows;
+  if (!scope.tenantWide || hasActiveScopeFilter(scope)) {
+    const brands = await allowedBrandIds(req);
+    const accStatuses = await Promise.all(
+      rows.map(r => entityScopeStatus(req, 'account', r.accountId)),
+    );
+    visible = rows.filter((r, i) => {
+      if (accStatuses[i] !== 'ok') return false;
+      if (r.brandId && !brands.includes(r.brandId)) return false;
+      return true;
+    });
+  }
+  const ctx = {
+    accs: await getAccountMap(),
+    brands: await getBrandMap(),
+    users: await getUserMap(scope.tenantId),
+  };
+  const mapped = await Promise.all(visible.map(r => mapExternalContract(r, ctx)));
+  res.json(mapped);
+});
+
+// 4) POST — persistieren nach User-Bestätigung
+router.post('/external-contracts', async (req, res) => {
+  const scope = getScope(req);
+  const parsed = ExternalContractCreateBody.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: 'invalid request', details: parsed.error.issues });
+    return;
+  }
+  const b = parsed.data;
+  if (!await assertOwnedObjectPath(req, res, scope, b.objectPath)) return;
+  const accStatus = await entityScopeStatus(req, 'account', b.accountId);
+  if (accStatus !== 'ok') {
+    res.status(accStatus === 'missing' ? 404 : 403)
+      .json({ error: accStatus === 'missing' ? 'account not found' : 'forbidden' });
+    return;
+  }
+  if (!SUPPORTED_EXT_CONTRACT_MIME.has(b.mimeType)) {
+    res.status(400).json({ error: 'mimeType must be PDF or DOCX' });
+    return;
+  }
+  if (b.brandId) {
+    // Tenant-Bindung erzwingen: brand → company.tenantId muss == scope.tenantId.
+    const [brandRow] = await db.select({ companyTenantId: companiesTable.tenantId })
+      .from(brandsTable)
+      .innerJoin(companiesTable, eq(companiesTable.id, brandsTable.companyId))
+      .where(eq(brandsTable.id, b.brandId));
+    if (!brandRow || brandRow.companyTenantId !== scope.tenantId) {
+      res.status(403).json({ error: 'brand not in tenant' });
+      return;
+    }
+    const brands = await allowedBrandIds(req);
+    if (!scope.tenantWide || hasActiveScopeFilter(scope)) {
+      if (!brands.includes(b.brandId)) {
+        res.status(403).json({ error: 'brand not in scope' });
+        return;
+      }
+    }
+  }
+
+  const id = `xct_${randomUUID().slice(0, 12)}`;
+  await db.insert(externalContractsTable).values({
+    id,
+    tenantId: scope.tenantId,
+    accountId: b.accountId,
+    brandId: b.brandId ?? null,
+    contractTypeCode: b.contractTypeCode ?? null,
+    objectPath: b.objectPath,
+    fileName: b.fileName,
+    fileSize: b.fileSize,
+    mimeType: b.mimeType,
+    status: 'confirmed',
+    title: b.title,
+    parties: b.parties,
+    currency: b.currency ?? null,
+    valueAmount: b.valueAmount == null ? null : String(b.valueAmount),
+    effectiveFrom: b.effectiveFrom ?? null,
+    effectiveTo: b.effectiveTo ?? null,
+    autoRenewal: b.autoRenewal,
+    renewalNoticeDays: b.renewalNoticeDays ?? null,
+    terminationNoticeDays: b.terminationNoticeDays ?? null,
+    governingLaw: b.governingLaw ?? null,
+    jurisdiction: b.jurisdiction ?? null,
+    identifiedClauseFamilies: b.identifiedClauseFamilies ?? [],
+    confidenceJson: b.confidence ?? {},
+    aiInvocationId: b.aiInvocationId ?? null,
+    notes: b.notes ?? null,
+    uploadedBy: scope.user?.id ?? null,
+  });
+  const [row] = await db.select().from(externalContractsTable)
+    .where(eq(externalContractsTable.id, id));
+  await writeAuditFromReq(req, {
+    entityType: 'external_contract',
+    entityId: id,
+    action: 'create',
+    summary: `Bestandsvertrag „${b.title}" hochgeladen (${b.fileName})`,
+    actor: scope.user?.name,
+    after: row,
+  });
+  void emitEvent(scope.tenantId, 'external_contract.confirmed', {
+    externalContractId: id,
+    accountId: b.accountId,
+    title: b.title,
+  });
+  const dto = await mapExternalContract(row);
+  res.status(201).json(dto);
+});
+
+// 5) GET single + signed download URL
+router.get('/external-contracts/:id', async (req, res) => {
+  const row = await loadVisibleExternalContract(req, req.params.id);
+  if (!row) {
+    res.status(404).json({ error: 'not found' });
+    return;
+  }
+  // Signed download URL — TTL kurz halten
+  let downloadUrl = '';
+  try {
+    const svc = new ObjectStorageService();
+    const file = await svc.getObjectEntityFile(row.objectPath);
+    const [signed] = await file.getSignedUrl({
+      action: 'read',
+      expires: Date.now() + 15 * 60_000,
+      version: 'v4',
+    });
+    downloadUrl = signed;
+  } catch (err) {
+    req.log.warn({ err }, 'external-contract: signed download url failed');
+    downloadUrl = '';
+  }
+  const dto = await mapExternalContract(row);
+  res.json({ ...dto, downloadUrl });
+});
+
+// 6) PATCH — pro Request 1 Audit-Eintrag mit before/after
+router.patch('/external-contracts/:id', async (req, res) => {
+  const scope = getScope(req);
+  const existing = await loadVisibleExternalContract(req, req.params.id);
+  if (!existing) {
+    res.status(404).json({ error: 'not found' });
+    return;
+  }
+  const parsed = ExternalContractPatchBody.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: 'invalid request', details: parsed.error.issues });
+    return;
+  }
+  const b = parsed.data;
+  if (b.brandId) {
+    // Tenant-Bindung erzwingen analog POST.
+    const [brandRow] = await db.select({ companyTenantId: companiesTable.tenantId })
+      .from(brandsTable)
+      .innerJoin(companiesTable, eq(companiesTable.id, brandsTable.companyId))
+      .where(eq(brandsTable.id, b.brandId));
+    if (!brandRow || brandRow.companyTenantId !== scope.tenantId) {
+      res.status(403).json({ error: 'brand not in tenant' });
+      return;
+    }
+    const brands = await allowedBrandIds(req);
+    if (!scope.tenantWide || hasActiveScopeFilter(scope)) {
+      if (!brands.includes(b.brandId)) {
+        res.status(403).json({ error: 'brand not in scope' });
+        return;
+      }
+    }
+  }
+  const patch: Partial<typeof externalContractsTable.$inferInsert> = {
+    updatedAt: new Date(),
+  };
+  if (b.brandId !== undefined) patch.brandId = b.brandId;
+  if (b.contractTypeCode !== undefined) patch.contractTypeCode = b.contractTypeCode;
+  if (b.title !== undefined) patch.title = b.title;
+  if (b.parties !== undefined) patch.parties = b.parties;
+  if (b.currency !== undefined) patch.currency = b.currency;
+  if (b.valueAmount !== undefined) {
+    patch.valueAmount = b.valueAmount == null ? null : String(b.valueAmount);
+  }
+  if (b.effectiveFrom !== undefined) patch.effectiveFrom = b.effectiveFrom;
+  if (b.effectiveTo !== undefined) patch.effectiveTo = b.effectiveTo;
+  if (b.autoRenewal !== undefined) patch.autoRenewal = b.autoRenewal;
+  if (b.renewalNoticeDays !== undefined) patch.renewalNoticeDays = b.renewalNoticeDays;
+  if (b.terminationNoticeDays !== undefined) patch.terminationNoticeDays = b.terminationNoticeDays;
+  if (b.governingLaw !== undefined) patch.governingLaw = b.governingLaw;
+  if (b.jurisdiction !== undefined) patch.jurisdiction = b.jurisdiction;
+  if (b.identifiedClauseFamilies !== undefined) {
+    patch.identifiedClauseFamilies = b.identifiedClauseFamilies;
+  }
+  if (b.notes !== undefined) patch.notes = b.notes;
+
+  await db.update(externalContractsTable)
+    .set(patch)
+    .where(eq(externalContractsTable.id, existing.id));
+  const [after] = await db.select().from(externalContractsTable)
+    .where(eq(externalContractsTable.id, existing.id));
+  await writeAuditFromReq(req, {
+    entityType: 'external_contract',
+    entityId: existing.id,
+    action: 'update',
+    summary: `Bestandsvertrag „${after.title}" aktualisiert`,
+    actor: scope.user?.name,
+    before: existing,
+    after,
+  });
+  res.json(await mapExternalContract(after));
+});
+
+// 7) DELETE — DB-Eintrag + Object-Storage-Datei
+router.delete('/external-contracts/:id', async (req, res) => {
+  const scope = getScope(req);
+  const existing = await loadVisibleExternalContract(req, req.params.id);
+  if (!existing) {
+    res.status(404).json({ error: 'not found' });
+    return;
+  }
+  await db.delete(externalContractsTable)
+    .where(eq(externalContractsTable.id, existing.id));
+  // Object-Storage-Datei löschen — best-effort. DB ist Source-of-Truth, also
+  // ist es OK wenn die Datei noch eine Weile dranbleibt.
+  try {
+    const svc = new ObjectStorageService();
+    const file = await svc.getObjectEntityFile(existing.objectPath);
+    await file.delete({ ignoreNotFound: true });
+  } catch (err) {
+    req.log.warn({ err, objectPath: existing.objectPath }, 'external-contract: object delete failed');
+  }
+  await writeAuditFromReq(req, {
+    entityType: 'external_contract',
+    entityId: existing.id,
+    action: 'delete',
+    summary: `Bestandsvertrag „${existing.title}" gelöscht`,
+    actor: scope.user?.name,
+    before: existing,
+  });
+  res.status(204).end();
+});
+
+
 
 export default router;
 

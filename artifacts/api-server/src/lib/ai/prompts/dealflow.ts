@@ -556,6 +556,106 @@ export const helpAssistant: PromptDefinition<
   toolName: "help_assistant_reply",
 };
 
+// ───────────────────────── 11. External Contract Extract ─────────────────────────
+//
+// Liest aus dem Rohtext eines hochgeladenen Vertrags-Dokuments die Kerndaten,
+// die unser ExternalContract-Datensatz braucht. Die Konfidenzwerte (0..1)
+// werden vom Frontend als Vertrauens-Indikator pro Feld angezeigt; bei
+// fehlendem Signal liefert das Modell den Wert null und confidence=0.
+//
+// Eingabe: { rawText: string, fileName: string, locale?: string }
+//
+// Wichtig fuer den Aufrufer:
+//   - Aufrufer kappt rawText auf ~60k Zeichen vor dem Aufruf.
+//   - Die Antwort ist NICHT autoritativ; der User bestaetigt/korrigiert
+//     vor dem Persistieren (status='confirmed').
+
+const PARTY_ROLE = z.union([
+  z.literal('customer'),
+  z.literal('supplier'),
+  z.literal('our_entity'),
+  z.literal('third_party'),
+  z.literal('unknown'),
+]);
+
+const ExternalContractExtractOutput = z.object({
+  title: z.string().min(2).max(240),
+  contractTypeGuess: z.union([
+    z.literal('msa'),
+    z.literal('framework'),
+    z.literal('order_form'),
+    z.literal('nda'),
+    z.literal('amendment'),
+    z.literal('sow'),
+    z.literal('dpa'),
+    z.literal('other'),
+  ]),
+  parties: z
+    .array(
+      z.object({
+        role: PARTY_ROLE,
+        name: z.string().min(2).max(200),
+      }),
+    )
+    .max(10),
+  currency: z.string().min(3).max(8).nullable(),
+  valueAmount: z.string().min(1).max(40).nullable(),
+  effectiveFrom: z.string().min(8).max(20).nullable(),
+  effectiveTo: z.string().min(8).max(20).nullable(),
+  autoRenewal: z.boolean(),
+  renewalNoticeDays: z.number().int().min(0).max(3650).nullable(),
+  terminationNoticeDays: z.number().int().min(0).max(3650).nullable(),
+  governingLaw: z.string().min(2).max(120).nullable(),
+  jurisdiction: z.string().min(2).max(120).nullable(),
+  identifiedClauseFamilies: z
+    .array(
+      z.object({
+        name: z.string().min(2).max(80),
+        confidence: z.number().min(0).max(1),
+      }),
+    )
+    .max(20),
+  // Pro Feldname (siehe oben) eine 0..1-Konfidenz. Felder ohne Konfidenz
+  // werden im Frontend mit einem Warn-Indikator gerendert.
+  confidence: z.record(z.string(), z.number().min(0).max(1)),
+  // Hinweise fuer den User: was ist unklar, was sollte er pruefen.
+  notes: z.array(z.string().min(2).max(240)).max(8),
+});
+
+export interface ExternalContractExtractInput {
+  rawText: string;
+  fileName: string;
+}
+
+export const externalContractExtract: PromptDefinition<
+  ExternalContractExtractInput,
+  z.infer<typeof ExternalContractExtractOutput>
+> = {
+  key: 'external.contract.extract',
+  model: 'claude-sonnet-4-6',
+  system:
+    'Du bist DealFlow-Copilot im Modus External Contract Intake. Du erhaelst ' +
+    'den extrahierten Rohtext eines hochgeladenen Bestandsvertrags (PDF/DOCX) ' +
+    'und identifizierst die strukturellen Kerndaten. Datumsangaben gibst du ' +
+    'als ISO-8601 (YYYY-MM-DD) zurueck; Betraege als reine Dezimalzahl ohne ' +
+    'Tausendertrennzeichen. Konfidenz pro Feld als 0..1, wobei 0 = kein ' +
+    'Signal im Text, 1 = explizit benannt. Felder, fuer die der Text keinen ' +
+    'klaren Beleg liefert, lieferst du als null. Niemals raten. ' +
+    SAFE_GERMAN_HINT,
+  buildUser: (input) =>
+    `Extrahiere die Kerndaten aus folgendem Vertrags-Rohtext.\n` +
+    `Dateiname: ${input.fileName}\n\n` +
+    `Rohtext (gekuerzt):\n"""${input.rawText}"""`,
+  outputSchema: ExternalContractExtractOutput,
+  toolDescription:
+    'Liefert title, contractTypeGuess, parties (role+name), currency, ' +
+    'valueAmount, effectiveFrom/To (ISO), autoRenewal, renewalNoticeDays, ' +
+    'terminationNoticeDays, governingLaw, jurisdiction, ' +
+    'identifiedClauseFamilies (name+confidence), confidence pro Feld, ' +
+    'notes (Hinweise fuer manuelle Pruefung).',
+  toolName: 'report_external_contract_extract',
+};
+
 // ───────────────────────── Bundle ─────────────────────────
 
 export const DEALFLOW_PROMPTS = {
@@ -570,4 +670,5 @@ export const DEALFLOW_PROMPTS = {
   [executiveBrief.key]: executiveBrief,
   [commercialHealthCheck.key]: commercialHealthCheck,
   [helpAssistant.key]: helpAssistant,
+  [externalContractExtract.key]: externalContractExtract,
 } as const;

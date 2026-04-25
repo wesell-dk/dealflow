@@ -17,6 +17,7 @@ import { Building, Phone, Mail, UserCircle2, Plus } from "lucide-react";
 import { DealFormDialog } from "@/components/deals/deal-form-dialog";
 import { InlineEditField } from "@/components/patterns/inline-edit-field";
 import { ActivityTimeline } from "@/components/patterns/activity-timeline";
+import { ExternalContractsCard } from "@/components/external-contracts/external-contracts-card";
 import { useTrackRecent } from "@/hooks/use-recents";
 import { useToast } from "@/hooks/use-toast";
 
@@ -147,6 +148,8 @@ export default function Account() {
               </div>
             </CardContent>
           </Card>
+
+          <ExternalContractsCard accountId={id} />
 
           <Card>
             <CardHeader><CardTitle>Deals</CardTitle></CardHeader>

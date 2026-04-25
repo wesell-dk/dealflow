@@ -7,6 +7,227 @@ Multi-tenant, multi-company, multi-brand. Deal-centric.
 
  * OpenAPI spec version: 0.1.0
  */
+export type ExternalContractPartyRole =
+  (typeof ExternalContractPartyRole)[keyof typeof ExternalContractPartyRole];
+
+export const ExternalContractPartyRole = {
+  customer: "customer",
+  supplier: "supplier",
+  our_entity: "our_entity",
+  third_party: "third_party",
+  unknown: "unknown",
+} as const;
+
+export interface ExternalContractParty {
+  role: ExternalContractPartyRole;
+  name: string;
+}
+
+export interface ExternalContractClauseFamily {
+  /** @nullable */
+  familyId?: string | null;
+  name: string;
+  /**
+   * @minimum 0
+   * @maximum 1
+   */
+  confidence: number;
+}
+
+export type ExternalContractStatus =
+  (typeof ExternalContractStatus)[keyof typeof ExternalContractStatus];
+
+export const ExternalContractStatus = {
+  draft: "draft",
+  confirmed: "confirmed",
+} as const;
+
+export type ExternalContractConfidence = { [key: string]: number };
+
+export interface ExternalContract {
+  id: string;
+  tenantId: string;
+  accountId: string;
+  /** @nullable */
+  accountName?: string | null;
+  /** @nullable */
+  brandId?: string | null;
+  /** @nullable */
+  brandName?: string | null;
+  /** @nullable */
+  contractTypeCode?: string | null;
+  objectPath: string;
+  fileName: string;
+  fileSize: number;
+  mimeType: string;
+  status: ExternalContractStatus;
+  title: string;
+  parties: ExternalContractParty[];
+  /** @nullable */
+  currency?: string | null;
+  /** @nullable */
+  valueAmount?: number | null;
+  /** @nullable */
+  effectiveFrom?: string | null;
+  /** @nullable */
+  effectiveTo?: string | null;
+  autoRenewal: boolean;
+  /** @nullable */
+  renewalNoticeDays?: number | null;
+  /** @nullable */
+  terminationNoticeDays?: number | null;
+  /** @nullable */
+  governingLaw?: string | null;
+  /** @nullable */
+  jurisdiction?: string | null;
+  identifiedClauseFamilies: ExternalContractClauseFamily[];
+  confidence: ExternalContractConfidence;
+  /** @nullable */
+  aiInvocationId?: string | null;
+  /** @nullable */
+  notes?: string | null;
+  /** @nullable */
+  uploadedBy?: string | null;
+  /** @nullable */
+  uploadedByName?: string | null;
+  /** true wenn autoRenewal=true und effectiveTo gesetzt ist (Marker für #66) */
+  renewalRelevant: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export type ExternalContractDetail = ExternalContract & {
+  /** Signed download URL (TTL 15min) für Original-Dokument */
+  downloadUrl: string;
+};
+
+export interface ExternalContractUploadUrlRequest {
+  fileName: string;
+  size: number;
+  contentType: string;
+}
+
+export interface ExternalContractUploadUrlResponse {
+  uploadURL: string;
+  objectPath: string;
+}
+
+export interface ExternalContractExtractRequest {
+  objectPath: string;
+  fileName: string;
+  mimeType: string;
+  accountId: string;
+}
+
+export type ExternalContractDraftFieldsConfidence = { [key: string]: number };
+
+export interface ExternalContractDraftFields {
+  /** @nullable */
+  title?: string | null;
+  /** @nullable */
+  contractTypeGuess?: string | null;
+  parties: ExternalContractParty[];
+  /** @nullable */
+  currency?: string | null;
+  /** @nullable */
+  valueAmount?: string | null;
+  /** @nullable */
+  effectiveFrom?: string | null;
+  /** @nullable */
+  effectiveTo?: string | null;
+  autoRenewal: boolean;
+  /** @nullable */
+  renewalNoticeDays?: number | null;
+  /** @nullable */
+  terminationNoticeDays?: number | null;
+  /** @nullable */
+  governingLaw?: string | null;
+  /** @nullable */
+  jurisdiction?: string | null;
+  identifiedClauseFamilies: ExternalContractClauseFamily[];
+  confidence: ExternalContractDraftFieldsConfidence;
+  notes: string[];
+}
+
+export interface ExternalContractExtractResponse {
+  aiAvailable: boolean;
+  /** @nullable */
+  invocationId?: string | null;
+  truncated?: boolean;
+  charCount?: number;
+  /** @nullable */
+  errorCode?: string | null;
+  suggestion: ExternalContractDraftFields;
+}
+
+export type ExternalContractCreateConfidence = { [key: string]: number };
+
+export interface ExternalContractCreate {
+  accountId: string;
+  /** @nullable */
+  brandId?: string | null;
+  /** @nullable */
+  contractTypeCode?: string | null;
+  objectPath: string;
+  fileName: string;
+  fileSize: number;
+  mimeType: string;
+  title: string;
+  parties: ExternalContractParty[];
+  /** @nullable */
+  currency?: string | null;
+  /** @nullable */
+  valueAmount?: number | null;
+  /** @nullable */
+  effectiveFrom?: string | null;
+  /** @nullable */
+  effectiveTo?: string | null;
+  autoRenewal: boolean;
+  /** @nullable */
+  renewalNoticeDays?: number | null;
+  /** @nullable */
+  terminationNoticeDays?: number | null;
+  /** @nullable */
+  governingLaw?: string | null;
+  /** @nullable */
+  jurisdiction?: string | null;
+  identifiedClauseFamilies?: ExternalContractClauseFamily[];
+  confidence?: ExternalContractCreateConfidence;
+  /** @nullable */
+  aiInvocationId?: string | null;
+  /** @nullable */
+  notes?: string | null;
+}
+
+export interface ExternalContractPatch {
+  /** @nullable */
+  brandId?: string | null;
+  /** @nullable */
+  contractTypeCode?: string | null;
+  title?: string;
+  parties?: ExternalContractParty[];
+  /** @nullable */
+  currency?: string | null;
+  /** @nullable */
+  valueAmount?: number | null;
+  /** @nullable */
+  effectiveFrom?: string | null;
+  /** @nullable */
+  effectiveTo?: string | null;
+  autoRenewal?: boolean;
+  /** @nullable */
+  renewalNoticeDays?: number | null;
+  /** @nullable */
+  terminationNoticeDays?: number | null;
+  /** @nullable */
+  governingLaw?: string | null;
+  /** @nullable */
+  jurisdiction?: string | null;
+  identifiedClauseFamilies?: ExternalContractClauseFamily[];
+  /** @nullable */
+  notes?: string | null;
+}
+
 /**
  * logo (admin only, 2MB images) or document (any user, 25MB docs+images). Default: logo for backward compatibility.
  */
@@ -2797,4 +3018,9 @@ export type ListObligationsParams = {
 
 export type GetCurrentQuoteParams = {
   accountId: string;
+};
+
+export type ListExternalContractsParams = {
+  accountId?: string;
+  brandId?: string;
 };
