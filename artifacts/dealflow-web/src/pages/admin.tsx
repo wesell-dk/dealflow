@@ -1,4 +1,5 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useRef } from "react";
+import { extractLogoColors } from "@/lib/extract-logo-colors";
 import { useTranslation } from "react-i18next";
 import {
   useGetTenant,
@@ -59,7 +60,8 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Settings, Shield, Building2, Users, Download, Trash2, Eye, Play, ShieldAlert, Webhook, Plus, RefreshCw, Lock } from "lucide-react";
+import { Settings, Shield, Building2, Users, Download, Trash2, Eye, Play, ShieldAlert, Webhook, Plus, RefreshCw, Lock, Upload, X, Image as ImageIcon, ChevronDown, Sparkles } from "lucide-react";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { useEffect } from "react";
 
@@ -397,6 +399,11 @@ export default function Admin() {
 
       <ContractPlaybooksCard />
 
+      {/* Erweiterte Einstellungen — Webhooks und DSGVO. Standardmäßig
+          eingeklappt, weil die meisten Tenants hier mit den Defaults gut fahren
+          und nichts manuell konfigurieren müssen. */}
+      <AdvancedSettingsSection>
+
       <WebhooksSection />
 
       {/* GDPR Section */}
@@ -519,22 +526,38 @@ export default function Admin() {
             </div>
           )}
 
-          {/* Retention policy */}
+          {/* Retention policy — Defaults sind serverseitig hinterlegt
+              (3J Kontakte, 2J Korrespondenz, 7J Audit, 1J Access-Log) und
+              werden automatisch angewendet. Eigene Werte überschreiben sie. */}
           <div className="flex flex-col gap-3">
-            <div className="font-medium">{t("pages.admin.gdpr.retention")}</div>
+            <div className="flex items-center gap-2">
+              <div className="font-medium">{t("pages.admin.gdpr.retention")}</div>
+              <Badge variant="outline" className="text-[10px]">Defaults aktiv</Badge>
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Ohne eigene Eingabe gelten gesetzeskonforme Default-Aufbewahrungsfristen
+              (HGB/BGB- und steuerliche Vorgaben). Du musst hier nur eingreifen,
+              wenn du davon abweichen willst.
+            </p>
             <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
-              {(["contactInactiveDays", "letterRespondedDays", "auditLogDays", "accessLogDays"] as const).map((k) => (
-                <div key={k} className="flex flex-col gap-1">
-                  <Label className="text-xs text-muted-foreground">{t(`pages.admin.gdpr.fields.${k}`)}</Label>
-                  <Input
-                    type="number"
-                    inputMode="numeric"
-                    value={getPolicyVal(k)}
-                    onChange={(e) => setPolicyDraft((d) => ({ ...d, [k]: e.target.value }))}
-                    placeholder="—"
-                  />
-                </div>
-              ))}
+              {(["contactInactiveDays", "letterRespondedDays", "auditLogDays", "accessLogDays"] as const).map((k) => {
+                const defaultVal = (policy.data as { defaults?: Record<string, number> })?.defaults?.[k];
+                return (
+                  <div key={k} className="flex flex-col gap-1">
+                    <Label className="text-xs text-muted-foreground">{t(`pages.admin.gdpr.fields.${k}`)}</Label>
+                    <Input
+                      type="number"
+                      inputMode="numeric"
+                      value={getPolicyVal(k)}
+                      onChange={(e) => setPolicyDraft((d) => ({ ...d, [k]: e.target.value }))}
+                      placeholder={defaultVal ? String(defaultVal) : "—"}
+                    />
+                    {defaultVal !== undefined && (
+                      <span className="text-[11px] text-muted-foreground">Default: {defaultVal} Tage</span>
+                    )}
+                  </div>
+                );
+              })}
             </div>
             <div className="flex gap-2">
               <Button onClick={onSavePolicy} disabled={Object.keys(policyDraft).length === 0}>
@@ -580,7 +603,39 @@ export default function Admin() {
           </div>
         </CardContent>
       </Card>
+
+      </AdvancedSettingsSection>
     </div>
+  );
+}
+
+/**
+ * Klappt Webhooks und DSGVO ein. Beide sind Tenant-spezifische
+ * Konfigurationen, die für die meisten Tenants out-of-the-box mit den
+ * Defaults laufen — Webhook-Endpunkte gibt es erst, wenn ein Kunde
+ * tatsächlich integrieren will, und die DSGVO-Aufbewahrungsregeln sind
+ * server-seitig auf gesetzeskonforme Werte vorbelegt (siehe
+ * `defaultRetentionPolicy` im Backend). Wir zeigen die Sektion daher
+ * standardmäßig zugeklappt, damit die Hauptseite ruhig bleibt.
+ */
+function AdvancedSettingsSection({ children }: { children: React.ReactNode }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <Collapsible open={open} onOpenChange={setOpen} className="border rounded-lg">
+      <CollapsibleTrigger className="w-full flex items-center justify-between gap-2 px-4 py-3 hover:bg-muted/40 rounded-t-lg" data-testid="advanced-settings-trigger">
+        <div className="flex items-center gap-2">
+          <Settings className="h-4 w-4 text-muted-foreground" />
+          <span className="font-medium text-sm">Erweiterte Einstellungen</span>
+          <span className="text-xs text-muted-foreground">— Webhooks und DSGVO (Defaults wirken bereits)</span>
+        </div>
+        <ChevronDown className={`h-4 w-4 text-muted-foreground transition-transform ${open ? "rotate-180" : ""}`} />
+      </CollapsibleTrigger>
+      <CollapsibleContent className="border-t">
+        <div className="flex flex-col gap-6 p-4">
+          {children}
+        </div>
+      </CollapsibleContent>
+    </Collapsible>
   );
 }
 
@@ -619,30 +674,81 @@ function BrandRow({ brand }: { brand: Brand }) {
   };
   const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
+  const [dragOver, setDragOver] = useState(false);
+  const [primaryTouched, setPrimaryTouched] = useState(false);
+  const [secondaryTouched, setSecondaryTouched] = useState(false);
+  const [colorsExtracted, setColorsExtracted] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+  // Refs für die touched-Flags + Upload-Token, damit asynchrone Color-Apply-
+  // Steps den jeweils aktuellen Stand sehen und parallele Uploads sich nicht
+  // gegenseitig überschreiben (siehe identische Logik in BrandFormDialog).
+  const primaryTouchedRef = useRef(false);
+  const secondaryTouchedRef = useRef(false);
+  const uploadTokenRef = useRef(0);
   const save = async () => {
     const payload: BrandUpdate = { ...draft };
     await update.mutateAsync({ id: brand.id, data: payload });
     setEditing(false);
   };
   const onUpload = async (file: File) => {
+    const ALLOWED = ["image/png", "image/jpeg", "image/svg+xml", "image/webp"];
+    if (!ALLOWED.includes(file.type)) {
+      setUploadError("Format nicht unterstützt — PNG/JPEG/SVG/WebP.");
+      return;
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      setUploadError(`Datei zu groß (${(file.size / 1024 / 1024).toFixed(1)} MB) — Maximum 5 MB.`);
+      return;
+    }
     setUploading(true); setUploadError(null);
+    const myToken = ++uploadTokenRef.current;
+    const colorsPromise = extractLogoColors(file).catch(() => null);
+    const applyColors = async () => {
+      const colors = await colorsPromise;
+      if (myToken !== uploadTokenRef.current) return;
+      if (!colors) return;
+      setColorsExtracted(true);
+      setDraft(d => ({
+        ...d,
+        primaryColor: primaryTouchedRef.current ? d.primaryColor : colors.primary,
+        secondaryColor: secondaryTouchedRef.current ? d.secondaryColor : (colors.secondary ?? d.secondaryColor),
+      }));
+    };
     try {
       const res = await fetch(`${import.meta.env.BASE_URL}api/storage/uploads/request-url`, {
         method: "POST", credentials: "include",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name: file.name, size: file.size, contentType: file.type }),
+        body: JSON.stringify({ name: file.name, size: file.size, contentType: file.type, kind: "logo" }),
       });
-      if (!res.ok) throw new Error(`upload URL failed (${res.status})`);
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        const msg = (body as { error?: string })?.error
+          ?? (res.status === 401 ? "Sitzung abgelaufen — bitte neu anmelden."
+              : res.status === 403 ? "Nur Tenant-Admins dürfen Logos hochladen."
+              : `Upload-URL fehlgeschlagen (${res.status})`);
+        throw new Error(msg);
+      }
       const { uploadURL, objectPath } = await res.json();
       const put = await fetch(uploadURL, { method: "PUT", headers: { "Content-Type": file.type }, body: file });
-      if (!put.ok) throw new Error(`PUT failed (${put.status})`);
-      const servingUrl = `/api/storage${objectPath}`;
-      setDraft(d => ({ ...d, logoUrl: servingUrl }));
+      if (!put.ok) throw new Error(`Upload fehlgeschlagen (${put.status})`);
+      if (myToken === uploadTokenRef.current) {
+        setDraft(d => ({ ...d, logoUrl: `/api/storage${objectPath}` }));
+      }
+      await applyColors();
     } catch (e: unknown) {
+      // Auch bei fehlgeschlagenem Server-Upload bekommt der User die lokal
+      // abgeleiteten Farben — sein Logo (URL-Eingabe) kann er später nachreichen.
+      await applyColors();
       setUploadError(e instanceof Error ? e.message : "upload failed");
     } finally {
       setUploading(false);
     }
+  };
+  const onDrop = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    setDragOver(false);
+    const f = e.dataTransfer.files?.[0];
+    if (f) void onUpload(f);
   };
   return (
     <>
@@ -672,19 +778,68 @@ function BrandRow({ brand }: { brand: Brand }) {
             <div className="grid grid-cols-2 gap-3 py-2">
               <div className="col-span-2">
                 <Label>Logo</Label>
-                <div className="flex items-center gap-2">
-                  <Input className="flex-1" value={draft.logoUrl ?? ""} onChange={e => setDraft({ ...draft, logoUrl: e.target.value })} placeholder="https://… / data:image/… / /api/storage/objects/…" />
+                <div
+                  onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
+                  onDragLeave={() => setDragOver(false)}
+                  onDrop={onDrop}
+                  onClick={() => fileInputRef.current?.click()}
+                  className={`mt-1 cursor-pointer rounded-md border-2 border-dashed transition-colors ${
+                    dragOver ? "border-primary bg-primary/5" : "border-muted-foreground/30 hover:border-muted-foreground/60"
+                  }`}
+                  data-testid={`brand-row-logo-dropzone-${brand.id}`}
+                >
                   <input
-                    type="file" accept="image/png,image/jpeg,image/svg+xml"
-                    onChange={e => { const f = e.target.files?.[0]; if (f) void onUpload(f); }}
+                    ref={fileInputRef}
+                    type="file"
+                    accept="image/png,image/jpeg,image/svg+xml,image/webp"
+                    onChange={e => { const f = e.target.files?.[0]; if (f) void onUpload(f); if (fileInputRef.current) fileInputRef.current.value = ""; }}
                     disabled={uploading}
-                    className="text-sm"
+                    className="hidden"
                   />
+                  <div className="flex items-center gap-3 p-3">
+                    {draft.logoUrl ? (
+                      <img src={draft.logoUrl} alt="Logo-Vorschau" className="h-12 w-12 object-contain rounded border bg-white p-1" />
+                    ) : (
+                      <div className="h-12 w-12 rounded bg-muted flex items-center justify-center text-muted-foreground">
+                        <ImageIcon className="h-5 w-5" />
+                      </div>
+                    )}
+                    <div className="flex-1 min-w-0 text-sm">
+                      {uploading ? (
+                        <span className="text-muted-foreground">Wird hochgeladen…</span>
+                      ) : draft.logoUrl ? (
+                        <span className="text-muted-foreground truncate block">Datei ziehen oder klicken zum Ersetzen</span>
+                      ) : (
+                        <>
+                          <div className="font-medium">Datei hierher ziehen oder klicken</div>
+                          <div className="text-xs text-muted-foreground">PNG, JPEG, SVG, WebP — bis 5 MB</div>
+                        </>
+                      )}
+                    </div>
+                    {draft.logoUrl && !uploading && (
+                      <Button size="sm" variant="ghost" onClick={(e) => { e.stopPropagation(); setDraft(d => ({ ...d, logoUrl: "" })); setColorsExtracted(false); }} aria-label="Logo entfernen">
+                        <X className="h-4 w-4" />
+                      </Button>
+                    )}
+                    {!draft.logoUrl && !uploading && (
+                      <Button size="sm" variant="outline" onClick={(e) => { e.stopPropagation(); fileInputRef.current?.click(); }}>
+                        <Upload className="h-4 w-4 mr-1" />Hochladen
+                      </Button>
+                    )}
+                  </div>
                 </div>
-                {uploading && <p className="text-xs text-muted-foreground mt-1">Wird hochgeladen…</p>}
+                <Input
+                  className="mt-1 text-xs"
+                  value={draft.logoUrl ?? ""}
+                  onChange={e => setDraft({ ...draft, logoUrl: e.target.value })}
+                  placeholder="…oder URL eintragen: https://… / /api/storage/objects/…"
+                />
                 {uploadError && <p className="text-xs text-destructive mt-1">{uploadError}</p>}
-                {draft.logoUrl && !uploading && (
-                  <img src={draft.logoUrl} alt="logo preview" className="mt-2 max-h-12 border rounded bg-white p-1" />
+                {colorsExtracted && (
+                  <p className="text-xs text-muted-foreground mt-1 flex items-center gap-1">
+                    <Sparkles className="h-3 w-3 text-primary" />
+                    Farben aus Logo abgeleitet — kannst du unten anpassen.
+                  </p>
                 )}
               </div>
               <div>
@@ -693,11 +848,11 @@ function BrandRow({ brand }: { brand: Brand }) {
               </div>
               <div>
                 <Label>Primary Color</Label>
-                <Input type="color" value={draft.primaryColor || "#2D6CDF"} onChange={e => setDraft({ ...draft, primaryColor: e.target.value })} />
+                <Input type="color" value={draft.primaryColor || "#2D6CDF"} onChange={e => { setDraft({ ...draft, primaryColor: e.target.value }); setPrimaryTouched(true); primaryTouchedRef.current = true; }} />
               </div>
               <div>
                 <Label>Secondary Color</Label>
-                <Input type="color" value={draft.secondaryColor || "#000000"} onChange={e => setDraft({ ...draft, secondaryColor: e.target.value })} />
+                <Input type="color" value={draft.secondaryColor || "#000000"} onChange={e => { setDraft({ ...draft, secondaryColor: e.target.value }); setSecondaryTouched(true); secondaryTouchedRef.current = true; }} />
               </div>
               <div>
                 <Label>Legal Entity Name</Label>

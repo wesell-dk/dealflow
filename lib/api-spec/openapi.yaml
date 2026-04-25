@@ -5032,7 +5032,14 @@ components:
       required: [tenantId, policy]
       properties:
         tenantId: { type: string }
+        # Effective policy = defaults gemerget über persistierte Overrides.
+        # Das ist das, womit der Sweep tatsächlich läuft.
         policy: { $ref: "#/components/schemas/GdprRetentionPolicy" }
+        # Server-seitige Default-Aufbewahrungsfristen (HGB/BGB-konform), wirksam
+        # auch ohne Tenant-Override. Optional, damit ältere Clients nicht brechen.
+        defaults: { $ref: "#/components/schemas/GdprRetentionPolicy" }
+        # Vom Tenant explizit gesetzte Werte (nur die Keys, die abweichen).
+        overrides: { $ref: "#/components/schemas/GdprRetentionPolicy" }
 
     GdprRetentionResult:
       type: object

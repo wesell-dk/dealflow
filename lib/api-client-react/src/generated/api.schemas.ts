@@ -2012,6 +2012,8 @@ export interface GdprRetentionPolicy {
 export interface GdprRetentionPolicyResponse {
   tenantId: string;
   policy: GdprRetentionPolicy;
+  defaults?: GdprRetentionPolicy;
+  overrides?: GdprRetentionPolicy;
 }
 
 export type GdprRetentionResultApplied = { [key: string]: number };

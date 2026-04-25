@@ -3207,6 +3207,22 @@ export const GetGdprRetentionPolicyResponse = zod.object({
     auditLogDays: zod.number().optional(),
     accessLogDays: zod.number().optional(),
   }),
+  defaults: zod
+    .object({
+      contactInactiveDays: zod.number().optional(),
+      letterRespondedDays: zod.number().optional(),
+      auditLogDays: zod.number().optional(),
+      accessLogDays: zod.number().optional(),
+    })
+    .optional(),
+  overrides: zod
+    .object({
+      contactInactiveDays: zod.number().optional(),
+      letterRespondedDays: zod.number().optional(),
+      auditLogDays: zod.number().optional(),
+      accessLogDays: zod.number().optional(),
+    })
+    .optional(),
 });
 
 export const UpdateGdprRetentionPolicyBody = zod.object({
@@ -3224,6 +3240,22 @@ export const UpdateGdprRetentionPolicyResponse = zod.object({
     auditLogDays: zod.number().optional(),
     accessLogDays: zod.number().optional(),
   }),
+  defaults: zod
+    .object({
+      contactInactiveDays: zod.number().optional(),
+      letterRespondedDays: zod.number().optional(),
+      auditLogDays: zod.number().optional(),
+      accessLogDays: zod.number().optional(),
+    })
+    .optional(),
+  overrides: zod
+    .object({
+      contactInactiveDays: zod.number().optional(),
+      letterRespondedDays: zod.number().optional(),
+      auditLogDays: zod.number().optional(),
+      accessLogDays: zod.number().optional(),
+    })
+    .optional(),
 });
 
 export const ListSavedViewsQueryParams = zod.object({

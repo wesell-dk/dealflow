@@ -6495,11 +6495,35 @@ router.post('/gdpr/retention/run', async (req, res) => {
   res.json(result);
 });
 
+// Sinnvolle DSGVO-Aufbewahrungs-Defaults. Werden im UI als Vorschlagswert
+// angezeigt, bis der Tenant explizit eigene Werte setzt — und vom Sweep auch
+// dann verwendet, wenn der Tenant nichts pflegt.
+//   contactInactiveDays: Kontakte, die seit X Tagen weder aktualisiert noch
+//     in einem Deal aktiv waren, werden pseudonymisiert (Art. 5(1)(e) DSGVO).
+//   letterRespondedDays: Preisänderungsschreiben/Kommunikation, auf die der
+//     Empfänger seit X Tagen reagiert hat, werden archiviert.
+//   auditLogDays / accessLogDays: technische Logs werden nach X Tagen geleert.
+const DEFAULT_RETENTION_POLICY: Record<string, number> = {
+  contactInactiveDays: 1095,    // 3 Jahre (Verjährung HGB/BGB)
+  letterRespondedDays: 730,     // 2 Jahre nach Reaktion
+  auditLogDays: 2555,           // 7 Jahre (steuerliche Aufbewahrung)
+  accessLogDays: 365,           // 1 Jahr für Zugriffs-Logs
+};
+
 router.get('/gdpr/retention-policy', async (req, res) => {
   if (!requireAdmin(req, res)) return;
   const scope = getScope(req);
   const [t] = await db.select().from(tenantsTable).where(eq(tenantsTable.id, scope.tenantId));
-  res.json({ tenantId: scope.tenantId, policy: t?.retentionPolicy ?? {} });
+  // Effektive Policy = persistierte Werte über Defaults gemerget, damit das UI
+  // jederzeit eine vollständige, aktivierte Policy zeigt.
+  const stored: Record<string, number> = (t?.retentionPolicy ?? {}) as Record<string, number>;
+  const effective = { ...DEFAULT_RETENTION_POLICY, ...stored };
+  res.json({
+    tenantId: scope.tenantId,
+    policy: effective,
+    defaults: DEFAULT_RETENTION_POLICY,
+    overrides: stored,
+  });
 });
 
 router.patch('/gdpr/retention-policy', async (req, res) => {

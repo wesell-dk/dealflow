@@ -12,4 +12,6 @@ import type { GdprRetentionPolicy } from "./gdprRetentionPolicy";
 export interface GdprRetentionPolicyResponse {
   tenantId: string;
   policy: GdprRetentionPolicy;
+  defaults?: GdprRetentionPolicy;
+  overrides?: GdprRetentionPolicy;
 }

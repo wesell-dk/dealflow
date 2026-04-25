@@ -269,7 +269,18 @@ export async function runRetentionSweepForTenant(
   const [tenant] = await db.select().from(tenantsTable).where(eq(tenantsTable.id, tenantId));
   if (!tenant) return { applied };
   {
-    const policy = tenant.retentionPolicy ?? {};
+    // Defaults müssen auch bei leerer DB-Policy greifen, sonst läuft der Sweep
+    // für jeden frisch angelegten Tenant ins Leere — UI zeigt zwar Defaults
+    // an, ohne diesen Merge wäre die Anzeige aber irreführend.
+    // Quelle: docs/konzept/03_vertragswesen.md (DSGVO-Aufbewahrungs-Defaults).
+    const DEFAULTS: Record<string, number> = {
+      contactInactiveDays: 1095,
+      letterRespondedDays: 730,
+      auditLogDays: 2555,
+      accessLogDays: 365,
+    };
+    const stored = (tenant.retentionPolicy ?? {}) as Record<string, number>;
+    const policy: Record<string, number> = { ...DEFAULTS, ...stored };
 
     // Tenant-scoped account set: accounts that have any deal in a company of this tenant.
     const tenantCompanies = await db.select({ id: companiesTable.id })

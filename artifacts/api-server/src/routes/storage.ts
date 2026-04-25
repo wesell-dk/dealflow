@@ -29,7 +29,7 @@ const ALLOWED_LOGO_MIME = new Set([
   "image/svg+xml",
   "image/webp",
 ]);
-const MAX_LOGO_BYTES = 2 * 1024 * 1024;
+const MAX_LOGO_BYTES = 5 * 1024 * 1024;
 
 // Quote attachments / library docs: docs + spreadsheets + images, up to 25 MB.
 const ALLOWED_DOCUMENT_MIME = new Set([

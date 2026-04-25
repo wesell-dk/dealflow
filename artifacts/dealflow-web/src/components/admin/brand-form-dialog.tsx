@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   useCreateBrand,
@@ -16,7 +16,8 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
-import { Loader2, Upload } from "lucide-react";
+import { Loader2, Upload, Image as ImageIcon, X, Sparkles } from "lucide-react";
+import { extractLogoColors } from "@/lib/extract-logo-colors";
 
 interface Props {
   open: boolean;
@@ -34,6 +35,8 @@ const TONES: Array<{ value: string; label: string; hint: string }> = [
 ];
 
 const HEX_RE = /^#[0-9a-fA-F]{6}$/;
+const ALLOWED_LOGO_MIME = ["image/png", "image/jpeg", "image/svg+xml", "image/webp"];
+const MAX_LOGO_BYTES = 5 * 1024 * 1024;
 
 export function BrandFormDialog({ open, onOpenChange, companies, defaultCompanyId }: Props) {
   const { toast } = useToast();
@@ -49,6 +52,20 @@ export function BrandFormDialog({ open, onOpenChange, companies, defaultCompanyI
   const [addressLine, setAddressLine] = useState("");
   const [logoUrl, setLogoUrl] = useState("");
   const [uploading, setUploading] = useState(false);
+  const [dragOver, setDragOver] = useState(false);
+  const [primaryTouched, setPrimaryTouched] = useState(false);
+  const [secondaryTouched, setSecondaryTouched] = useState(false);
+  const [colorsExtracted, setColorsExtracted] = useState<{ primary: string; secondary: string | null } | null>(null);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+  // Refs spiegeln die touched-Flags, damit der asynchrone Upload-Handler beim
+  // Anwenden der extrahierten Farben den jeweils aktuellen Stand sieht — und
+  // nicht den, der beim Drop in die Closure capture-d wurde. Sonst könnte ein
+  // Color-Picker-Edit während des Uploads von der Auto-Extraction überschrieben werden.
+  const primaryTouchedRef = useRef(false);
+  const secondaryTouchedRef = useRef(false);
+  // Monoton steigender Token, damit bei mehreren parallelen Uploads (User dropt
+  // schnell ein zweites Logo) nur der jüngste Lauf das State-Update gewinnt.
+  const uploadTokenRef = useRef(0);
 
   useEffect(() => {
     if (open) {
@@ -60,27 +77,102 @@ export function BrandFormDialog({ open, onOpenChange, companies, defaultCompanyI
       setLegalEntityName("");
       setAddressLine("");
       setLogoUrl("");
+      setPrimaryTouched(false);
+      setSecondaryTouched(false);
+      primaryTouchedRef.current = false;
+      secondaryTouchedRef.current = false;
+      setColorsExtracted(null);
     }
   }, [open, defaultCompanyId, companies]);
 
   const onUpload = async (file: File) => {
+    if (!ALLOWED_LOGO_MIME.includes(file.type)) {
+      toast({
+        title: "Format nicht unterstützt",
+        description: `${file.name || "Datei"} — erlaubt: PNG, JPEG, SVG, WebP.`,
+        variant: "destructive",
+      });
+      return;
+    }
+    if (file.size > MAX_LOGO_BYTES) {
+      toast({
+        title: "Logo zu groß",
+        description: `${(file.size / 1024 / 1024).toFixed(1)} MB — Maximum 5 MB.`,
+        variant: "destructive",
+      });
+      return;
+    }
     setUploading(true);
+    const myToken = ++uploadTokenRef.current;
+    // Farben asynchron aus dem File ableiten — independent vom Upload, damit
+    // der User selbst bei Upload-Fehlschlag eine Farbpalette bekommt.
+    const colorsPromise = extractLogoColors(file).catch(() => null);
+    // Helper: Farben anwenden, falls dieser Lauf noch der jüngste ist.
+    const applyColors = async () => {
+      const colors = await colorsPromise;
+      if (myToken !== uploadTokenRef.current) return;
+      if (!colors) return;
+      setColorsExtracted(colors);
+      if (!primaryTouchedRef.current) setPrimaryColor(colors.primary);
+      if (!secondaryTouchedRef.current && colors.secondary) setSecondaryColor(colors.secondary);
+    };
     try {
       const res = await fetch(`${import.meta.env.BASE_URL}api/storage/uploads/request-url`, {
-        method: "POST", credentials: "include",
+        method: "POST",
+        credentials: "include",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name: file.name, size: file.size, contentType: file.type }),
+        body: JSON.stringify({
+          name: file.name,
+          size: file.size,
+          contentType: file.type,
+          kind: "logo",
+        }),
       });
-      if (!res.ok) throw new Error(`upload URL failed (${res.status})`);
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        const msg = (body as { error?: string })?.error
+          ?? (res.status === 401 ? "Sitzung abgelaufen — bitte neu anmelden."
+              : res.status === 403 ? "Nur Tenant-Admins dürfen Logos hochladen."
+              : `Upload-URL fehlgeschlagen (${res.status})`);
+        throw new Error(msg);
+      }
       const { uploadURL, objectPath } = await res.json();
-      const put = await fetch(uploadURL, { method: "PUT", headers: { "Content-Type": file.type }, body: file });
-      if (!put.ok) throw new Error(`PUT failed (${put.status})`);
-      setLogoUrl(`/api/storage${objectPath}`);
+      const put = await fetch(uploadURL, {
+        method: "PUT",
+        headers: { "Content-Type": file.type },
+        body: file,
+      });
+      if (!put.ok) throw new Error(`Upload fehlgeschlagen (${put.status})`);
+      if (myToken === uploadTokenRef.current) {
+        setLogoUrl(`/api/storage${objectPath}`);
+      }
+      await applyColors();
     } catch (e: unknown) {
-      toast({ title: "Logo-Upload fehlgeschlagen", description: e instanceof Error ? e.message : "Unbekannt", variant: "destructive" });
+      // Farben trotzdem anwenden — der lokale Browser konnte sie ableiten,
+      // auch wenn der Server-Upload daneben ging.
+      await applyColors();
+      toast({
+        title: "Logo-Upload fehlgeschlagen",
+        description: e instanceof Error ? e.message : "Unbekannt",
+        variant: "destructive",
+      });
     } finally {
       setUploading(false);
     }
+  };
+
+  const onFileInput = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const f = e.target.files?.[0];
+    if (f) void onUpload(f);
+    // Eingabe leeren, damit dieselbe Datei erneut gewählt werden kann
+    if (fileInputRef.current) fileInputRef.current.value = "";
+  };
+
+  const onDrop = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    setDragOver(false);
+    const f = e.dataTransfer.files?.[0];
+    if (f) void onUpload(f);
   };
 
   const submit = async () => {
@@ -186,19 +278,127 @@ export function BrandFormDialog({ open, onOpenChange, companies, defaultCompanyI
             <p className="text-xs text-muted-foreground">Steuert Ansprache und Wortwahl in generierten Texten.</p>
           </div>
 
+          {/* Logo: Drag-&-Drop oder klassisches Hochladen */}
+          <div className="space-y-1.5">
+            <Label>Logo</Label>
+            <div
+              onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
+              onDragLeave={() => setDragOver(false)}
+              onDrop={onDrop}
+              onClick={() => fileInputRef.current?.click()}
+              className={`relative cursor-pointer rounded-md border-2 border-dashed transition-colors ${
+                dragOver ? "border-primary bg-primary/5" : "border-muted-foreground/30 hover:border-muted-foreground/60"
+              }`}
+              data-testid="brand-logo-dropzone"
+            >
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept={ALLOWED_LOGO_MIME.join(",")}
+                className="hidden"
+                disabled={uploading}
+                onChange={onFileInput}
+              />
+              <div className="flex items-center gap-3 p-4">
+                {logoUrl ? (
+                  <img src={logoUrl} alt="Logo-Vorschau" className="h-14 w-14 object-contain rounded border bg-white p-1" />
+                ) : (
+                  <div className="h-14 w-14 rounded bg-muted flex items-center justify-center text-muted-foreground">
+                    <ImageIcon className="h-6 w-6" />
+                  </div>
+                )}
+                <div className="flex-1 min-w-0">
+                  {uploading ? (
+                    <p className="text-sm text-muted-foreground flex items-center gap-2">
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      Wird hochgeladen…
+                    </p>
+                  ) : logoUrl ? (
+                    <>
+                      <p className="text-sm font-medium truncate">Logo geladen</p>
+                      <p className="text-xs text-muted-foreground truncate">{logoUrl}</p>
+                    </>
+                  ) : (
+                    <>
+                      <p className="text-sm font-medium">
+                        Datei hierher ziehen oder klicken
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        PNG, JPEG, SVG, WebP — bis 5 MB
+                      </p>
+                    </>
+                  )}
+                </div>
+                {logoUrl && !uploading && (
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="ghost"
+                    onClick={(e) => { e.stopPropagation(); setLogoUrl(""); setColorsExtracted(null); }}
+                    aria-label="Logo entfernen"
+                  >
+                    <X className="h-4 w-4" />
+                  </Button>
+                )}
+                {!logoUrl && !uploading && (
+                  <Button type="button" size="sm" variant="outline" onClick={(e) => { e.stopPropagation(); fileInputRef.current?.click(); }}>
+                    <Upload className="h-4 w-4 mr-1" />
+                    Hochladen
+                  </Button>
+                )}
+              </div>
+            </div>
+
+            {/* Manuelle URL-Eingabe als Fallback (z. B. CDN-Link) */}
+            <Input
+              value={logoUrl}
+              onChange={e => setLogoUrl(e.target.value)}
+              placeholder="…oder URL eintragen: https://… / /api/storage/objects/…"
+              className="text-xs"
+            />
+
+            {colorsExtracted && (
+              <div className="flex items-center gap-2 text-xs text-muted-foreground" data-testid="brand-colors-extracted">
+                <Sparkles className="h-3.5 w-3.5 text-primary" />
+                <span>Farben aus Logo abgeleitet — du kannst sie unten anpassen.</span>
+              </div>
+            )}
+          </div>
+
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1.5">
               <Label htmlFor="brand-primary">Primärfarbe</Label>
               <div className="flex gap-2">
-                <Input id="brand-primary" type="color" value={primaryColor} onChange={e => setPrimaryColor(e.target.value)} className="w-14 p-1" />
-                <Input value={primaryColor} onChange={e => setPrimaryColor(e.target.value)} className="flex-1" />
+                <Input
+                  id="brand-primary"
+                  type="color"
+                  value={primaryColor}
+                  onChange={e => { setPrimaryColor(e.target.value); setPrimaryTouched(true); primaryTouchedRef.current = true; }}
+                  className="w-14 p-1"
+                />
+                <Input
+                  value={primaryColor}
+                  onChange={e => { setPrimaryColor(e.target.value); setPrimaryTouched(true); primaryTouchedRef.current = true; }}
+                  className="flex-1"
+                />
               </div>
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="brand-secondary">Sekundärfarbe (optional)</Label>
               <div className="flex gap-2">
-                <Input id="brand-secondary" type="color" value={secondaryColor || "#000000"} onChange={e => setSecondaryColor(e.target.value)} className="w-14 p-1" />
-                <Input value={secondaryColor} onChange={e => setSecondaryColor(e.target.value)} className="flex-1" placeholder="leer = nur Primärfarbe" />
+                <Input
+                  id="brand-secondary"
+                  type="color"
+                  value={secondaryColor || "#000000"}
+                  onChange={e => { setSecondaryColor(e.target.value); setSecondaryTouched(true); secondaryTouchedRef.current = true; }}
+                  className="w-14 p-1"
+                />
+                <Input
+                  value={secondaryColor}
+                  onChange={e => { setSecondaryColor(e.target.value); setSecondaryTouched(true); secondaryTouchedRef.current = true; }}
+                  className="flex-1"
+                  placeholder="leer = nur Primärfarbe"
+                />
               </div>
             </div>
           </div>
@@ -210,23 +410,6 @@ export function BrandFormDialog({ open, onOpenChange, companies, defaultCompanyI
           <div className="space-y-1.5">
             <Label htmlFor="brand-address">Adresszeile (Impressum)</Label>
             <Input id="brand-address" value={addressLine} onChange={e => setAddressLine(e.target.value)} placeholder="Musterstraße 1, 10115 Berlin" />
-          </div>
-
-          <div className="space-y-1.5">
-            <Label htmlFor="brand-logo">Logo</Label>
-            <div className="flex items-center gap-2">
-              <Input id="brand-logo" value={logoUrl} onChange={e => setLogoUrl(e.target.value)} placeholder="/api/storage/objects/… oder https://…" className="flex-1" />
-              <label className="inline-flex items-center gap-1 text-sm border rounded-md px-3 py-1.5 cursor-pointer hover:bg-muted">
-                <Upload className="h-4 w-4" />
-                Hochladen
-                <input type="file" accept="image/png,image/jpeg,image/svg+xml" className="hidden" disabled={uploading}
-                  onChange={e => { const f = e.target.files?.[0]; if (f) void onUpload(f); }} />
-              </label>
-            </div>
-            {uploading && <p className="text-xs text-muted-foreground">Wird hochgeladen…</p>}
-            {logoUrl && !uploading && (
-              <img src={logoUrl} alt="logo preview" className="mt-1 max-h-12 border rounded bg-white p-1" />
-            )}
           </div>
         </div>
 
