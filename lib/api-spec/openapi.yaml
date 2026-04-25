@@ -8535,6 +8535,21 @@ components:
         tokenPlaintext:
           description: Wird ausschliesslich beim POST-Create gesetzt — danach IMMER null.
           type: ["string", "null"]
+        emailSent:
+          description: |
+            Ergebnis des Einladungs-E-Mail-Versands. Nur beim POST-Create gesetzt
+            (oder null, wenn kein Versand angefordert oder ein Validierungsfehler
+            beim Magic-Link-URL-Bau aufgetreten ist).
+          oneOf:
+            - type: "null"
+            - type: object
+              required: [ok, provider]
+              properties:
+                ok: { type: boolean }
+                provider:
+                  type: string
+                  description: "z.B. 'resend' (echter Versand) oder 'log' (Dev-Modus, nur Logger)."
+                error: { type: ["string", "null"] }
 
     ExternalCollaboratorCreate:
       type: object
@@ -8565,6 +8580,23 @@ components:
           minimum: 1
           maximum: 30
           default: 14
+        sendEmail:
+          description: |
+            Wenn true (Default), verschickt der Server unmittelbar nach dem
+            Erstellen des Magic-Links eine gebrandete Einladungs-E-Mail an die
+            angegebene Adresse. Auf false setzen, wenn der Link nur erzeugt
+            werden soll (z.B. um ihn manuell zu verteilen).
+          type: boolean
+          default: true
+        magicLinkBaseUrl:
+          description: |
+            Optionale absolute Basis-URL (Schema + Host + ggf. Web-App-Base-Pfad,
+            ohne Trailing-Slash), an die "/external/<token>" angehaengt wird,
+            um die Einladungs-URL zu bauen. Muss zum Origin des Requests passen
+            (Schutz vor Phishing-Relay). Wenn nicht gesetzt, wird die URL aus
+            dem Request abgeleitet.
+          type: ["string", "null"]
+          format: uri
 
     ExternalCollaboratorEvent:
       description: Aktivitaets-Event eines Magic-Links (Audit-Trail). Tenant-isoliert.

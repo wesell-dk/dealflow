@@ -1814,7 +1814,15 @@ function ExternalCollaboratorsCard({ contractId }: { contractId: string }) {
   const [expiresInDays, setExpiresInDays] = useState(14);
   const [editableFields, setEditableFields] = useState<string[]>([]);
   const [ipAllowlistText, setIpAllowlistText] = useState("");
-  const [createdToken, setCreatedToken] = useState<{ url: string; email: string } | null>(null);
+  const [sendEmail, setSendEmail] = useState(true);
+  const [createdToken, setCreatedToken] = useState<
+    | {
+        url: string;
+        email: string;
+        emailSent: { ok: boolean; provider: string; error?: string | null } | null;
+      }
+    | null
+  >(null);
 
   const EDITABLE_FIELD_KEYS = ["effectiveFrom", "effectiveTo", "governingLaw", "jurisdiction"] as const;
 
@@ -1822,6 +1830,7 @@ function ExternalCollaboratorsCard({ contractId }: { contractId: string }) {
     setEmail(""); setName(""); setOrganization("");
     setCapComment(true); setCapEditFields(false); setCapSign(false);
     setExpiresInDays(14); setEditableFields([]); setIpAllowlistText("");
+    setSendEmail(true);
   }
 
   function toggleEditableField(field: string) {
@@ -1842,6 +1851,11 @@ function ExternalCollaboratorsCard({ contractId }: { contractId: string }) {
       .split(/[\s,;\n]+/)
       .map(s => s.trim())
       .filter(Boolean);
+    // Build absolute magic-link base URL relative to current origin + BASE_URL.
+    // The server appends "/external/<token>" so the email and the success
+    // dialog show identical URLs even when the web app is mounted under a sub-path.
+    const base = import.meta.env.BASE_URL.replace(/\/$/, "");
+    const magicLinkBaseUrl = `${window.location.origin}${base}`;
     try {
       const r = await create.mutateAsync({
         id: contractId,
@@ -1853,16 +1867,24 @@ function ExternalCollaboratorsCard({ contractId }: { contractId: string }) {
           expiresInDays,
           editableFields: (capEditFields ? editableFields : []) as ExternalCollaboratorCreate["editableFields"],
           ipAllowlist,
+          sendEmail,
+          magicLinkBaseUrl,
         },
       });
-      // Build absolute magic-link URL relative to current origin + BASE_URL.
-      const base = import.meta.env.BASE_URL.replace(/\/$/, "");
-      const url = `${window.location.origin}${base}/external/${r.tokenPlaintext ?? ""}`;
-      setCreatedToken({ url, email: r.email });
+      const url = `${magicLinkBaseUrl}/external/${r.tokenPlaintext ?? ""}`;
+      setCreatedToken({ url, email: r.email, emailSent: r.emailSent ?? null });
       setOpen(false);
       reset();
       qc.invalidateQueries({ queryKey: getListExternalCollaboratorsQueryKey(contractId) });
-      toast({ title: t("pages.contracts.extCollabCreated") });
+      const sentOk = r.emailSent?.ok === true;
+      toast({
+        title: t("pages.contracts.extCollabCreated"),
+        description: sendEmail
+          ? sentOk
+            ? t("pages.contracts.extCollabEmailSentToast", { email: r.email })
+            : t("pages.contracts.extCollabEmailFailedToast")
+          : undefined,
+      });
     } catch (e) {
       toast({ title: String(e), variant: "destructive" });
     }
@@ -2076,6 +2098,18 @@ function ExternalCollaboratorsCard({ contractId }: { contractId: string }) {
               />
               <p className="text-[11px] text-muted-foreground">{t("pages.contracts.extCollabIpAllowlistHint")}</p>
             </div>
+            <div className="space-y-1 border-t pt-3">
+              <label className="flex items-center gap-2 text-sm font-medium cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={sendEmail}
+                  onChange={(e) => setSendEmail(e.target.checked)}
+                  data-testid="ext-collab-send-email"
+                />
+                {t("pages.contracts.extCollabSendEmail")}
+              </label>
+              <p className="text-[11px] text-muted-foreground">{t("pages.contracts.extCollabSendEmailHint")}</p>
+            </div>
             <div className="flex justify-end gap-2 pt-2">
               <Button variant="outline" size="sm" onClick={() => setOpen(false)}>
                 {t("common.cancel")}
@@ -2129,6 +2163,25 @@ function ExternalCollaboratorsCard({ contractId }: { contractId: string }) {
               >
                 {t("pages.contracts.extCollabTokenCopy")}
               </Button>
+              {createdToken.emailSent && (
+                <div
+                  className={
+                    "text-xs rounded border p-2 " +
+                    (createdToken.emailSent.ok
+                      ? "bg-emerald-500/10 border-emerald-500/30 text-emerald-700"
+                      : "bg-rose-500/10 border-rose-500/30 text-rose-700")
+                  }
+                  data-testid="ext-collab-email-status"
+                >
+                  {createdToken.emailSent.ok
+                    ? t("pages.contracts.extCollabEmailStatusSent", {
+                        provider: createdToken.emailSent.provider,
+                      })
+                    : t("pages.contracts.extCollabEmailStatusFailed", {
+                        error: createdToken.emailSent.error ?? "unknown",
+                      })}
+                </div>
+              )}
             </div>
           )}
         </DialogContent>

@@ -4166,6 +4166,20 @@ export const ExternalCollaboratorStatus = {
   revoked: "revoked",
 } as const;
 
+/**
+ * Ergebnis des Einladungs-E-Mail-Versands. Nur beim POST-Create gesetzt
+(oder null, wenn kein Versand angefordert oder ein Validierungsfehler
+beim Magic-Link-URL-Bau aufgetreten ist).
+
+ */
+export type ExternalCollaboratorEmailSent = null | {
+  ok: boolean;
+  /** z.B. 'resend' (echter Versand) oder 'log' (Dev-Modus, nur Logger). */
+  provider: string;
+  /** @nullable */
+  error?: string | null;
+};
+
 export interface ExternalCollaborator {
   id: string;
   contractId: string;
@@ -4194,6 +4208,11 @@ export interface ExternalCollaborator {
    * @nullable
    */
   tokenPlaintext?: string | null;
+  /** Ergebnis des Einladungs-E-Mail-Versands. Nur beim POST-Create gesetzt
+(oder null, wenn kein Versand angefordert oder ein Validierungsfehler
+beim Magic-Link-URL-Bau aufgetreten ist).
+ */
+  emailSent?: ExternalCollaboratorEmailSent;
 }
 
 export type ExternalCollaboratorCreateCapabilitiesItem =
@@ -4236,6 +4255,22 @@ export interface ExternalCollaboratorCreate {
    * @maximum 30
    */
   expiresInDays?: number;
+  /** Wenn true (Default), verschickt der Server unmittelbar nach dem
+Erstellen des Magic-Links eine gebrandete Einladungs-E-Mail an die
+angegebene Adresse. Auf false setzen, wenn der Link nur erzeugt
+werden soll (z.B. um ihn manuell zu verteilen).
+ */
+  sendEmail?: boolean;
+  /**
+   * Optionale absolute Basis-URL (Schema + Host + ggf. Web-App-Base-Pfad,
+ohne Trailing-Slash), an die "/external/<token>" angehaengt wird,
+um die Einladungs-URL zu bauen. Muss zum Origin des Requests passen
+(Schutz vor Phishing-Relay). Wenn nicht gesetzt, wird die URL aus
+dem Request abgeleitet.
+
+   * @nullable
+   */
+  magicLinkBaseUrl?: string | null;
 }
 
 export type ExternalCollaboratorEventAction =

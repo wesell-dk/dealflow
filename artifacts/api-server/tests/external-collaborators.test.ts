@@ -1,6 +1,6 @@
 import { after, before, describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { eq, inArray } from "drizzle-orm";
+import { and, eq, inArray } from "drizzle-orm";
 import {
   db,
   pool,
@@ -33,6 +33,7 @@ interface CollabResp {
   expiresAt: string;
   tokenPlaintext: string | null;
   lastUsedAt: string | null;
+  emailSent: { ok: boolean; provider: string; error?: string | null } | null;
 }
 
 describe("external collaborators — magic-link flow", () => {
@@ -553,5 +554,165 @@ describe("external collaborators — magic-link flow", () => {
     // Cross-Tenant ist 404 (Vertrag nicht sichtbar).
     const cross = await bob.get(`/api/v1/contracts/${worldA.contractId}/external-events`);
     assert.equal(cross.status, 404);
+  });
+
+  // ── Task #107: E-Mail-Versand fuer neue Magic-Links ───────────────────
+
+  it("schickt per Default eine Einladungs-E-Mail (log-Provider in Tests)", async () => {
+    // Test-Env hat keinen RESEND_API_KEY -> 'log'-Provider ist aktiv und
+    // liefert immer ok=true. Damit verifizieren wir Default-Verhalten +
+    // Audit-/Event-Trail ohne externe Abhaengigkeit.
+    const r = await alice.post(`/api/v1/contracts/${worldA.contractId}/external-collaborators`, {
+      email: "invite-default@example.com",
+      capabilities: ["view"],
+      // sendEmail bewusst weggelassen -> Default 'true'.
+    });
+    assert.equal(r.status, 201);
+    const c = r.body as CollabResp;
+    assert.ok(c.emailSent, "emailSent muss bei Default vorhanden sein");
+    assert.equal(c.emailSent!.ok, true);
+    assert.equal(c.emailSent!.provider, "log");
+
+    // Collab-Event 'invite_emailed' muss existieren.
+    const events = await db.select().from(externalCollaboratorEventsTable)
+      .where(eq(externalCollaboratorEventsTable.collaboratorId, c.id));
+    assert.ok(
+      events.some((e) => e.action === "invite_emailed"),
+      "invite_emailed event muss geschrieben sein",
+    );
+
+    // Audit-Eintrag 'external_collaborator_email_sent' muss existieren.
+    const audits = await db.select().from(auditLogTable)
+      .where(and(
+        eq(auditLogTable.entityId, worldA.contractId),
+        eq(auditLogTable.action, "external_collaborator_email_sent"),
+      ));
+    assert.ok(
+      audits.some((a) => {
+        const after = a.afterJson ? (JSON.parse(a.afterJson) as { collaboratorId?: string }) : null;
+        return after?.collaboratorId === c.id;
+      }),
+      "external_collaborator_email_sent Audit muss diesen Collab referenzieren",
+    );
+  });
+
+  it("sendEmail=false ueberspringt den Versand und schreibt KEIN Email-Event", async () => {
+    const r = await alice.post(`/api/v1/contracts/${worldA.contractId}/external-collaborators`, {
+      email: "no-email@example.com",
+      capabilities: ["view"],
+      sendEmail: false,
+    });
+    assert.equal(r.status, 201);
+    const c = r.body as CollabResp;
+    assert.equal(c.emailSent, null, "kein E-Mail-Status wenn Versand abgeschaltet");
+
+    const events = await db.select().from(externalCollaboratorEventsTable)
+      .where(eq(externalCollaboratorEventsTable.collaboratorId, c.id));
+    assert.ok(
+      !events.some((e) => e.action === "invite_emailed" || e.action === "invite_email_failed"),
+      "weder invite_emailed noch invite_email_failed darf existieren",
+    );
+
+    const audits = await db.select().from(auditLogTable)
+      .where(and(
+        eq(auditLogTable.entityId, worldA.contractId),
+        eq(auditLogTable.action, "external_collaborator_email_sent"),
+      ));
+    assert.ok(
+      !audits.some((a) => {
+        const after = a.afterJson ? (JSON.parse(a.afterJson) as { collaboratorId?: string }) : null;
+        return after?.collaboratorId === c.id;
+      }),
+      "kein Email-Audit fuer diesen Collab",
+    );
+  });
+
+  it("ignoriert cross-host magicLinkBaseUrl still und faellt auf APP_BASE_URL zurueck (Phishing-Schutz)", async () => {
+    // Wuerde der Server einen fremden Host akzeptieren, koennte ein Angreifer
+    // gebrandete E-Mails von unserer Domain mit Links auf SEINEM Host
+    // erzeugen. Mit konfiguriertem APP_BASE_URL muss der Server cross-host
+    // BaseUrls still verwerfen und auf die kanonische Origin zurueckfallen.
+    const prev = process.env["APP_BASE_URL"];
+    process.env["APP_BASE_URL"] = "https://app.dealflow.example";
+    try {
+      const r = await alice.post(`/api/v1/contracts/${worldA.contractId}/external-collaborators`, {
+        email: "phishing-host@example.com",
+        capabilities: ["view"],
+        magicLinkBaseUrl: "https://attacker.example.com",
+      });
+      assert.equal(r.status, 201);
+      const c = r.body as CollabResp;
+      assert.ok(c.emailSent && c.emailSent.ok, "Versand laeuft mit Fallback-URL");
+      assert.ok(c.tokenPlaintext, "Magic-Link wird erstellt");
+
+      // Erfolgs-Audit existiert; Failure-Audit darf NICHT existieren.
+      const failed = await db.select().from(auditLogTable)
+        .where(and(
+          eq(auditLogTable.entityId, worldA.contractId),
+          eq(auditLogTable.action, "external_collaborator_email_failed"),
+        ));
+      assert.ok(
+        !failed.some((a) => {
+          const after = a.afterJson ? (JSON.parse(a.afterJson) as { collaboratorId?: string }) : null;
+          return after?.collaboratorId === c.id;
+        }),
+        "kein failure-Audit — Fallback war erfolgreich",
+      );
+    } finally {
+      if (prev === undefined) delete process.env["APP_BASE_URL"];
+      else process.env["APP_BASE_URL"] = prev;
+    }
+  });
+
+
+  it("rejected magicLinkBaseUrl mit nicht-http(s)-Schema als emailSent.ok=false", async () => {
+    // ftp:// (oder javascript:, file:, ...) hat im Browser/Mailclient nichts
+    // zu suchen. Der Server muss das hart ablehnen, damit nichts Skurriles
+    // in der Einladungs-E-Mail landet.
+    const r = await alice.post(`/api/v1/contracts/${worldA.contractId}/external-collaborators`, {
+      email: "bad-scheme@example.com",
+      capabilities: ["view"],
+      magicLinkBaseUrl: "ftp://example.com/dealflow-web",
+    });
+    assert.equal(r.status, 201);
+    const c = r.body as CollabResp;
+    assert.ok(c.emailSent, "emailSent muss vorhanden sein");
+    assert.equal(c.emailSent!.ok, false, "non-http(s) base muss versand verhindern");
+    assert.match(
+      String(c.emailSent!.error ?? ""),
+      /invalid magicLinkBaseUrl/,
+      "Fehlertext muss die Ursache nennen",
+    );
+    assert.ok(c.tokenPlaintext, "Magic-Link wird trotz Email-Fehler erstellt");
+
+    // Failure-Audit + collab-event existieren.
+    const audits = await db.select().from(auditLogTable)
+      .where(and(
+        eq(auditLogTable.entityId, worldA.contractId),
+        eq(auditLogTable.action, "external_collaborator_email_failed"),
+      ));
+    assert.ok(
+      audits.some((a) => {
+        const after = a.afterJson ? (JSON.parse(a.afterJson) as { collaboratorId?: string }) : null;
+        return after?.collaboratorId === c.id;
+      }),
+      "external_collaborator_email_failed Audit muss diesen Collab referenzieren",
+    );
+  });
+
+  it("akzeptiert magicLinkBaseUrl mit gleichem Host (Web-App-Subpath)", async () => {
+    // Test-Server bindet auf 127.0.0.1:<port>; req.headers.host enthaelt
+    // genau diesen Host. Wir bauen daraus einen Subpath, der vom Validator
+    // akzeptiert werden muss.
+    const url = new URL(server.baseUrl);
+    const r = await alice.post(`/api/v1/contracts/${worldA.contractId}/external-collaborators`, {
+      email: "samehost@example.com",
+      capabilities: ["view"],
+      magicLinkBaseUrl: `${url.protocol}//${url.host}/dealflow-web`,
+    });
+    assert.equal(r.status, 201);
+    const c = r.body as CollabResp;
+    assert.ok(c.emailSent && c.emailSent.ok, "Versand muss erfolgreich sein");
+    assert.equal(c.emailSent!.provider, "log");
   });
 });

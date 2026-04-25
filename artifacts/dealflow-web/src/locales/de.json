@@ -274,7 +274,13 @@
       "extActivityAction_commented": "Kommentiert",
       "extActivityAction_edited_fields": "Felder bearbeitet",
       "extActivityAction_revoked": "Widerrufen",
-      "extActivityAction_expired_attempt": "Blockierter Versuch"
+      "extActivityAction_expired_attempt": "Blockierter Versuch",
+      "extCollabSendEmail": "Einladungs-E-Mail senden",
+      "extCollabSendEmailHint": "Sendet automatisch eine gebrandete Einladung mit Magic-Link, Ablaufdatum und Berechtigungen an die angegebene E-Mail-Adresse.",
+      "extCollabEmailSentToast": "Einladungs-E-Mail an {{email}} gesendet.",
+      "extCollabEmailFailedToast": "Magic-Link erstellt, aber Einladungs-E-Mail konnte nicht gesendet werden — bitte Link manuell teilen.",
+      "extCollabEmailStatusSent": "E-Mail erfolgreich gesendet (Provider: {{provider}}).",
+      "extCollabEmailStatusFailed": "E-Mail-Versand fehlgeschlagen: {{error}} — bitte Link manuell teilen."
     },
     "clauseSuggestions": {
       "title": "Klausel-Vorschläge",

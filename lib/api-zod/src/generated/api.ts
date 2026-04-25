@@ -7100,6 +7100,23 @@ export const ListExternalCollaboratorsResponseItem = zod.object({
     .describe(
       "Wird ausschliesslich beim POST-Create gesetzt — danach IMMER null.",
     ),
+  emailSent: zod
+    .union([
+      zod.null(),
+      zod.object({
+        ok: zod.boolean(),
+        provider: zod
+          .string()
+          .describe(
+            "z.B. 'resend' (echter Versand) oder 'log' (Dev-Modus, nur Logger).",
+          ),
+        error: zod.string().nullish(),
+      }),
+    ])
+    .optional()
+    .describe(
+      "Ergebnis des Einladungs-E-Mail-Versands. Nur beim POST-Create gesetzt\n(oder null, wenn kein Versand angefordert oder ein Validierungsfehler\nbeim Magic-Link-URL-Bau aufgetreten ist).\n",
+    ),
 });
 export const ListExternalCollaboratorsResponse = zod.array(
   ListExternalCollaboratorsResponseItem,
@@ -7116,6 +7133,8 @@ export const createExternalCollaboratorBodyIpAllowlistMax = 32;
 
 export const createExternalCollaboratorBodyExpiresInDaysDefault = 14;
 export const createExternalCollaboratorBodyExpiresInDaysMax = 30;
+
+export const createExternalCollaboratorBodySendEmailDefault = true;
 
 export const CreateExternalCollaboratorBody = zod.object({
   email: zod.string().email(),
@@ -7149,6 +7168,19 @@ export const CreateExternalCollaboratorBody = zod.object({
     .min(1)
     .max(createExternalCollaboratorBodyExpiresInDaysMax)
     .default(createExternalCollaboratorBodyExpiresInDaysDefault),
+  sendEmail: zod
+    .boolean()
+    .default(createExternalCollaboratorBodySendEmailDefault)
+    .describe(
+      "Wenn true (Default), verschickt der Server unmittelbar nach dem\nErstellen des Magic-Links eine gebrandete Einladungs-E-Mail an die\nangegebene Adresse. Auf false setzen, wenn der Link nur erzeugt\nwerden soll (z.B. um ihn manuell zu verteilen).\n",
+    ),
+  magicLinkBaseUrl: zod
+    .string()
+    .url()
+    .nullish()
+    .describe(
+      'Optionale absolute Basis-URL (Schema + Host + ggf. Web-App-Base-Pfad,\nohne Trailing-Slash), an die \"\/external\/<token>\" angehaengt wird,\num die Einladungs-URL zu bauen. Muss zum Origin des Requests passen\n(Schutz vor Phishing-Relay). Wenn nicht gesetzt, wird die URL aus\ndem Request abgeleitet.\n',
+    ),
 });
 
 /**
@@ -7197,6 +7229,23 @@ export const GetExternalCollaboratorResponse = zod.object({
     .describe(
       "Wird ausschliesslich beim POST-Create gesetzt — danach IMMER null.",
     ),
+  emailSent: zod
+    .union([
+      zod.null(),
+      zod.object({
+        ok: zod.boolean(),
+        provider: zod
+          .string()
+          .describe(
+            "z.B. 'resend' (echter Versand) oder 'log' (Dev-Modus, nur Logger).",
+          ),
+        error: zod.string().nullish(),
+      }),
+    ])
+    .optional()
+    .describe(
+      "Ergebnis des Einladungs-E-Mail-Versands. Nur beim POST-Create gesetzt\n(oder null, wenn kein Versand angefordert oder ein Validierungsfehler\nbeim Magic-Link-URL-Bau aufgetreten ist).\n",
+    ),
 });
 
 /**
@@ -7244,6 +7293,23 @@ export const RevokeExternalCollaboratorResponse = zod.object({
     .nullish()
     .describe(
       "Wird ausschliesslich beim POST-Create gesetzt — danach IMMER null.",
+    ),
+  emailSent: zod
+    .union([
+      zod.null(),
+      zod.object({
+        ok: zod.boolean(),
+        provider: zod
+          .string()
+          .describe(
+            "z.B. 'resend' (echter Versand) oder 'log' (Dev-Modus, nur Logger).",
+          ),
+        error: zod.string().nullish(),
+      }),
+    ])
+    .optional()
+    .describe(
+      "Ergebnis des Einladungs-E-Mail-Versands. Nur beim POST-Create gesetzt\n(oder null, wenn kein Versand angefordert oder ein Validierungsfehler\nbeim Magic-Link-URL-Bau aufgetreten ist).\n",
     ),
 });
 

@@ -5,6 +5,8 @@ import { BlockList } from 'node:net';
 import { ObjectStorageService } from '../lib/objectStorage';
 import { extractTextFromUpload } from '../lib/extractContractText';
 import { validateInline } from '../middlewares/validate';
+import { sendCollaboratorInviteEmail } from '../lib/collaboratorEmail';
+import { buildMagicLinkUrl } from '../lib/magicLinkUrl';
 import {
   computeRenewalRiskScore,
   type RenewalRiskFactor,
@@ -13394,7 +13396,10 @@ function ipMatchesAllowlist(reqIp: string | undefined | null, allowlist: string[
 
 function mapCollab(
   row: typeof externalCollaboratorsTable.$inferSelect,
-  opts: { tokenPlaintext?: string } = {},
+  opts: {
+    tokenPlaintext?: string;
+    emailSent?: { ok: boolean; provider: string; error?: string | null } | null;
+  } = {},
 ) {
   const now = Date.now();
   const expired = row.expiresAt.getTime() <= now;
@@ -13418,6 +13423,8 @@ function mapCollab(
     lastUsedAt: row.lastUsedAt ? row.lastUsedAt.toISOString() : null,
     // Plaintext only ever returned at create-time.
     tokenPlaintext: opts.tokenPlaintext ?? null,
+    // emailSent only ever returned at create-time as a status hint for the UI.
+    emailSent: opts.emailSent ?? null,
   };
 }
 
@@ -13530,6 +13537,8 @@ router.post('/contracts/:id/external-collaborators', async (req, res) => {
     editableFields?: unknown;
     ipAllowlist?: unknown;
     expiresInDays?: unknown;
+    sendEmail?: unknown;
+    magicLinkBaseUrl?: unknown;
   };
   if (!isEmail(body.email)) {
     res.status(400).json({ error: 'email must be a valid e-mail address' }); return;
@@ -13622,7 +13631,75 @@ router.post('/contracts/:id/external-collaborators', async (req, res) => {
       expiresAt: expiresAt.toISOString(),
     },
   });
-  res.status(201).json(mapCollab(row!, { tokenPlaintext }));
+
+  // --- E-Mail-Versand (optional, default: an) -----------------------------
+  // Externer Anwalt soll nicht erst aus der UI manuell den Link kopieren.
+  // sendEmail kann pro Request via Toggle deaktiviert werden — Default
+  // bleibt 'true', damit bestehende Clients automatisch profitieren.
+  let emailSent: { ok: boolean; provider: string; error?: string | null } | null = null;
+  const wantsEmail = body.sendEmail === undefined ? true : body.sendEmail === true;
+  if (wantsEmail) {
+    const baseUrl = buildMagicLinkUrl(req, body.magicLinkBaseUrl, tokenPlaintext);
+    if (!baseUrl) {
+      // Kein gueltiger Link konstruierbar — Versand wird ausgelassen, der
+      // Magic-Link selbst bleibt nutzbar. Damit der Vorfall im Audit-Trail
+      // landet (und nicht still im Response steckt), schreiben wir hier
+      // explizit failure-Event + Audit-Eintrag.
+      emailSent = { ok: false, provider: 'log', error: 'invalid magicLinkBaseUrl' };
+      await recordCollabEvent(row!, 'invite_email_failed', {
+        provider: 'log',
+        error: 'invalid magicLinkBaseUrl',
+      }, req);
+      await writeAuditFromReq(req, {
+        entityType: 'contract', entityId: c.id,
+        action: 'external_collaborator_email_failed',
+        summary: `Einladungs-E-Mail an ${email} fehlgeschlagen (invalid magicLinkBaseUrl)`,
+        after: {
+          collaboratorId: id,
+          provider: 'log',
+          error: 'invalid magicLinkBaseUrl',
+        },
+      });
+    } else {
+      const [deal] = await db.select().from(dealsTable).where(eq(dealsTable.id, c.dealId));
+      const brandName = deal
+        ? (await db.select().from(brandsTable).where(eq(brandsTable.id, deal.brandId)))[0]?.name ?? null
+        : null;
+      const result = await sendCollaboratorInviteEmail({
+        recipientEmail: email,
+        recipientName: typeof body.name === 'string' ? body.name.trim() || null : null,
+        organization: typeof body.organization === 'string' ? body.organization.trim() || null : null,
+        inviterName: scope.user.name,
+        inviterEmail: scope.user.email ?? null,
+        brandName,
+        contractTitle: c.title,
+        capabilities: caps,
+        expiresAt,
+        magicLinkUrl: baseUrl,
+        ipAllowlistCount: ipAllowlist.length,
+      });
+      emailSent = { ok: result.ok, provider: result.provider, error: result.error ?? null };
+      await recordCollabEvent(row!, result.ok ? 'invite_emailed' : 'invite_email_failed', {
+        provider: result.provider,
+        messageId: result.messageId ?? null,
+        error: result.error ?? null,
+      }, req);
+      await writeAuditFromReq(req, {
+        entityType: 'contract', entityId: c.id,
+        action: result.ok ? 'external_collaborator_email_sent' : 'external_collaborator_email_failed',
+        summary: result.ok
+          ? `Einladungs-E-Mail an ${email} verschickt (${result.provider})`
+          : `Einladungs-E-Mail an ${email} fehlgeschlagen (${result.provider})`,
+        after: {
+          collaboratorId: id,
+          provider: result.provider,
+          error: result.error ?? null,
+        },
+      });
+    }
+  }
+
+  res.status(201).json(mapCollab(row!, { tokenPlaintext, emailSent }));
 });
 
 // --- GET /external-collaborators/:id (single, fuer Audit-Deeplink) -------

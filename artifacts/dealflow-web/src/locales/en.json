@@ -458,7 +458,13 @@
       "extActivityAction_commented": "Commented",
       "extActivityAction_edited_fields": "Edited fields",
       "extActivityAction_revoked": "Revoked",
-      "extActivityAction_expired_attempt": "Blocked attempt"
+      "extActivityAction_expired_attempt": "Blocked attempt",
+      "extCollabSendEmail": "Send invite email",
+      "extCollabSendEmailHint": "Automatically sends a branded invitation with the magic link, expiry date and capabilities to the address above.",
+      "extCollabEmailSentToast": "Invitation email sent to {{email}}.",
+      "extCollabEmailFailedToast": "Magic link created, but the invitation email could not be sent — please share the link manually.",
+      "extCollabEmailStatusSent": "Email delivered successfully (provider: {{provider}}).",
+      "extCollabEmailStatusFailed": "Email delivery failed: {{error}} — please share the link manually."
     },
     "negotiations": {
       "title": "Negotiations",

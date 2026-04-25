@@ -223,6 +223,7 @@ export * from "./externalCollaboratorCreate";
 export * from "./externalCollaboratorCreateCapabilitiesItem";
 export * from "./externalCollaboratorCreateEditableFieldsItem";
 export * from "./externalCollaboratorEditableFieldsItem";
+export * from "./externalCollaboratorEmailSent";
 export * from "./externalCollaboratorEvent";
 export * from "./externalCollaboratorEventAction";
 export * from "./externalCollaboratorEventPayload";

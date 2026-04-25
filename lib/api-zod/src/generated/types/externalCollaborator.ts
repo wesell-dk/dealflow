@@ -9,6 +9,7 @@ Multi-tenant, multi-company, multi-brand. Deal-centric.
  */
 import type { ExternalCollaboratorCapabilitiesItem } from "./externalCollaboratorCapabilitiesItem";
 import type { ExternalCollaboratorEditableFieldsItem } from "./externalCollaboratorEditableFieldsItem";
+import type { ExternalCollaboratorEmailSent } from "./externalCollaboratorEmailSent";
 import type { ExternalCollaboratorStatus } from "./externalCollaboratorStatus";
 
 export interface ExternalCollaborator {
@@ -39,4 +40,9 @@ export interface ExternalCollaborator {
    * @nullable
    */
   tokenPlaintext?: string | null;
+  /** Ergebnis des Einladungs-E-Mail-Versands. Nur beim POST-Create gesetzt
+(oder null, wenn kein Versand angefordert oder ein Validierungsfehler
+beim Magic-Link-URL-Bau aufgetreten ist).
+ */
+  emailSent?: ExternalCollaboratorEmailSent;
 }
