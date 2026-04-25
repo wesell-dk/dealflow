@@ -8,6 +8,12 @@ import { validateInline } from '../middlewares/validate';
 import { sendCollaboratorInviteEmail } from '../lib/collaboratorEmail';
 import { buildMagicLinkUrl } from '../lib/magicLinkUrl';
 import {
+  sanitizeCompanyName,
+  extractCompanyNameFromTitle,
+  findLegalEntityInText,
+  hasLegalForm,
+} from '../lib/companyName';
+import {
   computeRenewalRiskScore,
   type RenewalRiskFactor,
   type RenewalRiskInput,
@@ -9693,7 +9699,10 @@ function stripTags(html: string): string {
 function extractTitle(html: string): string | null {
   const m = html.match(/<title[^>]*>([^<]+)<\/title>/i);
   if (!m) return null;
-  return decodeEntities(m[1]!).replace(/[|–—\-]\s*(Impressum|Imprint|Home|Startseite|Kontakt|Contact).*$/i, '').trim() || null;
+  // extractCompanyNameFromTitle entfernt Boilerplate-Tokens (Impressum, Imprint,
+  // Home, Kontakt, …) sowohl als Suffix als auch als Präfix und liefert
+  // null, wenn nur Müll übrig bleibt — siehe Bug-Report direct-friendly.de.
+  return extractCompanyNameFromTitle(decodeEntities(m[1]!));
 }
 
 // Sammelt absolute URLs zu möglichen Impressum-/Legal-Seiten aus Startseiten-HTML.
@@ -9847,6 +9856,13 @@ function parseHeuristics(html: string): Partial<EnrichSlot> {
   const le = text.match(/(?:Firma|Anbieter|Verantwortlich|Inhaber|Betreiber)[:\s]+([A-ZÄÖÜ][\w\säöüß.&,\-]+?(?:GmbH(?:\s*&\s*Co\.?\s*KG)?|AG|UG\s*\(haftungsbeschränkt\)|UG|KG|OHG|e\.K\.|GbR|Ltd|LLC|Inc))/);
   if (le) out.legalEntityName = le[1]!.trim();
 
+  // Fallback: erste freistehende "<Name> <Rechtsform>"-Phrase im Plaintext.
+  // Wichtig für Impressen ohne "Firma:"-Marker (z. B. direct-friendly.de).
+  if (!out.legalEntityName) {
+    const found = findLegalEntityInText(text);
+    if (found) out.legalEntityName = found;
+  }
+
   return out;
 }
 
@@ -9917,6 +9933,36 @@ router.post('/accounts/enrich-from-website', async (req, res) => {
     if (JSON.stringify(slot) !== before && !sourceUrl) sourceUrl = page.url;
     // Wenn alle wichtigen Felder gefüllt sind, abbrechen.
     if (slot.billingAddress && slot.phone && slot.vatId && slot.legalEntityName) break;
+  }
+
+  // legalEntityName auch noch sanitizen (Markers können führende ":" oder ".  " hinterlassen).
+  if (slot.legalEntityName) slot.legalEntityName = sanitizeCompanyName(slot.legalEntityName);
+
+  // Defensive Endsanitize: stellt sicher, dass nie ein Boilerplate-Wort ("Impressum") als Name rausgeht.
+  // MUSS vor dem Override-Check stehen, sonst sehen wir "Impressum | Foo" als legitimen Namen.
+  const sanitizedName = sanitizeCompanyName(slot.name);
+
+  // legalEntityName als Name übernehmen, aber konservativ:
+  //  a) wenn nach dem Sanitize gar kein Name übrig ist → immer ersetzen
+  //  b) wenn Brand-Name (z. B. "Stripe") ein Substring der legal entity ist
+  //     ("Stripe Payments Europe Ltd") → upgrade
+  //  c) sonst lieber den vorhandenen Display-Namen behalten — der könnte die
+  //     gewünschte Marke sein, während legalEntityName nur die Mutterfirma
+  //     ist (z. B. Display "Müller Bio" vs. legal "Finest People GmbH" als
+  //     Betreiber). Wir wollen valide Namen NICHT versehentlich überschreiben.
+  if (slot.legalEntityName) {
+    if (!sanitizedName) {
+      slot.name = slot.legalEntityName;
+    } else if (
+      !hasLegalForm(sanitizedName) &&
+      slot.legalEntityName.toLowerCase().includes(sanitizedName.toLowerCase())
+    ) {
+      slot.name = slot.legalEntityName;
+    } else {
+      slot.name = sanitizedName;
+    }
+  } else {
+    slot.name = sanitizedName;
   }
 
   const out = {
