@@ -60,6 +60,7 @@ import type {
   ClauseDeviation,
   ClauseDiff,
   ClauseFamily,
+  ClauseFamilyCuadMapping,
   ClauseVariantTranslation,
   ClauseVariantTranslationUpsert,
   Company,
@@ -87,6 +88,7 @@ import type {
   ContractRiskEnvelope,
   ContractType,
   ContractTypeCreate,
+  ContractTypeCuadExpectation,
   ContractTypeUpdate,
   CopilotChatReply,
   CopilotInsight,
@@ -98,6 +100,8 @@ import type {
   CounterproposalInput,
   CreateAmendmentInput,
   CreateVersionFromReaction201,
+  CuadCategory,
+  CuadCoverage,
   CurrentQuote,
   CustomerReaction,
   DashboardSummary,
@@ -230,6 +234,9 @@ import type {
   SavedViewPatch,
   ScopeTree,
   SearchGdprSubjectsParams,
+  SetClauseFamilyCuadCategoriesBody,
+  SetContractTypeCuadExpectations200,
+  SetContractTypeCuadExpectationsBody,
   SignaturePackage,
   SignaturePackageDetail,
   Tenant,
@@ -8117,6 +8124,518 @@ export function useListContractClauses<
 
   return { ...query, queryKey: queryOptions.queryKey };
 }
+
+/**
+ * @summary Deterministic CUAD-Vollständigkeits-Check für einen Vertrag
+ */
+export const getGetContractCuadCoverageUrl = (id: string) => {
+  return `/api/v1/contracts/${id}/cuad-coverage`;
+};
+
+export const getContractCuadCoverage = async (
+  id: string,
+  options?: RequestInit,
+): Promise<CuadCoverage> => {
+  return customFetch<CuadCoverage>(getGetContractCuadCoverageUrl(id), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getGetContractCuadCoverageQueryKey = (id: string) => {
+  return [`/api/v1/contracts/${id}/cuad-coverage`] as const;
+};
+
+export const getGetContractCuadCoverageQueryOptions = <
+  TData = Awaited<ReturnType<typeof getContractCuadCoverage>>,
+  TError = ErrorType<unknown>,
+>(
+  id: string,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getContractCuadCoverage>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey =
+    queryOptions?.queryKey ?? getGetContractCuadCoverageQueryKey(id);
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof getContractCuadCoverage>>
+  > = ({ signal }) =>
+    getContractCuadCoverage(id, { signal, ...requestOptions });
+
+  return {
+    queryKey,
+    queryFn,
+    enabled: !!id,
+    ...queryOptions,
+  } as UseQueryOptions<
+    Awaited<ReturnType<typeof getContractCuadCoverage>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetContractCuadCoverageQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getContractCuadCoverage>>
+>;
+export type GetContractCuadCoverageQueryError = ErrorType<unknown>;
+
+/**
+ * @summary Deterministic CUAD-Vollständigkeits-Check für einen Vertrag
+ */
+
+export function useGetContractCuadCoverage<
+  TData = Awaited<ReturnType<typeof getContractCuadCoverage>>,
+  TError = ErrorType<unknown>,
+>(
+  id: string,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getContractCuadCoverage>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetContractCuadCoverageQueryOptions(id, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Liste aller 41 CUAD-Kategorien (Taxonomie)
+ */
+export const getListCuadCategoriesUrl = () => {
+  return `/api/v1/cuad/categories`;
+};
+
+export const listCuadCategories = async (
+  options?: RequestInit,
+): Promise<CuadCategory[]> => {
+  return customFetch<CuadCategory[]>(getListCuadCategoriesUrl(), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getListCuadCategoriesQueryKey = () => {
+  return [`/api/v1/cuad/categories`] as const;
+};
+
+export const getListCuadCategoriesQueryOptions = <
+  TData = Awaited<ReturnType<typeof listCuadCategories>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof listCuadCategories>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getListCuadCategoriesQueryKey();
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof listCuadCategories>>
+  > = ({ signal }) => listCuadCategories({ signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof listCuadCategories>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type ListCuadCategoriesQueryResult = NonNullable<
+  Awaited<ReturnType<typeof listCuadCategories>>
+>;
+export type ListCuadCategoriesQueryError = ErrorType<unknown>;
+
+/**
+ * @summary Liste aller 41 CUAD-Kategorien (Taxonomie)
+ */
+
+export function useListCuadCategories<
+  TData = Awaited<ReturnType<typeof listCuadCategories>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof listCuadCategories>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getListCuadCategoriesQueryOptions(options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+export const getGetContractTypeCuadExpectationsUrl = (id: string) => {
+  return `/api/v1/contract-types/${id}/cuad-expectations`;
+};
+
+export const getContractTypeCuadExpectations = async (
+  id: string,
+  options?: RequestInit,
+): Promise<ContractTypeCuadExpectation[]> => {
+  return customFetch<ContractTypeCuadExpectation[]>(
+    getGetContractTypeCuadExpectationsUrl(id),
+    {
+      ...options,
+      method: "GET",
+    },
+  );
+};
+
+export const getGetContractTypeCuadExpectationsQueryKey = (id: string) => {
+  return [`/api/v1/contract-types/${id}/cuad-expectations`] as const;
+};
+
+export const getGetContractTypeCuadExpectationsQueryOptions = <
+  TData = Awaited<ReturnType<typeof getContractTypeCuadExpectations>>,
+  TError = ErrorType<unknown>,
+>(
+  id: string,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getContractTypeCuadExpectations>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey =
+    queryOptions?.queryKey ?? getGetContractTypeCuadExpectationsQueryKey(id);
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof getContractTypeCuadExpectations>>
+  > = ({ signal }) =>
+    getContractTypeCuadExpectations(id, { signal, ...requestOptions });
+
+  return {
+    queryKey,
+    queryFn,
+    enabled: !!id,
+    ...queryOptions,
+  } as UseQueryOptions<
+    Awaited<ReturnType<typeof getContractTypeCuadExpectations>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetContractTypeCuadExpectationsQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getContractTypeCuadExpectations>>
+>;
+export type GetContractTypeCuadExpectationsQueryError = ErrorType<unknown>;
+
+export function useGetContractTypeCuadExpectations<
+  TData = Awaited<ReturnType<typeof getContractTypeCuadExpectations>>,
+  TError = ErrorType<unknown>,
+>(
+  id: string,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getContractTypeCuadExpectations>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetContractTypeCuadExpectationsQueryOptions(
+    id,
+    options,
+  );
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+export const getSetContractTypeCuadExpectationsUrl = (id: string) => {
+  return `/api/v1/contract-types/${id}/cuad-expectations`;
+};
+
+export const setContractTypeCuadExpectations = async (
+  id: string,
+  setContractTypeCuadExpectationsBody: SetContractTypeCuadExpectationsBody,
+  options?: RequestInit,
+): Promise<SetContractTypeCuadExpectations200> => {
+  return customFetch<SetContractTypeCuadExpectations200>(
+    getSetContractTypeCuadExpectationsUrl(id),
+    {
+      ...options,
+      method: "PUT",
+      headers: { "Content-Type": "application/json", ...options?.headers },
+      body: JSON.stringify(setContractTypeCuadExpectationsBody),
+    },
+  );
+};
+
+export const getSetContractTypeCuadExpectationsMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof setContractTypeCuadExpectations>>,
+    TError,
+    { id: string; data: BodyType<SetContractTypeCuadExpectationsBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof setContractTypeCuadExpectations>>,
+  TError,
+  { id: string; data: BodyType<SetContractTypeCuadExpectationsBody> },
+  TContext
+> => {
+  const mutationKey = ["setContractTypeCuadExpectations"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof setContractTypeCuadExpectations>>,
+    { id: string; data: BodyType<SetContractTypeCuadExpectationsBody> }
+  > = (props) => {
+    const { id, data } = props ?? {};
+
+    return setContractTypeCuadExpectations(id, data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type SetContractTypeCuadExpectationsMutationResult = NonNullable<
+  Awaited<ReturnType<typeof setContractTypeCuadExpectations>>
+>;
+export type SetContractTypeCuadExpectationsMutationBody =
+  BodyType<SetContractTypeCuadExpectationsBody>;
+export type SetContractTypeCuadExpectationsMutationError = ErrorType<unknown>;
+
+export const useSetContractTypeCuadExpectations = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof setContractTypeCuadExpectations>>,
+    TError,
+    { id: string; data: BodyType<SetContractTypeCuadExpectationsBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof setContractTypeCuadExpectations>>,
+  TError,
+  { id: string; data: BodyType<SetContractTypeCuadExpectationsBody> },
+  TContext
+> => {
+  return useMutation(
+    getSetContractTypeCuadExpectationsMutationOptions(options),
+  );
+};
+
+export const getGetClauseFamilyCuadCategoriesUrl = (id: string) => {
+  return `/api/v1/clause-families/${id}/cuad-categories`;
+};
+
+export const getClauseFamilyCuadCategories = async (
+  id: string,
+  options?: RequestInit,
+): Promise<ClauseFamilyCuadMapping> => {
+  return customFetch<ClauseFamilyCuadMapping>(
+    getGetClauseFamilyCuadCategoriesUrl(id),
+    {
+      ...options,
+      method: "GET",
+    },
+  );
+};
+
+export const getGetClauseFamilyCuadCategoriesQueryKey = (id: string) => {
+  return [`/api/v1/clause-families/${id}/cuad-categories`] as const;
+};
+
+export const getGetClauseFamilyCuadCategoriesQueryOptions = <
+  TData = Awaited<ReturnType<typeof getClauseFamilyCuadCategories>>,
+  TError = ErrorType<unknown>,
+>(
+  id: string,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getClauseFamilyCuadCategories>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey =
+    queryOptions?.queryKey ?? getGetClauseFamilyCuadCategoriesQueryKey(id);
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof getClauseFamilyCuadCategories>>
+  > = ({ signal }) =>
+    getClauseFamilyCuadCategories(id, { signal, ...requestOptions });
+
+  return {
+    queryKey,
+    queryFn,
+    enabled: !!id,
+    ...queryOptions,
+  } as UseQueryOptions<
+    Awaited<ReturnType<typeof getClauseFamilyCuadCategories>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetClauseFamilyCuadCategoriesQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getClauseFamilyCuadCategories>>
+>;
+export type GetClauseFamilyCuadCategoriesQueryError = ErrorType<unknown>;
+
+export function useGetClauseFamilyCuadCategories<
+  TData = Awaited<ReturnType<typeof getClauseFamilyCuadCategories>>,
+  TError = ErrorType<unknown>,
+>(
+  id: string,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getClauseFamilyCuadCategories>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetClauseFamilyCuadCategoriesQueryOptions(
+    id,
+    options,
+  );
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+export const getSetClauseFamilyCuadCategoriesUrl = (id: string) => {
+  return `/api/v1/clause-families/${id}/cuad-categories`;
+};
+
+export const setClauseFamilyCuadCategories = async (
+  id: string,
+  setClauseFamilyCuadCategoriesBody: SetClauseFamilyCuadCategoriesBody,
+  options?: RequestInit,
+): Promise<ClauseFamilyCuadMapping> => {
+  return customFetch<ClauseFamilyCuadMapping>(
+    getSetClauseFamilyCuadCategoriesUrl(id),
+    {
+      ...options,
+      method: "PUT",
+      headers: { "Content-Type": "application/json", ...options?.headers },
+      body: JSON.stringify(setClauseFamilyCuadCategoriesBody),
+    },
+  );
+};
+
+export const getSetClauseFamilyCuadCategoriesMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof setClauseFamilyCuadCategories>>,
+    TError,
+    { id: string; data: BodyType<SetClauseFamilyCuadCategoriesBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof setClauseFamilyCuadCategories>>,
+  TError,
+  { id: string; data: BodyType<SetClauseFamilyCuadCategoriesBody> },
+  TContext
+> => {
+  const mutationKey = ["setClauseFamilyCuadCategories"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof setClauseFamilyCuadCategories>>,
+    { id: string; data: BodyType<SetClauseFamilyCuadCategoriesBody> }
+  > = (props) => {
+    const { id, data } = props ?? {};
+
+    return setClauseFamilyCuadCategories(id, data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type SetClauseFamilyCuadCategoriesMutationResult = NonNullable<
+  Awaited<ReturnType<typeof setClauseFamilyCuadCategories>>
+>;
+export type SetClauseFamilyCuadCategoriesMutationBody =
+  BodyType<SetClauseFamilyCuadCategoriesBody>;
+export type SetClauseFamilyCuadCategoriesMutationError = ErrorType<unknown>;
+
+export const useSetClauseFamilyCuadCategories = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof setClauseFamilyCuadCategories>>,
+    TError,
+    { id: string; data: BodyType<SetClauseFamilyCuadCategoriesBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof setClauseFamilyCuadCategories>>,
+  TError,
+  { id: string; data: BodyType<SetClauseFamilyCuadCategoriesBody> },
+  TContext
+> => {
+  return useMutation(getSetClauseFamilyCuadCategoriesMutationOptions(options));
+};
 
 export const getPatchContractClauseUrl = (id: string) => {
   return `/api/v1/contract-clauses/${id}`;

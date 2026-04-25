@@ -2496,6 +2496,116 @@ export const ListContractClausesResponse = zod.array(
   ListContractClausesResponseItem,
 );
 
+/**
+ * @summary Deterministic CUAD-Vollständigkeits-Check für einen Vertrag
+ */
+export const GetContractCuadCoverageParams = zod.object({
+  id: zod.coerce.string(),
+});
+
+export const GetContractCuadCoverageResponse = zod.object({
+  contractId: zod.string(),
+  contractTypeId: zod.union([zod.string(), zod.null()]).optional(),
+  contractTypeName: zod.union([zod.string(), zod.null()]).optional(),
+  totalExpected: zod.number(),
+  totalRecommended: zod.number(),
+  coveredExpected: zod.number(),
+  coveredRecommended: zod.number(),
+  missingExpectedCount: zod.number(),
+  missingRecommendedCount: zod.number(),
+  covered: zod.array(
+    zod.object({
+      cuadCategoryId: zod.string(),
+      code: zod.string(),
+      name: zod.string(),
+      requirement: zod.enum(["expected", "recommended"]),
+      coveredByFamilyIds: zod.array(zod.string()),
+    }),
+  ),
+  missing: zod.array(
+    zod.object({
+      cuadCategoryId: zod.string(),
+      code: zod.string(),
+      name: zod.string(),
+      requirement: zod.enum(["expected", "recommended"]),
+      suggestedFamilyIds: zod.array(zod.string()),
+    }),
+  ),
+});
+
+/**
+ * @summary Liste aller 41 CUAD-Kategorien (Taxonomie)
+ */
+export const ListCuadCategoriesResponseItem = zod.object({
+  id: zod.string(),
+  code: zod.string(),
+  name: zod.string(),
+  description: zod.union([zod.string(), zod.null()]).optional(),
+  sortOrder: zod.number(),
+});
+export const ListCuadCategoriesResponse = zod.array(
+  ListCuadCategoriesResponseItem,
+);
+
+export const GetContractTypeCuadExpectationsParams = zod.object({
+  id: zod.coerce.string(),
+});
+
+export const GetContractTypeCuadExpectationsResponseItem = zod.object({
+  cuadCategoryId: zod.string(),
+  requirement: zod.enum(["expected", "recommended"]),
+});
+export const GetContractTypeCuadExpectationsResponse = zod.array(
+  GetContractTypeCuadExpectationsResponseItem,
+);
+
+export const SetContractTypeCuadExpectationsParams = zod.object({
+  id: zod.coerce.string(),
+});
+
+export const SetContractTypeCuadExpectationsBody = zod.object({
+  items: zod.array(
+    zod.object({
+      cuadCategoryId: zod.string(),
+      requirement: zod.enum(["expected", "recommended"]),
+    }),
+  ),
+});
+
+export const SetContractTypeCuadExpectationsResponse = zod.object({
+  contractTypeId: zod.string(),
+  items: zod.array(
+    zod.object({
+      cuadCategoryId: zod.string(),
+      requirement: zod.enum(["expected", "recommended"]),
+    }),
+  ),
+});
+
+export const GetClauseFamilyCuadCategoriesParams = zod.object({
+  id: zod.coerce.string(),
+});
+
+export const GetClauseFamilyCuadCategoriesResponse = zod.object({
+  familyId: zod.string(),
+  isTenantOverride: zod.boolean(),
+  cuadCategoryIds: zod.array(zod.string()),
+});
+
+export const SetClauseFamilyCuadCategoriesParams = zod.object({
+  id: zod.coerce.string(),
+});
+
+export const SetClauseFamilyCuadCategoriesBody = zod.object({
+  cuadCategoryIds: zod.array(zod.string()),
+});
+
+export const SetClauseFamilyCuadCategoriesResponse = zod.object({
+  familyId: zod.string(),
+  isTenantOverride: zod.boolean(),
+  cuadCategoryIds: zod.array(zod.string()),
+});
+
 export const PatchContractClauseParams = zod.object({
   id: zod.coerce.string(),
 });
@@ -3475,6 +3585,45 @@ export const RunApprovalReadinessResponse = zod
           "open_negotiation",
           "open_price_increase",
         ]),
+        cuadCoverage: zod
+          .union([
+            zod.object({
+              contractId: zod.string(),
+              contractTypeId: zod.union([zod.string(), zod.null()]).optional(),
+              contractTypeName: zod
+                .union([zod.string(), zod.null()])
+                .optional(),
+              totalExpected: zod.number(),
+              totalRecommended: zod.number(),
+              coveredExpected: zod.number(),
+              coveredRecommended: zod.number(),
+              missingExpectedCount: zod.number(),
+              missingRecommendedCount: zod.number(),
+              covered: zod.array(
+                zod.object({
+                  cuadCategoryId: zod.string(),
+                  code: zod.string(),
+                  name: zod.string(),
+                  requirement: zod.enum(["expected", "recommended"]),
+                  coveredByFamilyIds: zod.array(zod.string()),
+                }),
+              ),
+              missing: zod.array(
+                zod.object({
+                  cuadCategoryId: zod.string(),
+                  code: zod.string(),
+                  name: zod.string(),
+                  requirement: zod.enum(["expected", "recommended"]),
+                  suggestedFamilyIds: zod.array(zod.string()),
+                }),
+              ),
+            }),
+            zod.null(),
+          ])
+          .optional()
+          .describe(
+            'Deterministic CUAD-Vollständigkeits-Check. Wird serverseitig nach\nder KI-Analyse berechnet. Lücken erscheinen als separate Sektion\n\"Typische Bausteine fehlen\" — getrennt von keyDeviations.\n',
+          ),
       }),
     }),
   );

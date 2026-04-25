@@ -1744,6 +1744,128 @@ paths:
                 type: array
                 items: { $ref: "#/components/schemas/ContractClause" }
 
+  /contracts/{id}/cuad-coverage:
+    get:
+      operationId: getContractCuadCoverage
+      tags: [contracts]
+      summary: Deterministic CUAD-Vollständigkeits-Check für einen Vertrag
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: ok
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CuadCoverage" }
+
+  /cuad/categories:
+    get:
+      operationId: listCuadCategories
+      tags: [contracts]
+      summary: Liste aller 41 CUAD-Kategorien (Taxonomie)
+      responses:
+        "200":
+          description: ok
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/CuadCategory" }
+
+  /contract-types/{id}/cuad-expectations:
+    get:
+      operationId: getContractTypeCuadExpectations
+      tags: [contracts]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: ok
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/ContractTypeCuadExpectation" }
+    put:
+      operationId: setContractTypeCuadExpectations
+      tags: [contracts]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [items]
+              properties:
+                items:
+                  type: array
+                  items: { $ref: "#/components/schemas/ContractTypeCuadExpectation" }
+      responses:
+        "200":
+          description: ok
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [contractTypeId, items]
+                properties:
+                  contractTypeId: { type: string }
+                  items:
+                    type: array
+                    items: { $ref: "#/components/schemas/ContractTypeCuadExpectation" }
+
+  /clause-families/{id}/cuad-categories:
+    get:
+      operationId: getClauseFamilyCuadCategories
+      tags: [contracts]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: ok
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ClauseFamilyCuadMapping" }
+    put:
+      operationId: setClauseFamilyCuadCategories
+      tags: [contracts]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [cuadCategoryIds]
+              properties:
+                cuadCategoryIds:
+                  type: array
+                  items: { type: string }
+      responses:
+        "200":
+          description: ok
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ClauseFamilyCuadMapping" }
+
   /contract-clauses/{id}:
     patch:
       operationId: patchContractClause
@@ -6316,6 +6438,103 @@ components:
         recommendedAction:
           type: string
           enum: [none, open_quote, open_contract, open_approval, open_negotiation, open_price_increase]
+        cuadCoverage:
+          description: |
+            Deterministic CUAD-Vollständigkeits-Check. Wird serverseitig nach
+            der KI-Analyse berechnet. Lücken erscheinen als separate Sektion
+            "Typische Bausteine fehlen" — getrennt von keyDeviations.
+          oneOf:
+            - { $ref: "#/components/schemas/CuadCoverage" }
+            - { type: "null" }
+
+    CuadCategory:
+      type: object
+      required: [id, code, name, sortOrder]
+      properties:
+        id: { type: string }
+        code: { type: string }
+        name: { type: string }
+        description:
+          oneOf:
+            - { type: string }
+            - { type: "null" }
+        sortOrder: { type: integer }
+
+    CuadCoverageItem:
+      type: object
+      required: [cuadCategoryId, code, name, requirement, coveredByFamilyIds]
+      properties:
+        cuadCategoryId: { type: string }
+        code: { type: string }
+        name: { type: string }
+        requirement: { type: string, enum: [expected, recommended] }
+        coveredByFamilyIds:
+          type: array
+          items: { type: string }
+
+    CuadCoverageMissing:
+      type: object
+      required: [cuadCategoryId, code, name, requirement, suggestedFamilyIds]
+      properties:
+        cuadCategoryId: { type: string }
+        code: { type: string }
+        name: { type: string }
+        requirement: { type: string, enum: [expected, recommended] }
+        suggestedFamilyIds:
+          type: array
+          items: { type: string }
+
+    CuadCoverage:
+      type: object
+      required:
+        - contractId
+        - totalExpected
+        - totalRecommended
+        - coveredExpected
+        - coveredRecommended
+        - covered
+        - missing
+        - missingExpectedCount
+        - missingRecommendedCount
+      properties:
+        contractId: { type: string }
+        contractTypeId:
+          oneOf:
+            - { type: string }
+            - { type: "null" }
+        contractTypeName:
+          oneOf:
+            - { type: string }
+            - { type: "null" }
+        totalExpected: { type: integer }
+        totalRecommended: { type: integer }
+        coveredExpected: { type: integer }
+        coveredRecommended: { type: integer }
+        missingExpectedCount: { type: integer }
+        missingRecommendedCount: { type: integer }
+        covered:
+          type: array
+          items: { $ref: "#/components/schemas/CuadCoverageItem" }
+        missing:
+          type: array
+          items: { $ref: "#/components/schemas/CuadCoverageMissing" }
+
+    ContractTypeCuadExpectation:
+      type: object
+      required: [cuadCategoryId, requirement]
+      properties:
+        cuadCategoryId: { type: string }
+        requirement: { type: string, enum: [expected, recommended] }
+
+    ClauseFamilyCuadMapping:
+      type: object
+      required: [familyId, cuadCategoryIds, isTenantOverride]
+      properties:
+        familyId: { type: string }
+        isTenantOverride: { type: boolean }
+        cuadCategoryIds:
+          type: array
+          items: { type: string }
 
     ApprovalReadinessEnvelope:
       type: object

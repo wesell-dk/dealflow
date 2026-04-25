@@ -16,6 +16,14 @@ import {
   useUpsertClauseVariantTranslation,
   useDeleteClauseVariantTranslation,
   getListClauseFamiliesQueryKey,
+  useListContractTypes,
+  useListCuadCategories,
+  useGetContractTypeCuadExpectations,
+  useSetContractTypeCuadExpectations,
+  useGetClauseFamilyCuadCategories,
+  useSetClauseFamilyCuadCategories,
+  getGetContractTypeCuadExpectationsQueryKey,
+  getGetClauseFamilyCuadCategoriesQueryKey,
 } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/contexts/auth-context";
@@ -191,6 +199,10 @@ export default function Clauses() {
 
       {isTenantAdmin && (families?.length ?? 0) > 0 && (
         <CompatibilityRulesSection families={families ?? []} />
+      )}
+
+      {isTenantAdmin && (
+        <CuadAdminSection families={families ?? []} />
       )}
 
       {(families?.length ?? 0) === 0 ? (
@@ -896,6 +908,246 @@ function ClauseTranslationsSection({
           )}
         </DialogContent>
       </Dialog>
+    </Card>
+  );
+}
+
+function CuadAdminSection({ families }: { families: FamilyLite[] }) {
+  const { toast } = useToast();
+  const qc = useQueryClient();
+  const { data: contractTypes } = useListContractTypes();
+  const { data: cuadCategories } = useListCuadCategories();
+  const [tab, setTab] = useState<"contractTypes" | "families">("contractTypes");
+  const [contractTypeId, setContractTypeId] = useState<string>("");
+  const [familyId, setFamilyId] = useState<string>("");
+
+  const ctActive = (contractTypes ?? []).filter(c => c.active);
+  const ctSelected = contractTypeId || ctActive[0]?.id || "";
+  const famSelected = familyId || families[0]?.id || "";
+
+  const { data: ctExpectations } = useGetContractTypeCuadExpectations(ctSelected, {
+    query: {
+      enabled: !!ctSelected && tab === "contractTypes",
+      queryKey: getGetContractTypeCuadExpectationsQueryKey(ctSelected),
+    },
+  });
+  const { data: famMapping } = useGetClauseFamilyCuadCategories(famSelected, {
+    query: {
+      enabled: !!famSelected && tab === "families",
+      queryKey: getGetClauseFamilyCuadCategoriesQueryKey(famSelected),
+    },
+  });
+  const setCt = useSetContractTypeCuadExpectations();
+  const setFam = useSetClauseFamilyCuadCategories();
+
+  const ctMap = useMemo(() => {
+    const m = new Map<string, "expected" | "recommended">();
+    for (const e of ctExpectations ?? []) {
+      m.set(e.cuadCategoryId, e.requirement === "recommended" ? "recommended" : "expected");
+    }
+    return m;
+  }, [ctExpectations]);
+
+  const famSet = useMemo(() => new Set(famMapping?.cuadCategoryIds ?? []), [famMapping]);
+
+  const [ctDraft, setCtDraft] = useState<Map<string, "expected" | "recommended"> | null>(null);
+  const [famDraft, setFamDraft] = useState<Set<string> | null>(null);
+
+  const ctEffective = ctDraft ?? ctMap;
+  const famEffective = famDraft ?? famSet;
+
+  const ctDirty = ctDraft != null;
+  const famDirty = famDraft != null;
+
+  const toggleCt = (cuadId: string, req: "expected" | "recommended" | "off") => {
+    const m = new Map(ctEffective);
+    if (req === "off") m.delete(cuadId);
+    else m.set(cuadId, req);
+    setCtDraft(m);
+  };
+  const toggleFam = (cuadId: string) => {
+    const s = new Set(famEffective);
+    if (s.has(cuadId)) s.delete(cuadId);
+    else s.add(cuadId);
+    setFamDraft(s);
+  };
+
+  const saveCt = async () => {
+    if (!ctSelected || !ctDraft) return;
+    try {
+      await setCt.mutateAsync({
+        id: ctSelected,
+        data: { items: [...ctDraft.entries()].map(([cuadCategoryId, requirement]) => ({ cuadCategoryId, requirement })) },
+      });
+      await qc.invalidateQueries({ queryKey: getGetContractTypeCuadExpectationsQueryKey(ctSelected) });
+      setCtDraft(null);
+      toast({ title: "CUAD-Erwartungen gespeichert" });
+    } catch (e) {
+      toast({ title: "Fehler", description: String(e), variant: "destructive" });
+    }
+  };
+
+  const saveFam = async () => {
+    if (!famSelected || !famDraft) return;
+    try {
+      await setFam.mutateAsync({
+        id: famSelected,
+        data: { cuadCategoryIds: [...famDraft] },
+      });
+      await qc.invalidateQueries({ queryKey: getGetClauseFamilyCuadCategoriesQueryKey(famSelected) });
+      setFamDraft(null);
+      toast({ title: "CUAD-Mapping gespeichert" });
+    } catch (e) {
+      toast({ title: "Fehler", description: String(e), variant: "destructive" });
+    }
+  };
+
+  return (
+    <Card data-testid="cuad-admin-card">
+      <CardHeader className="flex flex-row items-center gap-2 space-y-0">
+        <Library className="h-5 w-5 text-muted-foreground" />
+        <div>
+          <CardTitle>CUAD-Vollständigkeit</CardTitle>
+          <p className="text-xs text-muted-foreground mt-1">
+            Pflegt die erwarteten CUAD-Kategorien je Vertragstyp und das Mapping
+            Klauselfamilie ↔ CUAD-Kategorie für den Gap-Check.
+          </p>
+        </div>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        <div className="flex gap-2 border-b">
+          <button
+            type="button"
+            onClick={() => { setTab("contractTypes"); setCtDraft(null); setFamDraft(null); }}
+            className={`px-3 py-1.5 text-sm border-b-2 -mb-px ${tab === "contractTypes" ? "border-primary font-medium" : "border-transparent text-muted-foreground"}`}
+            data-testid="cuad-tab-contract-types"
+          >
+            Vertragstyp → Kategorien
+          </button>
+          <button
+            type="button"
+            onClick={() => { setTab("families"); setCtDraft(null); setFamDraft(null); }}
+            className={`px-3 py-1.5 text-sm border-b-2 -mb-px ${tab === "families" ? "border-primary font-medium" : "border-transparent text-muted-foreground"}`}
+            data-testid="cuad-tab-families"
+          >
+            Klauselfamilie → Kategorien
+          </button>
+        </div>
+
+        {tab === "contractTypes" ? (
+          <div className="space-y-3">
+            <div className="flex items-center gap-3 flex-wrap">
+              <Label className="text-xs text-muted-foreground">Vertragstyp:</Label>
+              <Select value={ctSelected} onValueChange={(v) => { setContractTypeId(v); setCtDraft(null); }}>
+                <SelectTrigger className="h-8 w-[280px] text-xs" data-testid="cuad-select-contract-type">
+                  <SelectValue placeholder="Vertragstyp wählen" />
+                </SelectTrigger>
+                <SelectContent>
+                  {ctActive.map(c => (
+                    <SelectItem key={c.id} value={c.id}>{c.code} · {c.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <Button
+                size="sm"
+                onClick={saveCt}
+                disabled={!ctDirty || setCt.isPending}
+                data-testid="cuad-save-contract-type"
+              >
+                <Save className="h-3 w-3 mr-1" />
+                {setCt.isPending ? "Speichere…" : "Speichern"}
+              </Button>
+              {ctDirty && (
+                <Button size="sm" variant="ghost" onClick={() => setCtDraft(null)}>Verwerfen</Button>
+              )}
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-1.5 max-h-[480px] overflow-auto pr-2">
+              {(cuadCategories ?? []).map(cat => {
+                const req = ctEffective.get(cat.id);
+                return (
+                  <div
+                    key={cat.id}
+                    className="flex items-center gap-2 border rounded px-2 py-1.5 text-xs"
+                    data-testid={`cuad-row-ct-${cat.id}`}
+                  >
+                    <div className="flex-1 min-w-0">
+                      <div className="font-medium truncate">{cat.name}</div>
+                      <div className="text-muted-foreground font-mono text-[10px]">{cat.code}</div>
+                    </div>
+                    <Select
+                      value={req ?? "off"}
+                      onValueChange={(v) => toggleCt(cat.id, v as "expected" | "recommended" | "off")}
+                    >
+                      <SelectTrigger className="h-7 w-[120px] text-xs" data-testid={`cuad-req-${cat.id}`}>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="off">— aus —</SelectItem>
+                        <SelectItem value="expected">Pflicht</SelectItem>
+                        <SelectItem value="recommended">Empfohlen</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        ) : (
+          <div className="space-y-3">
+            <div className="flex items-center gap-3 flex-wrap">
+              <Label className="text-xs text-muted-foreground">Klauselfamilie:</Label>
+              <Select value={famSelected} onValueChange={(v) => { setFamilyId(v); setFamDraft(null); }}>
+                <SelectTrigger className="h-8 w-[280px] text-xs" data-testid="cuad-select-family">
+                  <SelectValue placeholder="Klauselfamilie wählen" />
+                </SelectTrigger>
+                <SelectContent>
+                  {families.map(f => (
+                    <SelectItem key={f.id} value={f.id}>{f.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {famMapping && !famMapping.isTenantOverride && (
+                <Badge variant="outline" className="text-[10px]">System-Default</Badge>
+              )}
+              <Button
+                size="sm"
+                onClick={saveFam}
+                disabled={!famDirty || setFam.isPending}
+                data-testid="cuad-save-family"
+              >
+                <Save className="h-3 w-3 mr-1" />
+                {setFam.isPending ? "Speichere…" : "Speichern"}
+              </Button>
+              {famDirty && (
+                <Button size="sm" variant="ghost" onClick={() => setFamDraft(null)}>Verwerfen</Button>
+              )}
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-1.5 max-h-[480px] overflow-auto pr-2">
+              {(cuadCategories ?? []).map(cat => {
+                const checked = famEffective.has(cat.id);
+                return (
+                  <label
+                    key={cat.id}
+                    className={`flex items-center gap-2 border rounded px-2 py-1.5 text-xs cursor-pointer ${checked ? "bg-emerald-50/40 border-emerald-300" : ""}`}
+                    data-testid={`cuad-row-fam-${cat.id}`}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={checked}
+                      onChange={() => toggleFam(cat.id)}
+                      className="h-3.5 w-3.5"
+                    />
+                    <div className="flex-1 min-w-0">
+                      <div className="font-medium truncate">{cat.name}</div>
+                      <div className="text-muted-foreground font-mono text-[10px]">{cat.code}</div>
+                    </div>
+                  </label>
+                );
+              })}
+            </div>
+          </div>
+        )}
+      </CardContent>
     </Card>
   );
 }

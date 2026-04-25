@@ -2375,6 +2375,52 @@ export const ApprovalReadinessResultRecommendedAction = {
   open_price_increase: "open_price_increase",
 } as const;
 
+export type CuadCoverageItemRequirement =
+  (typeof CuadCoverageItemRequirement)[keyof typeof CuadCoverageItemRequirement];
+
+export const CuadCoverageItemRequirement = {
+  expected: "expected",
+  recommended: "recommended",
+} as const;
+
+export interface CuadCoverageItem {
+  cuadCategoryId: string;
+  code: string;
+  name: string;
+  requirement: CuadCoverageItemRequirement;
+  coveredByFamilyIds: string[];
+}
+
+export type CuadCoverageMissingRequirement =
+  (typeof CuadCoverageMissingRequirement)[keyof typeof CuadCoverageMissingRequirement];
+
+export const CuadCoverageMissingRequirement = {
+  expected: "expected",
+  recommended: "recommended",
+} as const;
+
+export interface CuadCoverageMissing {
+  cuadCategoryId: string;
+  code: string;
+  name: string;
+  requirement: CuadCoverageMissingRequirement;
+  suggestedFamilyIds: string[];
+}
+
+export interface CuadCoverage {
+  contractId: string;
+  contractTypeId?: string | null;
+  contractTypeName?: string | null;
+  totalExpected: number;
+  totalRecommended: number;
+  coveredExpected: number;
+  coveredRecommended: number;
+  missingExpectedCount: number;
+  missingRecommendedCount: number;
+  covered: CuadCoverageItem[];
+  missing: CuadCoverageMissing[];
+}
+
 export interface ApprovalReadinessResult {
   decisionReady: boolean;
   recommendation: ApprovalReadinessResultRecommendation;
@@ -2382,6 +2428,38 @@ export interface ApprovalReadinessResult {
   missingInformation: string[];
   keyDeviations: ApprovalReadinessResultKeyDeviationsItem[];
   recommendedAction: ApprovalReadinessResultRecommendedAction;
+  /** Deterministic CUAD-Vollständigkeits-Check. Wird serverseitig nach
+der KI-Analyse berechnet. Lücken erscheinen als separate Sektion
+"Typische Bausteine fehlen" — getrennt von keyDeviations.
+ */
+  cuadCoverage?: CuadCoverage | null;
+}
+
+export interface CuadCategory {
+  id: string;
+  code: string;
+  name: string;
+  description?: string | null;
+  sortOrder: number;
+}
+
+export type ContractTypeCuadExpectationRequirement =
+  (typeof ContractTypeCuadExpectationRequirement)[keyof typeof ContractTypeCuadExpectationRequirement];
+
+export const ContractTypeCuadExpectationRequirement = {
+  expected: "expected",
+  recommended: "recommended",
+} as const;
+
+export interface ContractTypeCuadExpectation {
+  cuadCategoryId: string;
+  requirement: ContractTypeCuadExpectationRequirement;
+}
+
+export interface ClauseFamilyCuadMapping {
+  familyId: string;
+  isTenantOverride: boolean;
+  cuadCategoryIds: string[];
 }
 
 export type ApprovalReadinessEnvelope = CopilotAiInsightRef & {
@@ -3791,6 +3869,19 @@ export type ListMyDelegations200 = {
 
 export type ListContractsParams = {
   dealId?: string;
+};
+
+export type SetContractTypeCuadExpectationsBody = {
+  items: ContractTypeCuadExpectation[];
+};
+
+export type SetContractTypeCuadExpectations200 = {
+  contractTypeId: string;
+  items: ContractTypeCuadExpectation[];
+};
+
+export type SetClauseFamilyCuadCategoriesBody = {
+  cuadCategoryIds: string[];
 };
 
 export type ListNegotiationsParams = {

@@ -10,6 +10,7 @@ Multi-tenant, multi-company, multi-brand. Deal-centric.
 import type { ApprovalReadinessResultKeyDeviationsItem } from "./approvalReadinessResultKeyDeviationsItem";
 import type { ApprovalReadinessResultRecommendation } from "./approvalReadinessResultRecommendation";
 import type { ApprovalReadinessResultRecommendedAction } from "./approvalReadinessResultRecommendedAction";
+import type { CuadCoverage } from "./cuadCoverage";
 
 export interface ApprovalReadinessResult {
   decisionReady: boolean;
@@ -18,4 +19,9 @@ export interface ApprovalReadinessResult {
   missingInformation: string[];
   keyDeviations: ApprovalReadinessResultKeyDeviationsItem[];
   recommendedAction: ApprovalReadinessResultRecommendedAction;
+  /** Deterministic CUAD-Vollständigkeits-Check. Wird serverseitig nach
+der KI-Analyse berechnet. Lücken erscheinen als separate Sektion
+"Typische Bausteine fehlen" — getrennt von keyDeviations.
+ */
+  cuadCoverage?: CuadCoverage | null;
 }

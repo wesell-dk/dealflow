@@ -1,5 +1,5 @@
 import { Router, type IRouter, type Request, type Response } from 'express';
-import { and, asc, desc, eq, inArray, isNull, sql, type SQL } from 'drizzle-orm';
+import { and, asc, desc, eq, inArray, isNull, or, sql, type SQL } from 'drizzle-orm';
 import { randomUUID, randomBytes } from 'node:crypto';
 import { ObjectStorageService } from '../lib/objectStorage';
 import { extractTextFromUpload } from '../lib/extractContractText';
@@ -85,6 +85,9 @@ import {
   contractPlaybooksTable,
   obligationsTable,
   clauseDeviationsTable,
+  cuadCategoriesTable,
+  clauseFamilyCuadCategoriesTable,
+  contractTypeCuadExpectationsTable,
   rolesTable,
   quoteTemplatesTable,
   quoteTemplateSectionsTable,
@@ -4461,6 +4464,305 @@ router.post('/contracts/:id/obligations/derive', async (req, res) => {
   res.json({ contractId: c.id, ...result });
 });
 
+// ─────────────────────────────────────────────────────────────────────────
+// CUAD-Vollständigkeits-Check
+// ─────────────────────────────────────────────────────────────────────────
+//
+// Deterministische Engine: Pro Vertrag wird verglichen, welche CUAD-Kategorien
+// laut Vertragsart erwartet werden, und welche durch vorhandene Klauselfamilien
+// abgedeckt sind. Lücken werden separat als "Typische Bausteine fehlen"
+// ausgewiesen — NICHT als clause_deviation, weil es um Vollständigkeit geht,
+// nicht um Policy-Verstöße.
+
+interface CuadCoverageItem {
+  cuadCategoryId: string;
+  code: string;
+  name: string;
+  requirement: 'expected' | 'recommended';
+  coveredByFamilyIds: string[];
+}
+interface CuadCoverageMissing {
+  cuadCategoryId: string;
+  code: string;
+  name: string;
+  requirement: 'expected' | 'recommended';
+  suggestedFamilyIds: string[];
+}
+interface CuadCoverageResult {
+  contractId: string;
+  contractTypeId: string | null;
+  contractTypeName: string | null;
+  totalExpected: number;
+  totalRecommended: number;
+  coveredExpected: number;
+  coveredRecommended: number;
+  covered: CuadCoverageItem[];
+  missing: CuadCoverageMissing[];
+  missingExpectedCount: number;
+  missingRecommendedCount: number;
+}
+
+async function loadFamilyCuadIndex(tenantId: string): Promise<{
+  familyToCuad: Map<string, Set<string>>;
+  cuadToFamilies: Map<string, Set<string>>;
+}> {
+  // Load system-mapping (tenantId NULL) plus tenant-overrides. Same
+  // replacement semantics as GET /clause-families/:id/cuad-categories: if a
+  // family has any tenant-row, those rows fully replace the system rows for
+  // that family. This lets a tenant remove a default CUAD category from a
+  // family by writing an empty/different override (writes drop existing
+  // tenant rows and re-insert), and prevents stale system defaults from
+  // leaking into the coverage check.
+  const rows = await db.select().from(clauseFamilyCuadCategoriesTable)
+    .where(or(
+      sql`${clauseFamilyCuadCategoriesTable.tenantId} IS NULL`,
+      eq(clauseFamilyCuadCategoriesTable.tenantId, tenantId),
+    ));
+  const tenantOverrideFamilies = new Set(
+    rows.filter(r => r.tenantId === tenantId).map(r => r.familyId),
+  );
+  const familyToCuad = new Map<string, Set<string>>();
+  const cuadToFamilies = new Map<string, Set<string>>();
+  for (const r of rows) {
+    // For families with a tenant override, ignore the system rows entirely.
+    if (r.tenantId === null && tenantOverrideFamilies.has(r.familyId)) continue;
+    if (!familyToCuad.has(r.familyId)) familyToCuad.set(r.familyId, new Set());
+    familyToCuad.get(r.familyId)!.add(r.cuadCategoryId);
+    if (!cuadToFamilies.has(r.cuadCategoryId)) cuadToFamilies.set(r.cuadCategoryId, new Set());
+    cuadToFamilies.get(r.cuadCategoryId)!.add(r.familyId);
+  }
+  return { familyToCuad, cuadToFamilies };
+}
+
+async function computeCuadCoverage(contractId: string): Promise<CuadCoverageResult | null> {
+  const [contract] = await db.select().from(contractsTable).where(eq(contractsTable.id, contractId));
+  if (!contract) return null;
+  const tenantId = contract.tenantId ?? 'tn_root';
+
+  let contractTypeName: string | null = null;
+  let expectations: Array<typeof contractTypeCuadExpectationsTable.$inferSelect> = [];
+  if (contract.contractTypeId) {
+    const [ct] = await db.select().from(contractTypesTable).where(eq(contractTypesTable.id, contract.contractTypeId));
+    contractTypeName = ct?.name ?? null;
+    expectations = await db.select().from(contractTypeCuadExpectationsTable)
+      .where(eq(contractTypeCuadExpectationsTable.contractTypeId, contract.contractTypeId));
+  }
+
+  const clauses = await db.select().from(contractClausesTable).where(eq(contractClausesTable.contractId, contractId));
+  const presentFamilyIds = new Set(clauses.map(c => c.familyId).filter((x): x is string => !!x));
+
+  const { familyToCuad, cuadToFamilies } = await loadFamilyCuadIndex(tenantId);
+
+  // CUAD-IDs, die durch vorhandene Klauselfamilien abgedeckt sind.
+  const coveredCuadIds = new Set<string>();
+  const coveredByMap = new Map<string, Set<string>>(); // cuad → familyIds present
+  for (const fid of presentFamilyIds) {
+    const cuads = familyToCuad.get(fid);
+    if (!cuads) continue;
+    for (const cuadId of cuads) {
+      coveredCuadIds.add(cuadId);
+      if (!coveredByMap.has(cuadId)) coveredByMap.set(cuadId, new Set());
+      coveredByMap.get(cuadId)!.add(fid);
+    }
+  }
+
+  // Kategorien-Lookup für Anzeige-Daten.
+  const allCategoryIds = new Set<string>([
+    ...expectations.map(e => e.cuadCategoryId),
+    ...coveredCuadIds,
+  ]);
+  const categoryRows = allCategoryIds.size
+    ? await db.select().from(cuadCategoriesTable).where(inArray(cuadCategoriesTable.id, [...allCategoryIds]))
+    : [];
+  const catById = new Map(categoryRows.map(c => [c.id, c]));
+
+  const covered: CuadCoverageItem[] = [];
+  const missing: CuadCoverageMissing[] = [];
+
+  for (const ex of expectations) {
+    const cat = catById.get(ex.cuadCategoryId);
+    if (!cat) continue;
+    const requirement = (ex.requirement === 'recommended' ? 'recommended' : 'expected') as 'expected' | 'recommended';
+    if (coveredCuadIds.has(ex.cuadCategoryId)) {
+      covered.push({
+        cuadCategoryId: cat.id,
+        code: cat.code,
+        name: cat.name,
+        requirement,
+        coveredByFamilyIds: [...(coveredByMap.get(cat.id) ?? new Set())].sort(),
+      });
+    } else {
+      missing.push({
+        cuadCategoryId: cat.id,
+        code: cat.code,
+        name: cat.name,
+        requirement,
+        suggestedFamilyIds: [...(cuadToFamilies.get(cat.id) ?? new Set())].sort(),
+      });
+    }
+  }
+
+  const totalExpected = expectations.filter(e => e.requirement !== 'recommended').length;
+  const totalRecommended = expectations.filter(e => e.requirement === 'recommended').length;
+  const coveredExpected = covered.filter(c => c.requirement === 'expected').length;
+  const coveredRecommended = covered.filter(c => c.requirement === 'recommended').length;
+
+  return {
+    contractId,
+    contractTypeId: contract.contractTypeId ?? null,
+    contractTypeName,
+    totalExpected,
+    totalRecommended,
+    coveredExpected,
+    coveredRecommended,
+    covered: covered.sort((a, b) => a.name.localeCompare(b.name)),
+    missing: missing.sort((a, b) => {
+      if (a.requirement !== b.requirement) return a.requirement === 'expected' ? -1 : 1;
+      return a.name.localeCompare(b.name);
+    }),
+    missingExpectedCount: missing.filter(m => m.requirement === 'expected').length,
+    missingRecommendedCount: missing.filter(m => m.requirement === 'recommended').length,
+  };
+}
+
+router.get('/cuad/categories', async (_req, res) => {
+  const rows = await db.select().from(cuadCategoriesTable).orderBy(asc(cuadCategoriesTable.sortOrder), asc(cuadCategoriesTable.code));
+  res.json(rows.map(r => ({
+    id: r.id, code: r.code, name: r.name,
+    description: r.description ?? null, sortOrder: r.sortOrder,
+  })));
+});
+
+router.get('/contracts/:id/cuad-coverage', async (req, res) => {
+  const [c] = await db.select().from(contractsTable).where(eq(contractsTable.id, req.params.id));
+  if (!c) { res.status(404).json({ error: 'not found' }); return; }
+  if (!(await gateDeal(req, res, c.dealId))) return;
+  const result = await computeCuadCoverage(c.id);
+  if (!result) { res.status(404).json({ error: 'not found' }); return; }
+  res.json(result);
+});
+
+router.get('/contract-types/:id/cuad-expectations', async (req, res) => {
+  const scope = getScope(req);
+  const [ct] = await db.select().from(contractTypesTable).where(eq(contractTypesTable.id, req.params.id));
+  if (!ct || ct.tenantId !== scope.tenantId) { res.status(404).json({ error: 'not found' }); return; }
+  const rows = await db.select().from(contractTypeCuadExpectationsTable)
+    .where(eq(contractTypeCuadExpectationsTable.contractTypeId, ct.id));
+  res.json(rows.map(r => ({
+    cuadCategoryId: r.cuadCategoryId,
+    requirement: r.requirement === 'recommended' ? 'recommended' : 'expected',
+  })));
+});
+
+router.put('/contract-types/:id/cuad-expectations', async (req, res) => {
+  if (!requireAdmin(req, res)) return;
+  const scope = getScope(req);
+  const [ct] = await db.select().from(contractTypesTable).where(eq(contractTypesTable.id, req.params.id));
+  if (!ct || ct.tenantId !== scope.tenantId) { res.status(404).json({ error: 'not found' }); return; }
+  const b = req.body as { items?: Array<{ cuadCategoryId?: string; requirement?: string }> } | undefined;
+  if (!b || !Array.isArray(b.items)) {
+    res.status(422).json({ error: 'items array is required' }); return;
+  }
+  const cleaned: Array<{ cuadCategoryId: string; requirement: 'expected' | 'recommended' }> = [];
+  const seen = new Set<string>();
+  for (const it of b.items) {
+    if (!it || typeof it.cuadCategoryId !== 'string') continue;
+    if (seen.has(it.cuadCategoryId)) continue;
+    seen.add(it.cuadCategoryId);
+    cleaned.push({
+      cuadCategoryId: it.cuadCategoryId,
+      requirement: it.requirement === 'recommended' ? 'recommended' : 'expected',
+    });
+  }
+  // Validate referenced categories exist.
+  if (cleaned.length) {
+    const cats = await db.select().from(cuadCategoriesTable)
+      .where(inArray(cuadCategoriesTable.id, cleaned.map(c => c.cuadCategoryId)));
+    const known = new Set(cats.map(c => c.id));
+    for (const c of cleaned) {
+      if (!known.has(c.cuadCategoryId)) {
+        res.status(422).json({ error: `unknown cuad category ${c.cuadCategoryId}` }); return;
+      }
+    }
+  }
+  await db.delete(contractTypeCuadExpectationsTable).where(eq(contractTypeCuadExpectationsTable.contractTypeId, ct.id));
+  if (cleaned.length) {
+    await db.insert(contractTypeCuadExpectationsTable).values(cleaned.map(c => ({
+      id: `ctcuad_${randomBytes(6).toString('hex')}`,
+      tenantId: scope.tenantId,
+      contractTypeId: ct.id,
+      cuadCategoryId: c.cuadCategoryId,
+      requirement: c.requirement,
+    })));
+  }
+  await writeAuditFromReq(req, {
+    entityType: 'contract_type', entityId: ct.id, action: 'update_cuad_expectations',
+    summary: `CUAD-Erwartungen für ${ct.code} aktualisiert (${cleaned.length} Kategorien)`,
+  });
+  res.json({ contractTypeId: ct.id, items: cleaned });
+});
+
+router.get('/clause-families/:id/cuad-categories', async (req, res) => {
+  const scope = getScope(req);
+  const [fam] = await db.select().from(clauseFamiliesTable).where(eq(clauseFamiliesTable.id, req.params.id));
+  if (!fam) { res.status(404).json({ error: 'not found' }); return; }
+  const rows = await db.select().from(clauseFamilyCuadCategoriesTable)
+    .where(and(
+      eq(clauseFamilyCuadCategoriesTable.familyId, fam.id),
+      or(
+        sql`${clauseFamilyCuadCategoriesTable.tenantId} IS NULL`,
+        eq(clauseFamilyCuadCategoriesTable.tenantId, scope.tenantId),
+      ),
+    ));
+  // Tenant-Overrides priorisieren: wenn tenant rows existieren, ersetzen sie System-rows.
+  const tenantIds = rows.filter(r => r.tenantId === scope.tenantId).map(r => r.cuadCategoryId);
+  const ids = tenantIds.length
+    ? tenantIds
+    : rows.filter(r => r.tenantId === null).map(r => r.cuadCategoryId);
+  res.json({
+    familyId: fam.id,
+    isTenantOverride: tenantIds.length > 0,
+    cuadCategoryIds: [...new Set(ids)].sort(),
+  });
+});
+
+router.put('/clause-families/:id/cuad-categories', async (req, res) => {
+  if (!requireAdmin(req, res)) return;
+  const scope = getScope(req);
+  const [fam] = await db.select().from(clauseFamiliesTable).where(eq(clauseFamiliesTable.id, req.params.id));
+  if (!fam) { res.status(404).json({ error: 'not found' }); return; }
+  const b = req.body as { cuadCategoryIds?: string[] } | undefined;
+  if (!b || !Array.isArray(b.cuadCategoryIds)) {
+    res.status(422).json({ error: 'cuadCategoryIds array is required' }); return;
+  }
+  const ids = [...new Set(b.cuadCategoryIds.filter((x): x is string => typeof x === 'string'))];
+  if (ids.length) {
+    const cats = await db.select().from(cuadCategoriesTable).where(inArray(cuadCategoriesTable.id, ids));
+    const known = new Set(cats.map(c => c.id));
+    for (const id of ids) {
+      if (!known.has(id)) { res.status(422).json({ error: `unknown cuad category ${id}` }); return; }
+    }
+  }
+  // Delete tenant-rows for this family then re-insert.
+  await db.delete(clauseFamilyCuadCategoriesTable).where(and(
+    eq(clauseFamilyCuadCategoriesTable.familyId, fam.id),
+    eq(clauseFamilyCuadCategoriesTable.tenantId, scope.tenantId),
+  ));
+  if (ids.length) {
+    await db.insert(clauseFamilyCuadCategoriesTable).values(ids.map(cid => ({
+      id: `cfcuad_${randomBytes(6).toString('hex')}`,
+      tenantId: scope.tenantId,
+      familyId: fam.id,
+      cuadCategoryId: cid,
+    })));
+  }
+  await writeAuditFromReq(req, {
+    entityType: 'clause_family', entityId: fam.id, action: 'update_cuad_mapping',
+    summary: `CUAD-Mapping für Klauselfamilie ${fam.name} aktualisiert (${ids.length} Kategorien)`,
+  });
+  res.json({ familyId: fam.id, isTenantOverride: ids.length > 0, cuadCategoryIds: ids.sort() });
+});
+
 // ── Quotes/current — aktuell akzeptiertes Angebot je Account ────────────
 // (Moved to before /quotes/:id to avoid path-param shadowing.)
 
@@ -6988,9 +7290,13 @@ router.post('/copilot/approval-readiness/:approvalId', async (req, res) => {
       actionType: result.output.recommendedAction === 'none' ? null : result.output.recommendedAction,
       actionPayload: { approvalId, recommendation: result.output.recommendation },
     });
+    // Deterministic CUAD coverage merged into the approval-readiness payload
+    // as a separate section ("Typische Bausteine fehlen") — distinct from the
+    // AI-generated keyDeviations.
+    const cuadCoverage = ctx.contract?.id ? await computeCuadCoverage(ctx.contract.id) : null;
     res.json({
       ok: true,
-      result: result.output,
+      result: { ...result.output, cuadCoverage },
       invocationId: result.invocationId,
       insightId,
       model: result.model,

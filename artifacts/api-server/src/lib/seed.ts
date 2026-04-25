@@ -46,6 +46,9 @@ import {
   contractPlaybooksTable,
   obligationsTable,
   clauseDeviationsTable,
+  cuadCategoriesTable,
+  clauseFamilyCuadCategoriesTable,
+  contractTypeCuadExpectationsTable,
 } from "@workspace/db";
 import { hashPassword } from "./auth";
 import { logger } from "./logger";
@@ -1375,6 +1378,9 @@ export async function seedContractMvpAugmentationIdempotent(): Promise<void> {
   // 7) Sprachfassungen + neue Klausel-Familien (idempotent) ─────────────
   await augmentClauseTranslations();
 
+  // 8) CUAD Vollständigkeits-Check ─────────────────────────────────────
+  await seedCuadDefaultsIdempotent();
+
   logger.info("Contract MVP augmentation completed");
 }
 
@@ -1494,5 +1500,145 @@ async function augmentClauseTranslations(): Promise<void> {
   if (toInsert.length > 0) {
     await db.insert(clauseVariantTranslationsTable).values(toInsert).onConflictDoNothing();
     logger.info({ count: toInsert.length }, "Clause variant translations augmented");
+  }
+}
+
+// CUAD (Contract Understanding Atticus Dataset) — 41 standard categories.
+// Tenant-agnostic taxonomy + default mapping clause-family ↔ CUAD +
+// default per-contract-type expectations for the seeded NDA/MSA/OF.
+const CUAD_CATEGORIES: Array<{ id: string; code: string; name: string; description: string }> = [
+  { id: "cuad_document_name",                     code: "DOCUMENT_NAME",                     name: "Document Name",                     description: "The name of the contract" },
+  { id: "cuad_parties",                           code: "PARTIES",                           name: "Parties",                           description: "The two or more parties who signed the contract" },
+  { id: "cuad_agreement_date",                    code: "AGREEMENT_DATE",                    name: "Agreement Date",                    description: "Date the contract was signed / executed" },
+  { id: "cuad_effective_date",                    code: "EFFECTIVE_DATE",                    name: "Effective Date",                    description: "Date when contractual obligations begin" },
+  { id: "cuad_expiration_date",                   code: "EXPIRATION_DATE",                   name: "Expiration Date",                   description: "Date when contract initially expires" },
+  { id: "cuad_renewal_term",                      code: "RENEWAL_TERM",                      name: "Renewal Term",                      description: "Renewal term after initial term expires" },
+  { id: "cuad_notice_period_to_terminate_renewal", code: "NOTICE_PERIOD_TO_TERMINATE_RENEWAL", name: "Notice Period To Terminate Renewal", description: "Notice period required to terminate renewal" },
+  { id: "cuad_governing_law",                     code: "GOVERNING_LAW",                     name: "Governing Law",                     description: "Which state/country's laws govern the agreement" },
+  { id: "cuad_most_favored_nation",               code: "MOST_FAVORED_NATION",               name: "Most Favored Nation",               description: "Better terms granted to a third party must also be offered" },
+  { id: "cuad_non_compete",                       code: "NON_COMPETE",                       name: "Non-Compete",                       description: "Restriction on competing in certain geographies/markets" },
+  { id: "cuad_exclusivity",                       code: "EXCLUSIVITY",                       name: "Exclusivity",                       description: "Exclusive dealing / sole supplier obligation" },
+  { id: "cuad_no_solicit_of_customers",           code: "NO_SOLICIT_OF_CUSTOMERS",           name: "No-Solicit Of Customers",           description: "Restriction on soliciting counterparty's customers" },
+  { id: "cuad_competitive_restriction_exception", code: "COMPETITIVE_RESTRICTION_EXCEPTION", name: "Competitive Restriction Exception", description: "Exceptions to competitive restrictions" },
+  { id: "cuad_no_solicit_of_employees",           code: "NO_SOLICIT_OF_EMPLOYEES",           name: "No-Solicit Of Employees",           description: "Restriction on soliciting counterparty's employees" },
+  { id: "cuad_non_disparagement",                 code: "NON_DISPARAGEMENT",                 name: "Non-Disparagement",                 description: "Prohibition on negative public statements" },
+  { id: "cuad_termination_for_convenience",       code: "TERMINATION_FOR_CONVENIENCE",       name: "Termination For Convenience",       description: "Right to terminate without cause" },
+  { id: "cuad_rofr_rofo_rofn",                    code: "ROFR_ROFO_ROFN",                    name: "Right Of First Refusal / Offer / Negotiation", description: "Pre-emption rights" },
+  { id: "cuad_change_of_control",                 code: "CHANGE_OF_CONTROL",                 name: "Change Of Control",                 description: "Effect of merger / acquisition" },
+  { id: "cuad_anti_assignment",                   code: "ANTI_ASSIGNMENT",                   name: "Anti-Assignment",                   description: "Restriction on assignment of the contract" },
+  { id: "cuad_revenue_profit_sharing",            code: "REVENUE_PROFIT_SHARING",            name: "Revenue / Profit Sharing",          description: "Revenue or profit share arrangement" },
+  { id: "cuad_price_restrictions",                code: "PRICE_RESTRICTIONS",                name: "Price Restrictions",                description: "Restrictions on price changes / pricing" },
+  { id: "cuad_minimum_commitment",                code: "MINIMUM_COMMITMENT",                name: "Minimum Commitment",                description: "Guaranteed minimum volume / spend" },
+  { id: "cuad_volume_restriction",                code: "VOLUME_RESTRICTION",                name: "Volume Restriction",                description: "Maximum / minimum volume restrictions" },
+  { id: "cuad_ip_ownership_assignment",           code: "IP_OWNERSHIP_ASSIGNMENT",           name: "IP Ownership Assignment",           description: "Who owns IP created under the contract" },
+  { id: "cuad_joint_ip_ownership",                code: "JOINT_IP_OWNERSHIP",                name: "Joint IP Ownership",                description: "Joint ownership of IP" },
+  { id: "cuad_license_grant",                     code: "LICENSE_GRANT",                     name: "License Grant",                     description: "Scope of license granted" },
+  { id: "cuad_non_transferable_license",          code: "NON_TRANSFERABLE_LICENSE",          name: "Non-Transferable License",          description: "License is not assignable / transferable" },
+  { id: "cuad_affiliate_license_licensor",        code: "AFFILIATE_LICENSE_LICENSOR",        name: "Affiliate License — Licensor",      description: "Licensor's affiliates can grant license" },
+  { id: "cuad_affiliate_license_licensee",        code: "AFFILIATE_LICENSE_LICENSEE",        name: "Affiliate License — Licensee",      description: "Licensee's affiliates can use license" },
+  { id: "cuad_unlimited_all_you_can_eat_license", code: "UNLIMITED_ALL_YOU_CAN_EAT_LICENSE", name: "Unlimited / All-You-Can-Eat License", description: "Unrestricted use license" },
+  { id: "cuad_irrevocable_or_perpetual_license",  code: "IRREVOCABLE_OR_PERPETUAL_LICENSE",  name: "Irrevocable / Perpetual License",   description: "License cannot be revoked / never expires" },
+  { id: "cuad_source_code_escrow",                code: "SOURCE_CODE_ESCROW",                name: "Source Code Escrow",                description: "Source code held in escrow" },
+  { id: "cuad_post_termination_services",         code: "POST_TERMINATION_SERVICES",         name: "Post-Termination Services",         description: "Services after contract end" },
+  { id: "cuad_audit_rights",                      code: "AUDIT_RIGHTS",                      name: "Audit Rights",                      description: "Right to audit counterparty" },
+  { id: "cuad_uncapped_liability",                code: "UNCAPPED_LIABILITY",                name: "Uncapped Liability",                description: "Liability is not capped" },
+  { id: "cuad_cap_on_liability",                  code: "CAP_ON_LIABILITY",                  name: "Cap On Liability",                  description: "Cap on aggregate liability" },
+  { id: "cuad_liquidated_damages",                code: "LIQUIDATED_DAMAGES",                name: "Liquidated Damages",                description: "Pre-agreed damages for breach" },
+  { id: "cuad_warranty_duration",                 code: "WARRANTY_DURATION",                 name: "Warranty Duration",                 description: "Duration of warranties" },
+  { id: "cuad_insurance",                         code: "INSURANCE",                         name: "Insurance",                         description: "Required insurance coverage" },
+  { id: "cuad_covenant_not_to_sue",               code: "COVENANT_NOT_TO_SUE",               name: "Covenant Not To Sue",               description: "Promise not to sue counterparty" },
+  { id: "cuad_third_party_beneficiary",           code: "THIRD_PARTY_BENEFICIARY",           name: "Third Party Beneficiary",           description: "Third parties that can enforce the contract" },
+];
+
+// Default mapping clause-family → CUAD categories (system-wide / tenantId NULL).
+const DEFAULT_FAMILY_CUAD_MAP: Record<string, string[]> = {
+  cf_liab: ["cuad_cap_on_liability", "cuad_uncapped_liability", "cuad_liquidated_damages"],
+  cf_term: ["cuad_expiration_date", "cuad_renewal_term", "cuad_notice_period_to_terminate_renewal", "cuad_termination_for_convenience"],
+  cf_data: ["cuad_audit_rights"],
+  cf_pay:  ["cuad_revenue_profit_sharing", "cuad_minimum_commitment"],
+  cf_sla:  ["cuad_warranty_duration"],
+  cf_ip:   ["cuad_ip_ownership_assignment", "cuad_license_grant", "cuad_non_transferable_license"],
+};
+
+// Default expectations per contract type (which CUAD categories should be present).
+// 'expected' = pflicht-bauteil, 'recommended' = nice-to-have.
+const DEFAULT_CT_CUAD_EXPECTATIONS: Record<string, Array<{ id: string; req: "expected" | "recommended" }>> = {
+  ct_nda: [
+    { id: "cuad_parties",            req: "expected" },
+    { id: "cuad_effective_date",     req: "expected" },
+    { id: "cuad_expiration_date",    req: "expected" },
+    { id: "cuad_governing_law",      req: "expected" },
+    { id: "cuad_audit_rights",       req: "recommended" },
+    { id: "cuad_anti_assignment",    req: "recommended" },
+  ],
+  ct_msa: [
+    { id: "cuad_parties",                          req: "expected" },
+    { id: "cuad_effective_date",                   req: "expected" },
+    { id: "cuad_expiration_date",                  req: "expected" },
+    { id: "cuad_renewal_term",                     req: "expected" },
+    { id: "cuad_notice_period_to_terminate_renewal", req: "expected" },
+    { id: "cuad_governing_law",                    req: "expected" },
+    { id: "cuad_cap_on_liability",                 req: "expected" },
+    { id: "cuad_warranty_duration",                req: "expected" },
+    { id: "cuad_audit_rights",                     req: "expected" },
+    { id: "cuad_ip_ownership_assignment",          req: "expected" },
+    { id: "cuad_license_grant",                    req: "expected" },
+    { id: "cuad_anti_assignment",                  req: "expected" },
+    { id: "cuad_termination_for_convenience",      req: "expected" },
+    { id: "cuad_insurance",                        req: "recommended" },
+    { id: "cuad_change_of_control",                req: "recommended" },
+    { id: "cuad_source_code_escrow",               req: "recommended" },
+  ],
+  ct_of: [
+    { id: "cuad_parties",         req: "expected" },
+    { id: "cuad_effective_date",  req: "expected" },
+    { id: "cuad_expiration_date", req: "expected" },
+    { id: "cuad_minimum_commitment", req: "recommended" },
+  ],
+};
+
+export async function seedCuadDefaultsIdempotent(): Promise<void> {
+  // 1) Categories (tenant-agnostic taxonomy).
+  await db.insert(cuadCategoriesTable).values(
+    CUAD_CATEGORIES.map((c, idx) => ({
+      id: c.id,
+      code: c.code,
+      name: c.name,
+      description: c.description,
+      sortOrder: idx,
+    })),
+  ).onConflictDoNothing();
+
+  // 2) Default family ↔ CUAD mapping (tenantId NULL = system mapping).
+  const familyMappings: Array<typeof clauseFamilyCuadCategoriesTable.$inferInsert> = [];
+  for (const [familyId, cuadIds] of Object.entries(DEFAULT_FAMILY_CUAD_MAP)) {
+    for (const cuadId of cuadIds) {
+      familyMappings.push({
+        id: `cfcuad_${familyId}_${cuadId}`.slice(0, 64),
+        tenantId: null,
+        familyId,
+        cuadCategoryId: cuadId,
+      });
+    }
+  }
+  if (familyMappings.length) {
+    await db.insert(clauseFamilyCuadCategoriesTable).values(familyMappings).onConflictDoNothing();
+  }
+
+  // 3) Default per-contract-type expectations (only for tn_root seeded contract types).
+  const ctExpectations: Array<typeof contractTypeCuadExpectationsTable.$inferInsert> = [];
+  for (const [contractTypeId, items] of Object.entries(DEFAULT_CT_CUAD_EXPECTATIONS)) {
+    for (const it of items) {
+      ctExpectations.push({
+        id: `ctcuad_${contractTypeId}_${it.id}`.slice(0, 64),
+        tenantId: "tn_root",
+        contractTypeId,
+        cuadCategoryId: it.id,
+        requirement: it.req,
+      });
+    }
+  }
+  if (ctExpectations.length) {
+    await db.insert(contractTypeCuadExpectationsTable).values(ctExpectations).onConflictDoNothing();
   }
 }

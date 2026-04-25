@@ -553,6 +553,43 @@ export const clauseFamiliesTable = pgTable("clause_families", {
   description: text("description").notNull(),
 });
 
+// CUAD (Contract Understanding Atticus Dataset) — 41 standard clause categories
+// for vendor-side gap detection. Tenant-agnostic taxonomy seeded by system.
+export const cuadCategoriesTable = pgTable("cuad_categories", {
+  id: id(),
+  code: text("code").notNull(),
+  name: text("name").notNull(),
+  description: text("description"),
+  sortOrder: integer("sort_order").notNull().default(0),
+}, (t) => ({
+  codeIdx: uniqueIndex("cuad_categories_code_uq").on(t.code),
+}));
+
+// n:m mapping clause family ↔ CUAD category. Tenant-agnostic (system mapping)
+// with optional tenant override row supported by tenantId nullable.
+export const clauseFamilyCuadCategoriesTable = pgTable("clause_family_cuad_categories", {
+  id: id(),
+  tenantId: text("tenant_id"),
+  familyId: text("family_id").notNull(),
+  cuadCategoryId: text("cuad_category_id").notNull(),
+  createdAt: ts("created_at"),
+}, (t) => ({
+  pairIdx: uniqueIndex("clause_family_cuad_pair_uq").on(t.tenantId, t.familyId, t.cuadCategoryId),
+}));
+
+// Per-contract-type expectation that a CUAD category is present.
+// requirement: 'expected' (must be there) | 'recommended' (nice to have)
+export const contractTypeCuadExpectationsTable = pgTable("contract_type_cuad_expectations", {
+  id: id(),
+  tenantId: text("tenant_id").notNull(),
+  contractTypeId: text("contract_type_id").notNull(),
+  cuadCategoryId: text("cuad_category_id").notNull(),
+  requirement: text("requirement").notNull().default("expected"),
+  createdAt: ts("created_at"),
+}, (t) => ({
+  pairIdx: uniqueIndex("contract_type_cuad_pair_uq").on(t.contractTypeId, t.cuadCategoryId),
+}));
+
 export const clauseVariantsTable = pgTable("clause_variants", {
   id: id(),
   familyId: text("family_id").notNull(),

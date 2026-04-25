@@ -17,6 +17,7 @@ import {
   useUpdateObligation,
   useDeriveContractObligations,
   useGetContractClauseCompatibility,
+  useGetContractCuadCoverage,
   useListExternalCollaborators,
   useCreateExternalCollaborator,
   useRevokeExternalCollaborator,
@@ -32,6 +33,7 @@ import {
   type ClauseDeviation,
   type Obligation,
   type ExternalCollaborator,
+  type CuadCoverage,
 } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -253,6 +255,8 @@ export default function Contract() {
       <AmendmentsSection contractId={id} contractStatus={contract.status} />
 
       <EffectiveStateSection contractId={id} contractStatus={contract.status} />
+
+      <CuadCoverageSection contractId={id} />
 
       <DeviationsSection contractId={id} />
 
@@ -742,6 +746,163 @@ function obligationStatusBadge(s: string) {
 
 function fmtDateShort(s: string | null | undefined): string {
   return s ? new Date(s).toLocaleDateString("de-DE") : "—";
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// CUAD-Vollständigkeits-Check — "Typische Bausteine fehlen"
+// ─────────────────────────────────────────────────────────────────────────────
+
+function CuadCoverageSection({ contractId }: { contractId: string }) {
+  const { data, isLoading } = useGetContractCuadCoverage(contractId);
+  const { data: families } = useListClauseFamilies();
+  const [showAll, setShowAll] = useState(false);
+
+  const familyNameById = new Map<string, string>();
+  for (const f of families ?? []) familyNameById.set(f.id, f.name);
+
+  const cov = (data ?? null) as CuadCoverage | null;
+
+  const totalRequired = (cov?.totalExpected ?? 0);
+  const coveredRequired = (cov?.coveredExpected ?? 0);
+  const pct = totalRequired > 0 ? Math.round((coveredRequired / totalRequired) * 100) : null;
+
+  const renderFamilyChips = (ids: string[]) => (
+    ids.length ? (
+      <div className="flex flex-wrap gap-1 mt-1">
+        {ids.map(fid => (
+          <Badge key={fid} variant="outline" className="text-[11px] font-normal">
+            {familyNameById.get(fid) ?? fid}
+          </Badge>
+        ))}
+      </div>
+    ) : null
+  );
+
+  return (
+    <div className="space-y-3" data-testid="section-cuad-coverage">
+      <div className="flex items-center justify-between gap-2 pb-2 border-b">
+        <div className="flex items-center gap-2">
+          <Library className="h-5 w-5 text-muted-foreground" />
+          <h2 className="text-xl font-semibold">Typische Bausteine (CUAD)</h2>
+          {cov && (
+            <Badge variant="outline" className="ml-2">
+              {coveredRequired}/{totalRequired} Pflicht
+            </Badge>
+          )}
+          {cov && cov.missingExpectedCount > 0 && (
+            <Badge variant="outline" className="border-amber-300 text-amber-700 bg-amber-50">
+              {cov.missingExpectedCount} fehlt
+            </Badge>
+          )}
+        </div>
+      </div>
+
+      {isLoading ? (
+        <Skeleton className="h-24 w-full" />
+      ) : !cov || !cov.contractTypeId ? (
+        <div className="p-6 text-center border rounded-md text-sm text-muted-foreground bg-muted/10">
+          Kein Vertragstyp zugeordnet — CUAD-Coverage nicht berechenbar.
+        </div>
+      ) : (
+        <div className="space-y-3">
+          <Card>
+            <CardContent className="p-4 space-y-3">
+              <div className="flex items-center justify-between gap-3 flex-wrap">
+                <div>
+                  <div className="text-sm font-medium">{cov.contractTypeName ?? cov.contractTypeId}</div>
+                  <div className="text-xs text-muted-foreground">
+                    {coveredRequired} von {totalRequired} Pflicht-Kategorien abgedeckt
+                    {cov.totalRecommended > 0 && (
+                      <> · {cov.coveredRecommended}/{cov.totalRecommended} empfohlen</>
+                    )}
+                  </div>
+                </div>
+                {pct != null && (
+                  <div className="text-2xl font-semibold tabular-nums" data-testid="cuad-coverage-pct">
+                    {pct}%
+                  </div>
+                )}
+              </div>
+              {pct != null && <Progress value={pct} className="h-2" />}
+            </CardContent>
+          </Card>
+
+          {cov.missing.length > 0 && (
+            <div className="space-y-2" data-testid="cuad-missing-list">
+              <div className="text-sm font-medium text-amber-700">
+                Typische Bausteine fehlen
+              </div>
+              {cov.missing.map(m => (
+                <div
+                  key={m.cuadCategoryId}
+                  className="border rounded-md p-3 bg-card"
+                  data-testid={`cuad-missing-${m.cuadCategoryId}`}
+                >
+                  <div className="flex items-start justify-between gap-3 flex-wrap">
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <Badge
+                          variant="outline"
+                          className={m.requirement === "expected"
+                            ? "border-amber-300 text-amber-700 bg-amber-50"
+                            : "border-slate-300 text-slate-600"}
+                        >
+                          {m.requirement === "expected" ? "Pflicht" : "Empfohlen"}
+                        </Badge>
+                        <span className="text-sm font-medium">{m.name}</span>
+                        <span className="text-xs text-muted-foreground font-mono">{m.code}</span>
+                      </div>
+                      {m.suggestedFamilyIds.length > 0 && (
+                        <div className="mt-1.5">
+                          <div className="text-xs text-muted-foreground">
+                            Vorschläge — Klauselfamilie hinzufügen:
+                          </div>
+                          {renderFamilyChips(m.suggestedFamilyIds)}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {cov.covered.length > 0 && (
+            <div className="space-y-2">
+              <button
+                type="button"
+                onClick={() => setShowAll(s => !s)}
+                className="text-xs text-muted-foreground hover:underline"
+                data-testid="cuad-toggle-covered"
+              >
+                {showAll ? "▾" : "▸"} Abgedeckte Kategorien ({cov.covered.length})
+              </button>
+              {showAll && (
+                <div className="grid gap-2" data-testid="cuad-covered-list">
+                  {cov.covered.map(c => (
+                    <div
+                      key={c.cuadCategoryId}
+                      className="border rounded-md p-2 bg-emerald-50/30 text-sm"
+                      data-testid={`cuad-covered-${c.cuadCategoryId}`}
+                    >
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <Badge variant="outline" className="border-emerald-300 text-emerald-700 bg-emerald-50">
+                          {c.requirement === "expected" ? "Pflicht" : "Empf."}
+                        </Badge>
+                        <span className="font-medium">{c.name}</span>
+                        <span className="text-xs text-muted-foreground font-mono">{c.code}</span>
+                      </div>
+                      {renderFamilyChips(c.coveredByFamilyIds)}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
 }
 
 function DeviationsSection({ contractId }: { contractId: string }) {
