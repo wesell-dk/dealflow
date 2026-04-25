@@ -186,8 +186,9 @@ export function ApprovalChainsCard() {
             <p className="text-sm text-muted-foreground mt-1">
               Definieren Sie mehrstufige Approval-Workflows. Ein Trigger (z. B. Klausel-Änderung
               oder Amendment) wird beim Erstellen eines Approvals gegen alle aktiven Templates
-              geprüft; das Template mit der höchsten Priorität gewinnt. Jede Stage benötigt
-              entweder eine Rolle oder einen konkreten User als Approver.
+              geprüft; bei mehreren Treffern gewinnt das Template mit der niedrigsten
+              Prioritäts-Zahl (Default 100). Jede Stage benötigt entweder eine Rolle oder
+              einen konkreten User als Approver.
             </p>
           </div>
         </div>
@@ -271,7 +272,7 @@ export function ApprovalChainsCard() {
                 <Input value={name} onChange={e => setName(e.target.value)} data-testid="input-chain-name" />
               </div>
               <div>
-                <Label>Priorität (höher = wichtiger)</Label>
+                <Label>Priorität (niedriger = wichtiger, Default 100)</Label>
                 <Input type="number" value={priority} onChange={e => setPriority(parseInt(e.target.value) || 0)} data-testid="input-chain-priority" />
               </div>
             </div>
