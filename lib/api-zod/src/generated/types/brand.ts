@@ -29,4 +29,6 @@ export interface Brand {
   addressLine?: string | null;
   /** Default-Vertragssprache der Brand. NULL → Tenant-Default. */
   defaultLanguage?: BrandDefaultLanguage;
+  /** Bevorzugter Vertragstyp dieser Brand. Wird in POST /contracts verwendet, wenn der Aufruf keinen expliziten contractTypeId angibt (vor der Template-Heuristik). NULL → Heuristik nutzen. */
+  defaultContractTypeId?: string | null;
 }

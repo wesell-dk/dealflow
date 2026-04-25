@@ -4,6 +4,7 @@ import {
   useCreateBrand,
   useUpdateBrand,
   useListBrands,
+  useListContractTypes,
   getListBrandsQueryKey,
   type Brand,
   type Company,
@@ -44,6 +45,7 @@ const HEX_RE = /^#[0-9a-fA-F]{6}$/;
 const ALLOWED_LOGO_MIME = ["image/png", "image/jpeg", "image/svg+xml", "image/webp"];
 const MAX_LOGO_BYTES = 5 * 1024 * 1024;
 const NO_PARENT = "_none_";
+const NO_CONTRACT_TYPE = "_none_";
 
 export function BrandFormDialog({ open, onOpenChange, companies, defaultCompanyId, brand }: Props) {
   const { toast } = useToast();
@@ -51,6 +53,7 @@ export function BrandFormDialog({ open, onOpenChange, companies, defaultCompanyI
   const createMut = useCreateBrand();
   const updateMut = useUpdateBrand();
   const { data: allBrands } = useListBrands();
+  const { data: contractTypes } = useListContractTypes();
   const isEdit = !!brand;
 
   const [companyId, setCompanyId] = useState(defaultCompanyId ?? companies[0]?.id ?? "");
@@ -62,6 +65,7 @@ export function BrandFormDialog({ open, onOpenChange, companies, defaultCompanyI
   const [legalEntityName, setLegalEntityName] = useState("");
   const [addressLine, setAddressLine] = useState("");
   const [logoUrl, setLogoUrl] = useState("");
+  const [defaultContractTypeId, setDefaultContractTypeId] = useState<string>(NO_CONTRACT_TYPE);
   const [uploading, setUploading] = useState(false);
   const [dragOver, setDragOver] = useState(false);
   const [primaryTouched, setPrimaryTouched] = useState(false);
@@ -83,6 +87,7 @@ export function BrandFormDialog({ open, onOpenChange, companies, defaultCompanyI
       setLegalEntityName(brand?.legalEntityName ?? "");
       setAddressLine(brand?.addressLine ?? "");
       setLogoUrl(brand?.logoUrl ?? "");
+      setDefaultContractTypeId(brand?.defaultContractTypeId ?? NO_CONTRACT_TYPE);
       setPrimaryTouched(false);
       setSecondaryTouched(false);
       primaryTouchedRef.current = false;
@@ -191,6 +196,7 @@ export function BrandFormDialog({ open, onOpenChange, companies, defaultCompanyI
       return;
     }
     const parent = parentBrandId === NO_PARENT ? null : parentBrandId;
+    const ctDefault = defaultContractTypeId === NO_CONTRACT_TYPE ? null : defaultContractTypeId;
     try {
       if (isEdit && brand) {
         await updateMut.mutateAsync({
@@ -206,6 +212,7 @@ export function BrandFormDialog({ open, onOpenChange, companies, defaultCompanyI
             addressLine: addressLine.trim() || null,
             logoUrl: logoUrl.trim() || null,
             parentBrandId: parent,
+            defaultContractTypeId: ctDefault,
           },
         });
         toast({ title: "Brand aktualisiert", description: trimmed });
@@ -223,6 +230,7 @@ export function BrandFormDialog({ open, onOpenChange, companies, defaultCompanyI
             legalEntityName: legalEntityName.trim() || null,
             addressLine: addressLine.trim() || null,
             logoUrl: logoUrl.trim() || null,
+            defaultContractTypeId: ctDefault,
           },
         });
         toast({ title: "Brand angelegt", description: trimmed });
@@ -453,6 +461,30 @@ export function BrandFormDialog({ open, onOpenChange, companies, defaultCompanyI
                 />
               </div>
             </div>
+          </div>
+
+          <div className="space-y-1.5">
+            <Label htmlFor="brand-default-contract-type">Standard-Vertragstyp</Label>
+            <Select value={defaultContractTypeId} onValueChange={setDefaultContractTypeId}>
+              <SelectTrigger id="brand-default-contract-type" data-testid="select-brand-default-contract-type">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value={NO_CONTRACT_TYPE}>— Heuristik aus Template-Name —</SelectItem>
+                {(contractTypes ?? []).filter(ct => ct.active !== false).map(ct => (
+                  <SelectItem key={ct.id} value={ct.id} textValue={ct.name}>
+                    <div className="flex flex-col">
+                      <span className="font-medium">{ct.name}</span>
+                      <span className="text-xs text-muted-foreground">{ct.code}</span>
+                    </div>
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <p className="text-xs text-muted-foreground">
+              Wird in „Vertrag erstellen" verwendet, wenn kein Vertragstyp explizit gewählt wurde — bevor die
+              Schlagwort-Heuristik aus dem Templatenamen greift.
+            </p>
           </div>
 
           <div className="space-y-1.5">

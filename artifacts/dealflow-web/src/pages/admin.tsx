@@ -672,7 +672,9 @@ function BrandRow({ brand }: { brand: Brand }) {
     addressLine: brand.addressLine ?? "",
     parentBrandId: brand.parentBrandId ?? null,
     defaultLanguage: brand.defaultLanguage ?? "de",
+    defaultContractTypeId: brand.defaultContractTypeId ?? null,
   });
+  const contractTypesQ = useListContractTypes();
   const allBrandsQ = useListBrands();
   const NO_PARENT = "_none_";
   const parentCandidates = (allBrandsQ.data ?? []).filter(b => {
@@ -951,6 +953,30 @@ function BrandRow({ brand }: { brand: Brand }) {
                   </SelectContent>
                 </Select>
                 <p className="text-xs text-muted-foreground mt-1">Optional — Sub-Brand unter einer übergeordneten Marke.</p>
+              </div>
+              <div className="col-span-2">
+                <Label>Standard-Vertragstyp</Label>
+                <Select
+                  value={draft.defaultContractTypeId ?? NO_PARENT}
+                  onValueChange={(v) => setDraft({ ...draft, defaultContractTypeId: v === NO_PARENT ? null : v })}
+                >
+                  <SelectTrigger data-testid={`select-brand-default-contract-type-${brand.id}`}><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value={NO_PARENT}>— Heuristik aus Template-Name —</SelectItem>
+                    {(contractTypesQ.data ?? []).filter(ct => ct.active !== false).map(ct => (
+                      <SelectItem key={ct.id} value={ct.id} textValue={ct.name}>
+                        <div className="flex flex-col">
+                          <span className="font-medium">{ct.name}</span>
+                          <span className="text-xs text-muted-foreground">{ct.code}</span>
+                        </div>
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-muted-foreground mt-1">
+                  Wird in „Vertrag erstellen" verwendet, wenn kein Vertragstyp explizit gewählt wurde — vor der
+                  Schlagwort-Heuristik aus dem Templatenamen.
+                </p>
               </div>
               <div>
                 <Label>Tone / Voice</Label>

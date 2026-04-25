@@ -182,6 +182,12 @@ export const ListBrandsResponseItem = zod.object({
     .enum(["de", "en"])
     .nullish()
     .describe("Default-Vertragssprache der Brand. NULL → Tenant-Default."),
+  defaultContractTypeId: zod
+    .string()
+    .nullish()
+    .describe(
+      "Bevorzugter Vertragstyp dieser Brand. Wird in POST \/contracts verwendet, wenn der Aufruf keinen expliziten contractTypeId angibt (vor der Template-Heuristik). NULL → Heuristik nutzen.",
+    ),
 });
 export const ListBrandsResponse = zod.array(ListBrandsResponseItem);
 
@@ -210,6 +216,12 @@ export const CreateBrandBody = zod.object({
   tone: zod.string().nullish(),
   legalEntityName: zod.string().nullish(),
   addressLine: zod.string().nullish(),
+  defaultContractTypeId: zod
+    .string()
+    .nullish()
+    .describe(
+      "Optional bei Anlage: bevorzugter Vertragstyp für POST \/contracts. Muss tenant-eigen oder ein tn_root-Seed sein und aktiv sein.",
+    ),
 });
 
 /**
@@ -243,6 +255,12 @@ export const ListBrandsWithDefaultsResponseItem = zod.object({
     .enum(["de", "en"])
     .nullish()
     .describe("Default-Vertragssprache der Brand. NULL → Tenant-Default."),
+  defaultContractTypeId: zod
+    .string()
+    .nullish()
+    .describe(
+      "Bevorzugter Vertragstyp dieser Brand. Wird in POST \/contracts verwendet, wenn der Aufruf keinen expliziten contractTypeId angibt (vor der Template-Heuristik). NULL → Heuristik nutzen.",
+    ),
 });
 export const ListBrandsWithDefaultsResponse = zod.array(
   ListBrandsWithDefaultsResponseItem,
@@ -264,6 +282,12 @@ export const UpdateBrandBody = zod.object({
   legalEntityName: zod.string().nullish(),
   addressLine: zod.string().nullish(),
   defaultLanguage: zod.enum(["de", "en"]).nullish(),
+  defaultContractTypeId: zod
+    .string()
+    .nullish()
+    .describe(
+      "Bevorzugter Vertragstyp. Muss tenant-eigen oder ein tn_root-Seed sein und aktiv sein. NULL setzt zurück auf Heuristik.",
+    ),
 });
 
 export const UpdateBrandResponse = zod.object({
@@ -290,6 +314,12 @@ export const UpdateBrandResponse = zod.object({
     .enum(["de", "en"])
     .nullish()
     .describe("Default-Vertragssprache der Brand. NULL → Tenant-Default."),
+  defaultContractTypeId: zod
+    .string()
+    .nullish()
+    .describe(
+      "Bevorzugter Vertragstyp dieser Brand. Wird in POST \/contracts verwendet, wenn der Aufruf keinen expliziten contractTypeId angibt (vor der Template-Heuristik). NULL → Heuristik nutzen.",
+    ),
 });
 
 export const UpdateBrandDefaultClausesParams = zod.object({
@@ -324,6 +354,12 @@ export const UpdateBrandDefaultClausesResponse = zod.object({
     .enum(["de", "en"])
     .nullish()
     .describe("Default-Vertragssprache der Brand. NULL → Tenant-Default."),
+  defaultContractTypeId: zod
+    .string()
+    .nullish()
+    .describe(
+      "Bevorzugter Vertragstyp dieser Brand. Wird in POST \/contracts verwendet, wenn der Aufruf keinen expliziten contractTypeId angibt (vor der Template-Heuristik). NULL → Heuristik nutzen.",
+    ),
 });
 
 export const ListUsersResponseItem = zod.object({

@@ -9,6 +9,7 @@ import {
   jsonb,
   uniqueIndex,
   index,
+  type AnyPgColumn,
 } from "drizzle-orm/pg-core";
 import { sql } from "drizzle-orm";
 
@@ -73,6 +74,15 @@ export const brandsTable = pgTable("brands", {
   addressLine: text("address_line"),
   // Default-Vertragssprache für diese Brand (de/en). Wenn null → Tenant-Default.
   defaultLanguage: text("default_language"),
+  // Bevorzugter Vertragstyp (FK auf contract_types.id, nullable). Wenn gesetzt
+  // und der POST /contracts-Aufruf liefert KEINEN expliziten contractTypeId,
+  // wird dieser Wert verwendet (vor der Template-Heuristik). Gibt Brand-Admins
+  // damit eine deterministische Vorgabe statt sich auf das Schlagwort-Mapping
+  // im Templatenamen verlassen zu müssen.
+  // ON DELETE SET NULL spiegelt die Runtime-Semantik (POST /contracts fällt
+  // auf die Heuristik zurück, wenn der Vertragstyp inaktiv/weg ist).
+  defaultContractTypeId: text("default_contract_type_id")
+    .references((): AnyPgColumn => contractTypesTable.id, { onDelete: "set null" }),
 });
 
 export const usersTable = pgTable("users", {

@@ -531,6 +531,8 @@ export interface Brand {
   addressLine?: string | null;
   /** Default-Vertragssprache der Brand. NULL → Tenant-Default. */
   defaultLanguage?: BrandDefaultLanguage;
+  /** Bevorzugter Vertragstyp dieser Brand. Wird in POST /contracts verwendet, wenn der Aufruf keinen expliziten contractTypeId angibt (vor der Template-Heuristik). NULL → Heuristik nutzen. */
+  defaultContractTypeId?: string | null;
 }
 
 export type BrandUpdateDefaultLanguage =
@@ -554,6 +556,8 @@ export interface BrandUpdate {
   legalEntityName?: string | null;
   addressLine?: string | null;
   defaultLanguage?: BrandUpdateDefaultLanguage;
+  /** Bevorzugter Vertragstyp. Muss tenant-eigen oder ein tn_root-Seed sein und aktiv sein. NULL setzt zurück auf Heuristik. */
+  defaultContractTypeId?: string | null;
 }
 
 export interface CompanyCreate {
@@ -623,6 +627,8 @@ export interface BrandCreate {
   tone?: string | null;
   legalEntityName?: string | null;
   addressLine?: string | null;
+  /** Optional bei Anlage: bevorzugter Vertragstyp für POST /contracts. Muss tenant-eigen oder ein tn_root-Seed sein und aktiv sein. */
+  defaultContractTypeId?: string | null;
 }
 
 /**

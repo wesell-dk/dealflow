@@ -7,6 +7,7 @@ import {
   contractClausesTable,
   usersTable,
   contractTypesTable,
+  brandsTable,
 } from "@workspace/db";
 import {
   createTestWorld,
@@ -161,6 +162,95 @@ describe("Contract bindings — POST/PATCH set tenantId + contractTypeId", () =>
     const cleared = await alice.patch(`/api/contracts/${legacyId}`, { contractTypeId: null });
     assert.equal(cleared.status, 200);
     assert.equal((cleared.body as ContractResponse).contractTypeId, null);
+  });
+
+  it("POST /contracts uses brand.defaultContractTypeId before falling back to template heuristic", async () => {
+    // Pin the world brand to ct_msa explicitly. Template name says "Mutual NDA"
+    // — heuristic alone would yield ct_nda — so seeing ct_msa proves the brand
+    // default takes precedence.
+    await db.update(brandsTable)
+      .set({ defaultContractTypeId: "ct_msa" })
+      .where(eq(brandsTable.id, world.brandId));
+    try {
+      const created = await alice.post("/api/contracts", {
+        dealId: world.dealId,
+        title: "Brand-default wins over heuristic",
+        template: "Mutual NDA",
+        brandId: world.brandId,
+      });
+      assert.equal(created.status, 201, JSON.stringify(created.body));
+      const body = created.body as ContractResponse;
+      seededContractIds.push(body.id);
+      assert.equal(body.contractTypeId, "ct_msa", "brand default must beat the NDA heuristic");
+
+      // Explicit contractTypeId still wins over the brand default.
+      const explicit = await alice.post("/api/contracts", {
+        dealId: world.dealId,
+        title: "Explicit overrides brand default",
+        template: "Mutual NDA",
+        brandId: world.brandId,
+        contractTypeId: "ct_nda",
+      });
+      assert.equal(explicit.status, 201);
+      const eb = explicit.body as ContractResponse;
+      seededContractIds.push(eb.id);
+      assert.equal(eb.contractTypeId, "ct_nda");
+
+      // Inactive brand default → heuristic kicks back in (defensive revalidation).
+      await db.update(contractTypesTable).set({ active: false }).where(eq(contractTypesTable.id, "ct_msa"));
+      try {
+        const fallback = await alice.post("/api/contracts", {
+          dealId: world.dealId,
+          title: "Falls back to heuristic when brand default is inactive",
+          template: "Mutual NDA",
+          brandId: world.brandId,
+        });
+        assert.equal(fallback.status, 201, JSON.stringify(fallback.body));
+        const fb = fallback.body as ContractResponse;
+        seededContractIds.push(fb.id);
+        assert.equal(fb.contractTypeId, "ct_nda", "must fall back to heuristic when brand default is inactive");
+      } finally {
+        await db.update(contractTypesTable).set({ active: true }).where(eq(contractTypesTable.id, "ct_msa"));
+      }
+    } finally {
+      await db.update(brandsTable)
+        .set({ defaultContractTypeId: null })
+        .where(eq(brandsTable.id, world.brandId));
+    }
+  });
+
+  it("PATCH /brands/:id sets and clears defaultContractTypeId with FK validation", async () => {
+    // Set to a valid tn_root-seeded type.
+    const set = await alice.patch(`/api/brands/${world.brandId}`, { defaultContractTypeId: "ct_msa" });
+    assert.equal(set.status, 200, JSON.stringify(set.body));
+    assert.equal((set.body as { defaultContractTypeId: string | null }).defaultContractTypeId, "ct_msa");
+
+    // Unknown id → 422.
+    const bad = await alice.patch(`/api/brands/${world.brandId}`, { defaultContractTypeId: "ct_nope" });
+    assert.equal(bad.status, 422, JSON.stringify(bad.body));
+
+    // Foreign-tenant type → 403.
+    const foreignTypeId = `${world.runId}_foreign_dft`;
+    await db.insert(contractTypesTable).values({
+      id: foreignTypeId,
+      tenantId: "tn_some_other_tenant_does_not_exist",
+      code: "FORN2",
+      name: "Foreign Default Type",
+      active: true,
+    });
+    try {
+      const denied = await alice.patch(`/api/brands/${world.brandId}`, {
+        defaultContractTypeId: foreignTypeId,
+      });
+      assert.equal(denied.status, 403, JSON.stringify(denied.body));
+    } finally {
+      await db.delete(contractTypesTable).where(eq(contractTypesTable.id, foreignTypeId));
+    }
+
+    // Clearing with null returns to heuristic mode.
+    const cleared = await alice.patch(`/api/brands/${world.brandId}`, { defaultContractTypeId: null });
+    assert.equal(cleared.status, 200);
+    assert.equal((cleared.body as { defaultContractTypeId: string | null }).defaultContractTypeId, null);
   });
 
   it("PATCH /contracts/:id rejects contractTypeId from other tenants", async () => {

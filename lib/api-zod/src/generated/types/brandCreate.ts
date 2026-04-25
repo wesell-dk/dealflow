@@ -27,4 +27,6 @@ export interface BrandCreate {
   tone?: string | null;
   legalEntityName?: string | null;
   addressLine?: string | null;
+  /** Optional bei Anlage: bevorzugter Vertragstyp für POST /contracts. Muss tenant-eigen oder ein tn_root-Seed sein und aktiv sein. */
+  defaultContractTypeId?: string | null;
 }

@@ -21,4 +21,6 @@ export interface BrandUpdate {
   legalEntityName?: string | null;
   addressLine?: string | null;
   defaultLanguage?: BrandUpdateDefaultLanguage;
+  /** Bevorzugter Vertragstyp. Muss tenant-eigen oder ein tn_root-Seed sein und aktiv sein. NULL setzt zurück auf Heuristik. */
+  defaultContractTypeId?: string | null;
 }

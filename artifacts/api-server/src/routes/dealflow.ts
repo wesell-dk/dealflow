@@ -465,6 +465,7 @@ router.post('/orgs/brands', async (req, res) => {
     color?: string | null; voice?: string | null;
     logoUrl?: string | null; primaryColor?: string | null; secondaryColor?: string | null;
     tone?: string | null; legalEntityName?: string | null; addressLine?: string | null;
+    defaultContractTypeId?: string | null;
   };
   const [company] = await db.select().from(companiesTable).where(eq(companiesTable.id, b.companyId));
   if (!company) { res.status(404).json({ error: 'company not found' }); return; }
@@ -483,6 +484,20 @@ router.post('/orgs/brands', async (req, res) => {
   const dup = await db.select().from(brandsTable)
     .where(and(eq(brandsTable.companyId, b.companyId), eq(brandsTable.name, name)));
   if (dup.length) { res.status(409).json({ error: `brand "${name}" already exists for this company` }); return; }
+  // Optionaler Default-Vertragstyp: muss tenant-eigen oder ein tn_root-Seed
+  // sein und aktiv. Damit der spätere POST /contracts-Pfad nicht auf einen
+  // fremden/inaktiven Typ verweist.
+  let defaultContractTypeId: string | null = null;
+  if (b.defaultContractTypeId !== undefined && b.defaultContractTypeId !== null && b.defaultContractTypeId !== '') {
+    const [ct] = await db.select().from(contractTypesTable)
+      .where(eq(contractTypesTable.id, b.defaultContractTypeId.trim()));
+    if (!ct) { res.status(422).json({ error: 'defaultContractTypeId not found' }); return; }
+    if (ct.tenantId !== scope.tenantId && ct.tenantId !== 'tn_root') {
+      res.status(403).json({ error: 'defaultContractTypeId belongs to a different tenant' }); return;
+    }
+    if (!ct.active) { res.status(422).json({ error: 'defaultContractTypeId is inactive' }); return; }
+    defaultContractTypeId = ct.id;
+  }
   // Defaults & Hex-Validierung.
   const color = (b.color ?? b.primaryColor ?? '#2D6CDF').trim();
   if (!HEX_RE.test(color)) { res.status(422).json({ error: 'color must be #RRGGBB hex' }); return; }
@@ -506,6 +521,7 @@ router.post('/orgs/brands', async (req, res) => {
     tone: b.tone?.trim() || (b.voice?.trim() || null),
     legalEntityName: b.legalEntityName?.trim() || null,
     addressLine: b.addressLine?.trim() || null,
+    defaultContractTypeId,
   };
   await db.insert(brandsTable).values(row);
   const [inserted] = await db.select().from(brandsTable).where(eq(brandsTable.id, newId));
@@ -3218,7 +3234,19 @@ router.post('/contracts', async (req, res) => {
     if (!ct.active) { res.status(422).json({ error: 'contractTypeId is inactive' }); return; }
     contractType = ct;
   } else {
-    contractType = await resolveDefaultContractType({ template: b.template, tenantId: tenantIdForSeed });
+    // Brand-Default hat Vorrang vor der Template-Heuristik. Wir revalidieren
+    // den FK defensiv (Tenant-Boundary, Aktiv-Status), falls der Vertragstyp
+    // nach dem Setzen am Brand inaktiviert oder gelöscht wurde.
+    if (brandForSeed?.defaultContractTypeId) {
+      const [ct] = await db.select().from(contractTypesTable)
+        .where(eq(contractTypesTable.id, brandForSeed.defaultContractTypeId));
+      if (ct && ct.active && (ct.tenantId === tenantIdForSeed || ct.tenantId === 'tn_root')) {
+        contractType = ct;
+      }
+    }
+    if (!contractType) {
+      contractType = await resolveDefaultContractType({ template: b.template, tenantId: tenantIdForSeed });
+    }
     if (!contractType) {
       res.status(422).json({
         error: 'contractTypeId required',
@@ -3402,6 +3430,7 @@ function mapBrand(b: typeof brandsTable.$inferSelect) {
     legalEntityName: b.legalEntityName ?? null,
     addressLine: b.addressLine ?? null,
     parentBrandId: b.parentBrandId ?? null,
+    defaultContractTypeId: b.defaultContractTypeId ?? null,
   };
 }
 
@@ -3449,6 +3478,26 @@ router.patch('/brands/:id', async (req, res) => {
   }
   const body: Record<string, unknown> = req.body ?? {};
   const patch: Partial<typeof brandsTable.$inferInsert> = {};
+  // defaultContractTypeId separat behandeln (nullable, mit Tenant-/Aktiv-Check).
+  // Damit POST /contracts deterministisch auf einen sicheren Typ zurückgreifen
+  // kann statt auf die Template-Heuristik.
+  if ('defaultContractTypeId' in body) {
+    const v = body.defaultContractTypeId;
+    if (v === null || v === '') {
+      patch.defaultContractTypeId = null;
+    } else if (typeof v !== 'string') {
+      res.status(400).json({ error: 'defaultContractTypeId must be string or null' }); return;
+    } else {
+      const [ct] = await db.select().from(contractTypesTable)
+        .where(eq(contractTypesTable.id, v.trim()));
+      if (!ct) { res.status(422).json({ error: 'defaultContractTypeId not found' }); return; }
+      if (ct.tenantId !== scope.tenantId && ct.tenantId !== 'tn_root') {
+        res.status(403).json({ error: 'defaultContractTypeId belongs to a different tenant' }); return;
+      }
+      if (!ct.active) { res.status(422).json({ error: 'defaultContractTypeId is inactive' }); return; }
+      patch.defaultContractTypeId = ct.id;
+    }
+  }
   // parentBrandId separat behandeln (nullable, mit Self-/Company-Validation).
   if ('parentBrandId' in body) {
     const v = body.parentBrandId;
