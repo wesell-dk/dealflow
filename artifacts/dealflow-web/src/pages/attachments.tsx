@@ -32,6 +32,8 @@ import { FieldHint } from "@/components/ui/field-hint";
 import { ATTACHMENT_CATEGORIES } from "@/lib/glossary";
 import { Paperclip, Upload, Trash2, Search, Loader2, Plus, Download } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { PageHeader } from "@/components/patterns/page-header";
+import { EmptyStateCard } from "@/components/patterns/empty-state-card";
 
 const CATEGORIES = ["all", "datasheet", "terms", "reference", "certificate", "other"];
 const UPLOAD_CATEGORIES = ["datasheet", "terms", "reference", "certificate", "other"] as const;
@@ -141,23 +143,19 @@ export default function Attachments() {
 
   return (
     <div className="flex flex-col gap-6">
-      <div className="flex items-center justify-between gap-4">
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight">
-            {t("pages.attachments.title")}
-          </h1>
-          <p className="text-muted-foreground mt-1">
-            {t("pages.attachments.subtitle")}
-          </p>
-        </div>
-        <Dialog open={uploadOpen} onOpenChange={setUploadOpen}>
-          <DialogTrigger asChild>
-            <Button data-testid="attachment-upload-button">
-              <Plus className="h-4 w-4 mr-1" />
-              {t("pages.attachments.upload")}
-            </Button>
-          </DialogTrigger>
-          <DialogContent>
+      <PageHeader
+        icon={Paperclip}
+        title={t("pages.attachments.title")}
+        subtitle={t("pages.attachments.subtitle")}
+        actions={
+          <Button onClick={() => setUploadOpen(true)} data-testid="attachment-upload-button">
+            <Plus className="h-4 w-4 mr-1" />
+            {t("pages.attachments.upload")}
+          </Button>
+        }
+      />
+      <Dialog open={uploadOpen} onOpenChange={setUploadOpen}>
+        <DialogContent>
             <DialogHeader>
               <DialogTitle>{t("pages.attachments.uploadTitle")}</DialogTitle>
             </DialogHeader>
@@ -245,9 +243,8 @@ export default function Attachments() {
                 {t("pages.attachments.upload")}
               </Button>
             </DialogFooter>
-          </DialogContent>
-        </Dialog>
-      </div>
+        </DialogContent>
+      </Dialog>
 
       <div className="flex items-center gap-2">
         <div className="relative flex-1 max-w-md">
@@ -276,9 +273,18 @@ export default function Attachments() {
       {isLoading && <Skeleton className="h-64 w-full" />}
 
       {!isLoading && filtered.length === 0 && (
-        <div className="rounded-md border p-8 text-center text-muted-foreground">
-          {t("pages.attachments.empty")}
-        </div>
+        <EmptyStateCard
+          icon={Paperclip}
+          title={t("pages.attachments.emptyTitle")}
+          body={items && items.length > 0
+            ? t("pages.attachments.empty")
+            : t("pages.attachments.emptyBody")}
+          primaryAction={items && items.length === 0 ? {
+            label: t("pages.attachments.upload"),
+            onClick: () => setUploadOpen(true),
+            testId: "attachments-empty-upload",
+          } : undefined}
+        />
       )}
 
       <div className="grid gap-3 md:grid-cols-2">

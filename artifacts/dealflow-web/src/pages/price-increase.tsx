@@ -30,6 +30,7 @@ import {
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { CheckCircle2, Clock, XCircle, MessageSquarePlus } from "lucide-react";
+import { Breadcrumbs } from "@/components/patterns/breadcrumbs";
 
 function ResponseDialog({ campaignId, letterId, onDone }: { campaignId: string; letterId: string; onDone: () => void }) {
   const { t } = useTranslation();
@@ -106,6 +107,12 @@ export default function PriceIncrease() {
 
   return (
     <div className="flex flex-col gap-6">
+      <Breadcrumbs
+        items={[
+          { label: t("nav.priceIncreases"), href: "/price-increases" },
+          { label: campaign.name },
+        ]}
+      />
       <div className="flex flex-col gap-2 border-b pb-4">
         <div className="flex items-center justify-between">
           <h1 className="text-3xl font-bold tracking-tight">{campaign.name}</h1>

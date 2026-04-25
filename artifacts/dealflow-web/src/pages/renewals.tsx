@@ -37,6 +37,8 @@ import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
 import { CalendarClock, AlertTriangle, RefreshCcw, Calendar, FileSignature, X, FilePlus2 } from "lucide-react";
 import { Link, useSearch, useLocation } from "wouter";
+import { PageHeader } from "@/components/patterns/page-header";
+import { EmptyStateCard } from "@/components/patterns/empty-state-card";
 
 type Bucket = "" | "this_month" | "next_90" | "risk";
 
@@ -198,20 +200,17 @@ export default function RenewalsPage() {
 
   return (
     <div className="space-y-6 p-6">
-      <div className="flex items-start justify-between gap-4">
-        <div>
-          <h1 className="flex items-center gap-2 text-2xl font-semibold">
-            <CalendarClock className="h-6 w-6" /> {t("pages.renewals.title")}
-          </h1>
-          <p className="text-sm text-muted-foreground">{t("pages.renewals.subtitle")}</p>
-        </div>
-        {isTenantAdmin && (
+      <PageHeader
+        icon={CalendarClock}
+        title={t("pages.renewals.title")}
+        subtitle={t("pages.renewals.subtitle")}
+        actions={isTenantAdmin && (
           <Button onClick={runEngine} disabled={runMut.isPending} variant="outline">
             <RefreshCcw className="mr-2 h-4 w-4" />
             {t("pages.renewals.runNow")}
           </Button>
         )}
-      </div>
+      />
 
       <div className="grid gap-4 md:grid-cols-4">
         <Card>
@@ -346,9 +345,13 @@ export default function RenewalsPage() {
           {isLoadingRows ? (
             <Skeleton className="h-40 w-full" />
           ) : sortedRows.length === 0 ? (
-            <div className="rounded-md border border-dashed p-8 text-center text-sm text-muted-foreground">
-              {t("pages.renewals.empty")}
-            </div>
+            <EmptyStateCard
+              icon={CalendarClock}
+              title={t("pages.renewals.emptyTitle")}
+              body={t("pages.renewals.empty")}
+              hint={t("pages.renewals.emptyHint")}
+              className="border-0 shadow-none"
+            />
           ) : (
             <Table>
               <TableHeader>

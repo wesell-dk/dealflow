@@ -22,6 +22,7 @@ import { FileText, Download, Paperclip, Languages } from "lucide-react";
 import { QuoteDuplicateButton } from "@/components/quotes/quote-duplicate-button";
 import { useToast } from "@/hooks/use-toast";
 import { AiPromptPanel } from "@/components/copilot/ai-prompt-panel";
+import { Breadcrumbs } from "@/components/patterns/breadcrumbs";
 
 export default function Quote() {
   const params = useParams();
@@ -52,6 +53,12 @@ export default function Quote() {
 
   return (
     <div className="flex flex-col gap-6">
+      <Breadcrumbs
+        items={[
+          { label: t("nav.quotes"), href: "/quotes" },
+          { label: `${t("common.quote")} ${quote.number}` },
+        ]}
+      />
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-bold tracking-tight">{t("common.quote")} {quote.number}</h1>

@@ -16,6 +16,7 @@ import { Progress } from "@/components/ui/progress";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { Breadcrumbs } from "@/components/patterns/breadcrumbs";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
@@ -90,6 +91,13 @@ export default function OrderConfirmationDetail() {
 
   return (
     <>
+      <Breadcrumbs
+        className="mb-3"
+        items={[
+          { label: t("nav.orderConfirmations"), href: "/order-confirmations" },
+          { label: data.number },
+        ]}
+      />
       <div className="flex items-center gap-3">
         <Link href="/order-confirmations">
           <Button variant="ghost" size="icon">

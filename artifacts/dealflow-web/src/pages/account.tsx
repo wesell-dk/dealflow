@@ -33,8 +33,11 @@ import { ActivityTimeline } from "@/components/patterns/activity-timeline";
 import { ExternalContractsCard } from "@/components/external-contracts/external-contracts-card";
 import { useTrackRecent } from "@/hooks/use-recents";
 import { useToast } from "@/hooks/use-toast";
+import { Breadcrumbs } from "@/components/patterns/breadcrumbs";
+import { useTranslation } from "react-i18next";
 
 export default function Account() {
+  const { t } = useTranslation();
   const [, params] = useRoute("/accounts/:id");
   const id = params?.id || "";
   const [dealOpen, setDealOpen] = useState(false);
@@ -81,6 +84,12 @@ export default function Account() {
 
   return (
     <div className="flex flex-col gap-6">
+      <Breadcrumbs
+        items={[
+          { label: t("nav.accounts"), href: "/accounts" },
+          { label: account.name },
+        ]}
+      />
       <div className="flex flex-col gap-4 border-b pb-6">
         <div className="flex items-start justify-between">
           <div className="space-y-2">

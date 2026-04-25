@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useParams } from "wouter";
+import { useTranslation } from "react-i18next";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   useGetDeal,
@@ -22,8 +23,10 @@ import { ActivityTimeline } from "@/components/patterns/activity-timeline";
 import { useTrackRecent } from "@/hooks/use-recents";
 import { useToast } from "@/hooks/use-toast";
 import { AiPromptPanel } from "@/components/copilot/ai-prompt-panel";
+import { Breadcrumbs } from "@/components/patterns/breadcrumbs";
 
 export default function Deal() {
+  const { t } = useTranslation();
   const params = useParams();
   const id = params.id as string;
   const qc = useQueryClient();
@@ -58,6 +61,12 @@ export default function Deal() {
 
   return (
     <div className="flex flex-col gap-6">
+      <Breadcrumbs
+        items={[
+          { label: t("nav.deals"), href: "/deals" },
+          { label: deal.name },
+        ]}
+      />
       <div className="flex flex-col gap-3 border-b pb-4">
         <div className="flex items-start justify-between gap-4">
           <h1 className="text-3xl font-bold tracking-tight">

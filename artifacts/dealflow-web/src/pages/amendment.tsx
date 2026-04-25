@@ -23,6 +23,7 @@ import {
 import { FileStack, GitCompare, ArrowLeft, ClipboardList, History, CheckCircle2, PenLine } from "lucide-react";
 import { EntityVersions } from "@/components/ui/entity-versions";
 import { useToast } from "@/hooks/use-toast";
+import { Breadcrumbs } from "@/components/patterns/breadcrumbs";
 
 function amendmentTypeLabel(type: string): string {
   switch (type) {
@@ -110,6 +111,13 @@ export default function Amendment() {
 
   return (
     <div className="flex flex-col gap-6">
+      <Breadcrumbs
+        items={[
+          { label: t("nav.contracts"), href: "/contracts" },
+          { label: t("common.contract"), href: `/contracts/${a.originalContractId}` },
+          { label: a.number },
+        ]}
+      />
       <div className="flex flex-col gap-2 border-b pb-4">
         <Link
           href={`/contracts/${a.originalContractId}`}

@@ -30,6 +30,8 @@ import {
   Eye, XCircle, ArrowRight, Send,
 } from "lucide-react";
 import { format, formatDistanceToNowStrict } from "date-fns";
+import { Breadcrumbs } from "@/components/patterns/breadcrumbs";
+import { useTranslation } from "react-i18next";
 import { de } from "date-fns/locale";
 
 const statusBadge: Record<string, { label: string; cls: string; icon: React.ComponentType<{className?: string}> }> = {
@@ -48,6 +50,7 @@ const packageStatusBadge: Record<string, { label: string; variant: "secondary" |
 };
 
 export default function SignatureDetail() {
+  const { t } = useTranslation();
   const [, params] = useRoute("/signatures/:id");
   const id = params?.id as string;
   const [, setLocation] = useLocation();
@@ -137,6 +140,12 @@ export default function SignatureDetail() {
 
   return (
     <div className="flex flex-col gap-6 max-w-5xl mx-auto w-full">
+      <Breadcrumbs
+        items={[
+          { label: t("nav.signatures"), href: "/signatures" },
+          { label: pkg.title },
+        ]}
+      />
       <div className="flex flex-col gap-2 border-b pb-6">
         <div className="flex items-center justify-between flex-wrap gap-3">
           <div>

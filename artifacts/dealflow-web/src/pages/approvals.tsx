@@ -27,6 +27,8 @@ import { Label } from "@/components/ui/label";
 import {
   Clock, CheckCircle2, XCircle, AlertCircle, ChevronRight, UserCog, Trash2,
 } from "lucide-react";
+import { PageHeader } from "@/components/patterns/page-header";
+import { EmptyStateCard } from "@/components/patterns/empty-state-card";
 
 function StageStepper({ stages, currentIdx }: { stages: ApprovalStage[]; currentIdx: number }) {
   return (
@@ -237,10 +239,11 @@ export default function Approvals() {
 
   return (
     <div className="flex flex-col gap-6">
-      <div>
-        <h1 className="text-3xl font-bold tracking-tight">{t("pages.approvals.title")}</h1>
-        <p className="text-muted-foreground mt-1">{t("pages.approvals.subtitle")}</p>
-      </div>
+      <PageHeader
+        icon={CheckCircle2}
+        title={t("pages.approvals.title")}
+        subtitle={t("pages.approvals.subtitle")}
+      />
 
       <MyDelegationsCard />
 
@@ -260,11 +263,12 @@ export default function Approvals() {
 
       <div className="grid gap-4">
         {approvals?.length === 0 ? (
-          <div className="text-center py-12 border rounded-lg bg-muted/20">
-            <CheckCircle2 className="mx-auto h-12 w-12 text-muted-foreground opacity-50" />
-            <h3 className="mt-4 text-lg font-medium">All caught up</h3>
-            <p className="text-muted-foreground text-sm">No approvals found matching your criteria.</p>
-          </div>
+          <EmptyStateCard
+            icon={CheckCircle2}
+            title={t("pages.approvals.emptyTitle")}
+            body={t("pages.approvals.emptyBody")}
+            hint={t("pages.approvals.emptyHint")}
+          />
         ) : (
           approvals?.map((approval: ApprovalCase) => {
             const isOpen = approval.status !== "approved" && approval.status !== "rejected";

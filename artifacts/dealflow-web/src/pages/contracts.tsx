@@ -21,6 +21,9 @@ import {
 import { Label } from "@/components/ui/label";
 import { FileText, Plus, RefreshCw } from "lucide-react";
 import { ContractFormDialog } from "@/components/contracts/contract-form-dialog";
+import { PageHeader } from "@/components/patterns/page-header";
+import { EmptyStateCard } from "@/components/patterns/empty-state-card";
+import { ContractStatusBadge, RiskBadge } from "@/components/patterns/status-badges";
 
 type Source = "all" | "internal" | "external";
 
@@ -108,35 +111,48 @@ export default function Contracts() {
     return combined.sort((a, b) => a.title.localeCompare(b.title, "de"));
   }, [contracts, externals, source]);
 
-  if (isLoading) return <div className="p-8"><Skeleton className="h-64 w-full" /></div>;
-
   return (
-    <div className="flex flex-col gap-6">
-      <div className="flex items-end justify-between gap-4">
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight">{t("pages.contracts.title")}</h1>
-          <p className="text-muted-foreground mt-1">{t("pages.contracts.subtitle")}</p>
-        </div>
-        <div className="flex items-end gap-2">
-          <div className="w-48">
-            <Label className="text-xs text-muted-foreground">Quelle</Label>
-            <Select value={source} onValueChange={(v) => setSource(v as Source)}>
-              <SelectTrigger data-testid="contracts-source-filter"><SelectValue /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">Alle</SelectItem>
-                <SelectItem value="internal">Intern</SelectItem>
-                <SelectItem value="external">Extern</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-          <Button onClick={() => setCreateOpen(true)} data-testid="button-new-contract">
-            <Plus className="mr-2 h-4 w-4" /> Neuer Vertrag
-          </Button>
-        </div>
-      </div>
+    <div className="flex flex-col">
+      <PageHeader
+        icon={FileText}
+        title={t("pages.contracts.title")}
+        subtitle={t("pages.contracts.subtitle")}
+        actions={
+          <>
+            <div className="w-44">
+              <Label className="text-xs text-muted-foreground">{t("pages.contracts.source")}</Label>
+              <Select value={source} onValueChange={(v) => setSource(v as Source)}>
+                <SelectTrigger data-testid="contracts-source-filter"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">{t("common.all")}</SelectItem>
+                  <SelectItem value="internal">{t("pages.contracts.internal")}</SelectItem>
+                  <SelectItem value="external">{t("pages.contracts.external")}</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <Button onClick={() => setCreateOpen(true)} data-testid="button-new-contract" className="self-end">
+              <Plus className="mr-2 h-4 w-4" /> {t("pages.contracts.newContract")}
+            </Button>
+          </>
+        }
+      />
 
       <ContractFormDialog open={createOpen} onOpenChange={setCreateOpen} />
 
+      {isLoading ? (
+        <Skeleton className="h-64 w-full" />
+      ) : rows.length === 0 ? (
+        <EmptyStateCard
+          icon={FileText}
+          title={t("pages.contracts.emptyTitle")}
+          body={t("pages.contracts.emptyBody")}
+          primaryAction={{
+            label: t("pages.contracts.newContract"),
+            onClick: () => setCreateOpen(true),
+            testId: "contracts-empty-create",
+          }}
+        />
+      ) : (
       <div className="border rounded-md">
         <Table>
           <TableHeader>
@@ -169,19 +185,9 @@ export default function Contracts() {
                   </TableCell>
                   <TableCell>{row.template}</TableCell>
                   <TableCell>v{row.version}</TableCell>
-                  <TableCell><Badge variant="outline">{row.status}</Badge></TableCell>
-                  <TableCell>
-                    <Badge
-                      variant={row.riskLevel === 'high' ? 'destructive' : row.riskLevel === 'medium' ? 'secondary' : 'default'}
-                      className={row.riskLevel === 'low'
-                        ? 'bg-green-500/10 text-green-600 hover:bg-green-500/20'
-                        : row.riskLevel === 'medium'
-                        ? 'bg-amber-500/10 text-amber-600 hover:bg-amber-500/20' : ''}
-                    >
-                      {row.riskLevel}
-                    </Badge>
-                  </TableCell>
-                  <TableCell>{row.validUntil ? new Date(row.validUntil).toLocaleDateString() : 'N/A'}</TableCell>
+                  <TableCell><ContractStatusBadge status={row.status} /></TableCell>
+                  <TableCell><RiskBadge risk={row.riskLevel} /></TableCell>
+                  <TableCell>{row.validUntil ? new Date(row.validUntil).toLocaleDateString() : '—'}</TableCell>
                 </TableRow>
               ) : (
                 <TableRow key={`ext-${row.id}`} data-testid={`contract-row-${row.id}`}>
@@ -193,7 +199,7 @@ export default function Contracts() {
                   </TableCell>
                   <TableCell>
                     <Badge variant="secondary" className="gap-1">
-                      Extern
+                      {t("pages.contracts.external")}
                       {row.renewalRelevant && <RefreshCw className="h-3 w-3" />}
                     </Badge>
                   </TableCell>
@@ -204,20 +210,16 @@ export default function Contracts() {
                   </TableCell>
                   <TableCell className="text-muted-foreground">{row.fileName}</TableCell>
                   <TableCell>—</TableCell>
-                  <TableCell><Badge variant="outline">{row.status}</Badge></TableCell>
+                  <TableCell><ContractStatusBadge status={row.status} /></TableCell>
                   <TableCell>—</TableCell>
                   <TableCell>{row.validUntil ? new Date(row.validUntil).toLocaleDateString() : '—'}</TableCell>
                 </TableRow>
               )
             )}
-            {rows.length === 0 && (
-              <TableRow>
-                <TableCell colSpan={8} className="h-24 text-center">No contracts found.</TableCell>
-              </TableRow>
-            )}
           </TableBody>
         </Table>
       </div>
+      )}
     </div>
   );
 }

@@ -26,6 +26,8 @@ import {
 } from "lucide-react";
 import { formatDistanceToNow, format } from "date-fns";
 import { useToast } from "@/hooks/use-toast";
+import { Breadcrumbs } from "@/components/patterns/breadcrumbs";
+import { useTranslation } from "react-i18next";
 
 type ReactionTypeKey = "question" | "objection" | "counterproposal" | "acceptance" | "partial" | "price_rejected" | "clause_rejected" | "term_change" | "deferred";
 
@@ -60,6 +62,7 @@ function signed(n: number | null | undefined, suffix = "") {
 }
 
 export default function NegotiationWorkspace() {
+  const { t } = useTranslation();
   const [, params] = useRoute("/negotiations/:id");
   const id = params?.id as string;
   const [, setLocation] = useLocation();
@@ -166,6 +169,12 @@ export default function NegotiationWorkspace() {
 
   return (
     <div className="flex flex-col gap-6">
+      <Breadcrumbs
+        items={[
+          { label: t("nav.negotiations"), href: "/negotiations" },
+          { label: neg.dealName },
+        ]}
+      />
       <div className="flex items-center justify-between border-b pb-4">
         <div>
           <h1 className="text-3xl font-bold tracking-tight">{neg.dealName}</h1>

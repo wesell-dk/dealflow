@@ -35,6 +35,7 @@ import { ArrowRight, Tag, Shield, Percent, Clock, AlertTriangle, Layers, CheckCi
 import { BundleFormDialog } from "@/components/pricing/bundle-form-dialog";
 import { PricePositionFormDialog } from "@/components/pricing/price-position-form-dialog";
 import { PriceRuleFormDialog } from "@/components/pricing/price-rule-form-dialog";
+import { EmptyStateCard } from "@/components/patterns/empty-state-card";
 
 function ResolvePanel() {
   const { t } = useTranslation();
@@ -149,9 +150,17 @@ function BundlesPanel() {
           {[0,1,2].map(i => <Skeleton key={i} className="h-44 w-full" />)}
         </div>
       ) : !bundles || bundles.length === 0 ? (
-        <div className="p-12 text-center border rounded-md text-muted-foreground bg-muted/10">
-          {t("pages.pricing.bundles.empty")}
-        </div>
+        <EmptyStateCard
+          icon={Package}
+          title={t("pages.pricing.bundles.emptyTitle", "Noch keine Bundles")}
+          body={t("pages.pricing.bundles.empty")}
+          hint={t("pages.pricing.bundles.emptyHint", "Bündel wiederkehrende Positionen für schnellere Angebote.")}
+          primaryAction={{
+            label: t("pages.pricing.bundles.create"),
+            onClick: () => setCreateOpen(true),
+            testId: "bundles-empty-create",
+          }}
+        />
       ) : (
         <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3" data-testid="bundles-grid">
           {bundles.map(b => (

@@ -75,6 +75,7 @@ import { EntityVersions } from "@/components/ui/entity-versions";
 import { useToast } from "@/hooks/use-toast";
 import { ApiError } from "@workspace/api-client-react";
 import { AiPromptPanel } from "@/components/copilot/ai-prompt-panel";
+import { Breadcrumbs } from "@/components/patterns/breadcrumbs";
 
 function toneClass(tone: string) {
   switch (tone) {
@@ -201,6 +202,12 @@ export default function Contract() {
 
   return (
     <div className="flex flex-col gap-6">
+      <Breadcrumbs
+        items={[
+          { label: t("nav.contracts"), href: "/contracts" },
+          { label: contract.title },
+        ]}
+      />
       <div className="flex flex-col gap-2 border-b pb-4">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">

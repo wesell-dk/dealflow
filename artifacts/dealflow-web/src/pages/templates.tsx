@@ -25,6 +25,8 @@ import {
 import { FileStack, Search, Trash2, Eye, Plus } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { TemplateFormDialog } from "@/components/templates/template-form-dialog";
+import { PageHeader } from "@/components/patterns/page-header";
+import { EmptyStateCard } from "@/components/patterns/empty-state-card";
 
 const INDUSTRIES = ["all", "saas", "consulting", "manufacturing", "services", "other"];
 
@@ -65,20 +67,17 @@ export default function Templates() {
 
   return (
     <div className="flex flex-col gap-6">
-      <div className="flex items-center justify-between gap-4">
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight">
-            {t("pages.templates.title")}
-          </h1>
-          <p className="text-muted-foreground mt-1">
-            {t("pages.templates.subtitle")}
-          </p>
-        </div>
-        <Button onClick={() => setCreateOpen(true)} data-testid="templates-new-button">
-          <Plus className="h-4 w-4 mr-1" />
-          Vorlage erstellen
-        </Button>
-      </div>
+      <PageHeader
+        icon={FileStack}
+        title={t("pages.templates.title")}
+        subtitle={t("pages.templates.subtitle")}
+        actions={
+          <Button onClick={() => setCreateOpen(true)} data-testid="templates-new-button">
+            <Plus className="h-4 w-4 mr-1" />
+            {t("pages.templates.create")}
+          </Button>
+        }
+      />
 
       <div className="flex items-center gap-2">
         <div className="relative flex-1 max-w-md">
@@ -109,9 +108,18 @@ export default function Templates() {
       {isLoading && <Skeleton className="h-64 w-full" />}
 
       {!isLoading && filtered.length === 0 && (
-        <div className="rounded-md border p-8 text-center text-muted-foreground">
-          {t("pages.templates.empty")}
-        </div>
+        <EmptyStateCard
+          icon={FileStack}
+          title={t("pages.templates.emptyTitle")}
+          body={templates && templates.length > 0
+            ? t("pages.templates.empty")
+            : t("pages.templates.emptyBody")}
+          primaryAction={templates && templates.length === 0 ? {
+            label: t("pages.templates.create"),
+            onClick: () => setCreateOpen(true),
+            testId: "templates-empty-create",
+          } : undefined}
+        />
       )}
 
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">

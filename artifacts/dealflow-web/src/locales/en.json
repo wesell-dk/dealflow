@@ -80,7 +80,12 @@
     "quote": "Quote",
     "error": "Error",
     "open": "Open",
-    "description": "Description"
+    "description": "Description",
+    "source": "Source",
+    "internal": "Internal",
+    "external": "External",
+    "noResultsTitle": "No matches",
+    "noResultsBody": "No entries match the current search or filter."
   },
   "actions": {
     "duplicate": "Duplicate"
@@ -121,6 +126,8 @@
       "title": "Quotes",
       "subtitle": "All quotes across your deals.",
       "newQuote": "New Quote",
+      "emptyTitle": "No quotes yet",
+      "emptyBody": "Create your first quote — start from a template or build it from scratch.",
       "duplicateConfirmTitle": "Duplicate quote?",
       "duplicateConfirmBody": "A full copy of quote {{number}} will be created as a new draft — including line items, sections and linked attachments.",
       "duplicated": "Quote duplicated",
@@ -169,7 +176,10 @@
       "title": "Quote Templates",
       "subtitle": "Industry templates with sections, line items and terms.",
       "searchPlaceholder": "Search templates…",
-      "empty": "No templates found.",
+      "empty": "No templates match this search.",
+      "emptyTitle": "No templates yet",
+      "emptyBody": "Create your first template to build quotes faster and more consistently.",
+      "create": "Create template",
       "sections": "sections",
       "sectionsTitle": "Sections",
       "lineItemsTitle": "Default Line Items",
@@ -179,7 +189,9 @@
       "title": "Attachment Library",
       "subtitle": "Reusable attachments such as DPA, SLA, datasheets.",
       "searchPlaceholder": "Search attachments…",
-      "empty": "No attachments found.",
+      "empty": "No attachments match this search.",
+      "emptyTitle": "No attachments yet",
+      "emptyBody": "Upload your first document — for example a datasheet, DPA or certificate.",
       "upload": "Upload",
       "uploadTitle": "Upload Attachment",
       "uploaded": "Attachment uploaded",
@@ -196,7 +208,10 @@
       "title": "Approvals",
       "subtitle": "Review and manage your pending requests.",
       "approve": "Approve",
-      "reject": "Reject"
+      "reject": "Reject",
+      "emptyTitle": "All caught up",
+      "emptyBody": "No approvals match your current filter.",
+      "emptyHint": "Approvals are raised automatically from discounts, risky clauses or contract deviations."
     },
     "clauseSuggestions": {
       "title": "Clause Suggestions",
@@ -386,6 +401,12 @@
     "contracts": {
       "title": "Contracts",
       "subtitle": "All contracts across your deals.",
+      "emptyTitle": "No contracts yet",
+      "emptyBody": "Create your first contract or import an external contract from a customer account.",
+      "newContract": "New Contract",
+      "source": "Source",
+      "internal": "Internal",
+      "external": "External",
       "riskScore": "Risk Score",
       "riskScoreInfo": "Calculated from {{count}} clause severity weights (high·25 / medium·10 / low·3, capped at 100).",
       "currentClauses": "Active clauses",
@@ -470,18 +491,43 @@
     "negotiations": {
       "title": "Negotiations",
       "subtitle": "Manage active deal negotiations and customer reactions.",
-      "concluded": "Concluded"
+      "concluded": "Concluded",
+      "tabActive": "Active",
+      "tabConcluded": "Concluded",
+      "tabAll": "All",
+      "round": "Round {{n}}",
+      "emptyTitle": "No negotiations",
+      "emptyBody": "Negotiations appear once a customer responds to a quote with an objection or counter-proposal.",
+      "emptyHint": "Tip: switch the filter to “All” to also see concluded negotiations."
     },
     "signatures": {
       "title": "Signature Center",
       "subtitle": "Manage and track contract signatures.",
       "inProgress": "In Progress",
-      "remind": "Remind"
+      "remind": "Remind",
+      "tabInProgress": "In Progress",
+      "tabCompleted": "Completed",
+      "tabAll": "All",
+      "signed": "signed",
+      "reminderSent": "Reminder sent to pending signers",
+      "reminderFailed": "Reminder could not be sent",
+      "emptyTitle": "No signature packages",
+      "emptyBody": "Signature packages emerge from sign-ready contracts — start a signature workflow in the contract workspace.",
+      "emptyHint": "Tip: switch the filter to “All” to see completed packages."
     },
     "priceIncreasesList": {
       "title": "Price Increases",
       "subtitle": "Manage pricing campaigns across accounts.",
-      "empty": "You don't have any price increase campaigns right now."
+      "empty": "You don't have any price increase campaigns right now.",
+      "emptyTitle": "No active campaign",
+      "emptyBody": "You don't have any price increase campaigns right now.",
+      "emptyHint": "Plan price adjustments per contract family and track acceptance vs. rejection rates centrally.",
+      "effectiveDate": "Effective",
+      "accounts": "Accounts",
+      "accepted": "accepted",
+      "pending": "pending",
+      "rejected": "rejected",
+      "avgUplift": "Avg. uplift"
     },
     "audit": {
       "title": "Audit Log",
@@ -494,6 +540,10 @@
     "orderConfirmations": {
       "title": "Order Confirmations",
       "subtitle": "Confirmed orders and onboarding handover",
+      "emptyTitle": "No order confirmations yet",
+      "emptyBody": "Order confirmations are created automatically from signed contracts that pass all required checks.",
+      "emptyHint": "Tip: once a contract is signed and all onboarding prerequisites are met, a new confirmation appears here.",
+      "searchPlaceholder": "Search by number or deal…",
       "create": "New Order Confirmation",
       "handover": "Handover",
       "startHandover": "Start handover",
@@ -735,6 +785,8 @@
         "subtitle": "Combine multiple price positions into reusable packages.",
         "create": "New Bundle",
         "empty": "No bundles yet — create your first one.",
+        "emptyTitle": "No bundles yet",
+        "emptyHint": "Group recurring positions for faster quoting.",
         "deleted": "Bundle deleted",
         "deleteFailed": "Failed to delete",
         "deleteConfirmTitle": "Delete bundle?",

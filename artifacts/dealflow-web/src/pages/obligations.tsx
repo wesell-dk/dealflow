@@ -21,28 +21,13 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import {
   AlarmClock, AlertTriangle, CheckCircle2, ClipboardList,
-  Clock, FileSignature, ListChecks, Repeat,
+  FileSignature, ListChecks, Repeat,
 } from "lucide-react";
+import { PageHeader } from "@/components/patterns/page-header";
+import { EmptyStateCard } from "@/components/patterns/empty-state-card";
+import { ObligationStatusBadge } from "@/components/patterns/status-badges";
 
 type ObligationStatus = "pending" | "in_progress" | "done" | "missed" | "waived";
-
-function statusBadge(status: string) {
-  const map: Record<string, { label: string; cls: string; icon: typeof Clock }> = {
-    pending:     { label: "Offen",      cls: "border-slate-300 text-slate-700",      icon: Clock },
-    in_progress: { label: "In Arbeit",  cls: "border-amber-300 text-amber-700 bg-amber-50",    icon: AlarmClock },
-    done:        { label: "Erledigt",   cls: "border-emerald-300 text-emerald-700 bg-emerald-50", icon: CheckCircle2 },
-    missed:      { label: "Versäumt",   cls: "border-red-300 text-red-700 bg-red-50",          icon: AlertTriangle },
-    waived:      { label: "Verzichtet", cls: "border-slate-300 text-slate-500",      icon: CheckCircle2 },
-  };
-  const m = map[status] ?? { label: status, cls: "", icon: Clock };
-  const Icon = m.icon;
-  return (
-    <Badge variant="outline" className={`gap-1 ${m.cls}`}>
-      <Icon className="h-3 w-3" />
-      {m.label}
-    </Badge>
-  );
-}
 
 function typeLabel(type: string): string {
   return ({
@@ -139,14 +124,11 @@ export default function Obligations() {
 
   return (
     <div className="space-y-6 p-6" data-testid="page-obligations">
-      <div className="flex items-center gap-3">
-        <ClipboardList className="h-6 w-6 text-primary" />
-        <h1 className="text-2xl font-bold">Pflichten (Obligations)</h1>
-      </div>
-      <p className="text-sm text-muted-foreground -mt-4">
-        Vertragliche Pflichten aus aktiven Verträgen — automatisch abgeleitet bei Signatur,
-        manuell ergänzbar im Vertrags-Workspace.
-      </p>
+      <PageHeader
+        icon={ClipboardList}
+        title="Pflichten (Obligations)"
+        subtitle="Vertragliche Pflichten aus aktiven Verträgen — automatisch abgeleitet bei Signatur, manuell ergänzbar im Vertrags-Workspace."
+      />
 
       <div className="grid gap-4 md:grid-cols-4">
         <Card data-testid="kpi-open">
@@ -214,10 +196,15 @@ export default function Obligations() {
           {isLoading ? (
             <Skeleton className="h-64 w-full" />
           ) : filtered.length === 0 ? (
-            <div className="p-12 text-center text-muted-foreground">
-              <ClipboardList className="h-10 w-10 mx-auto opacity-30 mb-2" />
-              <p>Keine Pflichten gefunden.</p>
-            </div>
+            <EmptyStateCard
+              icon={ClipboardList}
+              title="Keine Pflichten gefunden"
+              body={data && data.length > 0
+                ? "Keine Pflichten passen zu Suche oder Filter. Filter zurücksetzen, um alle anzuzeigen."
+                : "Pflichten werden bei Vertrags-Signatur automatisch erkannt und im Vertrags-Workspace gepflegt."}
+              hint="Tipp: Mit dem Filter „Alle offenen“ siehst Du laufende und überfällige Pflichten gemeinsam."
+              className="border-0 shadow-none"
+            />
           ) : (
             <Table>
               <TableHeader>
@@ -258,7 +245,7 @@ export default function Obligations() {
                       {o.recurrence !== "none" && <Repeat className="h-3 w-3 inline mr-1" />}
                       {recurrenceLabel(o.recurrence)}
                     </TableCell>
-                    <TableCell>{statusBadge(o.status)}</TableCell>
+                    <TableCell><ObligationStatusBadge status={o.status === "done" ? "completed" : o.status === "missed" ? "overdue" : o.status} /></TableCell>
                     <TableCell className="text-right">
                       {o.status !== "done" && o.status !== "waived" && (
                         <div className="flex justify-end gap-1">

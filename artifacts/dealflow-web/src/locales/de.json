@@ -80,7 +80,12 @@
     "quote": "Angebot",
     "error": "Fehler",
     "open": "Öffnen",
-    "description": "Beschreibung"
+    "description": "Beschreibung",
+    "source": "Quelle",
+    "internal": "Intern",
+    "external": "Extern",
+    "noResultsTitle": "Keine Treffer",
+    "noResultsBody": "Keine Einträge passen zur aktuellen Suche oder zum Filter."
   },
   "actions": {
     "duplicate": "Duplizieren"
@@ -121,6 +126,8 @@
       "title": "Angebote",
       "subtitle": "Alle Angebote über deine Deals hinweg.",
       "newQuote": "Neues Angebot",
+      "emptyTitle": "Noch keine Angebote",
+      "emptyBody": "Lege dein erstes Angebot an — basierend auf einer Vorlage oder von Grund auf neu.",
       "duplicateConfirmTitle": "Angebot duplizieren?",
       "duplicateConfirmBody": "Es wird eine vollständige Kopie von Angebot {{number}} als neuer Entwurf erstellt — inklusive Positionen, Sektionen und verknüpfter Anhänge.",
       "duplicated": "Angebot dupliziert",
@@ -169,7 +176,10 @@
       "title": "Angebots-Vorlagen",
       "subtitle": "Branchen-Vorlagen mit Sektionen, Positionen und Konditionen.",
       "searchPlaceholder": "Vorlagen durchsuchen…",
-      "empty": "Keine Vorlagen vorhanden.",
+      "empty": "Keine Vorlagen für diese Suche.",
+      "emptyTitle": "Noch keine Vorlagen",
+      "emptyBody": "Lege deine erste Vorlage an, um Angebote schneller und konsistenter zu erstellen.",
+      "create": "Vorlage erstellen",
       "sections": "Sektionen",
       "sectionsTitle": "Sektionen",
       "lineItemsTitle": "Standard-Positionen",
@@ -179,7 +189,9 @@
       "title": "Anhang-Bibliothek",
       "subtitle": "Wiederverwendbare Anhänge wie DPA, SLA, Datenblätter.",
       "searchPlaceholder": "Anhänge durchsuchen…",
-      "empty": "Keine Anhänge vorhanden.",
+      "empty": "Keine Anhänge für diese Suche.",
+      "emptyTitle": "Noch keine Anhänge",
+      "emptyBody": "Lade dein erstes Dokument hoch — etwa Datenblatt, DPA oder Zertifikat.",
       "upload": "Hochladen",
       "uploadTitle": "Anhang hochladen",
       "uploaded": "Anhang hochgeladen",
@@ -196,11 +208,20 @@
       "title": "Freigaben",
       "subtitle": "Prüfe und verwalte offene Anfragen.",
       "approve": "Freigeben",
-      "reject": "Ablehnen"
+      "reject": "Ablehnen",
+      "emptyTitle": "Alles erledigt",
+      "emptyBody": "Aktuell sind keine Freigaben offen, die Deinem Filter entsprechen.",
+      "emptyHint": "Hinweis: Freigaben entstehen automatisch aus Rabatten, Risiko-Klauseln oder Vertragsabweichungen."
     },
     "contracts": {
       "title": "Verträge",
       "subtitle": "Alle Verträge über deine Deals hinweg.",
+      "emptyTitle": "Noch keine Verträge",
+      "emptyBody": "Lege deinen ersten Vertrag an oder importiere einen externen Vertrag aus einem Kunden-Account.",
+      "newContract": "Neuer Vertrag",
+      "source": "Quelle",
+      "internal": "Intern",
+      "external": "Extern",
       "riskScore": "Risiko-Score",
       "riskScoreInfo": "Berechnet aus {{count}} Klausel-Severities (high·25 / medium·10 / low·3, max. 100).",
       "currentClauses": "Aktive Klauseln",
@@ -470,18 +491,43 @@
     "negotiations": {
       "title": "Verhandlungen",
       "subtitle": "Aktive Verhandlungen und Kundenreaktionen verwalten.",
-      "concluded": "Abgeschlossen"
+      "concluded": "Abgeschlossen",
+      "tabActive": "Aktiv",
+      "tabConcluded": "Abgeschlossen",
+      "tabAll": "Alle",
+      "round": "Runde {{n}}",
+      "emptyTitle": "Keine Verhandlungen",
+      "emptyBody": "Verhandlungen entstehen, sobald ein Kunde auf ein Angebot mit Einwand oder Gegenvorschlag reagiert.",
+      "emptyHint": "Tipp: Wechsle den Filter auf „Alle“, um auch abgeschlossene Verhandlungen zu sehen."
     },
     "signatures": {
       "title": "Unterschriften",
       "subtitle": "Vertragsunterschriften verwalten und nachverfolgen.",
       "inProgress": "Läuft",
-      "remind": "Erinnern"
+      "remind": "Erinnern",
+      "tabInProgress": "Laufend",
+      "tabCompleted": "Abgeschlossen",
+      "tabAll": "Alle",
+      "signed": "signiert",
+      "reminderSent": "Erinnerung an offene Unterzeichner versendet",
+      "reminderFailed": "Erinnerung konnte nicht versendet werden",
+      "emptyTitle": "Keine Signaturpakete",
+      "emptyBody": "Signaturpakete entstehen aus signierungsbereiten Verträgen — starte einen Signatur-Workflow im Vertrags-Workspace.",
+      "emptyHint": "Tipp: Wechsle den Filter auf „Alle“, um abgeschlossene Pakete zu sehen."
     },
     "priceIncreasesList": {
       "title": "Preiserhöhungen",
       "subtitle": "Preiserhöhungs-Kampagnen über Kunden hinweg verwalten.",
-      "empty": "Aktuell sind keine Preiserhöhungs-Kampagnen aktiv."
+      "empty": "Aktuell sind keine Preiserhöhungs-Kampagnen aktiv.",
+      "emptyTitle": "Keine aktive Kampagne",
+      "emptyBody": "Aktuell sind keine Preiserhöhungs-Kampagnen aktiv.",
+      "emptyHint": "Plane Preisanpassungen pro Vertragsfamilie und tracke Annahme- bzw. Ablehnungsquoten zentral.",
+      "effectiveDate": "Stichtag",
+      "accounts": "Kunden",
+      "accepted": "akzeptiert",
+      "pending": "offen",
+      "rejected": "abgelehnt",
+      "avgUplift": "Ø Uplift"
     },
     "audit": {
       "title": "Audit-Log",
@@ -540,7 +586,11 @@
         "blocked": "Blockiert",
         "pending": "Offen"
       },
-      "noConfirmations": "Noch keine Auftragsbestätigungen vorhanden"
+      "noConfirmations": "Noch keine Auftragsbestätigungen vorhanden",
+      "emptyTitle": "Noch keine Auftragsbestätigungen",
+      "emptyBody": "Auftragsbestätigungen entstehen automatisch aus signierten Verträgen mit allen erforderlichen Pflicht-Checks.",
+      "emptyHint": "Tipp: Sobald ein Vertrag signiert ist und alle Onboarding-Voraussetzungen erfüllt sind, erscheint hier eine neue Bestätigung.",
+      "searchPlaceholder": "Nach Nummer oder Deal suchen…"
     },
     "copilot": {
       "title": "Copilot",
@@ -621,6 +671,8 @@
       "snoozeRequiresDate": "Bitte ein Datum für die Wiedervorlage wählen.",
       "tableTitle": "Renewal-Pipeline",
       "empty": "Keine Renewal-Opportunities im Filter.",
+      "emptyTitle": "Keine Renewals im Filter",
+      "emptyHint": "Tipp: Engine erkennt Verlängerungen automatisch aus Verträgen mit Auto-Renewal-Klauseln. Filter zurücksetzen, um alle anzuzeigen.",
       "summary": {
         "totalOpen": "Offene Renewals",
         "thisMonth": "Diesen Monat fällig",
@@ -735,6 +787,8 @@
         "subtitle": "Mehrere Preispositionen zu wiederverwendbaren Paketen kombinieren.",
         "create": "Bündel anlegen",
         "empty": "Noch keine Bündel angelegt — lege das erste Bundle an.",
+        "emptyTitle": "Noch keine Bündel",
+        "emptyHint": "Bündel wiederkehrende Positionen für schnellere Angebote.",
         "deleted": "Bündel gelöscht",
         "deleteFailed": "Löschen fehlgeschlagen",
         "deleteConfirmTitle": "Bündel löschen?",
