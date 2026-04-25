@@ -589,6 +589,7 @@
       },
       "status": {
         "open": "Offen",
+        "in_progress": "Folgevertrag in Arbeit",
         "snoozed": "Wiedervorlage",
         "won": "Verlängert",
         "lost": "Verloren",
@@ -597,6 +598,7 @@
       "detail": {
         "riskTitle": "Risiko-Faktoren",
         "contract": "Vertrag",
+        "followup": "Folgevertrag",
         "notes": "Notizen",
         "snoozeUntil": "Wiedervorlage bis"
       },
@@ -605,8 +607,12 @@
         "snooze": "Wiedervorlage",
         "won": "Verlängert markieren",
         "lost": "Verloren markieren",
-        "cancel": "Stornieren"
-      }
+        "cancel": "Stornieren",
+        "issueFollowup": "Folgevertrag anlegen",
+        "openFollowup": "Folgevertrag öffnen"
+      },
+      "followupCreated": "Folgevertrag-Draft angelegt",
+      "followupFailed": "Folgevertrag konnte nicht angelegt werden"
     },
     "reports": {
       "title": "Berichte",

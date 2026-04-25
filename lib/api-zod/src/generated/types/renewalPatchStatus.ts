@@ -13,6 +13,7 @@ export type RenewalPatchStatus =
 
 export const RenewalPatchStatus = {
   open: "open",
+  in_progress: "in_progress",
   snoozed: "snoozed",
   won: "won",
   lost: "lost",

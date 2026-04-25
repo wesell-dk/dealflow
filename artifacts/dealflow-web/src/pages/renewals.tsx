@@ -5,6 +5,7 @@ import {
   useGetRenewalSummary,
   useUpdateRenewal,
   useRunRenewalEngine,
+  useIssueRenewalFollowup,
   getListRenewalsQueryKey,
   getGetRenewalSummaryQueryKey,
   type RenewalOpportunity,
@@ -34,7 +35,7 @@ import {
 } from "@/components/ui/sheet";
 import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
-import { CalendarClock, AlertTriangle, RefreshCcw, Calendar, FileSignature, X } from "lucide-react";
+import { CalendarClock, AlertTriangle, RefreshCcw, Calendar, FileSignature, X, FilePlus2 } from "lucide-react";
 import { Link, useSearch, useLocation } from "wouter";
 
 type Bucket = "" | "this_month" | "next_90" | "risk";
@@ -66,6 +67,7 @@ function riskBadge(score: number) {
 function statusBadge(status: string, t: (k: string) => string) {
   const variant: Record<string, "default" | "secondary" | "destructive" | "outline"> = {
     open: "default",
+    in_progress: "default",
     snoozed: "secondary",
     won: "outline",
     lost: "destructive",
@@ -115,6 +117,8 @@ export default function RenewalsPage() {
   const { data: rows, isLoading: isLoadingRows } = useListRenewals(params);
   const updateMut = useUpdateRenewal();
   const runMut = useRunRenewalEngine();
+  const issueMut = useIssueRenewalFollowup();
+  const [, setLocation] = useLocation();
 
   function refetchAll() {
     qc.invalidateQueries({ queryKey: getListRenewalsQueryKey() });
@@ -161,6 +165,23 @@ export default function RenewalsPage() {
     toast({ title: t("pages.renewals.saved") });
     refetchAll();
     setSelected(null);
+  }
+
+  async function issueFollowup() {
+    if (!selected) return;
+    try {
+      const res = await issueMut.mutateAsync({ id: selected.id });
+      toast({
+        title: t("pages.renewals.followupCreated"),
+        description: res.contract.title,
+      });
+      refetchAll();
+      setSelected(null);
+      setLocation(`/contracts/${res.contract.id}`);
+    } catch (err) {
+      const detail = err instanceof Error ? err.message : String(err);
+      toast({ title: t("pages.renewals.followupFailed"), description: detail, variant: "destructive" });
+    }
   }
 
   async function runEngine() {
@@ -285,6 +306,7 @@ export default function RenewalsPage() {
               <SelectTrigger className="w-44"><SelectValue placeholder={t("pages.renewals.filter.status")} /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="open">{t("pages.renewals.status.open")}</SelectItem>
+                <SelectItem value="in_progress">{t("pages.renewals.status.in_progress")}</SelectItem>
                 <SelectItem value="snoozed">{t("pages.renewals.status.snoozed")}</SelectItem>
                 <SelectItem value="won">{t("pages.renewals.status.won")}</SelectItem>
                 <SelectItem value="lost">{t("pages.renewals.status.lost")}</SelectItem>
@@ -424,6 +446,19 @@ export default function RenewalsPage() {
                   </Link>
                 </div>
 
+                {selected.followupContractId && (
+                  <div>
+                    <div className="text-xs text-muted-foreground mb-1">{t("pages.renewals.detail.followup")}</div>
+                    <Link
+                      href={`/contracts/${selected.followupContractId}`}
+                      className="inline-flex items-center gap-1 text-primary hover:underline"
+                      data-testid="link-followup-contract"
+                    >
+                      <FilePlus2 className="h-4 w-4" /> {selected.followupContractId}
+                    </Link>
+                  </div>
+                )}
+
                 <div>
                   <div className="text-xs text-muted-foreground mb-1">{t("pages.renewals.detail.notes")}</div>
                   <Textarea value={notes} onChange={(e) => setNotes(e.target.value)} rows={3} />
@@ -435,6 +470,29 @@ export default function RenewalsPage() {
                 </div>
 
                 <div className="flex flex-wrap gap-2 pt-2">
+                  {selected.status === "open" && !selected.followupContractId && (
+                    <Button
+                      onClick={issueFollowup}
+                      disabled={issueMut.isPending}
+                      data-testid="button-issue-followup"
+                    >
+                      <FilePlus2 className="mr-2 h-4 w-4" />
+                      {t("pages.renewals.actions.issueFollowup")}
+                    </Button>
+                  )}
+                  {selected.followupContractId && (
+                    <Button
+                      variant="outline"
+                      onClick={() => {
+                        setSelected(null);
+                        setLocation(`/contracts/${selected.followupContractId}`);
+                      }}
+                      data-testid="button-open-followup"
+                    >
+                      <FilePlus2 className="mr-2 h-4 w-4" />
+                      {t("pages.renewals.actions.openFollowup")}
+                    </Button>
+                  )}
                   <Button variant="outline" onClick={() => patch("save")} disabled={updateMut.isPending}>
                     {t("pages.renewals.actions.saveNotes")}
                   </Button>

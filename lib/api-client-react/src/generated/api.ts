@@ -237,6 +237,7 @@ import type {
   QuoteVersion,
   QuoteVersionInput,
   ReactionInput,
+  RenewalFollowupResult,
   RenewalOpportunity,
   RenewalPatch,
   RenewalRunResult,
@@ -18215,6 +18216,97 @@ export const useUpdateRenewal = <
   TContext
 > => {
   return useMutation(getUpdateRenewalMutationOptions(options));
+};
+
+/**
+ * Legt einen neuen `contracts`-Datensatz im Status `drafting` an, der
+Brand, Klausel-Set und (optionale) Quote-Vorlage des Vorvertrags
+übernimmt. Der neue Vertrag verweist über `predecessorContractId`
+auf den Vorvertrag, die Renewal wechselt auf Status `in_progress`.
+Sobald der Folgevertrag signiert wird, wird die Renewal automatisch
+auf `won` geschaltet.
+
+ * @summary Folgevertrag-Draft aus einer offenen Renewal anlegen
+ */
+export const getIssueRenewalFollowupUrl = (id: string) => {
+  return `/api/v1/renewals/${id}/issue-followup`;
+};
+
+export const issueRenewalFollowup = async (
+  id: string,
+  options?: RequestInit,
+): Promise<RenewalFollowupResult> => {
+  return customFetch<RenewalFollowupResult>(getIssueRenewalFollowupUrl(id), {
+    ...options,
+    method: "POST",
+  });
+};
+
+export const getIssueRenewalFollowupMutationOptions = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof issueRenewalFollowup>>,
+    TError,
+    { id: string },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof issueRenewalFollowup>>,
+  TError,
+  { id: string },
+  TContext
+> => {
+  const mutationKey = ["issueRenewalFollowup"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof issueRenewalFollowup>>,
+    { id: string }
+  > = (props) => {
+    const { id } = props ?? {};
+
+    return issueRenewalFollowup(id, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type IssueRenewalFollowupMutationResult = NonNullable<
+  Awaited<ReturnType<typeof issueRenewalFollowup>>
+>;
+
+export type IssueRenewalFollowupMutationError = ErrorType<void>;
+
+/**
+ * @summary Folgevertrag-Draft aus einer offenen Renewal anlegen
+ */
+export const useIssueRenewalFollowup = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof issueRenewalFollowup>>,
+    TError,
+    { id: string },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof issueRenewalFollowup>>,
+  TError,
+  { id: string },
+  TContext
+> => {
+  return useMutation(getIssueRenewalFollowupMutationOptions(options));
 };
 
 /**

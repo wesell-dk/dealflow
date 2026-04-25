@@ -526,7 +526,19 @@ export const contractsTable = pgTable("contracts", {
   openDeviationsCount: integer("open_deviations_count").default(0),
   obligationsCount: integer("obligations_count").default(0),
   signedAt: timestamp("signed_at", { withTimezone: true }),
-});
+  // Verweis auf den Vorgänger-Vertrag, wenn dieser Vertrag aus einer Renewal
+  // als Folgevertrag erzeugt wurde. Erlaubt 1) das Re-Issue im UI sichtbar
+  // zu machen und 2) beim Signieren des Folgevertrags die Renewal automatisch
+  // auf "won" zu schalten (siehe POST /renewals/:id/issue-followup).
+  predecessorContractId: text("predecessor_contract_id"),
+}, (t) => ({
+  // Pro Tenant darf jeder Vorvertrag nur EINEN Folgevertrag-Draft haben — sonst
+  // gäbe es bei zwei parallelen "Folgevertrag anlegen"-Klicks zwei Drafts und
+  // mapRenewal wüsste nicht, welcher der "richtige" ist. Postgres behandelt
+  // NULL als distinct, daher konstrainen wir nur effektiv die Folgeverträge.
+  predecessorUq: uniqueIndex("contracts_tenant_predecessor_uq")
+    .on(t.tenantId, t.predecessorContractId),
+}));
 
 export const contractTypesTable = pgTable("contract_types", {
   id: id(),

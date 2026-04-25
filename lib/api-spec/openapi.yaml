@@ -3906,7 +3906,7 @@ paths:
         - in: query
           name: status
           required: false
-          schema: { type: string, enum: [open, snoozed, won, lost, cancelled] }
+          schema: { type: string, enum: [open, in_progress, snoozed, won, lost, cancelled] }
         - in: query
           name: accountId
           required: false
@@ -4006,6 +4006,31 @@ paths:
               schema: { $ref: "#/components/schemas/RenewalOpportunity" }
         "404": { description: not found }
 
+  /renewals/{id}/issue-followup:
+    post:
+      operationId: issueRenewalFollowup
+      tags: [renewals]
+      summary: Folgevertrag-Draft aus einer offenen Renewal anlegen
+      description: |
+        Legt einen neuen `contracts`-Datensatz im Status `drafting` an, der
+        Brand, Klausel-Set und (optionale) Quote-Vorlage des Vorvertrags
+        übernimmt. Der neue Vertrag verweist über `predecessorContractId`
+        auf den Vorvertrag, die Renewal wechselt auf Status `in_progress`.
+        Sobald der Folgevertrag signiert wird, wird die Renewal automatisch
+        auf `won` geschaltet.
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        "201":
+          description: created
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/RenewalFollowupResult" }
+        "404": { description: not found }
+        "409": { description: renewal not eligible (status != open or already issued) }
 
   /brands/{brandId}/clause-overrides:
     get:
@@ -6125,6 +6150,9 @@ components:
         contractTypeId:
           type: ["string", "null"]
           description: "Vertragstyp-Bindung — Voraussetzung für CUAD-Coverage und Tenant-Mappings. Bei neu angelegten Verträgen immer gesetzt (Auswahl oder Heuristik aus Template)."
+        predecessorContractId:
+          type: ["string", "null"]
+          description: "Wenn aus einer Renewal als Folgevertrag erzeugt: id des Vorvertrags."
 
     ContractInput:
       type: object
@@ -8048,13 +8076,16 @@ components:
           items: { $ref: "#/components/schemas/RenewalRiskFactor" }
         status:
           type: string
-          enum: [open, snoozed, won, lost, cancelled]
+          enum: [open, in_progress, snoozed, won, lost, cancelled]
         valueAmount: { type: ["number", "null"] }
         currency: { type: ["string", "null"] }
         snoozedUntil: { type: ["string", "null"], format: date }
         decidedAt: { type: ["string", "null"], format: date-time }
         decidedBy: { type: ["string", "null"] }
         notes: { type: ["string", "null"] }
+        followupContractId:
+          type: ["string", "null"]
+          description: "Folgevertrag-Draft, sobald er aus dieser Renewal erzeugt wurde."
         createdAt: { type: string, format: date-time }
         updatedAt: { type: string, format: date-time }
 
@@ -8063,9 +8094,16 @@ components:
       properties:
         status:
           type: string
-          enum: [open, snoozed, won, lost, cancelled]
+          enum: [open, in_progress, snoozed, won, lost, cancelled]
         snoozedUntil: { type: ["string", "null"], format: date }
         notes: { type: ["string", "null"] }
+
+    RenewalFollowupResult:
+      type: object
+      required: [renewal, contract]
+      properties:
+        renewal: { $ref: "#/components/schemas/RenewalOpportunity" }
+        contract: { $ref: "#/components/schemas/Contract" }
 
     RenewalRunResult:
       type: object

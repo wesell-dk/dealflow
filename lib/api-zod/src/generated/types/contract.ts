@@ -35,4 +35,9 @@ export interface Contract {
    * @nullable
    */
   contractTypeId?: string | null;
+  /**
+   * Wenn aus einer Renewal als Folgevertrag erzeugt: id des Vorvertrags.
+   * @nullable
+   */
+  predecessorContractId?: string | null;
 }

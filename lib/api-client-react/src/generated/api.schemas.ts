@@ -1197,6 +1197,11 @@ export interface Contract {
    * @nullable
    */
   contractTypeId?: string | null;
+  /**
+   * Wenn aus einer Renewal als Folgevertrag erzeugt: id des Vorvertrags.
+   * @nullable
+   */
+  predecessorContractId?: string | null;
 }
 
 export type ApprovalStageStatus =
@@ -3786,6 +3791,7 @@ export type RenewalOpportunityStatus =
 
 export const RenewalOpportunityStatus = {
   open: "open",
+  in_progress: "in_progress",
   snoozed: "snoozed",
   won: "won",
   lost: "lost",
@@ -3826,6 +3832,11 @@ export interface RenewalOpportunity {
   decidedBy?: string | null;
   /** @nullable */
   notes?: string | null;
+  /**
+   * Folgevertrag-Draft, sobald er aus dieser Renewal erzeugt wurde.
+   * @nullable
+   */
+  followupContractId?: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -3835,6 +3846,7 @@ export type RenewalPatchStatus =
 
 export const RenewalPatchStatus = {
   open: "open",
+  in_progress: "in_progress",
   snoozed: "snoozed",
   won: "won",
   lost: "lost",
@@ -3847,6 +3859,11 @@ export interface RenewalPatch {
   snoozedUntil?: string | null;
   /** @nullable */
   notes?: string | null;
+}
+
+export interface RenewalFollowupResult {
+  renewal: RenewalOpportunity;
+  contract: Contract;
 }
 
 export interface RenewalRunResult {
@@ -4643,6 +4660,7 @@ export type ListRenewalsStatus =
 
 export const ListRenewalsStatus = {
   open: "open",
+  in_progress: "in_progress",
   snoozed: "snoozed",
   won: "won",
   lost: "lost",

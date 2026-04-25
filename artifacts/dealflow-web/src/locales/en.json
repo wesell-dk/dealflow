@@ -589,6 +589,7 @@
       },
       "status": {
         "open": "Open",
+        "in_progress": "Followup in progress",
         "snoozed": "Snoozed",
         "won": "Renewed",
         "lost": "Lost",
@@ -597,6 +598,7 @@
       "detail": {
         "riskTitle": "Risk factors",
         "contract": "Contract",
+        "followup": "Followup contract",
         "notes": "Notes",
         "snoozeUntil": "Snooze until"
       },
@@ -605,8 +607,12 @@
         "snooze": "Snooze",
         "won": "Mark renewed",
         "lost": "Mark lost",
-        "cancel": "Cancel"
-      }
+        "cancel": "Cancel",
+        "issueFollowup": "Create followup contract",
+        "openFollowup": "Open followup contract"
+      },
+      "followupCreated": "Followup contract draft created",
+      "followupFailed": "Could not create followup contract"
     },
     "reports": {
       "title": "Reports",

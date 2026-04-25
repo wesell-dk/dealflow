@@ -44,6 +44,11 @@ export interface RenewalOpportunity {
   decidedBy?: string | null;
   /** @nullable */
   notes?: string | null;
+  /**
+   * Folgevertrag-Draft, sobald er aus dieser Renewal erzeugt wurde.
+   * @nullable
+   */
+  followupContractId?: string | null;
   createdAt: Date;
   updatedAt: Date;
 }

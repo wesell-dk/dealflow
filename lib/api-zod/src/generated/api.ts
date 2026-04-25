@@ -952,6 +952,12 @@ export const GetDealResponse = zod
             .describe(
               "Vertragstyp-Bindung — Voraussetzung für CUAD-Coverage und Tenant-Mappings. Bei neu angelegten Verträgen immer gesetzt (Auswahl oder Heuristik aus Template).",
             ),
+          predecessorContractId: zod
+            .string()
+            .nullish()
+            .describe(
+              "Wenn aus einer Renewal als Folgevertrag erzeugt: id des Vorvertrags.",
+            ),
         }),
       ),
       approvals: zod.array(
@@ -2087,6 +2093,12 @@ export const ListContractsResponseItem = zod.object({
     .describe(
       "Vertragstyp-Bindung — Voraussetzung für CUAD-Coverage und Tenant-Mappings. Bei neu angelegten Verträgen immer gesetzt (Auswahl oder Heuristik aus Template).",
     ),
+  predecessorContractId: zod
+    .string()
+    .nullish()
+    .describe(
+      "Wenn aus einer Renewal als Folgevertrag erzeugt: id des Vorvertrags.",
+    ),
 });
 export const ListContractsResponse = zod.array(ListContractsResponseItem);
 
@@ -2152,6 +2164,12 @@ export const GetContractResponse = zod
       .nullish()
       .describe(
         "Vertragstyp-Bindung — Voraussetzung für CUAD-Coverage und Tenant-Mappings. Bei neu angelegten Verträgen immer gesetzt (Auswahl oder Heuristik aus Template).",
+      ),
+    predecessorContractId: zod
+      .string()
+      .nullish()
+      .describe(
+        "Wenn aus einer Renewal als Folgevertrag erzeugt: id des Vorvertrags.",
       ),
   })
   .and(
@@ -2246,6 +2264,12 @@ export const PatchContractResponse = zod.object({
     .nullish()
     .describe(
       "Vertragstyp-Bindung — Voraussetzung für CUAD-Coverage und Tenant-Mappings. Bei neu angelegten Verträgen immer gesetzt (Auswahl oder Heuristik aus Template).",
+    ),
+  predecessorContractId: zod
+    .string()
+    .nullish()
+    .describe(
+      "Wenn aus einer Renewal als Folgevertrag erzeugt: id des Vorvertrags.",
     ),
 });
 
@@ -6497,7 +6521,9 @@ export const ListRenewalsQueryParams = zod.object({
     .min(listRenewalsQueryMinRiskMin)
     .max(listRenewalsQueryMinRiskMax)
     .optional(),
-  status: zod.enum(["open", "snoozed", "won", "lost", "cancelled"]).optional(),
+  status: zod
+    .enum(["open", "in_progress", "snoozed", "won", "lost", "cancelled"])
+    .optional(),
   accountId: zod.coerce.string().optional(),
   brandId: zod.coerce.string().optional(),
 });
@@ -6528,13 +6554,26 @@ export const ListRenewalsResponseItem = zod.object({
       detail: zod.string().optional(),
     }),
   ),
-  status: zod.enum(["open", "snoozed", "won", "lost", "cancelled"]),
+  status: zod.enum([
+    "open",
+    "in_progress",
+    "snoozed",
+    "won",
+    "lost",
+    "cancelled",
+  ]),
   valueAmount: zod.number().nullish(),
   currency: zod.string().nullish(),
   snoozedUntil: zod.coerce.date().nullish(),
   decidedAt: zod.coerce.date().nullish(),
   decidedBy: zod.string().nullish(),
   notes: zod.string().nullish(),
+  followupContractId: zod
+    .string()
+    .nullish()
+    .describe(
+      "Folgevertrag-Draft, sobald er aus dieser Renewal erzeugt wurde.",
+    ),
   createdAt: zod.coerce.date(),
   updatedAt: zod.coerce.date(),
 });
@@ -6626,13 +6665,26 @@ export const GetRenewalResponse = zod.object({
       detail: zod.string().optional(),
     }),
   ),
-  status: zod.enum(["open", "snoozed", "won", "lost", "cancelled"]),
+  status: zod.enum([
+    "open",
+    "in_progress",
+    "snoozed",
+    "won",
+    "lost",
+    "cancelled",
+  ]),
   valueAmount: zod.number().nullish(),
   currency: zod.string().nullish(),
   snoozedUntil: zod.coerce.date().nullish(),
   decidedAt: zod.coerce.date().nullish(),
   decidedBy: zod.string().nullish(),
   notes: zod.string().nullish(),
+  followupContractId: zod
+    .string()
+    .nullish()
+    .describe(
+      "Folgevertrag-Draft, sobald er aus dieser Renewal erzeugt wurde.",
+    ),
   createdAt: zod.coerce.date(),
   updatedAt: zod.coerce.date(),
 });
@@ -6645,7 +6697,9 @@ export const UpdateRenewalParams = zod.object({
 });
 
 export const UpdateRenewalBody = zod.object({
-  status: zod.enum(["open", "snoozed", "won", "lost", "cancelled"]).optional(),
+  status: zod
+    .enum(["open", "in_progress", "snoozed", "won", "lost", "cancelled"])
+    .optional(),
   snoozedUntil: zod.coerce.date().nullish(),
   notes: zod.string().nullish(),
 });
@@ -6676,15 +6730,42 @@ export const UpdateRenewalResponse = zod.object({
       detail: zod.string().optional(),
     }),
   ),
-  status: zod.enum(["open", "snoozed", "won", "lost", "cancelled"]),
+  status: zod.enum([
+    "open",
+    "in_progress",
+    "snoozed",
+    "won",
+    "lost",
+    "cancelled",
+  ]),
   valueAmount: zod.number().nullish(),
   currency: zod.string().nullish(),
   snoozedUntil: zod.coerce.date().nullish(),
   decidedAt: zod.coerce.date().nullish(),
   decidedBy: zod.string().nullish(),
   notes: zod.string().nullish(),
+  followupContractId: zod
+    .string()
+    .nullish()
+    .describe(
+      "Folgevertrag-Draft, sobald er aus dieser Renewal erzeugt wurde.",
+    ),
   createdAt: zod.coerce.date(),
   updatedAt: zod.coerce.date(),
+});
+
+/**
+ * Legt einen neuen `contracts`-Datensatz im Status `drafting` an, der
+Brand, Klausel-Set und (optionale) Quote-Vorlage des Vorvertrags
+übernimmt. Der neue Vertrag verweist über `predecessorContractId`
+auf den Vorvertrag, die Renewal wechselt auf Status `in_progress`.
+Sobald der Folgevertrag signiert wird, wird die Renewal automatisch
+auf `won` geschaltet.
+
+ * @summary Folgevertrag-Draft aus einer offenen Renewal anlegen
+ */
+export const IssueRenewalFollowupParams = zod.object({
+  id: zod.coerce.string(),
 });
 
 /**

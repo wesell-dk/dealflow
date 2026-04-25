@@ -401,6 +401,7 @@ export * from "./quoteVersion";
 export * from "./quoteVersionInput";
 export * from "./reactionInput";
 export * from "./renewalBucketStat";
+export * from "./renewalFollowupResult";
 export * from "./renewalOpportunity";
 export * from "./renewalOpportunityStatus";
 export * from "./renewalPatch";

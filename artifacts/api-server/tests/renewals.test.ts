@@ -4,6 +4,7 @@ import { and, eq, inArray } from "drizzle-orm";
 import {
   db,
   contractsTable,
+  contractClausesTable,
   renewalOpportunitiesTable,
   usersTable,
   auditLogTable,
@@ -71,6 +72,7 @@ describe("renewals — engine, scope, lifecycle", () => {
   let aliceAdmin: AuthedClient;  // worldA, after upgrading to Tenant Admin
   let bob: AuthedClient;         // worldB
   const seededObligationIds: string[] = [];
+  const seededFollowupContractIds: string[] = [];
 
   before(async () => {
     await sweepStaleTestData();
@@ -96,6 +98,16 @@ describe("renewals — engine, scope, lifecycle", () => {
   after(async () => {
     if (seededObligationIds.length > 0) {
       await db.delete(obligationsTable).where(inArray(obligationsTable.id, seededObligationIds));
+    }
+    if (seededFollowupContractIds.length > 0) {
+      await db.delete(contractClausesTable).where(
+        inArray(contractClausesTable.contractId, seededFollowupContractIds),
+      );
+      await db.delete(auditLogTable).where(and(
+        eq(auditLogTable.entityType, "contract"),
+        inArray(auditLogTable.entityId, seededFollowupContractIds),
+      ));
+      await db.delete(contractsTable).where(inArray(contractsTable.id, seededFollowupContractIds));
     }
     if (worldA && worldB) {
       await db.delete(renewalOpportunitiesTable).where(inArray(
@@ -208,9 +220,187 @@ describe("renewals — engine, scope, lifecycle", () => {
       assert.ok(b.atRiskValue <= b.value, `atRiskValue must be <= value for ${b.ym}`);
       assert.ok(b.atRiskCount <= b.count, `atRiskCount must be <= count for ${b.ym}`);
     }
+  it("POST /renewals/:id/issue-followup creates successor + flips status to in_progress", async () => {
+    // Seed two clauses + an accepted quote linkage on the predecessor so we
+    // can verify both the clause snapshot and the quote-context inheritance.
+    await db.insert(contractClausesTable).values([
+      {
+        id: `${worldA.runId}_pcl1`,
+        contractId: worldA.contractId,
+        family: "Liability",
+        variant: "Standard",
+        severity: "low",
+        summary: "Standard liability cap.",
+      },
+      {
+        id: `${worldA.runId}_pcl2`,
+        contractId: worldA.contractId,
+        family: "Termination",
+        variant: "30-day notice",
+        severity: "low",
+        summary: "Either party may terminate with 30 days notice.",
+      },
+    ]);
+    await db.update(contractsTable).set({
+      acceptedQuoteVersionId: worldA.quoteId,
+    }).where(eq(contractsTable.id, worldA.contractId));
+
+    const list = await aliceAdmin.get("/api/renewals?status=open");
+    assert.equal(list.status, 200);
+    const opp = ((list.body as Array<{ id: string; contractId: string; status: string }>) ?? [])
+      .find(r => r.contractId === worldA.contractId);
+    assert.ok(opp, "expected an open renewal for worldA");
+    assert.equal(opp!.status, "open");
+
+    const res = await aliceAdmin.post(`/api/renewals/${opp!.id}/issue-followup`);
+    assert.equal(res.status, 201, `expected 201, got ${res.status}: ${JSON.stringify(res.body)}`);
+    const body = res.body as {
+      renewal: { id: string; status: string; followupContractId: string | null; decidedAt: string | null };
+      contract: { id: string; status: string; predecessorContractId: string | null; dealId: string };
+    };
+    assert.equal(body.renewal.status, "in_progress");
+    assert.equal(body.renewal.followupContractId, body.contract.id);
+    assert.equal(body.renewal.decidedAt, null, "in_progress must not set decidedAt");
+    assert.equal(body.contract.status, "drafting");
+    assert.equal(body.contract.predecessorContractId, worldA.contractId);
+    assert.equal(body.contract.dealId, worldA.dealId);
+    seededFollowupContractIds.push(body.contract.id);
+
+    // Quote-context preserved at DB level (not part of the mapped Contract DTO,
+    // but must be carried over so the AE keeps the same pricing baseline).
+    const [newRow] = await db.select().from(contractsTable)
+      .where(eq(contractsTable.id, body.contract.id));
+    assert.equal(newRow!.acceptedQuoteVersionId, worldA.quoteId,
+      "acceptedQuoteVersionId must be inherited from predecessor");
+
+    // Clauses copied 1:1
+    const newClauses = await db.select().from(contractClausesTable)
+      .where(eq(contractClausesTable.contractId, body.contract.id));
+    assert.equal(newClauses.length, 2, "must copy both predecessor clauses");
+    const families = newClauses.map(c => c.family).sort();
+    assert.deepEqual(families, ["Liability", "Termination"]);
+
+    // Audit row written
+    const audit = await db.select().from(auditLogTable).where(and(
+      eq(auditLogTable.entityType, "renewal_opportunity"),
+      eq(auditLogTable.entityId, opp!.id),
+      eq(auditLogTable.action, "followup_issued"),
+    ));
+    assert.ok(audit.length >= 1, "expected followup_issued audit row");
+
+    // GET /renewals/:id reflects the in_progress + followup link
+    const reload = await aliceAdmin.get(`/api/renewals/${opp!.id}`);
+    assert.equal(reload.status, 200);
+    const reloaded = reload.body as { status: string; followupContractId: string | null };
+    assert.equal(reloaded.status, "in_progress");
+    assert.equal(reloaded.followupContractId, body.contract.id);
+  });
+
+  it("POST /renewals/:id/issue-followup — concurrent duplicate is blocked by unique index", async () => {
+    // Reset to an open renewal with no successor so we can race two issues.
+    if (seededFollowupContractIds.length > 0) {
+      await db.delete(contractClausesTable).where(
+        inArray(contractClausesTable.contractId, seededFollowupContractIds),
+      );
+      await db.delete(contractsTable).where(
+        inArray(contractsTable.id, seededFollowupContractIds),
+      );
+      seededFollowupContractIds.length = 0;
+    }
+    await db.update(renewalOpportunitiesTable).set({
+      status: "open",
+      decidedAt: null,
+      decidedBy: null,
+    }).where(and(
+      eq(renewalOpportunitiesTable.tenantId, worldA.tenantId),
+      eq(renewalOpportunitiesTable.contractId, worldA.contractId),
+    ));
+
+    const list = await aliceAdmin.get("/api/renewals?status=open");
+    const opp = ((list.body as Array<{ id: string; contractId: string }>) ?? [])
+      .find(r => r.contractId === worldA.contractId);
+    assert.ok(opp, "expected open renewal for race test");
+
+    // Fire two issue calls in parallel — exactly one must win, the other must
+    // 409 (either via the read-then-insert guard or the unique-constraint
+    // catch). Either way, only ONE successor must exist in the DB.
+    const [r1, r2] = await Promise.all([
+      aliceAdmin.post(`/api/renewals/${opp!.id}/issue-followup`),
+      aliceAdmin.post(`/api/renewals/${opp!.id}/issue-followup`),
+    ]);
+    const statuses = [r1.status, r2.status].sort();
+    assert.deepEqual(statuses, [201, 409],
+      `expected exactly one 201 + one 409, got ${JSON.stringify(statuses)}`);
+
+    const successors = await db.select().from(contractsTable).where(and(
+      eq(contractsTable.tenantId, worldA.tenantId),
+      eq(contractsTable.predecessorContractId, worldA.contractId),
+    ));
+    assert.equal(successors.length, 1, "exactly one follow-up contract must exist");
+    seededFollowupContractIds.push(successors[0]!.id);
+  });
+
+  it("POST /renewals/:id/issue-followup is idempotent — second call returns 409", async () => {
+    const list = await aliceAdmin.get("/api/renewals?status=in_progress");
+    assert.equal(list.status, 200);
+    const opp = ((list.body as Array<{ id: string; contractId: string }>) ?? [])
+      .find(r => r.contractId === worldA.contractId);
+    assert.ok(opp, "expected the in_progress renewal from previous test");
+    const res = await aliceAdmin.post(`/api/renewals/${opp!.id}/issue-followup`);
+    assert.equal(res.status, 409, `expected 409 (status != open), got ${res.status}`);
+  });
+
+  it("POST /renewals/:id/issue-followup is tenant-scoped — bob cannot issue alice's followup", async () => {
+    // Reset worldA renewal back to open + remove the stub successor so the test
+    // doesn't conflict with the previous one. We delete the previously created
+    // followup contract to clear the "already issued" guard.
+    if (seededFollowupContractIds.length > 0) {
+      await db.delete(contractClausesTable).where(
+        inArray(contractClausesTable.contractId, seededFollowupContractIds),
+      );
+      await db.delete(contractsTable).where(
+        inArray(contractsTable.id, seededFollowupContractIds),
+      );
+    }
+    await db.update(renewalOpportunitiesTable).set({
+      status: "open",
+      decidedAt: null,
+      decidedBy: null,
+    }).where(and(
+      eq(renewalOpportunitiesTable.tenantId, worldA.tenantId),
+      eq(renewalOpportunitiesTable.contractId, worldA.contractId),
+    ));
+
+    // Find alice's renewal id, then attempt as bob → must 404 (scope hides it).
+    const listAlice = await aliceAdmin.get("/api/renewals?status=open");
+    const aliceOpp = ((listAlice.body as Array<{ id: string; contractId: string }>) ?? [])
+      .find(r => r.contractId === worldA.contractId);
+    assert.ok(aliceOpp, "expected an open renewal for worldA");
+
+    const bobAdmin = await loginClient(server.baseUrl, worldB.userEmail, worldB.password);
+    const denied = await bobAdmin.post(`/api/renewals/${aliceOpp!.id}/issue-followup`);
+    assert.equal(denied.status, 404, `expected 404 (tenant-scope), got ${denied.status}`);
+
+    // Cleanup: re-issue as alice so the seededFollowupContractIds list captures
+    // the eventual contract for `after` cleanup. Then we re-record it.
+    const ok = await aliceAdmin.post(`/api/renewals/${aliceOpp!.id}/issue-followup`);
+    assert.equal(ok.status, 201);
+    const okBody = ok.body as { contract: { id: string } };
+    seededFollowupContractIds.length = 0;
+    seededFollowupContractIds.push(okBody.contract.id);
   });
 
   it("PATCH /renewals/:id snooze sets status + snoozedUntil and writes audit", async () => {
+    // Issue-followup test left the renewal as in_progress with a successor; reset
+    // so the snooze test still sees a snoozable open renewal.
+    await db.update(renewalOpportunitiesTable).set({
+      status: "open",
+      decidedAt: null,
+      decidedBy: null,
+    }).where(and(
+      eq(renewalOpportunitiesTable.tenantId, worldA.tenantId),
+      eq(renewalOpportunitiesTable.contractId, worldA.contractId),
+    ));
     const list = await aliceAdmin.get("/api/renewals");
     assert.equal(list.status, 200);
     const opp = ((list.body as Array<{ id: string }>) ?? [])[0];

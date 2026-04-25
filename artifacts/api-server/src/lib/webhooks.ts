@@ -14,7 +14,8 @@ export type WebhookEvent =
   | "order.completed"
   | "external_contract.confirmed"
   | "renewal.created"
-  | "renewal.due_soon";
+  | "renewal.due_soon"
+  | "renewal.followup_issued";
 
 /**
  * Hosts an admin may explicitly allowlist via env, e.g. for staging callbacks
@@ -323,6 +324,10 @@ export const WEBHOOK_EVENTS: WebhookEvent[] = [
   // 30 Tagen liegt — typisches Trigger-Event für CRM-Folge-Workflows.
   "renewal.created",
   "renewal.due_soon",
+  // Re-Issue (#98): wird ausgelöst, sobald aus einer offenen Renewal ein
+  // Folgevertrag-Draft erzeugt wird. Payload trägt renewalId + neue
+  // contractId + predecessorContractId, damit CRMs den Übergang verknüpfen.
+  "renewal.followup_issued",
 ];
 
 /**

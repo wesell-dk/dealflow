@@ -13,6 +13,7 @@ export type ListRenewalsStatus =
 
 export const ListRenewalsStatus = {
   open: "open",
+  in_progress: "in_progress",
   snoozed: "snoozed",
   won: "won",
   lost: "lost",

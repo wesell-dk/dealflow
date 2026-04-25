@@ -3010,6 +3010,7 @@ function mapContract(c: typeof contractsTable.$inferSelect, dealName: string, cl
     language: normalizeLocale(c.language),
     tenantId: c.tenantId ?? null,
     contractTypeId: c.contractTypeId ?? null,
+    predecessorContractId: c.predecessorContractId ?? null,
   };
 }
 
@@ -6485,6 +6486,40 @@ async function maybeCompletePackageAndCreateOC(req: Request, pkg: PackageRow, si
         // Engines sollen den Signatur-Abschluss nicht blockieren.
         // Fehler werden ignoriert — Audit-Log enthält den eigentlichen Abschluss.
         void err;
+      }
+      // Folgevertrag-Signatur (#98) → zugehörige Renewal automatisch
+      // auf "won" schalten. Wir suchen die Renewal über den Vorvertrag, die
+      // beim Issue auf in_progress ging. Nur Renewals des gleichen Tenants
+      // berücksichtigen, terminale States werden nicht überschrieben.
+      if (ctr.predecessorContractId) {
+        try {
+          const [renewalRow] = await db.select().from(renewalOpportunitiesTable).where(and(
+            eq(renewalOpportunitiesTable.tenantId, tenantIdForCtr),
+            eq(renewalOpportunitiesTable.contractId, ctr.predecessorContractId),
+            inArray(renewalOpportunitiesTable.status, ['open', 'in_progress']),
+          )).limit(1);
+          if (renewalRow) {
+            const before = renewalRow;
+            await db.update(renewalOpportunitiesTable).set({
+              status: 'won',
+              decidedAt: new Date(),
+              decidedBy: 'system',
+              updatedAt: new Date(),
+            }).where(eq(renewalOpportunitiesTable.id, renewalRow.id));
+            const [after] = await db.select().from(renewalOpportunitiesTable)
+              .where(eq(renewalOpportunitiesTable.id, renewalRow.id));
+            await writeAuditFromReq(req, {
+              entityType: 'renewal_opportunity',
+              entityId: renewalRow.id,
+              action: 'auto_won',
+              summary: `Folgevertrag ${ctr.id} signiert → Renewal automatisch gewonnen`,
+              before,
+              after,
+            });
+          }
+        } catch (err) {
+          void err;
+        }
       }
     }
   }
@@ -12013,12 +12048,30 @@ async function mapRenewal(
     accs?: Map<string, typeof accountsTable.$inferSelect>;
     brands?: Map<string, typeof brandsTable.$inferSelect>;
     contracts?: Map<string, typeof contractsTable.$inferSelect>;
+    /**
+     * Vorvertrag-id → Folgevertrag-id, damit die UI nach Issue eines
+     * Folgevertrags direkt verlinken kann ohne Extra-Roundtrip.
+     */
+    successors?: Map<string, string>;
   },
 ) {
   const accs = ctx?.accs ?? (await getAccountMap());
   const brands = ctx?.brands ?? (await getBrandMap());
   const contracts = ctx?.contracts ?? new Map<string, typeof contractsTable.$inferSelect>();
   const c = contracts.get(row.contractId) ?? null;
+  let followupContractId: string | null = ctx?.successors?.get(row.contractId) ?? null;
+  if (!followupContractId && !ctx?.successors) {
+    // Single-Renewal-Lookup (kein vorgewärmter Cache vorhanden): einmaliger
+    // Punkt-Query ist günstig; in_progress / won impliziert i.d.R. Successor.
+    const [succ] = await db.select({ id: contractsTable.id })
+      .from(contractsTable)
+      .where(and(
+        eq(contractsTable.tenantId, row.tenantId),
+        eq(contractsTable.predecessorContractId, row.contractId),
+      ))
+      .limit(1);
+    followupContractId = succ?.id ?? null;
+  }
   return {
     id: row.id,
     tenantId: row.tenantId,
@@ -12039,6 +12092,7 @@ async function mapRenewal(
     decidedAt: iso(row.decidedAt),
     decidedBy: row.decidedBy,
     notes: row.notes,
+    followupContractId,
     createdAt: iso(row.createdAt)!,
     updatedAt: iso(row.updatedAt)!,
   };
@@ -12071,7 +12125,7 @@ router.get('/renewals', async (req, res) => {
   const filters: SQL[] = [eq(renewalOpportunitiesTable.tenantId, scope.tenantId)];
 
   const status = typeof req.query.status === 'string' ? req.query.status : null;
-  if (status && ['open','snoozed','won','lost','cancelled'].includes(status)) {
+  if (status && ['open','in_progress','snoozed','won','lost','cancelled'].includes(status)) {
     filters.push(eq(renewalOpportunitiesTable.status, status));
   } else if (!status || status === 'open') {
     // Default-Listing zeigt offene Opportunities
@@ -12127,15 +12181,27 @@ router.get('/renewals', async (req, res) => {
   }
   const visible = rows.filter(r => visAcc.has(r.accountId));
 
-  const [accs, brands, contractsRows] = await Promise.all([
+  const [accs, brands, contractsRows, successorRows] = await Promise.all([
     getAccountMap(),
     getBrandMap(),
     visible.length === 0 ? Promise.resolve([] as Array<typeof contractsTable.$inferSelect>)
       : db.select().from(contractsTable).where(inArray(contractsTable.id, visible.map(r => r.contractId))),
+    visible.length === 0 ? Promise.resolve([] as Array<{ id: string; predecessorContractId: string | null }>)
+      : db.select({
+          id: contractsTable.id,
+          predecessorContractId: contractsTable.predecessorContractId,
+        }).from(contractsTable).where(and(
+          eq(contractsTable.tenantId, scope.tenantId),
+          inArray(contractsTable.predecessorContractId, visible.map(r => r.contractId)),
+        )),
   ]);
   const contracts = new Map(contractsRows.map(c => [c.id, c]));
+  const successors = new Map<string, string>();
+  for (const s of successorRows) {
+    if (s.predecessorContractId) successors.set(s.predecessorContractId, s.id);
+  }
 
-  const out = await Promise.all(visible.map(r => mapRenewal(r, { accs, brands, contracts })));
+  const out = await Promise.all(visible.map(r => mapRenewal(r, { accs, brands, contracts, successors })));
   res.json(out);
 });
 
@@ -12285,7 +12351,7 @@ router.post('/renewals/run', async (req, res) => {
 
 // PATCH /renewals/:id — snooze / status ändern
 const RenewalPatchBody = z.object({
-  status: z.enum(['open','snoozed','won','lost','cancelled']).optional(),
+  status: z.enum(['open','in_progress','snoozed','won','lost','cancelled']).optional(),
   snoozedUntil: z.string().nullable().optional(),
   notes: z.string().max(2000).nullable().optional(),
 });
@@ -12308,7 +12374,10 @@ router.patch('/renewals/:id', async (req, res) => {
   };
   if (b.status !== undefined) {
     patch.status = b.status;
-    if (b.status !== 'open' && b.status !== 'snoozed') {
+    // Nur terminale States markieren decidedAt. `in_progress` ist nur die
+    // Phase zwischen Folgevertrag-Draft und Signatur und gilt nicht als
+    // Entscheidung.
+    if (b.status === 'won' || b.status === 'lost' || b.status === 'cancelled') {
       patch.decidedAt = new Date();
       patch.decidedBy = scope.user?.id ?? null;
     }
@@ -12331,6 +12400,170 @@ router.patch('/renewals/:id', async (req, res) => {
     after,
   });
   res.json(await mapRenewal(after));
+});
+
+// POST /renewals/:id/issue-followup
+// ---------------------------------------------------------------------------
+// Erzeugt aus einer offenen Renewal einen Folgevertrag-Draft, der Brand,
+// Klauseln und Vertragsmetadaten des Vorvertrags übernimmt. Die Renewal
+// wechselt in den Zwischen-Status `in_progress`, der erst durch das Signieren
+// des Folgevertrags (→ `won`) bzw. durch eine manuelle PATCH-Entscheidung
+// terminiert wird. Doppel-Issue ist blockiert (gleiche Renewal nur 1×).
+router.post('/renewals/:id/issue-followup', async (req, res) => {
+  const scope = getScope(req);
+  const renewal = await loadVisibleRenewal(req, req.params.id);
+  if (!renewal) { res.status(404).json({ error: 'not found' }); return; }
+  if (renewal.status !== 'open') {
+    res.status(409).json({ error: 'renewal not eligible', detail: `status is ${renewal.status}` });
+    return;
+  }
+  // Predecessor laden — gleicher Tenant + sichtbarer Deal (gateDeal-Logik).
+  const [pred] = await db.select().from(contractsTable).where(eq(contractsTable.id, renewal.contractId));
+  if (!pred) { res.status(404).json({ error: 'predecessor contract not found' }); return; }
+  if (!(await gateDeal(req, res, pred.dealId))) return;
+  // Doppelschuss verhindern: pro Vorvertrag genau ein Folgevertrag-Draft.
+  const [existingSucc] = await db.select({ id: contractsTable.id })
+    .from(contractsTable)
+    .where(and(
+      eq(contractsTable.tenantId, scope.tenantId),
+      eq(contractsTable.predecessorContractId, pred.id),
+    ))
+    .limit(1);
+  if (existingSucc) {
+    res.status(409).json({ error: 'followup already issued', followupContractId: existingSucc.id });
+    return;
+  }
+
+  // Neuer Vertragstitel: Vorvertrag + " (Renewal YYYY)".
+  const renewalYear = new Date(renewal.dueDate).getUTCFullYear();
+  const title = `${pred.title} (Renewal ${renewalYear})`;
+  const newId = `ctr_${randomUUID().slice(0, 8)}`;
+  // Term fortschreiben: effectiveFrom = effectiveTo des Vorvertrags
+  // (oder dueDate der Renewal als Fallback), +1 Jahr Laufzeit.
+  const newEffectiveFrom = pred.effectiveTo ?? renewal.dueDate;
+  const fromDate = new Date(newEffectiveFrom);
+  const newEffectiveTo = toDateOnly(addDays(fromDate, 365))!;
+
+  try {
+    await db.insert(contractsTable).values({
+      id: newId,
+      dealId: pred.dealId,
+      title,
+      status: 'drafting',
+      version: 1,
+      riskLevel: pred.riskLevel ?? 'low',
+      template: pred.template,
+      validUntil: toDateOnly(addDays(new Date(), 365)),
+      tenantId: scope.tenantId,
+      companyId: pred.companyId ?? null,
+      brandId: pred.brandId ?? null,
+      accountId: pred.accountId ?? renewal.accountId,
+      contractTypeId: pred.contractTypeId ?? null,
+      playbookId: pred.playbookId ?? null,
+      // Quote-Kontext erben: das im Vorvertrag akzeptierte Quote-Bundle ist
+      // typischerweise auch der Startpunkt für die Verhandlung des Folge-
+      // vertrags (gleiche Konditionen, ggf. Index-Anpassung). AE darf später
+      // ein anderes Quote akzeptieren und überschreiben.
+      acceptedQuoteVersionId: pred.acceptedQuoteVersionId ?? null,
+      language: pred.language ?? null,
+      currency: pred.currency ?? renewal.currency ?? null,
+      effectiveFrom: newEffectiveFrom,
+      effectiveTo: newEffectiveTo,
+      autoRenewal: pred.autoRenewal ?? false,
+      renewalNoticeDays: pred.renewalNoticeDays ?? null,
+      terminationNoticeDays: pred.terminationNoticeDays ?? null,
+      governingLaw: pred.governingLaw ?? null,
+      jurisdiction: pred.jurisdiction ?? null,
+      valueAmount: pred.valueAmount ?? (renewal.valueAmount ?? null),
+      valueCurrency: pred.valueCurrency ?? renewal.currency ?? null,
+      predecessorContractId: pred.id,
+    });
+  } catch (err) {
+    // Race-Condition: zwischen unserer Read-Then-Insert-Prüfung und dem
+    // tatsächlichen Insert hat ein zweiter Request denselben Folgevertrag
+    // angelegt. Der unique index `contracts_tenant_predecessor_uq` verhindert
+    // den Doppel-Eintrag — wir mappen die SQLState-23505-Fehlermeldung auf
+    // einen sauberen 409-Konflikt, statt den Fehler als 500 weiterzureichen.
+    // Drizzle wickelt PostgresError, der eigentliche Code steckt in `cause`.
+    const e = err as { code?: string; cause?: { code?: string } } | null;
+    const code = e?.code ?? e?.cause?.code;
+    if (code === '23505') {
+      const [winner] = await db.select({ id: contractsTable.id })
+        .from(contractsTable)
+        .where(and(
+          eq(contractsTable.tenantId, scope.tenantId),
+          eq(contractsTable.predecessorContractId, pred.id),
+        ))
+        .limit(1);
+      res.status(409).json({
+        error: 'followup already issued',
+        followupContractId: winner?.id ?? null,
+      });
+      return;
+    }
+    throw err;
+  }
+
+  // Klauseln des Vorvertrags 1:1 als Snapshot übernehmen — Edits werden
+  // bewusst nicht vererbt (der Folgevertrag startet sauber von der Variante).
+  const predClauses = await db.select().from(contractClausesTable)
+    .where(eq(contractClausesTable.contractId, pred.id));
+  if (predClauses.length > 0) {
+    await db.insert(contractClausesTable).values(predClauses.map(c => ({
+      id: `cc_${randomUUID().slice(0, 8)}`,
+      contractId: newId,
+      family: c.family,
+      variant: c.variant,
+      severity: c.severity,
+      summary: c.summary,
+      familyId: c.familyId ?? null,
+      activeVariantId: c.activeVariantId ?? null,
+    })));
+  }
+
+  // Renewal auf in_progress schalten — kein decidedAt, da noch nicht final.
+  await db.update(renewalOpportunitiesTable).set({
+    status: 'in_progress',
+    updatedAt: new Date(),
+  }).where(eq(renewalOpportunitiesTable.id, renewal.id));
+
+  const [renewalAfter] = await db.select().from(renewalOpportunitiesTable)
+    .where(eq(renewalOpportunitiesTable.id, renewal.id));
+  const [contractAfter] = await db.select().from(contractsTable)
+    .where(eq(contractsTable.id, newId));
+
+  await writeAuditFromReq(req, {
+    entityType: 'renewal_opportunity',
+    entityId: renewal.id,
+    action: 'followup_issued',
+    summary: `Folgevertrag ${newId} aus Renewal angelegt`,
+    actor: scope.user?.name,
+    before: renewal,
+    after: renewalAfter,
+  });
+  await writeAuditFromReq(req, {
+    entityType: 'contract',
+    entityId: newId,
+    action: 'create',
+    summary: `Folgevertrag aus Renewal ${renewal.id} (Vorvertrag ${pred.id})`,
+    actor: scope.user?.name,
+    after: contractAfter,
+  });
+
+  void emitEvent(scope.tenantId, 'renewal.followup_issued', {
+    renewalId: renewal.id,
+    contractId: newId,
+    predecessorContractId: pred.id,
+    dealId: pred.dealId,
+    accountId: renewal.accountId,
+    brandId: renewal.brandId ?? null,
+  });
+
+  const dealMap = await getDealMap();
+  res.status(201).json({
+    renewal: await mapRenewal(renewalAfter),
+    contract: mapContract(contractAfter!, dealMap.get(contractAfter!.dealId)?.name ?? 'Unknown'),
+  });
 });
 
 // =============================================================================
