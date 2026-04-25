@@ -63,6 +63,13 @@ export function AccountFormDialog({ open, onOpenChange, account, onSaved }: Prop
 
   const [suggestion, setSuggestion] = useState<AccountEnrichmentSuggestion | null>(null);
 
+  // Achtung: Dependency hier nur auf `open` und `account?.id`. Das Parent-
+  // Component (pages/account.tsx) baut das account-Objekt inline auf jedem
+  // Render neu auf, wodurch eine Dependency auf `account` selbst diesen
+  // Effect bei jedem Eltern-Render feuern würde — und damit auch frisch
+  // geladene Crawler-Vorschläge sofort wieder leise weg-wischen würde,
+  // während der Toast stehen bleibt ("er sagt er hat es gecrawled aber
+  // hat es nicht gecrawled"-Bug).
   useEffect(() => {
     if (open) {
       setName(account?.name ?? "");
@@ -76,7 +83,8 @@ export function AccountFormDialog({ open, onOpenChange, account, onSaved }: Prop
       setSizeBracket(account?.sizeBracket ?? "");
       setSuggestion(null);
     }
-  }, [open, account]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, account?.id]);
 
   const onEnrich = async () => {
     const w = website.trim();
@@ -86,15 +94,88 @@ export function AccountFormDialog({ open, onOpenChange, account, onSaved }: Prop
     }
     try {
       const res = await enrich.mutateAsync({ data: { website: w } });
-      setSuggestion(res);
-      const fields = [
-        res.name && "Name", res.country && "Land", res.billingAddress && "Adresse",
-        res.phone && "Telefon", res.vatId && "USt-ID", res.legalEntityName && "Firmierung",
-      ].filter(Boolean);
-      if (fields.length === 0) {
-        toast({ title: "Keine Daten gefunden", description: "Wir konnten zu dieser Website nichts ableiten." });
+
+      // Leere Form-Felder werden direkt befüllt — sonst denkt der User, der
+      // Crawler hätte gelogen ("er sagt er hat es gecrawled aber hat es
+      // nicht gecrawled"). Felder, die der User schon ausgefüllt hat und
+      // die vom Crawler abweichen, kommen weiter in den Vorschlags-Panel
+      // zum manuellen Übernehmen — wir wollen keine Eingaben überschreiben.
+      const applied: string[] = [];
+      const conflicts: string[] = [];
+      const conflictSuggestion: AccountEnrichmentSuggestion = {
+        name: null, country: null, billingAddress: null,
+        phone: null, vatId: null, legalEntityName: null, sourceUrl: res.sourceUrl ?? null,
+      };
+
+      // Normalisierung pro Feldtyp, damit semantisch gleiche Werte nicht
+      // als Konflikt markiert werden (z.B. "DE" vs "de" beim Land,
+      // unterschiedliche Whitespace-/Punkt-Schreibweisen bei VAT/Telefon).
+      const normCountry = (s: string) => s.trim().toUpperCase();
+      const normVatId = (s: string) => s.replace(/[\s.\-/]/g, "").toUpperCase();
+      const normPhone = (s: string) => s.replace(/[\s().\-/]/g, "");
+      const normPlain = (s: string) => s.trim();
+
+      const consider = (
+        label: string,
+        suggested: string | null | undefined,
+        current: string,
+        apply: (v: string) => void,
+        conflictKey: keyof AccountEnrichmentSuggestion,
+        normalize: (s: string) => string = normPlain,
+      ) => {
+        const s = (suggested ?? "").trim();
+        if (!s) return;
+        if (!current.trim()) {
+          apply(s);
+          applied.push(label);
+        } else if (normalize(s) !== normalize(current)) {
+          conflicts.push(label);
+          (conflictSuggestion[conflictKey] as string) = s;
+        }
+      };
+
+      consider("Name", res.name, name, setName, "name");
+      consider("Land", res.country, country, setCountry, "country", normCountry);
+      consider("Adresse", res.billingAddress, billingAddress, setBillingAddress, "billingAddress");
+      consider("Telefon", res.phone, phone, setPhone, "phone", normPhone);
+      consider("USt-ID", res.vatId, vatId, setVatId, "vatId", normVatId);
+      // Firmierung hat kein eigenes Form-Feld — nur als Info im Panel.
+      const hasLegalHint = Boolean(res.legalEntityName);
+      if (hasLegalHint) {
+        conflictSuggestion.legalEntityName = res.legalEntityName ?? null;
+      }
+
+      const hasConflicts = conflicts.length > 0 || hasLegalHint;
+      setSuggestion(hasConflicts ? conflictSuggestion : null);
+
+      if (applied.length === 0 && conflicts.length === 0 && !hasLegalHint) {
+        toast({
+          title: "Keine Daten gefunden",
+          description: "Zu dieser Website konnten wir nichts aus Impressum oder öffentlichen Quellen ableiten.",
+        });
+      } else if (applied.length > 0 && conflicts.length === 0 && !hasLegalHint) {
+        toast({
+          title: "Felder ergänzt",
+          description: applied.join(", ") + " automatisch übernommen.",
+        });
+      } else if (applied.length > 0 && conflicts.length > 0) {
+        toast({
+          title: "Teilweise übernommen",
+          description: `${applied.join(", ")} ergänzt. ${conflicts.join(", ")} weicht ab — bitte prüfen.`,
+        });
+      } else if (conflicts.length > 0) {
+        toast({
+          title: "Vorschläge weichen ab",
+          description: `${conflicts.join(", ")} ${conflicts.length === 1 ? "weicht" : "weichen"} von deiner Eingabe ab — bitte prüfen.`,
+        });
       } else {
-        toast({ title: "Vorschläge geladen", description: fields.join(", ") + " gefunden." });
+        // Nur legalEntityName-Hinweis ohne Konflikte und/oder ohne übernommene Felder.
+        toast({
+          title: applied.length > 0 ? "Felder ergänzt" : "Hinweis aus dem Web",
+          description: applied.length > 0
+            ? `${applied.join(", ")} übernommen. Zusätzlich Firmierung gefunden.`
+            : `Im Impressum gefunden: Firmierung „${res.legalEntityName}".`,
+        });
       }
     } catch (e) {
       toast({
@@ -107,7 +188,9 @@ export function AccountFormDialog({ open, onOpenChange, account, onSaved }: Prop
 
   const applySuggestion = () => {
     if (!suggestion) return;
-    if (suggestion.name && !name.trim()) setName(suggestion.name);
+    // Im Konflikt-Modus überschreibt Übernehmen jetzt explizit die User-
+    // Eingabe mit dem Web-Vorschlag.
+    if (suggestion.name) setName(suggestion.name);
     if (suggestion.country) setCountry(suggestion.country);
     if (suggestion.billingAddress) setBillingAddress(suggestion.billingAddress);
     if (suggestion.phone) setPhone(suggestion.phone);
