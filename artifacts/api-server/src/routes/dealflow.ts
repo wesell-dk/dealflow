@@ -1,6 +1,7 @@
 import { Router, type IRouter, type Request, type Response } from 'express';
 import { and, asc, desc, eq, inArray, isNull, or, sql, type SQL } from 'drizzle-orm';
 import { randomUUID, randomBytes } from 'node:crypto';
+import { BlockList } from 'node:net';
 import { ObjectStorageService } from '../lib/objectStorage';
 import { extractTextFromUpload } from '../lib/extractContractText';
 import { validateInline } from '../middlewares/validate';
@@ -12680,8 +12681,24 @@ router.get('/contracts/:id/clauses/_compatibility', async (req, res) => {
 // Magic-Link-Zugang fuer externe Anwaelte / Berater (Task #70)
 // =========================================================================
 
-const COLLAB_CAPABILITIES = ['view', 'comment', 'sign_party'] as const;
+const COLLAB_CAPABILITIES = ['view', 'comment', 'edit_fields', 'sign_party'] as const;
 type CollabCapability = typeof COLLAB_CAPABILITIES[number];
+
+// Whitelist der Vertrags-Felder, die per `edit_fields`-Capability ueberhaupt
+// freigegeben werden duerfen. Damit kann ein Tenant-User nicht versehentlich
+// einem Externen Schreibrechte auf z.B. status/template/dealId/brandId
+// einraeumen — nur auf rein vertragsinhaltliche Felder.
+const EDITABLE_CONTRACT_FIELDS = [
+  'effectiveFrom',
+  'effectiveTo',
+  'governingLaw',
+  'jurisdiction',
+] as const;
+type EditableContractField = typeof EDITABLE_CONTRACT_FIELDS[number];
+
+// Hartes Maximum aus Konzept (`docs/konzept/03_vertragswesen.md`, Phase 3):
+// Magic-Links duerfen NIE laenger als 30 Tage gueltig sein.
+const MAX_COLLAB_EXPIRY_DAYS = 30;
 
 function hashToken(plain: string): string {
   return createHash('sha256').update(plain).digest('hex');
@@ -12711,6 +12728,93 @@ function normaliseCapabilities(input: unknown): CollabCapability[] | null {
   return Array.from(set);
 }
 
+function normaliseEditableFields(input: unknown): EditableContractField[] | null {
+  if (input === undefined || input === null) return [];
+  if (!Array.isArray(input)) return null;
+  const set = new Set<EditableContractField>();
+  for (const v of input) {
+    if (typeof v !== 'string') return null;
+    if (!(EDITABLE_CONTRACT_FIELDS as readonly string[]).includes(v)) return null;
+    set.add(v as EditableContractField);
+  }
+  return Array.from(set);
+}
+
+// IPv4 / IPv6 / CIDR Validierung. Kein vollstaendiger RFC-Parser, sondern
+// pragmatische Pruefung mit `net.BlockList`-Kompatibilitaet (siehe ipMatches).
+function isValidIpOrCidr(s: string): boolean {
+  if (typeof s !== 'string' || s.length === 0 || s.length > 64) return false;
+  // Trenne optionalen CIDR-Suffix.
+  const slash = s.indexOf('/');
+  const addr = slash === -1 ? s : s.slice(0, slash);
+  const prefix = slash === -1 ? null : s.slice(slash + 1);
+  if (prefix !== null) {
+    if (!/^\d+$/.test(prefix)) return false;
+    const p = Number(prefix);
+    if (!Number.isInteger(p) || p < 0) return false;
+    // v4 max 32, v6 max 128 — gepruefte Obergrenze auf max(128).
+    if (p > 128) return false;
+  }
+  // sehr lockere v4/v6 Erkennung — wir verlassen uns auf BlockList beim Match.
+  if (/^\d{1,3}(\.\d{1,3}){3}$/.test(addr)) {
+    const parts = addr.split('.').map(Number);
+    if (parts.some((n) => !Number.isInteger(n) || n < 0 || n > 255)) return false;
+    if (prefix !== null && Number(prefix) > 32) return false;
+    return true;
+  }
+  if (/^[0-9a-fA-F:]+$/.test(addr) && addr.includes(':')) {
+    // grobe v6-Pruefung
+    return true;
+  }
+  return false;
+}
+
+function normaliseIpAllowlist(input: unknown): string[] | null {
+  if (input === undefined || input === null) return [];
+  if (!Array.isArray(input)) return null;
+  if (input.length > 32) return null; // sane upper bound
+  const out: string[] = [];
+  for (const v of input) {
+    if (typeof v !== 'string') return null;
+    const trimmed = v.trim();
+    if (trimmed.length === 0) continue;
+    if (!isValidIpOrCidr(trimmed)) return null;
+    out.push(trimmed);
+  }
+  return out;
+}
+
+// Pruefe, ob die aktuelle Request-IP in der Allowlist liegt.
+// Leere Allowlist = keine Einschraenkung.
+function ipMatchesAllowlist(reqIp: string | undefined | null, allowlist: string[]): boolean {
+  if (!allowlist || allowlist.length === 0) return true;
+  if (!reqIp) return false;
+  // Express liefert v4 oft als IPv4-mapped v6 ("::ffff:1.2.3.4"). Strip mapping.
+  let ip = reqIp;
+  if (ip.startsWith('::ffff:')) ip = ip.slice(7);
+  // node:net BlockList ist Node-builtin und erlaubt CIDR-Matches
+  // ueber addSubnet/check ohne externe Lib.
+  const list = new BlockList();
+  for (const entry of allowlist) {
+    const slash = entry.indexOf('/');
+    if (slash === -1) {
+      // Einzelne IP.
+      const family = entry.includes(':') ? 'ipv6' : 'ipv4';
+      try { list.addAddress(entry, family); } catch { /* skip */ }
+    } else {
+      const addr = entry.slice(0, slash);
+      const prefix = Number(entry.slice(slash + 1));
+      const family = addr.includes(':') ? 'ipv6' : 'ipv4';
+      try { list.addSubnet(addr, prefix, family); } catch { /* skip */ }
+    }
+  }
+  try {
+    return list.check(ip, ip.includes(':') ? 'ipv6' : 'ipv4');
+  } catch {
+    return false;
+  }
+}
+
 function mapCollab(
   row: typeof externalCollaboratorsTable.$inferSelect,
   opts: { tokenPlaintext?: string } = {},
@@ -12726,6 +12830,8 @@ function mapCollab(
     name: row.name ?? null,
     organization: row.organization ?? null,
     capabilities: row.capabilities,
+    editableFields: row.editableFields ?? [],
+    ipAllowlist: row.ipAllowlist ?? [],
     status,
     expiresAt: row.expiresAt.toISOString(),
     revokedAt: row.revokedAt ? row.revokedAt.toISOString() : null,
@@ -12736,6 +12842,35 @@ function mapCollab(
     // Plaintext only ever returned at create-time.
     tokenPlaintext: opts.tokenPlaintext ?? null,
   };
+}
+
+/**
+ * Audit-Tag fuer Aktionen, die ueber einen Magic-Link ausgefuehrt wurden.
+ * Statt der User-ID landet der Token-/Collaborator-Identifier im actor-Feld
+ * — Audit-Reader sehen sofort, dass die Aktion von extern kam, und koennen
+ * ueber die Token-ID den vollen Kontext (Empfaenger, Capabilities, Erzeuger)
+ * nachvollziehen.
+ */
+function magicLinkActor(collab: typeof externalCollaboratorsTable.$inferSelect): string {
+  return `magic-link:${collab.id}`;
+}
+
+async function writeMagicLinkAudit(
+  collab: typeof externalCollaboratorsTable.$inferSelect,
+  action: string,
+  summary: string,
+  payload: Record<string, unknown>,
+) {
+  await writeAudit({
+    tenantId: collab.tenantId,
+    entityType: 'contract',
+    entityId: collab.contractId,
+    action,
+    actor: magicLinkActor(collab),
+    summary,
+    after: { collaboratorId: collab.id, ...payload },
+    activeScope: null,
+  });
 }
 
 /**
@@ -12804,11 +12939,19 @@ router.post('/contracts/:id/external-collaborators', async (req, res) => {
   const scope = getScope(req);
   const c = await loadContractForCollab(req, req.params.id);
   if (!c) { res.status(404).json({ error: 'contract not found' }); return; }
+  // Brand-Scope-Guard: Magic-Link kann nie ueber die Berechtigung des
+  // Erzeugers hinausgehen. loadContractForCollab pruefte bereits
+  // allowedDealIds (= Tenant + Company-/Brand-Scope), aber zusaetzlich
+  // sicherstellen, dass der User den Vertrag tatsaechlich SCHREIBEN darf
+  // (gateDeal wirft 403, wenn der Deal nicht im aktiven Schreib-Scope liegt).
+  if (!(await gateDeal(req, res, c.dealId))) return;
   const body = (req.body ?? {}) as {
     email?: unknown;
     name?: unknown;
     organization?: unknown;
     capabilities?: unknown;
+    editableFields?: unknown;
+    ipAllowlist?: unknown;
     expiresInDays?: unknown;
   };
   if (!isEmail(body.email)) {
@@ -12820,9 +12963,38 @@ router.post('/contracts/:id/external-collaborators', async (req, res) => {
       error: `capabilities must be a non-empty array of: ${COLLAB_CAPABILITIES.join(', ')}`,
     }); return;
   }
+  const editFields = normaliseEditableFields(body.editableFields);
+  if (editFields === null) {
+    res.status(400).json({
+      error: `editableFields must be an array of: ${EDITABLE_CONTRACT_FIELDS.join(', ')}`,
+    }); return;
+  }
+  // Ein leeres editableFields-Array bei aktiver edit_fields-Capability ist
+  // sinnlos (waere nur Kosmetik). Strikt rejecten — sonst koennte der
+  // Externe nichts editieren, der UI-Zustand waere irrefuehrend.
+  if (caps.includes('edit_fields') && editFields.length === 0) {
+    res.status(400).json({
+      error: 'editableFields must list at least one field when edit_fields capability is granted',
+    }); return;
+  }
+  // Umgekehrt: editableFields ohne Capability waere ein latentes Risiko
+  // (jemand schaltet die Capability spaeter via DB-Patch).
+  if (!caps.includes('edit_fields') && editFields.length > 0) {
+    res.status(400).json({
+      error: 'editableFields requires the edit_fields capability',
+    }); return;
+  }
+  const ipAllowlist = normaliseIpAllowlist(body.ipAllowlist);
+  if (ipAllowlist === null) {
+    res.status(400).json({
+      error: 'ipAllowlist must be an array of valid IPv4/IPv6 addresses or CIDR blocks (max 32 entries)',
+    }); return;
+  }
   const days = Number(body.expiresInDays ?? 14);
-  if (!Number.isFinite(days) || !Number.isInteger(days) || days < 1 || days > 90) {
-    res.status(400).json({ error: 'expiresInDays must be an integer between 1 and 90' }); return;
+  if (!Number.isFinite(days) || !Number.isInteger(days) || days < 1 || days > MAX_COLLAB_EXPIRY_DAYS) {
+    res.status(400).json({
+      error: `expiresInDays must be an integer between 1 and ${MAX_COLLAB_EXPIRY_DAYS}`,
+    }); return;
   }
   const email = String(body.email).trim().toLowerCase();
   const [existing] = await db.select().from(externalCollaboratorsTable)
@@ -12847,17 +13019,31 @@ router.post('/contracts/:id/external-collaborators', async (req, res) => {
     name: typeof body.name === 'string' && body.name.trim() ? body.name.trim().slice(0, 200) : null,
     organization: typeof body.organization === 'string' && body.organization.trim() ? body.organization.trim().slice(0, 200) : null,
     capabilities: caps,
+    editableFields: editFields,
+    ipAllowlist,
     tokenHash,
     expiresAt,
     createdBy: scope.user.id,
   });
   const [row] = await db.select().from(externalCollaboratorsTable)
     .where(eq(externalCollaboratorsTable.id, id));
-  await recordCollabEvent(row!, 'created', { email, capabilities: caps, expiresAt: expiresAt.toISOString() }, req);
+  await recordCollabEvent(row!, 'created', {
+    email,
+    capabilities: caps,
+    editableFields: editFields,
+    ipAllowlistCount: ipAllowlist.length,
+    expiresAt: expiresAt.toISOString(),
+  }, req);
   await writeAuditFromReq(req, {
     entityType: 'contract', entityId: c.id, action: 'external_collaborator_created',
     summary: `Magic-Link erstellt für ${email}`,
-    after: { collaboratorId: id, capabilities: caps, expiresAt: expiresAt.toISOString() },
+    after: {
+      collaboratorId: id,
+      capabilities: caps,
+      editableFields: editFields,
+      ipAllowlistCount: ipAllowlist.length,
+      expiresAt: expiresAt.toISOString(),
+    },
   });
   res.status(201).json(mapCollab(row!, { tokenPlaintext }));
 });
@@ -12943,36 +13129,61 @@ router.post('/contracts/:id/comments', async (req, res) => {
 
 // =========================================================================
 // PUBLIC (No-Auth) ROUTES — bypassed via PUBLIC_PREFIXES in auth middleware.
-// All authorization happens via token-hash lookup + revoked/expired checks.
+// All authorization happens via token-hash lookup + revoked/expired/IP checks.
 // =========================================================================
 
-// --- GET /external/:token (resolve magic-link) ---------------------------
-router.get('/external/:token', async (req, res) => {
-  const collab = await loadCollabByToken(req.params.token);
-  if (!collab) { res.status(404).json({ error: 'invalid token' }); return; }
-  const now = Date.now();
+/**
+ * Resolve token + run alle Magic-Link-Gates (revoked, expired, IP-Allowlist,
+ * Tenant-Drift). Liefert entweder den fertigen Collab-Datensatz oder beendet
+ * die Response mit dem passenden Status. Ein zentraler Helper sorgt dafuer,
+ * dass jede neue Magic-Link-Route exakt dieselben Sicherheits-Checks durch-
+ * laeuft — vergessenes Gate = Bug.
+ */
+async function gateMagicLink(req: Request, res: Response):
+  Promise<typeof externalCollaboratorsTable.$inferSelect | null>
+{
+  const token = (req.params as { token?: string }).token ?? '';
+  const collab = await loadCollabByToken(token);
+  if (!collab) { res.status(404).json({ error: 'invalid token' }); return null; }
   if (collab.revokedAt) {
     await recordCollabEvent(collab, 'expired_attempt', { reason: 'revoked' }, req);
-    res.status(401).json({ error: 'token revoked' }); return;
+    res.status(401).json({ error: 'token revoked' }); return null;
   }
-  if (collab.expiresAt.getTime() <= now) {
+  if (collab.expiresAt.getTime() <= Date.now()) {
     await recordCollabEvent(collab, 'expired_attempt', { reason: 'expired' }, req);
-    res.status(401).json({ error: 'token expired' }); return;
+    res.status(401).json({ error: 'token expired' }); return null;
   }
-  const [c] = await db.select().from(contractsTable)
-    .where(eq(contractsTable.id, collab.contractId));
-  if (!c) { res.status(404).json({ error: 'contract not found' }); return; }
+  if (!ipMatchesAllowlist(req.ip, collab.ipAllowlist ?? [])) {
+    await recordCollabEvent(collab, 'expired_attempt', {
+      reason: 'ip_blocked', ip: req.ip ?? null,
+    }, req);
+    res.status(403).json({ error: 'IP address not in allowlist' });
+    return null;
+  }
   // Defense-in-depth: Token bindet contractId, aber wenn ein Tenant-Drift
   // entstuende (z. B. durch Datenmigration), wuerden wir cross-tenant Daten
   // leaken. deals.companyId -> companies.tenantId scopen.
+  const [c] = await db.select().from(contractsTable)
+    .where(eq(contractsTable.id, collab.contractId));
+  if (!c) { res.status(404).json({ error: 'contract not found' }); return null; }
   const tenantRow = await db
     .select({ tenantId: companiesTable.tenantId })
     .from(dealsTable)
     .innerJoin(companiesTable, eq(dealsTable.companyId, companiesTable.id))
     .where(eq(dealsTable.id, c.dealId));
   if (!tenantRow[0] || tenantRow[0].tenantId !== collab.tenantId) {
-    res.status(404).json({ error: 'contract not found' }); return;
+    res.status(404).json({ error: 'contract not found' }); return null;
   }
+  return collab;
+}
+
+// --- GET /external/:token (resolve magic-link) ---------------------------
+router.get('/external/:token', async (req, res) => {
+  const collab = await gateMagicLink(req, res);
+  if (!collab) return;
+  const [c] = await db.select().from(contractsTable)
+    .where(eq(contractsTable.id, collab.contractId));
+  if (!c) { res.status(404).json({ error: 'contract not found' }); return; }
   // Brand fuer Branding (Logo/Tone). Optional — Vertraege ohne Brand sind ok.
   let brandSnapshot: { id: string; name: string; primaryColor: string | null; logoUrl: string | null } | null = null;
   if (c.brandId) {
@@ -12997,6 +13208,7 @@ router.get('/external/:token', async (req, res) => {
       name: collab.name ?? null,
       organization: collab.organization ?? null,
       capabilities: collab.capabilities,
+      editableFields: collab.editableFields ?? [],
       expiresAt: collab.expiresAt.toISOString(),
     },
     contract: {
@@ -13031,11 +13243,8 @@ router.get('/external/:token', async (req, res) => {
 
 // --- POST /external/:token/comments (externer Kommentar) -----------------
 router.post('/external/:token/comments', async (req, res) => {
-  const collab = await loadCollabByToken(req.params.token);
-  if (!collab) { res.status(404).json({ error: 'invalid token' }); return; }
-  const now = Date.now();
-  if (collab.revokedAt) { res.status(401).json({ error: 'token revoked' }); return; }
-  if (collab.expiresAt.getTime() <= now) { res.status(401).json({ error: 'token expired' }); return; }
+  const collab = await gateMagicLink(req, res);
+  if (!collab) return;
   if (!collab.capabilities.includes('comment')) {
     res.status(403).json({ error: 'comment capability missing' }); return;
   }
@@ -13058,6 +13267,9 @@ router.post('/external/:token/comments', async (req, res) => {
   await db.update(externalCollaboratorsTable).set({ lastUsedAt: new Date() })
     .where(eq(externalCollaboratorsTable.id, collab.id));
   await recordCollabEvent(collab, 'commented', { commentId: id, length: body.body.length }, req);
+  await writeMagicLinkAudit(collab, 'external_comment_created',
+    `Externer Kommentar von ${authorName}`,
+    { commentId: id, length: body.body.length, ip: req.ip ?? null });
   const [row] = await db.select().from(contractCommentsTable).where(eq(contractCommentsTable.id, id));
   res.status(201).json({
     id: row!.id,
@@ -13067,6 +13279,99 @@ router.post('/external/:token/comments', async (req, res) => {
     authorName: row!.authorName,
     body: row!.body,
     createdAt: row!.createdAt.toISOString(),
+  });
+});
+
+// --- PATCH /external/:token/contract (Felder bearbeiten) -----------------
+// Schreibt nur Felder, die in collab.editableFields freigegeben sind. Jede
+// erfolgreiche Aenderung landet im Audit-Trail mit actor=magic-link:<id>.
+router.patch('/external/:token/contract', async (req, res) => {
+  const collab = await gateMagicLink(req, res);
+  if (!collab) return;
+  if (!collab.capabilities.includes('edit_fields')) {
+    res.status(403).json({ error: 'edit_fields capability missing' }); return;
+  }
+  const allowed = new Set(collab.editableFields ?? []);
+  if (allowed.size === 0) {
+    res.status(403).json({ error: 'no editable fields configured' }); return;
+  }
+  const body = (req.body ?? {}) as Record<string, unknown>;
+  const patch: Partial<typeof contractsTable.$inferInsert> = {};
+  const before: Record<string, unknown> = {};
+  const after: Record<string, unknown> = {};
+
+  // Iteriere ueber genau die whitelisted Felder — niemals body.keys, damit
+  // ein Versuch, neue Felder einzuschmuggeln, einfach ignoriert wird.
+  for (const field of EDITABLE_CONTRACT_FIELDS) {
+    if (!(field in body)) continue;
+    if (!allowed.has(field)) {
+      res.status(403).json({ error: `field "${field}" not in editableFields scope` });
+      return;
+    }
+    const v = body[field];
+    if (field === 'effectiveFrom' || field === 'effectiveTo') {
+      if (v === null || v === '') {
+        patch[field] = null;
+      } else if (typeof v === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(v)) {
+        patch[field] = v;
+      } else {
+        res.status(400).json({ error: `${field} must be YYYY-MM-DD or null` });
+        return;
+      }
+    } else {
+      // governingLaw / jurisdiction: Freitext.
+      if (v === null || v === '') {
+        patch[field] = null;
+      } else if (typeof v === 'string' && v.trim().length > 0 && v.length <= 200) {
+        patch[field] = v.trim();
+      } else {
+        res.status(400).json({ error: `${field} must be a string up to 200 chars or null` });
+        return;
+      }
+    }
+  }
+  if (Object.keys(patch).length === 0) {
+    res.status(400).json({ error: 'no editable fields provided' }); return;
+  }
+
+  const [c] = await db.select().from(contractsTable)
+    .where(eq(contractsTable.id, collab.contractId));
+  if (!c) { res.status(404).json({ error: 'contract not found' }); return; }
+  for (const k of Object.keys(patch) as (keyof typeof patch)[]) {
+    before[k as string] = (c as Record<string, unknown>)[k as string] ?? null;
+    after[k as string] = (patch as Record<string, unknown>)[k as string] ?? null;
+  }
+
+  await db.update(contractsTable).set(patch).where(eq(contractsTable.id, c.id));
+  await db.update(externalCollaboratorsTable).set({ lastUsedAt: new Date() })
+    .where(eq(externalCollaboratorsTable.id, collab.id));
+  await recordCollabEvent(collab, 'edited_fields', { fields: Object.keys(patch) }, req);
+  // Audit-Eintrag mit Token-/Collaborator-ID statt User-ID — Reviewer sehen
+  // sofort, dass die Aenderung von extern kam, und koennen ueber die ID den
+  // Erzeuger-User + Empfaenger-Email rekonstruieren.
+  await writeAudit({
+    tenantId: collab.tenantId,
+    entityType: 'contract',
+    entityId: c.id,
+    action: 'external_field_edit',
+    actor: magicLinkActor(collab),
+    summary: `Externe Bearbeitung (${Object.keys(patch).join(', ')}) durch ${collab.email}`,
+    before,
+    after: { ...after, collaboratorId: collab.id, ip: req.ip ?? null },
+    activeScope: null,
+  });
+
+  const [updated] = await db.select().from(contractsTable)
+    .where(eq(contractsTable.id, c.id));
+  res.json({
+    contract: {
+      id: updated!.id,
+      effectiveFrom: updated!.effectiveFrom,
+      effectiveTo: updated!.effectiveTo,
+      governingLaw: updated!.governingLaw,
+      jurisdiction: updated!.jurisdiction,
+    },
+    updatedFields: Object.keys(patch),
   });
 });
 

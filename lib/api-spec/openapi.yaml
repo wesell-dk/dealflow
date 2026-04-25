@@ -4295,6 +4295,33 @@ paths:
         "403": { description: comment capability missing }
         "404": { description: invalid token }
 
+  /external/{token}/contract:
+    patch:
+      operationId: editExternalContractFields
+      tags: [external-collaborators]
+      summary: "Public: Vertrags-Felder per Magic-Link aendern (Capability edit_fields + editableFields-Whitelist)"
+      security: []
+      parameters:
+        - in: path
+          name: token
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ExternalContractFieldEdit" }
+      responses:
+        "200":
+          description: updated
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ExternalContractFieldEditResult" }
+        "400": { description: invalid }
+        "401": { description: token revoked or expired }
+        "403": { description: edit_fields capability or field-scope missing }
+        "404": { description: invalid token }
+
   /ai-recommendations:
     get:
       operationId: listAiRecommendations
@@ -8179,7 +8206,7 @@ components:
     # ── Magic-Link / External Collaborators (Task #70) ──
     ExternalCollaborator:
       type: object
-      required: [id, contractId, email, capabilities, status, expiresAt, createdBy, createdAt]
+      required: [id, contractId, email, capabilities, editableFields, ipAllowlist, status, expiresAt, createdBy, createdAt]
       properties:
         id: { type: string }
         contractId: { type: string }
@@ -8190,7 +8217,17 @@ components:
           type: array
           items:
             type: string
-            enum: [view, comment, sign_party]
+            enum: [view, comment, edit_fields, sign_party]
+        editableFields:
+          description: Whitelist der Vertrags-Felder, die der Magic-Link bearbeiten darf. Nur relevant bei capability `edit_fields`.
+          type: array
+          items:
+            type: string
+            enum: [effectiveFrom, effectiveTo, governingLaw, jurisdiction]
+        ipAllowlist:
+          description: Optionale IP-Allowlist (IPv4/IPv6/CIDR). Leer = keine Einschraenkung.
+          type: array
+          items: { type: string }
         status:
           type: string
           enum: [active, expired, revoked]
@@ -8216,12 +8253,50 @@ components:
           minItems: 1
           items:
             type: string
-            enum: [view, comment, sign_party]
+            enum: [view, comment, edit_fields, sign_party]
+        editableFields:
+          description: Pflicht (mind. 1 Eintrag), wenn capabilities `edit_fields` enthaelt. Sonst leer/weglassen.
+          type: array
+          items:
+            type: string
+            enum: [effectiveFrom, effectiveTo, governingLaw, jurisdiction]
+        ipAllowlist:
+          description: Optionale IP-Allowlist. Eintraege koennen einzelne IPs (v4/v6) oder CIDR-Blocks sein. Max. 32 Eintraege.
+          type: array
+          maxItems: 32
+          items: { type: string }
         expiresInDays:
           type: integer
           minimum: 1
-          maximum: 90
+          maximum: 30
           default: 14
+
+    ExternalContractFieldEdit:
+      description: |
+        Felder-Edit ueber Magic-Link. Nur die in collab.editableFields freigegebenen Felder
+        werden geschrieben; alles andere wird ignoriert/abgelehnt.
+      type: object
+      properties:
+        effectiveFrom: { type: ["string", "null"], description: "YYYY-MM-DD oder null" }
+        effectiveTo: { type: ["string", "null"], description: "YYYY-MM-DD oder null" }
+        governingLaw: { type: ["string", "null"] }
+        jurisdiction: { type: ["string", "null"] }
+
+    ExternalContractFieldEditResult:
+      type: object
+      required: [contract, updatedFields]
+      properties:
+        contract:
+          type: object
+          properties:
+            id: { type: string }
+            effectiveFrom: { type: ["string", "null"] }
+            effectiveTo: { type: ["string", "null"] }
+            governingLaw: { type: ["string", "null"] }
+            jurisdiction: { type: ["string", "null"] }
+        updatedFields:
+          type: array
+          items: { type: string }
 
     ContractComment:
       type: object
@@ -8250,7 +8325,7 @@ components:
       properties:
         collaborator:
           type: object
-          required: [id, email, capabilities, expiresAt]
+          required: [id, email, capabilities, editableFields, expiresAt]
           properties:
             id: { type: string }
             email: { type: string, format: email }
@@ -8258,7 +8333,10 @@ components:
             organization: { type: ["string", "null"] }
             capabilities:
               type: array
-              items: { type: string, enum: [view, comment, sign_party] }
+              items: { type: string, enum: [view, comment, edit_fields, sign_party] }
+            editableFields:
+              type: array
+              items: { type: string, enum: [effectiveFrom, effectiveTo, governingLaw, jurisdiction] }
             expiresAt: { type: string, format: date-time }
         contract:
           type: object

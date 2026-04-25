@@ -1352,8 +1352,9 @@ export const clauseImportSuggestionsTable = pgTable("clause_import_suggestions",
 // Magic-Link-Zugang fuer externe Anwaelte/Berater. Pro Vertrag werden ein
 // oder mehrere Collaborator-Datensaetze angelegt, jeder mit einem eigenen
 // gehashten Token (Plaintext nur 1x bei Erstellung zurueck), Capabilities
-// (view / comment / sign_party) und Ablaufdatum. Revoke setzt revokedAt;
-// Token-Lookups muessen revokedAt + expiresAt pruefen.
+// (view / comment / edit_fields / sign_party), Ablaufdatum (max. 30 Tage)
+// und optionaler IP-Allowlist. Revoke setzt revokedAt; Token-Lookups muessen
+// revokedAt + expiresAt + ggfs. ipAllowlist pruefen.
 export const externalCollaboratorsTable = pgTable("external_collaborators", {
   id: id(),
   tenantId: text("tenant_id").notNull(),
@@ -1362,6 +1363,14 @@ export const externalCollaboratorsTable = pgTable("external_collaborators", {
   name: text("name"),
   organization: text("organization"),
   capabilities: jsonb("capabilities").$type<string[]>().notNull().default([]),
+  // Wenn capabilities `edit_fields` enthaelt: Liste der erlaubten Vertrags-
+  // Felder (z.B. ["effectiveFrom","effectiveTo","jurisdiction","governingLaw"]).
+  // Andere Felder bleiben fuer den Magic-Link-Inhaber strikt read-only.
+  editableFields: jsonb("editable_fields").$type<string[]>().notNull().default([]),
+  // Optionale IP-Allowlist. Leer/[] = keine Einschraenkung. Eintraege koennen
+  // einzelne IPs (v4/v6) oder CIDR-Blocks sein (z.B. "203.0.113.0/24").
+  // Treffer-Pruefung erfolgt bei jedem Token-Aufruf gegen req.ip.
+  ipAllowlist: jsonb("ip_allowlist").$type<string[]>().notNull().default([]),
   // sha256(plaintext) — Plaintext nie speichern, beim Erstellen 1x als
   // tokenPlaintext zurueckgegeben.
   tokenHash: text("token_hash").notNull(),

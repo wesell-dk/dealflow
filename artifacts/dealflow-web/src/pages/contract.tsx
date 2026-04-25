@@ -39,6 +39,7 @@ import {
   type ClauseDeviation,
   type Obligation,
   type ExternalCollaborator,
+  type ExternalCollaboratorCreate,
   type CuadCoverage,
 } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
@@ -1627,19 +1628,39 @@ function ExternalCollaboratorsCard({ contractId }: { contractId: string }) {
   const [organization, setOrganization] = useState("");
   const [capView] = useState(true); // implicit
   const [capComment, setCapComment] = useState(true);
+  const [capEditFields, setCapEditFields] = useState(false);
   const [capSign, setCapSign] = useState(false);
   const [expiresInDays, setExpiresInDays] = useState(14);
+  const [editableFields, setEditableFields] = useState<string[]>([]);
+  const [ipAllowlistText, setIpAllowlistText] = useState("");
   const [createdToken, setCreatedToken] = useState<{ url: string; email: string } | null>(null);
+
+  const EDITABLE_FIELD_KEYS = ["effectiveFrom", "effectiveTo", "governingLaw", "jurisdiction"] as const;
 
   function reset() {
     setEmail(""); setName(""); setOrganization("");
-    setCapComment(true); setCapSign(false); setExpiresInDays(14);
+    setCapComment(true); setCapEditFields(false); setCapSign(false);
+    setExpiresInDays(14); setEditableFields([]); setIpAllowlistText("");
+  }
+
+  function toggleEditableField(field: string) {
+    setEditableFields((prev) => prev.includes(field) ? prev.filter(f => f !== field) : [...prev, field]);
   }
 
   async function handleSubmit() {
-    const caps: ("view" | "comment" | "sign_party")[] = ["view"];
+    const caps: ("view" | "comment" | "edit_fields" | "sign_party")[] = ["view"];
     if (capComment) caps.push("comment");
+    if (capEditFields) caps.push("edit_fields");
     if (capSign) caps.push("sign_party");
+    // Cross-Check vor dem Server-Call: edit_fields ohne Whitelist macht keinen Sinn.
+    if (capEditFields && editableFields.length === 0) {
+      toast({ title: t("pages.contracts.extCollabEditFieldsRequired"), variant: "destructive" });
+      return;
+    }
+    const ipAllowlist = ipAllowlistText
+      .split(/[\s,;\n]+/)
+      .map(s => s.trim())
+      .filter(Boolean);
     try {
       const r = await create.mutateAsync({
         id: contractId,
@@ -1649,6 +1670,8 @@ function ExternalCollaboratorsCard({ contractId }: { contractId: string }) {
           organization: organization.trim() || null,
           capabilities: caps as unknown as ExternalCollaborator["capabilities"],
           expiresInDays,
+          editableFields: (capEditFields ? editableFields : []) as ExternalCollaboratorCreate["editableFields"],
+          ipAllowlist,
         },
       });
       // Build absolute magic-link URL relative to current origin + BASE_URL.
@@ -1721,9 +1744,20 @@ function ExternalCollaboratorsCard({ contractId }: { contractId: string }) {
                         ? t("pages.contracts.extCollabCapView")
                         : cap === "comment"
                         ? t("pages.contracts.extCollabCapComment")
+                        : cap === "edit_fields"
+                        ? t("pages.contracts.extCollabCapEditFields")
                         : t("pages.contracts.extCollabCapSign")}
                     </Badge>
                   ))}
+                  {(c.ipAllowlist ?? []).length > 0 && (
+                    <Badge
+                      variant="outline"
+                      className="text-[10px] uppercase tracking-wide bg-blue-500/10 text-blue-600 border-blue-500/30"
+                      title={(c.ipAllowlist ?? []).join(", ")}
+                    >
+                      IP-Lock ({(c.ipAllowlist ?? []).length})
+                    </Badge>
+                  )}
                 </div>
                 <div className="text-xs text-muted-foreground mt-1 flex flex-wrap gap-3">
                   {c.organization && <span>{c.organization}</span>}
@@ -1787,11 +1821,13 @@ function ExternalCollaboratorsCard({ contractId }: { contractId: string }) {
                 <input
                   type="number"
                   min={1}
-                  max={90}
+                  max={30}
                   className="w-full border rounded px-2 py-1 text-sm bg-background"
                   value={expiresInDays}
-                  onChange={(e) => setExpiresInDays(Math.max(1, Math.min(90, Number(e.target.value) || 14)))}
+                  onChange={(e) => setExpiresInDays(Math.max(1, Math.min(30, Number(e.target.value) || 14)))}
+                  data-testid="ext-collab-expires"
                 />
+                <p className="text-[11px] text-muted-foreground">{t("pages.contracts.extCollabExpiresHint")}</p>
               </div>
             </div>
             <div className="space-y-1">
@@ -1815,10 +1851,49 @@ function ExternalCollaboratorsCard({ contractId }: { contractId: string }) {
                   {t("pages.contracts.extCollabCapComment")}
                 </label>
                 <label className="flex items-center gap-2 text-sm">
+                  <input
+                    type="checkbox"
+                    checked={capEditFields}
+                    onChange={(e) => setCapEditFields(e.target.checked)}
+                    data-testid="ext-collab-cap-editfields"
+                  />
+                  {t("pages.contracts.extCollabCapEditFields")}
+                </label>
+                <label className="flex items-center gap-2 text-sm">
                   <input type="checkbox" checked={capSign} onChange={(e) => setCapSign(e.target.checked)} />
                   {t("pages.contracts.extCollabCapSign")}
                 </label>
               </div>
+            </div>
+            {capEditFields && (
+              <div className="space-y-1 border-l-2 border-amber-500/40 pl-3">
+                <label className="text-sm font-medium">{t("pages.contracts.extCollabEditableFields")} *</label>
+                <div className="flex flex-col gap-1">
+                  {EDITABLE_FIELD_KEYS.map((f) => (
+                    <label key={f} className="flex items-center gap-2 text-sm">
+                      <input
+                        type="checkbox"
+                        checked={editableFields.includes(f)}
+                        onChange={() => toggleEditableField(f)}
+                        data-testid={`ext-collab-editable-${f}`}
+                      />
+                      {t(`pages.contracts.extCollabField_${f}`)}
+                    </label>
+                  ))}
+                </div>
+              </div>
+            )}
+            <div className="space-y-1">
+              <label className="text-sm font-medium">{t("pages.contracts.extCollabIpAllowlist")}</label>
+              <textarea
+                rows={2}
+                placeholder="z.B. 203.0.113.5, 198.51.100.0/24"
+                className="w-full border rounded px-2 py-1 text-sm bg-background font-mono"
+                value={ipAllowlistText}
+                onChange={(e) => setIpAllowlistText(e.target.value)}
+                data-testid="ext-collab-ip-allowlist"
+              />
+              <p className="text-[11px] text-muted-foreground">{t("pages.contracts.extCollabIpAllowlistHint")}</p>
             </div>
             <div className="flex justify-end gap-2 pt-2">
               <Button variant="outline" size="sm" onClick={() => setOpen(false)}>

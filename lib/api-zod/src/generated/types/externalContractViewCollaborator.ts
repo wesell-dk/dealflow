@@ -8,6 +8,7 @@ Multi-tenant, multi-company, multi-brand. Deal-centric.
  * OpenAPI spec version: 0.1.0
  */
 import type { ExternalContractViewCollaboratorCapabilitiesItem } from "./externalContractViewCollaboratorCapabilitiesItem";
+import type { ExternalContractViewCollaboratorEditableFieldsItem } from "./externalContractViewCollaboratorEditableFieldsItem";
 
 export type ExternalContractViewCollaborator = {
   id: string;
@@ -17,5 +18,6 @@ export type ExternalContractViewCollaborator = {
   /** @nullable */
   organization?: string | null;
   capabilities: ExternalContractViewCollaboratorCapabilitiesItem[];
+  editableFields: ExternalContractViewCollaboratorEditableFieldsItem[];
   expiresAt: Date;
 };

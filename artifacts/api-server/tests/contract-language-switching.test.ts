@@ -95,6 +95,10 @@ describe("contract language switching DE↔EN (E2E)", () => {
       title: "Lang-Switch Test Contract",
       template: "standard",
       brandId: world.brandId,
+      // Task #82 hat `contractTypeId` zur Pflicht gemacht; "standard" ist kein
+      // Template-Schlagwort der Heuristik. Wir binden explizit an MSA, damit
+      // die Sprach-Switch-Tests deterministisch durchlaufen.
+      contractTypeId: "ct_msa",
     });
     assert.equal(res.status, 201, JSON.stringify(res.body));
     const body = res.body as ContractDto;

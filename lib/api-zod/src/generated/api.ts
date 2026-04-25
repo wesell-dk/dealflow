@@ -6862,7 +6862,26 @@ export const ListExternalCollaboratorsResponseItem = zod.object({
   email: zod.string().email(),
   name: zod.string().nullish(),
   organization: zod.string().nullish(),
-  capabilities: zod.array(zod.enum(["view", "comment", "sign_party"])),
+  capabilities: zod.array(
+    zod.enum(["view", "comment", "edit_fields", "sign_party"]),
+  ),
+  editableFields: zod
+    .array(
+      zod.enum([
+        "effectiveFrom",
+        "effectiveTo",
+        "governingLaw",
+        "jurisdiction",
+      ]),
+    )
+    .describe(
+      "Whitelist der Vertrags-Felder, die der Magic-Link bearbeiten darf. Nur relevant bei capability `edit_fields`.",
+    ),
+  ipAllowlist: zod
+    .array(zod.string())
+    .describe(
+      "Optionale IP-Allowlist (IPv4\/IPv6\/CIDR). Leer = keine Einschraenkung.",
+    ),
   status: zod.enum(["active", "expired", "revoked"]),
   expiresAt: zod.coerce.date(),
   revokedAt: zod.coerce.date().nullish(),
@@ -6888,14 +6907,38 @@ export const CreateExternalCollaboratorParams = zod.object({
   id: zod.coerce.string(),
 });
 
+export const createExternalCollaboratorBodyIpAllowlistMax = 32;
+
 export const createExternalCollaboratorBodyExpiresInDaysDefault = 14;
-export const createExternalCollaboratorBodyExpiresInDaysMax = 90;
+export const createExternalCollaboratorBodyExpiresInDaysMax = 30;
 
 export const CreateExternalCollaboratorBody = zod.object({
   email: zod.string().email(),
   name: zod.string().nullish(),
   organization: zod.string().nullish(),
-  capabilities: zod.array(zod.enum(["view", "comment", "sign_party"])).min(1),
+  capabilities: zod
+    .array(zod.enum(["view", "comment", "edit_fields", "sign_party"]))
+    .min(1),
+  editableFields: zod
+    .array(
+      zod.enum([
+        "effectiveFrom",
+        "effectiveTo",
+        "governingLaw",
+        "jurisdiction",
+      ]),
+    )
+    .optional()
+    .describe(
+      "Pflicht (mind. 1 Eintrag), wenn capabilities `edit_fields` enthaelt. Sonst leer\/weglassen.",
+    ),
+  ipAllowlist: zod
+    .array(zod.string())
+    .max(createExternalCollaboratorBodyIpAllowlistMax)
+    .optional()
+    .describe(
+      "Optionale IP-Allowlist. Eintraege koennen einzelne IPs (v4\/v6) oder CIDR-Blocks sein. Max. 32 Eintraege.",
+    ),
   expiresInDays: zod
     .number()
     .min(1)
@@ -6916,7 +6959,26 @@ export const RevokeExternalCollaboratorResponse = zod.object({
   email: zod.string().email(),
   name: zod.string().nullish(),
   organization: zod.string().nullish(),
-  capabilities: zod.array(zod.enum(["view", "comment", "sign_party"])),
+  capabilities: zod.array(
+    zod.enum(["view", "comment", "edit_fields", "sign_party"]),
+  ),
+  editableFields: zod
+    .array(
+      zod.enum([
+        "effectiveFrom",
+        "effectiveTo",
+        "governingLaw",
+        "jurisdiction",
+      ]),
+    )
+    .describe(
+      "Whitelist der Vertrags-Felder, die der Magic-Link bearbeiten darf. Nur relevant bei capability `edit_fields`.",
+    ),
+  ipAllowlist: zod
+    .array(zod.string())
+    .describe(
+      "Optionale IP-Allowlist (IPv4\/IPv6\/CIDR). Leer = keine Einschraenkung.",
+    ),
   status: zod.enum(["active", "expired", "revoked"]),
   expiresAt: zod.coerce.date(),
   revokedAt: zod.coerce.date().nullish(),
@@ -6979,7 +7041,17 @@ export const ResolveExternalTokenResponse = zod.object({
     email: zod.string().email(),
     name: zod.string().nullish(),
     organization: zod.string().nullish(),
-    capabilities: zod.array(zod.enum(["view", "comment", "sign_party"])),
+    capabilities: zod.array(
+      zod.enum(["view", "comment", "edit_fields", "sign_party"]),
+    ),
+    editableFields: zod.array(
+      zod.enum([
+        "effectiveFrom",
+        "effectiveTo",
+        "governingLaw",
+        "jurisdiction",
+      ]),
+    ),
     expiresAt: zod.coerce.date(),
   }),
   contract: zod.object({
@@ -7036,6 +7108,35 @@ export const createExternalCommentBodyBodyMax = 4000;
 export const CreateExternalCommentBody = zod.object({
   body: zod.string().min(1).max(createExternalCommentBodyBodyMax),
   contractClauseId: zod.string().nullish(),
+});
+
+/**
+ * @summary Public: Vertrags-Felder per Magic-Link aendern (Capability edit_fields + editableFields-Whitelist)
+ */
+export const EditExternalContractFieldsParams = zod.object({
+  token: zod.coerce.string(),
+});
+
+export const EditExternalContractFieldsBody = zod
+  .object({
+    effectiveFrom: zod.string().nullish().describe("YYYY-MM-DD oder null"),
+    effectiveTo: zod.string().nullish().describe("YYYY-MM-DD oder null"),
+    governingLaw: zod.string().nullish(),
+    jurisdiction: zod.string().nullish(),
+  })
+  .describe(
+    "Felder-Edit ueber Magic-Link. Nur die in collab.editableFields freigegebenen Felder\nwerden geschrieben; alles andere wird ignoriert\/abgelehnt.\n",
+  );
+
+export const EditExternalContractFieldsResponse = zod.object({
+  contract: zod.object({
+    id: zod.string().optional(),
+    effectiveFrom: zod.string().nullish(),
+    effectiveTo: zod.string().nullish(),
+    governingLaw: zod.string().nullish(),
+    jurisdiction: zod.string().nullish(),
+  }),
+  updatedFields: zod.array(zod.string()),
 });
 
 /**

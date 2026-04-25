@@ -5,8 +5,11 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import { FileText, ShieldAlert, MessageSquare, Lock } from "lucide-react";
+import { FileText, ShieldAlert, MessageSquare, Lock, Info, Pencil } from "lucide-react";
 import { toAssetSrc } from "@/lib/asset-url";
+
+type ExtCapability = "view" | "comment" | "edit_fields" | "sign_party";
+type EditableField = "effectiveFrom" | "effectiveTo" | "governingLaw" | "jurisdiction";
 
 interface Comment {
   id: string;
@@ -22,7 +25,8 @@ interface ExternalView {
     email: string;
     name: string | null;
     organization: string | null;
-    capabilities: ("view" | "comment" | "sign_party")[];
+    capabilities: ExtCapability[];
+    editableFields: EditableField[];
     expiresAt: string;
   };
   contract: {
@@ -53,6 +57,10 @@ export default function ExternalContractPage() {
   const [loading, setLoading] = useState(true);
   const [commentBody, setCommentBody] = useState("");
   const [posting, setPosting] = useState(false);
+  // Edit-Felder Form-State (nur sichtbar bei capability=edit_fields).
+  const [editDraft, setEditDraft] = useState<Partial<Record<EditableField, string | null>>>({});
+  const [savingEdit, setSavingEdit] = useState(false);
+  const [editMessage, setEditMessage] = useState<{ kind: "ok" | "err"; text: string } | null>(null);
 
   async function load() {
     setLoading(true);
@@ -82,6 +90,52 @@ export default function ExternalContractPage() {
     () => data?.collaborator.capabilities.includes("comment") ?? false,
     [data],
   );
+  const canEditFields = useMemo(
+    () =>
+      (data?.collaborator.capabilities.includes("edit_fields") ?? false) &&
+      (data?.collaborator.editableFields?.length ?? 0) > 0,
+    [data],
+  );
+
+  function fieldValue(f: EditableField): string {
+    if (f in editDraft) return (editDraft[f] as string | null) ?? "";
+    const v = data?.contract[f] ?? null;
+    return v ?? "";
+  }
+  function setField(f: EditableField, v: string) {
+    setEditDraft((prev) => ({ ...prev, [f]: v === "" ? null : v }));
+  }
+  function fieldLabel(f: EditableField): string {
+    return f === "effectiveFrom" ? "Vertragsbeginn"
+      : f === "effectiveTo" ? "Vertragsende"
+      : f === "governingLaw" ? "Anwendbares Recht"
+      : "Gerichtsstand";
+  }
+
+  async function saveEdits() {
+    if (!data) return;
+    setSavingEdit(true);
+    setEditMessage(null);
+    try {
+      const r = await fetch(`${API_BASE}/external/${encodeURIComponent(token)}/contract`, {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(editDraft),
+      });
+      if (!r.ok) {
+        const txt = await r.text();
+        setEditMessage({ kind: "err", text: txt || `HTTP ${r.status}` });
+      } else {
+        setEditMessage({ kind: "ok", text: "Felder erfolgreich gespeichert." });
+        setEditDraft({});
+        await load();
+      }
+    } catch (e) {
+      setEditMessage({ kind: "err", text: String(e) });
+    } finally {
+      setSavingEdit(false);
+    }
+  }
 
   async function postComment() {
     if (!commentBody.trim()) return;
@@ -157,6 +211,36 @@ export default function ExternalContractPage() {
 
         {data && (
           <>
+            {/* Externer Zugriff Banner — informiert Anwalt/Berater ueber Read-only- und
+                Audit-Status, sodass keine Verwechslung mit interner Bearbeitung entsteht. */}
+            <div
+              className="border-l-4 border-amber-500 bg-amber-500/10 px-4 py-3 rounded-md flex items-start gap-3"
+              data-testid="ext-access-banner"
+              role="status"
+            >
+              <Info className="h-5 w-5 text-amber-600 shrink-0 mt-0.5" />
+              <div className="text-sm">
+                <div className="font-semibold text-amber-900 dark:text-amber-200">
+                  Externer Zugriff über Magic-Link
+                </div>
+                <p className="text-amber-900/80 dark:text-amber-200/80 mt-0.5">
+                  Du arbeitest mit einem zeitlich begrenzten, gegenüber{" "}
+                  <strong>{data.brand?.name ?? "DealFlow.One"}</strong> protokollierten Zugang.
+                  Alle Aktionen werden mit deiner E-Mail-Adresse{" "}
+                  <strong>{data.collaborator.email}</strong> im Audit-Log festgehalten.
+                  Berechtigungen:{" "}
+                  {data.collaborator.capabilities.map((c) => (
+                    <Badge key={c} variant="outline" className="ml-1 text-[10px] uppercase">
+                      {c === "view" ? "Lesen"
+                       : c === "comment" ? "Kommentieren"
+                       : c === "edit_fields" ? "Felder bearbeiten"
+                       : "Mitzeichnen"}
+                    </Badge>
+                  ))}
+                </p>
+              </div>
+            </div>
+
             <Card>
               <CardHeader>
                 <CardTitle className="flex items-center justify-between">
@@ -203,6 +287,62 @@ export default function ExternalContractPage() {
                 )}
               </CardContent>
             </Card>
+
+            {canEditFields && (
+              <Card data-testid="ext-edit-fields-card" className="border-amber-500/50">
+                <CardHeader>
+                  <CardTitle className="text-base flex items-center gap-2">
+                    <Pencil className="h-4 w-4" />
+                    Felder bearbeiten
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                  <p className="text-xs text-muted-foreground">
+                    Du kannst die folgenden Felder direkt aendern. Jede Aenderung wird im
+                    Audit-Log mit deiner E-Mail-Adresse protokolliert.
+                  </p>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    {data.collaborator.editableFields.map((f) => {
+                      const isDate = f === "effectiveFrom" || f === "effectiveTo";
+                      return (
+                        <div key={f} className="space-y-1">
+                          <label className="text-xs font-medium text-muted-foreground">
+                            {fieldLabel(f)}
+                          </label>
+                          <input
+                            type={isDate ? "date" : "text"}
+                            className="w-full border rounded px-2 py-1 text-sm bg-background"
+                            value={fieldValue(f)}
+                            onChange={(e) => setField(f, e.target.value)}
+                            data-testid={`ext-edit-${f}`}
+                          />
+                        </div>
+                      );
+                    })}
+                  </div>
+                  {editMessage && (
+                    <p
+                      className={`text-xs ${
+                        editMessage.kind === "ok" ? "text-emerald-600" : "text-destructive"
+                      }`}
+                      data-testid="ext-edit-message"
+                    >
+                      {editMessage.text}
+                    </p>
+                  )}
+                  <div className="flex justify-end">
+                    <Button
+                      size="sm"
+                      onClick={saveEdits}
+                      disabled={savingEdit || Object.keys(editDraft).length === 0}
+                      data-testid="ext-edit-submit"
+                    >
+                      Aenderungen speichern
+                    </Button>
+                  </div>
+                </CardContent>
+              </Card>
+            )}
 
             <Card>
               <CardHeader>

@@ -8,6 +8,7 @@ Multi-tenant, multi-company, multi-brand. Deal-centric.
  * OpenAPI spec version: 0.1.0
  */
 import type { ExternalCollaboratorCapabilitiesItem } from "./externalCollaboratorCapabilitiesItem";
+import type { ExternalCollaboratorEditableFieldsItem } from "./externalCollaboratorEditableFieldsItem";
 import type { ExternalCollaboratorStatus } from "./externalCollaboratorStatus";
 
 export interface ExternalCollaborator {
@@ -19,6 +20,10 @@ export interface ExternalCollaborator {
   /** @nullable */
   organization?: string | null;
   capabilities: ExternalCollaboratorCapabilitiesItem[];
+  /** Whitelist der Vertrags-Felder, die der Magic-Link bearbeiten darf. Nur relevant bei capability `edit_fields`. */
+  editableFields: ExternalCollaboratorEditableFieldsItem[];
+  /** Optionale IP-Allowlist (IPv4/IPv6/CIDR). Leer = keine Einschraenkung. */
+  ipAllowlist: string[];
   status: ExternalCollaboratorStatus;
   expiresAt: Date;
   /** @nullable */

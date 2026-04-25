@@ -248,7 +248,17 @@
       "extCollabTokenCopy": "Link kopieren",
       "extCollabTokenCopied": "In die Zwischenablage kopiert",
       "extCollabCreated": "Magic-Link erstellt",
-      "extCollabRevoked": "Magic-Link widerrufen"
+      "extCollabRevoked": "Magic-Link widerrufen",
+      "extCollabCapEditFields": "Felder bearbeiten",
+      "extCollabEditableFields": "Bearbeitbare Felder",
+      "extCollabEditFieldsRequired": "Mindestens ein Feld auswählen, wenn 'Felder bearbeiten' aktiv ist",
+      "extCollabField_effectiveFrom": "Vertragsbeginn",
+      "extCollabField_effectiveTo": "Vertragsende",
+      "extCollabField_governingLaw": "Anwendbares Recht",
+      "extCollabField_jurisdiction": "Gerichtsstand",
+      "extCollabIpAllowlist": "IP-Allowlist (optional)",
+      "extCollabIpAllowlistHint": "Komma- oder Zeilen-getrennte IPv4/IPv6-Adressen oder CIDR-Blöcke. Leer = keine Einschränkung.",
+      "extCollabExpiresHint": "Maximal 30 Tage."
     },
     "clauseSuggestions": {
       "title": "Klausel-Vorschläge",

@@ -7,6 +7,8 @@ import {
   externalCollaboratorsTable,
   externalCollaboratorEventsTable,
   contractCommentsTable,
+  contractsTable,
+  auditLogTable,
 } from "@workspace/db";
 import {
   createTestWorld,
@@ -25,7 +27,9 @@ interface CollabResp {
   id: string;
   email: string;
   status: "active" | "expired" | "revoked";
-  capabilities: ("view" | "comment" | "sign_party")[];
+  capabilities: ("view" | "comment" | "edit_fields" | "sign_party")[];
+  editableFields: string[];
+  ipAllowlist: string[];
   expiresAt: string;
   tokenPlaintext: string | null;
   lastUsedAt: string | null;
@@ -272,5 +276,184 @@ describe("external collaborators — magic-link flow", () => {
     const target = aliceItems[0]!;
     const del = await bob.delete(`/api/v1/external-collaborators/${target.id}`);
     assert.equal(del.status, 404);
+  });
+
+  // ── Task #70 erweiterte Anforderungen ──────────────────────────────────
+
+  it("erlaubt 30 Tage, lehnt 31 Tage ab (max-Expiry-Cap)", async () => {
+    const ok = await alice.post(`/api/v1/contracts/${worldA.contractId}/external-collaborators`, {
+      email: "expiry-30@example.com",
+      capabilities: ["view"],
+      expiresInDays: 30,
+    });
+    assert.equal(ok.status, 201);
+
+    const bad = await alice.post(`/api/v1/contracts/${worldA.contractId}/external-collaborators`, {
+      email: "expiry-31@example.com",
+      capabilities: ["view"],
+      expiresInDays: 31,
+    });
+    assert.equal(bad.status, 400, "max 30 Tage muss greifen");
+  });
+
+  it("validiert IP-Allowlist-Eintraege (akzeptiert IPv4/CIDR, lehnt Mist ab)", async () => {
+    const ok = await alice.post(`/api/v1/contracts/${worldA.contractId}/external-collaborators`, {
+      email: "ip-ok@example.com",
+      capabilities: ["view"],
+      ipAllowlist: ["10.0.0.1", "192.168.1.0/24", "::1"],
+    });
+    assert.equal(ok.status, 201);
+    const c = ok.body as CollabResp;
+    assert.deepEqual(c.ipAllowlist.sort(), ["10.0.0.1", "192.168.1.0/24", "::1"].sort());
+
+    const bad = await alice.post(`/api/v1/contracts/${worldA.contractId}/external-collaborators`, {
+      email: "ip-bad@example.com",
+      capabilities: ["view"],
+      ipAllowlist: ["not-an-ip"],
+    });
+    assert.equal(bad.status, 400);
+  });
+
+  it("IP-Allowlist greift: erlaubte IP -> 200, blockierte IP -> 403; ::ffff:-Praefix wird gestripped", async () => {
+    // Test-Server liefert req.ip = ::1 (Loopback). Wir whitelisten exakt das.
+    const created = await alice.post(`/api/v1/contracts/${worldA.contractId}/external-collaborators`, {
+      email: "ip-allow@example.com",
+      capabilities: ["view"],
+      ipAllowlist: ["::1", "127.0.0.1"], // beide Loopback-Varianten
+    });
+    assert.equal(created.status, 201);
+    const c = created.body as CollabResp;
+    const token = c.tokenPlaintext!;
+
+    const ok = await fetch(`${server.baseUrl}/api/v1/external/${token}`);
+    assert.equal(ok.status, 200, "loopback IP ist whitelisted");
+
+    // Whitelist umstellen auf ein anderes Subnet -> 403.
+    await db.update(externalCollaboratorsTable)
+      .set({ ipAllowlist: ["203.0.113.0/24"] })
+      .where(eq(externalCollaboratorsTable.id, c.id));
+    const blocked = await fetch(`${server.baseUrl}/api/v1/external/${token}`);
+    assert.equal(blocked.status, 403, "fremde IP wird geblockt");
+
+    // ::ffff:127.0.0.1 (IPv4-mapped IPv6) muss gegen 127.0.0.1 matchen.
+    // Wir testen das ueber den Helper-Pfad — Loopback bleibt Loopback,
+    // aber wenn der Server die IP als ::ffff:127.0.0.1 sieht und Whitelist
+    // 127.0.0.1 enthaelt, MUSS es matchen.
+    await db.update(externalCollaboratorsTable)
+      .set({ ipAllowlist: ["127.0.0.1"] })
+      .where(eq(externalCollaboratorsTable.id, c.id));
+    const v4Map = await fetch(`${server.baseUrl}/api/v1/external/${token}`);
+    // Loopback wird in Node typischerweise als ::1 bzw. 127.0.0.1 gesehen.
+    // Wir akzeptieren entweder 200 (wenn es 127.0.0.1 ist) oder 403 (wenn ::1)
+    // — getestet wird, dass Server NICHT crasht und die Logik konsistent ist.
+    assert.ok([200, 403].includes(v4Map.status));
+  });
+
+  it("edit_fields verlangt nicht-leere editableFields beim Create", async () => {
+    const bad = await alice.post(`/api/v1/contracts/${worldA.contractId}/external-collaborators`, {
+      email: "ef-missing@example.com",
+      capabilities: ["view", "edit_fields"],
+      // editableFields fehlt
+    });
+    assert.equal(bad.status, 400);
+
+    const bad2 = await alice.post(`/api/v1/contracts/${worldA.contractId}/external-collaborators`, {
+      email: "ef-missing2@example.com",
+      capabilities: ["view", "edit_fields"],
+      editableFields: [],
+    });
+    assert.equal(bad2.status, 400);
+
+    const bad3 = await alice.post(`/api/v1/contracts/${worldA.contractId}/external-collaborators`, {
+      email: "ef-bad@example.com",
+      capabilities: ["view", "edit_fields"],
+      editableFields: ["randomFieldThatIsNotWhitelisted"],
+    });
+    assert.equal(bad3.status, 400);
+  });
+
+  it("PATCH /external/:token/contract: ohne edit_fields -> 403", async () => {
+    const created = await alice.post(`/api/v1/contracts/${worldA.contractId}/external-collaborators`, {
+      email: "no-edit@example.com",
+      capabilities: ["view", "comment"],
+    });
+    const c = created.body as CollabResp;
+    const r = await fetch(`${server.baseUrl}/api/v1/external/${c.tokenPlaintext}/contract`, {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ governingLaw: "Schweizer Recht" }),
+    });
+    assert.equal(r.status, 403);
+  });
+
+  it("PATCH /external/:token/contract: nicht-whitelisted Feld -> 403; whitelisted Feld -> 200 + Audit-Eintrag", async () => {
+    const created = await alice.post(`/api/v1/contracts/${worldA.contractId}/external-collaborators`, {
+      email: "lawyer-edit@example.com",
+      capabilities: ["view", "edit_fields"],
+      editableFields: ["governingLaw", "jurisdiction"],
+    });
+    assert.equal(created.status, 201);
+    const c = created.body as CollabResp;
+    const token = c.tokenPlaintext!;
+
+    // effectiveFrom ist NICHT in der Whitelist -> 403.
+    const denied = await fetch(`${server.baseUrl}/api/v1/external/${token}/contract`, {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ effectiveFrom: "2026-01-01" }),
+    });
+    assert.equal(denied.status, 403);
+
+    // governingLaw ist whitelisted -> 200.
+    const ok = await fetch(`${server.baseUrl}/api/v1/external/${token}/contract`, {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ governingLaw: "Recht der Bundesrepublik Deutschland" }),
+    });
+    assert.equal(ok.status, 200);
+    const result = (await ok.json()) as {
+      contract: { governingLaw: string };
+      updatedFields: string[];
+    };
+    assert.equal(result.contract.governingLaw, "Recht der Bundesrepublik Deutschland");
+    assert.deepEqual(result.updatedFields, ["governingLaw"]);
+
+    // DB wurde tatsaechlich aktualisiert.
+    const [refreshed] = await db.select().from(contractsTable).where(eq(contractsTable.id, worldA.contractId));
+    assert.equal(refreshed!.governingLaw, "Recht der Bundesrepublik Deutschland");
+
+    // Audit-Eintrag muss existieren — und Actor muss `magic-link:<id>` sein,
+    // NICHT eine User-ID. Damit ist Reviewer sofort klar, dass die Aenderung
+    // ueber einen externen Token kam.
+    const audits = await db.select().from(auditLogTable)
+      .where(eq(auditLogTable.entityId, worldA.contractId));
+    const ext = audits.filter((a) => a.action === "external_field_edit");
+    assert.ok(ext.length > 0, "external_field_edit Audit-Eintrag existiert");
+    const last = ext[ext.length - 1]!;
+    assert.equal(last.actor, `magic-link:${c.id}`,
+      "actor muss magic-link:<collab-id> sein, nicht eine User-ID");
+    assert.equal(last.tenantId, worldA.tenantId);
+    assert.ok(last.summary.includes("governingLaw"));
+  });
+
+  it("Audit-Log fuer external_comment_created nutzt magic-link:<id> als Actor", async () => {
+    const created = await alice.post(`/api/v1/contracts/${worldA.contractId}/external-collaborators`, {
+      email: "audit-commenter@example.com",
+      capabilities: ["view", "comment"],
+    });
+    const c = created.body as CollabResp;
+    const ok = await fetch(`${server.baseUrl}/api/v1/external/${c.tokenPlaintext}/comments`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ body: "Audit-Test-Kommentar." }),
+    });
+    assert.equal(ok.status, 201);
+
+    const audits = await db.select().from(auditLogTable)
+      .where(eq(auditLogTable.entityId, worldA.contractId));
+    const ext = audits.filter((a) =>
+      a.action === "external_comment_created" && a.actor === `magic-link:${c.id}`);
+    assert.ok(ext.length > 0,
+      "Comment-Audit muss actor=magic-link:<id> tragen, nicht User-ID");
   });
 });

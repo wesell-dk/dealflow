@@ -142,6 +142,8 @@ import type {
   ExternalContractDetail,
   ExternalContractExtractRequest,
   ExternalContractExtractResponse,
+  ExternalContractFieldEdit,
+  ExternalContractFieldEditResult,
   ExternalContractPatch,
   ExternalContractUploadUrlRequest,
   ExternalContractUploadUrlResponse,
@@ -19488,6 +19490,97 @@ export const useCreateExternalComment = <
   TContext
 > => {
   return useMutation(getCreateExternalCommentMutationOptions(options));
+};
+
+/**
+ * @summary Public: Vertrags-Felder per Magic-Link aendern (Capability edit_fields + editableFields-Whitelist)
+ */
+export const getEditExternalContractFieldsUrl = (token: string) => {
+  return `/api/v1/external/${token}/contract`;
+};
+
+export const editExternalContractFields = async (
+  token: string,
+  externalContractFieldEdit: ExternalContractFieldEdit,
+  options?: RequestInit,
+): Promise<ExternalContractFieldEditResult> => {
+  return customFetch<ExternalContractFieldEditResult>(
+    getEditExternalContractFieldsUrl(token),
+    {
+      ...options,
+      method: "PATCH",
+      headers: { "Content-Type": "application/json", ...options?.headers },
+      body: JSON.stringify(externalContractFieldEdit),
+    },
+  );
+};
+
+export const getEditExternalContractFieldsMutationOptions = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof editExternalContractFields>>,
+    TError,
+    { token: string; data: BodyType<ExternalContractFieldEdit> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof editExternalContractFields>>,
+  TError,
+  { token: string; data: BodyType<ExternalContractFieldEdit> },
+  TContext
+> => {
+  const mutationKey = ["editExternalContractFields"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof editExternalContractFields>>,
+    { token: string; data: BodyType<ExternalContractFieldEdit> }
+  > = (props) => {
+    const { token, data } = props ?? {};
+
+    return editExternalContractFields(token, data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type EditExternalContractFieldsMutationResult = NonNullable<
+  Awaited<ReturnType<typeof editExternalContractFields>>
+>;
+export type EditExternalContractFieldsMutationBody =
+  BodyType<ExternalContractFieldEdit>;
+export type EditExternalContractFieldsMutationError = ErrorType<void>;
+
+/**
+ * @summary Public: Vertrags-Felder per Magic-Link aendern (Capability edit_fields + editableFields-Whitelist)
+ */
+export const useEditExternalContractFields = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof editExternalContractFields>>,
+    TError,
+    { token: string; data: BodyType<ExternalContractFieldEdit> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof editExternalContractFields>>,
+  TError,
+  { token: string; data: BodyType<ExternalContractFieldEdit> },
+  TContext
+> => {
+  return useMutation(getEditExternalContractFieldsMutationOptions(options));
 };
 
 /**

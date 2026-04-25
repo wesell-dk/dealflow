@@ -8,6 +8,7 @@ Multi-tenant, multi-company, multi-brand. Deal-centric.
  * OpenAPI spec version: 0.1.0
  */
 import type { ExternalCollaboratorCreateCapabilitiesItem } from "./externalCollaboratorCreateCapabilitiesItem";
+import type { ExternalCollaboratorCreateEditableFieldsItem } from "./externalCollaboratorCreateEditableFieldsItem";
 
 export interface ExternalCollaboratorCreate {
   email: string;
@@ -17,9 +18,16 @@ export interface ExternalCollaboratorCreate {
   organization?: string | null;
   /** @minItems 1 */
   capabilities: ExternalCollaboratorCreateCapabilitiesItem[];
+  /** Pflicht (mind. 1 Eintrag), wenn capabilities `edit_fields` enthaelt. Sonst leer/weglassen. */
+  editableFields?: ExternalCollaboratorCreateEditableFieldsItem[];
+  /**
+   * Optionale IP-Allowlist. Eintraege koennen einzelne IPs (v4/v6) oder CIDR-Blocks sein. Max. 32 Eintraege.
+   * @maxItems 32
+   */
+  ipAllowlist?: string[];
   /**
    * @minimum 1
-   * @maximum 90
+   * @maximum 30
    */
   expiresInDays?: number;
 }

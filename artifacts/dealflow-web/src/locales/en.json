@@ -432,7 +432,17 @@
       "extCollabTokenCopy": "Copy link",
       "extCollabTokenCopied": "Copied to clipboard",
       "extCollabCreated": "Magic link created",
-      "extCollabRevoked": "Magic link revoked"
+      "extCollabRevoked": "Magic link revoked",
+      "extCollabCapEditFields": "Edit fields",
+      "extCollabEditableFields": "Editable fields",
+      "extCollabEditFieldsRequired": "Select at least one field when 'Edit fields' is enabled",
+      "extCollabField_effectiveFrom": "Effective from",
+      "extCollabField_effectiveTo": "Effective to",
+      "extCollabField_governingLaw": "Governing law",
+      "extCollabField_jurisdiction": "Jurisdiction",
+      "extCollabIpAllowlist": "IP allowlist (optional)",
+      "extCollabIpAllowlistHint": "Comma- or newline-separated IPv4/IPv6 addresses or CIDR blocks. Empty = no restriction.",
+      "extCollabExpiresHint": "Maximum 30 days."
     },
     "negotiations": {
       "title": "Negotiations",

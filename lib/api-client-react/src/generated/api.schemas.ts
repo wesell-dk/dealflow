@@ -4002,7 +4002,18 @@ export type ExternalCollaboratorCapabilitiesItem =
 export const ExternalCollaboratorCapabilitiesItem = {
   view: "view",
   comment: "comment",
+  edit_fields: "edit_fields",
   sign_party: "sign_party",
+} as const;
+
+export type ExternalCollaboratorEditableFieldsItem =
+  (typeof ExternalCollaboratorEditableFieldsItem)[keyof typeof ExternalCollaboratorEditableFieldsItem];
+
+export const ExternalCollaboratorEditableFieldsItem = {
+  effectiveFrom: "effectiveFrom",
+  effectiveTo: "effectiveTo",
+  governingLaw: "governingLaw",
+  jurisdiction: "jurisdiction",
 } as const;
 
 export type ExternalCollaboratorStatus =
@@ -4023,6 +4034,10 @@ export interface ExternalCollaborator {
   /** @nullable */
   organization?: string | null;
   capabilities: ExternalCollaboratorCapabilitiesItem[];
+  /** Whitelist der Vertrags-Felder, die der Magic-Link bearbeiten darf. Nur relevant bei capability `edit_fields`. */
+  editableFields: ExternalCollaboratorEditableFieldsItem[];
+  /** Optionale IP-Allowlist (IPv4/IPv6/CIDR). Leer = keine Einschraenkung. */
+  ipAllowlist: string[];
   status: ExternalCollaboratorStatus;
   expiresAt: string;
   /** @nullable */
@@ -4046,7 +4061,18 @@ export type ExternalCollaboratorCreateCapabilitiesItem =
 export const ExternalCollaboratorCreateCapabilitiesItem = {
   view: "view",
   comment: "comment",
+  edit_fields: "edit_fields",
   sign_party: "sign_party",
+} as const;
+
+export type ExternalCollaboratorCreateEditableFieldsItem =
+  (typeof ExternalCollaboratorCreateEditableFieldsItem)[keyof typeof ExternalCollaboratorCreateEditableFieldsItem];
+
+export const ExternalCollaboratorCreateEditableFieldsItem = {
+  effectiveFrom: "effectiveFrom",
+  effectiveTo: "effectiveTo",
+  governingLaw: "governingLaw",
+  jurisdiction: "jurisdiction",
 } as const;
 
 export interface ExternalCollaboratorCreate {
@@ -4057,11 +4083,57 @@ export interface ExternalCollaboratorCreate {
   organization?: string | null;
   /** @minItems 1 */
   capabilities: ExternalCollaboratorCreateCapabilitiesItem[];
+  /** Pflicht (mind. 1 Eintrag), wenn capabilities `edit_fields` enthaelt. Sonst leer/weglassen. */
+  editableFields?: ExternalCollaboratorCreateEditableFieldsItem[];
+  /**
+   * Optionale IP-Allowlist. Eintraege koennen einzelne IPs (v4/v6) oder CIDR-Blocks sein. Max. 32 Eintraege.
+   * @maxItems 32
+   */
+  ipAllowlist?: string[];
   /**
    * @minimum 1
-   * @maximum 90
+   * @maximum 30
    */
   expiresInDays?: number;
+}
+
+/**
+ * Felder-Edit ueber Magic-Link. Nur die in collab.editableFields freigegebenen Felder
+werden geschrieben; alles andere wird ignoriert/abgelehnt.
+
+ */
+export interface ExternalContractFieldEdit {
+  /**
+   * YYYY-MM-DD oder null
+   * @nullable
+   */
+  effectiveFrom?: string | null;
+  /**
+   * YYYY-MM-DD oder null
+   * @nullable
+   */
+  effectiveTo?: string | null;
+  /** @nullable */
+  governingLaw?: string | null;
+  /** @nullable */
+  jurisdiction?: string | null;
+}
+
+export type ExternalContractFieldEditResultContract = {
+  id?: string;
+  /** @nullable */
+  effectiveFrom?: string | null;
+  /** @nullable */
+  effectiveTo?: string | null;
+  /** @nullable */
+  governingLaw?: string | null;
+  /** @nullable */
+  jurisdiction?: string | null;
+};
+
+export interface ExternalContractFieldEditResult {
+  contract: ExternalContractFieldEditResultContract;
+  updatedFields: string[];
 }
 
 export type ContractCommentAuthorType =
@@ -4099,7 +4171,18 @@ export type ExternalContractViewCollaboratorCapabilitiesItem =
 export const ExternalContractViewCollaboratorCapabilitiesItem = {
   view: "view",
   comment: "comment",
+  edit_fields: "edit_fields",
   sign_party: "sign_party",
+} as const;
+
+export type ExternalContractViewCollaboratorEditableFieldsItem =
+  (typeof ExternalContractViewCollaboratorEditableFieldsItem)[keyof typeof ExternalContractViewCollaboratorEditableFieldsItem];
+
+export const ExternalContractViewCollaboratorEditableFieldsItem = {
+  effectiveFrom: "effectiveFrom",
+  effectiveTo: "effectiveTo",
+  governingLaw: "governingLaw",
+  jurisdiction: "jurisdiction",
 } as const;
 
 export type ExternalContractViewCollaborator = {
@@ -4110,6 +4193,7 @@ export type ExternalContractViewCollaborator = {
   /** @nullable */
   organization?: string | null;
   capabilities: ExternalContractViewCollaboratorCapabilitiesItem[];
+  editableFields: ExternalContractViewCollaboratorEditableFieldsItem[];
   expiresAt: string;
 };
 

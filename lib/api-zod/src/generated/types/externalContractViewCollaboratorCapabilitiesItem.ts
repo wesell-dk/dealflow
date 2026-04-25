@@ -14,5 +14,6 @@ export type ExternalContractViewCollaboratorCapabilitiesItem =
 export const ExternalContractViewCollaboratorCapabilitiesItem = {
   view: "view",
   comment: "comment",
+  edit_fields: "edit_fields",
   sign_party: "sign_party",
 } as const;
