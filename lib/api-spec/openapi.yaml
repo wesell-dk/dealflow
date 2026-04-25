@@ -549,6 +549,98 @@ paths:
                 type: array
                 items: { $ref: "#/components/schemas/Contact" }
 
+  /accounts/{id}/contacts:
+    post:
+      operationId: createContact
+      tags: [contacts]
+      summary: Kontakt am Kunden anlegen
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ContactInput" }
+      responses:
+        "201":
+          description: created
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Contact" }
+        "403": { description: forbidden }
+        "404": { description: not found }
+        "422": { description: invalid input }
+
+  /accounts/{id}/contacts/scrape-from-website:
+    post:
+      operationId: scrapeContactsFromWebsite
+      tags: [contacts]
+      summary: Personen aus typischen Website-Unterseiten vorschlagen
+      description: |
+        Crawlt Startseite + typische Unterseiten (`/impressum`, `/imprint`, `/team`,
+        `/ueber-uns`, `/about`, `/kontakt`, `/contact`, `/management`, `/leadership`,
+        `/people`) und liefert dedupliziert Personen mit Name, mutmaßlicher Rolle,
+        ggf. E-Mail/Telefon und Quell-URL. Geschäftsführer/CEO/Vorstand werden
+        als Entscheider markiert.
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ContactScrapeRequest" }
+      responses:
+        "200":
+          description: ok
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ContactScrapeResponse" }
+        "403": { description: forbidden }
+        "404": { description: not found }
+        "422": { description: invalid input }
+
+  /contacts/{id}:
+    patch:
+      operationId: updateContact
+      tags: [contacts]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ContactPatch" }
+      responses:
+        "200":
+          description: ok
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Contact" }
+        "403": { description: forbidden }
+        "404": { description: not found }
+        "422": { description: invalid input }
+    delete:
+      operationId: deleteContact
+      tags: [contacts]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        "204": { description: deleted }
+        "403": { description: forbidden }
+        "404": { description: not found }
+
   # ───────────── DEALS ─────────────
 
   /deals:
@@ -4520,6 +4612,53 @@ components:
         isDecisionMaker: { type: boolean }
         phone:
           type: ["string", "null"]
+
+    ContactInput:
+      type: object
+      required: [name]
+      properties:
+        name: { type: string, minLength: 1 }
+        role: { type: string }
+        email: { type: ["string", "null"] }
+        phone: { type: ["string", "null"] }
+        isDecisionMaker: { type: boolean }
+
+    ContactPatch:
+      type: object
+      properties:
+        name: { type: string, minLength: 1 }
+        role: { type: string }
+        email: { type: ["string", "null"] }
+        phone: { type: ["string", "null"] }
+        isDecisionMaker: { type: boolean }
+
+    ContactScrapeRequest:
+      type: object
+      required: [website]
+      properties:
+        website: { type: string, description: "URL oder Domain (https:// optional)." }
+
+    ScrapedContact:
+      type: object
+      required: [name, role, isDecisionMaker, sourceUrl, isDuplicate]
+      properties:
+        name: { type: string }
+        role: { type: string }
+        email: { type: ["string", "null"] }
+        phone: { type: ["string", "null"] }
+        isDecisionMaker: { type: boolean }
+        sourceUrl: { type: string }
+        isDuplicate: { type: boolean, description: "True, wenn am Account bereits ein Kontakt mit gleichem Namen oder gleicher E-Mail existiert." }
+
+    ContactScrapeResponse:
+      type: object
+      required: [website, results, pagesCrawled]
+      properties:
+        website: { type: string, description: "Tatsächlich verwendete URL inkl. Schema." }
+        pagesCrawled: { type: integer, description: "Anzahl der erfolgreich abgerufenen Unterseiten." }
+        results:
+          type: array
+          items: { $ref: "#/components/schemas/ScrapedContact" }
 
     # ── Deals ──
     Deal:

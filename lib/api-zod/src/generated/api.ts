@@ -699,6 +699,86 @@ export const ListContactsResponseItem = zod.object({
 });
 export const ListContactsResponse = zod.array(ListContactsResponseItem);
 
+/**
+ * @summary Kontakt am Kunden anlegen
+ */
+export const CreateContactParams = zod.object({
+  id: zod.coerce.string(),
+});
+
+export const CreateContactBody = zod.object({
+  name: zod.string().min(1),
+  role: zod.string().optional(),
+  email: zod.string().nullish(),
+  phone: zod.string().nullish(),
+  isDecisionMaker: zod.boolean().optional(),
+});
+
+/**
+ * Crawlt Startseite + typische Unterseiten (`/impressum`, `/imprint`, `/team`,
+`/ueber-uns`, `/about`, `/kontakt`, `/contact`, `/management`, `/leadership`,
+`/people`) und liefert dedupliziert Personen mit Name, mutmaßlicher Rolle,
+ggf. E-Mail/Telefon und Quell-URL. Geschäftsführer/CEO/Vorstand werden
+als Entscheider markiert.
+
+ * @summary Personen aus typischen Website-Unterseiten vorschlagen
+ */
+export const ScrapeContactsFromWebsiteParams = zod.object({
+  id: zod.coerce.string(),
+});
+
+export const ScrapeContactsFromWebsiteBody = zod.object({
+  website: zod.string().describe("URL oder Domain (https:\/\/ optional)."),
+});
+
+export const ScrapeContactsFromWebsiteResponse = zod.object({
+  website: zod.string().describe("Tatsächlich verwendete URL inkl. Schema."),
+  pagesCrawled: zod
+    .number()
+    .describe("Anzahl der erfolgreich abgerufenen Unterseiten."),
+  results: zod.array(
+    zod.object({
+      name: zod.string(),
+      role: zod.string(),
+      email: zod.string().nullish(),
+      phone: zod.string().nullish(),
+      isDecisionMaker: zod.boolean(),
+      sourceUrl: zod.string(),
+      isDuplicate: zod
+        .boolean()
+        .describe(
+          "True, wenn am Account bereits ein Kontakt mit gleichem Namen oder gleicher E-Mail existiert.",
+        ),
+    }),
+  ),
+});
+
+export const UpdateContactParams = zod.object({
+  id: zod.coerce.string(),
+});
+
+export const UpdateContactBody = zod.object({
+  name: zod.string().min(1).optional(),
+  role: zod.string().optional(),
+  email: zod.string().nullish(),
+  phone: zod.string().nullish(),
+  isDecisionMaker: zod.boolean().optional(),
+});
+
+export const UpdateContactResponse = zod.object({
+  id: zod.string(),
+  accountId: zod.string(),
+  name: zod.string(),
+  email: zod.string(),
+  role: zod.string(),
+  isDecisionMaker: zod.boolean(),
+  phone: zod.string().nullish(),
+});
+
+export const DeleteContactParams = zod.object({
+  id: zod.coerce.string(),
+});
+
 export const ListDealsQueryParams = zod.object({
   stage: zod.coerce.string().optional(),
   ownerId: zod.coerce.string().optional(),

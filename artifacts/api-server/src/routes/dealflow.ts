@@ -834,6 +834,388 @@ router.get('/contacts', async (req, res) => {
   res.json(visible);
 });
 
+// ── CONTACT WRITE OPS (am Kunden anlegen / bearbeiten / löschen) ──
+//
+// Visibility & Schreibrecht: gleiche Regel wie /accounts/:id PATCH —
+// gateAccount entscheidet, ob der aufrufende Nutzer den Account sieht und
+// damit auch dessen Kontakte pflegen darf. Ein Read-Only-Nutzer (kein
+// Schreibrecht) sieht den Account ohnehin nicht im allowedAccountIds-Set.
+//
+// Audit & PII: jede Mutation erzeugt einen Audit-Log-Eintrag mit before/after
+// (PII bleibt im Tenant-eigenen audit_log und wird vom GDPR-Forget-Sweep
+// pseudonymisiert mitbehandelt).
+
+function trimOrNull(v: unknown): string | null {
+  if (typeof v !== 'string') return null;
+  const t = v.trim();
+  return t === '' ? null : t;
+}
+
+router.post('/accounts/:id/contacts', async (req, res) => {
+  if (!validateInline(req, res, { params: Z.CreateContactParams, body: Z.CreateContactBody })) return;
+  if (!(await gateAccount(req, res, req.params.id))) return;
+  const b = req.body as {
+    name: string;
+    role?: string;
+    email?: string | null;
+    phone?: string | null;
+    isDecisionMaker?: boolean;
+  };
+  const name = (b.name ?? '').trim();
+  if (!name) { res.status(422).json({ error: 'name required' }); return; }
+  const email = trimOrNull(b.email);
+  if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    res.status(422).json({ error: 'invalid email' }); return;
+  }
+  const id = `ct_${randomUUID().slice(0, 8)}`;
+  const row = {
+    id,
+    accountId: req.params.id,
+    name,
+    role: (b.role ?? '').trim(),
+    email: email ?? '',
+    phone: trimOrNull(b.phone),
+    isDecisionMaker: Boolean(b.isDecisionMaker),
+  };
+  await db.insert(contactsTable).values(row);
+  await writeAuditFromReq(req, {
+    entityType: 'contact',
+    entityId: id,
+    action: 'create',
+    summary: `Kontakt "${row.name}" am Kunden angelegt`,
+    after: { ...row },
+  });
+  res.status(201).json(row);
+});
+
+router.patch('/contacts/:id', async (req, res) => {
+  if (!validateInline(req, res, { params: Z.UpdateContactParams, body: Z.UpdateContactBody })) return;
+  const [existing] = await db.select().from(contactsTable).where(eq(contactsTable.id, req.params.id));
+  if (!existing) { res.status(404).json({ error: 'not found' }); return; }
+  if (!(await gateAccount(req, res, existing.accountId))) return;
+  const b = req.body as {
+    name?: string;
+    role?: string;
+    email?: string | null;
+    phone?: string | null;
+    isDecisionMaker?: boolean;
+  };
+  const update: Record<string, unknown> = {};
+  if (typeof b.name === 'string') {
+    const n = b.name.trim();
+    if (!n) { res.status(422).json({ error: 'name required' }); return; }
+    update.name = n;
+  }
+  if (typeof b.role === 'string') update.role = b.role.trim();
+  if (b.email !== undefined) {
+    const e = trimOrNull(b.email);
+    if (e && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e)) {
+      res.status(422).json({ error: 'invalid email' }); return;
+    }
+    update.email = e ?? '';
+  }
+  if (b.phone !== undefined) update.phone = trimOrNull(b.phone);
+  if (b.isDecisionMaker !== undefined) update.isDecisionMaker = Boolean(b.isDecisionMaker);
+  if (Object.keys(update).length === 0) {
+    res.json(existing); return;
+  }
+  await db.update(contactsTable).set(update).where(eq(contactsTable.id, req.params.id));
+  const [after] = await db.select().from(contactsTable).where(eq(contactsTable.id, req.params.id));
+  await writeAuditFromReq(req, {
+    entityType: 'contact',
+    entityId: req.params.id,
+    action: 'update',
+    summary: `Kontakt "${after?.name ?? existing.name}" aktualisiert`,
+    before: existing,
+    after: after ?? null,
+  });
+  res.json(after ?? existing);
+});
+
+router.delete('/contacts/:id', async (req, res) => {
+  if (!validateInline(req, res, { params: Z.DeleteContactParams })) return;
+  const [existing] = await db.select().from(contactsTable).where(eq(contactsTable.id, req.params.id));
+  if (!existing) { res.status(404).json({ error: 'not found' }); return; }
+  if (!(await gateAccount(req, res, existing.accountId))) return;
+  // Wenn Account auf diesen Kontakt zeigt, primaryContactId leeren — sonst
+  // hängen wir auf eine ID, die es nicht mehr gibt.
+  await db.update(accountsTable)
+    .set({ primaryContactId: null })
+    .where(and(eq(accountsTable.id, existing.accountId), eq(accountsTable.primaryContactId, existing.id)));
+  await db.delete(contactsTable).where(eq(contactsTable.id, req.params.id));
+  await writeAuditFromReq(req, {
+    entityType: 'contact',
+    entityId: req.params.id,
+    action: 'delete',
+    summary: `Kontakt "${existing.name}" gelöscht`,
+    before: existing,
+  });
+  res.status(204).send();
+});
+
+// ── PEOPLE-CRAWLER (Vorschläge aus Website) ─────────────────────────────────
+// Reuse fetchWithLimit / SSRF-Logik aus dem Firmen-Anreicherungs-Crawler.
+// Ziel: Geschäftsführer/CEO/Vorstand zuverlässig + best-effort weitere
+// Ansprechpartner aus Impressum, Über-uns, Team, Kontakt finden.
+
+const CONTACT_SCRAPE_PATHS = [
+  '', // origin (Startseite)
+  '/impressum', '/imprint', '/legal',
+  '/team', '/unser-team', '/our-team',
+  '/ueber-uns', '/über-uns', '/about', '/about-us', '/about/us',
+  '/kontakt', '/contact', '/contact-us',
+  '/management', '/leadership', '/people', '/company/team',
+];
+
+// (label, isDecisionMaker). Reihenfolge ist relevant: spezifischere Patterns
+// zuerst, damit z. B. "Managing Director" vor "Director" greift.
+const ROLE_PATTERNS: Array<{ regex: RegExp; label: string; decisionMaker: boolean }> = [
+  // ── Decision-Maker (DE) ─────────────────────────────────────────────────
+  { regex: /\bGeschäftsführer(?:in)?\b/i, label: 'Geschäftsführer', decisionMaker: true },
+  { regex: /\b(Geschäftsführung|GF)\b/i,  label: 'Geschäftsführung', decisionMaker: true },
+  { regex: /\bVorstands?vorsitzende[rn]?\b/i, label: 'Vorstandsvorsitzender', decisionMaker: true },
+  { regex: /\bVorstand\b/i,               label: 'Vorstand', decisionMaker: true },
+  { regex: /\bInhaber(?:in)?\b/i,         label: 'Inhaber', decisionMaker: true },
+  { regex: /\bEigentümer(?:in)?\b/i,      label: 'Eigentümer', decisionMaker: true },
+  { regex: /\b(Mit)?[Gg]ründer(?:in)?\b/, label: 'Gründer', decisionMaker: true },
+  { regex: /\bGesellschafter(?:in)?\b/i,  label: 'Gesellschafter', decisionMaker: true },
+  // ── Decision-Maker (EN) ─────────────────────────────────────────────────
+  { regex: /\bManaging\s+Director\b/i,    label: 'Managing Director', decisionMaker: true },
+  { regex: /\bChief\s+Executive\s+Officer\b/i, label: 'CEO', decisionMaker: true },
+  { regex: /\bCEO\b/,                     label: 'CEO', decisionMaker: true },
+  { regex: /\bCo-?Founder\b/i,            label: 'Co-Founder', decisionMaker: true },
+  { regex: /\bFounder\b/i,                label: 'Founder', decisionMaker: true },
+  { regex: /\bOwner\b/i,                  label: 'Owner', decisionMaker: true },
+  { regex: /\bPresident\b/i,              label: 'President', decisionMaker: true },
+  // ── Andere C-Level / leitende Rollen (kein Auto-Entscheider, aber Ansprechpartner) ─
+  { regex: /\bProkurist(?:in)?\b/i,       label: 'Prokurist', decisionMaker: false },
+  { regex: /\bCFO\b/,                     label: 'CFO', decisionMaker: false },
+  { regex: /\bCTO\b/,                     label: 'CTO', decisionMaker: false },
+  { regex: /\bCOO\b/,                     label: 'COO', decisionMaker: false },
+  { regex: /\bCIO\b/,                     label: 'CIO', decisionMaker: false },
+  { regex: /\bCMO\b/,                     label: 'CMO', decisionMaker: false },
+  { regex: /\bCRO\b/,                     label: 'CRO', decisionMaker: false },
+  { regex: /\bCPO\b/,                     label: 'CPO', decisionMaker: false },
+  { regex: /\bCSO\b/,                     label: 'CSO', decisionMaker: false },
+  { regex: /\bChief\s+\w+(?:\s+\w+)?\s+Officer\b/i, label: 'Chief Officer', decisionMaker: false },
+  { regex: /\bVice\s+President\b/i,       label: 'Vice President', decisionMaker: false },
+  { regex: /\bVP\s+[A-ZÄÖÜ][\w-]+/,       label: 'VP', decisionMaker: false },
+  { regex: /\bDirector\b/i,               label: 'Director', decisionMaker: false },
+  { regex: /\bHead\s+of\s+[A-ZÄÖÜ][\w&\- ]+/, label: 'Head of', decisionMaker: false },
+  { regex: /\bBereichsleiter(?:in)?\b/i,  label: 'Bereichsleiter', decisionMaker: false },
+  { regex: /\bAbteilungsleiter(?:in)?\b/i,label: 'Abteilungsleiter', decisionMaker: false },
+  { regex: /\bLeiter(?:in)?\b/i,          label: 'Leiter', decisionMaker: false },
+];
+
+// Auch Personennamen mit gängigen akademischen Titeln (Dr., Prof., Mag., Dipl.-Ing.)
+// und Adelsprädikaten (van, von, de) — bewusst konservativ, sonst halten wir
+// jede Phrase aus zwei Großbuchstaben-Wörtern für einen Namen.
+const NAME_RE = /\b(?:(?:Dr|Prof|Prof\.?\s*Dr|Mag|Dipl\.-?Ing|Dipl\.-?Kfm)\.?\s+)?[A-ZÄÖÜ][a-zäöüß\-]{1,}(?:\s+(?:van|von|de|del|der|den)\s+)?(?:\s+[A-ZÄÖÜ][a-zäöüß\-]{1,}){1,2}\b/;
+
+function extractNameFromText(text: string): string | null {
+  const m = text.match(NAME_RE);
+  return m ? m[0].trim() : null;
+}
+
+function detectRole(text: string): { label: string; decisionMaker: boolean; match: string } | null {
+  for (const r of ROLE_PATTERNS) {
+    const m = text.match(r.regex);
+    if (m) return { label: r.label, decisionMaker: r.decisionMaker, match: m[0] };
+  }
+  return null;
+}
+
+const EMAIL_RE = /\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/i;
+function deobfuscateEmails(t: string): string {
+  return t
+    .replace(/\s*\(\s*at\s*\)\s*/gi, '@')
+    .replace(/\s*\[\s*at\s*\]\s*/gi, '@')
+    .replace(/\s+at\s+([A-Z0-9.-]+)\s+(?:dot|\.)\s+([A-Z]{2,})/gi, '@$1.$2')
+    .replace(/\{at\}/gi, '@')
+    .replace(/&#64;/g, '@')
+    .replace(/&commat;/g, '@');
+}
+
+function extractEmailFromText(text: string): string | null {
+  const cleaned = deobfuscateEmails(text);
+  const m = cleaned.match(EMAIL_RE);
+  return m ? m[0].trim().toLowerCase() : null;
+}
+
+const PHONE_RE = /(?:Tel(?:efon)?\.?|Phone|T:|Fon)[:\s]*((?:\+|00)?[\d][\d\s().\/-]{6,}\d)/i;
+const PHONE_BARE_RE = /\b(\+\d{1,3}[\s().\/-]?\d[\d\s().\/-]{5,}\d)\b/;
+function extractPhoneFromText(text: string): string | null {
+  const m = text.match(PHONE_RE) ?? text.match(PHONE_BARE_RE);
+  if (!m) return null;
+  return (m[1] ?? m[0]).replace(/[\s().\/-]+/g, ' ').replace(/\s+/g, ' ').trim();
+}
+
+// Tags entfernen, aber Block-Grenzen als Newlines erhalten — wichtig für die
+// "Name auf Zeile X, Rolle auf Zeile X+1"-Heuristik.
+function htmlToLines(html: string): string[] {
+  const text = html
+    .replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, ' ')
+    .replace(/<style\b[^>]*>[\s\S]*?<\/style>/gi, ' ')
+    .replace(/<br\s*\/?>/gi, '\n')
+    .replace(/<\/(p|div|li|tr|h[1-6]|section|article|td|dd|dt|figcaption)>/gi, '\n')
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/&nbsp;/gi, ' ')
+    .replace(/&amp;/gi, '&')
+    .replace(/&quot;/gi, '"')
+    .replace(/&#39;/gi, "'");
+  return text
+    .split('\n')
+    .map((l) => l.replace(/[ \t]+/g, ' ').trim())
+    .filter((l) => l.length > 0);
+}
+
+type ScrapedPerson = {
+  name: string;
+  role: string;
+  email: string | null;
+  phone: string | null;
+  isDecisionMaker: boolean;
+  sourceUrl: string;
+};
+
+function findPeopleOnPage(html: string, sourceUrl: string): ScrapedPerson[] {
+  // mailto-Links liefern oft Name → E-Mail-Paare zuverlässig. Diese Map nutzen
+  // wir später, um bei einem gefundenen Namen ohne E-Mail noch eine E-Mail
+  // zuzuordnen.
+  const mailtoByName = new Map<string, string>();
+  const mailtoEmails = new Set<string>();
+  for (const m of html.matchAll(/<a[^>]+href="mailto:([^"?]+)"[^>]*>([^<]+)<\/a>/gi)) {
+    const email = (m[1] ?? '').trim().toLowerCase();
+    if (!email || !EMAIL_RE.test(email)) continue;
+    mailtoEmails.add(email);
+    const label = (m[2] ?? '').replace(/\s+/g, ' ').trim();
+    const name = extractNameFromText(label);
+    if (name) mailtoByName.set(name.toLowerCase(), email);
+  }
+
+  const lines = htmlToLines(html);
+  const found: ScrapedPerson[] = [];
+  const seen = new Set<string>(); // dedupe-Key innerhalb dieser Seite
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i] ?? '';
+    if (line.length > 240) continue; // Fließtext überspringen
+    const role = detectRole(line);
+    if (!role) continue;
+
+    // Name-Kandidaten: gleiche Zeile (Rolle entfernt), Vorzeile, Folgezeile.
+    const sameLineSansRole = line.replace(role.match, ' ').replace(/\s{2,}/g, ' ').trim();
+    const candidates = [
+      extractNameFromText(sameLineSansRole),
+      i > 0 ? extractNameFromText(lines[i - 1] ?? '') : null,
+      i < lines.length - 1 ? extractNameFromText(lines[i + 1] ?? '') : null,
+    ].filter((n): n is string => Boolean(n));
+    if (candidates.length === 0) continue;
+    const name = candidates[0]!;
+
+    // Kontext-Fenster (5 Zeilen) für E-Mail/Telefon in der Nähe.
+    const ctxLines = lines.slice(Math.max(0, i - 2), Math.min(lines.length, i + 3)).join(' ');
+    let email = extractEmailFromText(ctxLines);
+    if (!email) {
+      const m = mailtoByName.get(name.toLowerCase());
+      if (m) email = m;
+    }
+    const phone = extractPhoneFromText(ctxLines);
+
+    const key = `${name.toLowerCase()}|${email ?? ''}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+
+    found.push({
+      name,
+      role: role.label,
+      email,
+      phone,
+      isDecisionMaker: role.decisionMaker,
+      sourceUrl,
+    });
+  }
+  return found;
+}
+
+router.post('/accounts/:id/contacts/scrape-from-website', async (req, res) => {
+  if (!validateInline(req, res, { params: Z.ScrapeContactsFromWebsiteParams, body: Z.ScrapeContactsFromWebsiteBody })) return;
+  if (!(await gateAccount(req, res, req.params.id))) return;
+
+  const raw = (req.body as { website?: unknown })?.website;
+  if (typeof raw !== 'string' || !raw.trim()) {
+    res.status(422).json({ error: 'website required' }); return;
+  }
+  let url: URL;
+  try {
+    const trimmed = raw.trim();
+    const withProto = /^https?:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`;
+    url = new URL(withProto);
+    if (!/^https?:$/i.test(url.protocol)) throw new Error('bad proto');
+  } catch {
+    res.status(422).json({ error: 'invalid website url' }); return;
+  }
+  // SSRF-Schutz analog zu enrich-from-website.
+  const host = url.hostname.toLowerCase();
+  if (host === 'localhost' || host === '0.0.0.0' || host.endsWith('.local') ||
+      /^(127|10|192\.168|169\.254|172\.(1[6-9]|2\d|3[01]))\./.test(host)) {
+    res.status(422).json({ error: 'host not allowed' }); return;
+  }
+
+  const candidates = CONTACT_SCRAPE_PATHS.map((p) => `${url.origin}${p}`);
+  const results: ScrapedPerson[] = [];
+  let pagesCrawled = 0;
+  const dedupe = new Map<string, ScrapedPerson>();
+  for (const cand of candidates) {
+    const html = await fetchWithLimit(cand);
+    if (!html || html.length < 200) continue;
+    pagesCrawled += 1;
+    const people = findPeopleOnPage(html, cand);
+    for (const p of people) {
+      const key = `${p.name.toLowerCase()}|${(p.email ?? '').toLowerCase()}`;
+      const prev = dedupe.get(key);
+      if (!prev) {
+        dedupe.set(key, p);
+        continue;
+      }
+      // Decision-Maker-Treffer hat Vorrang vor anderen.
+      if (!prev.isDecisionMaker && p.isDecisionMaker) {
+        dedupe.set(key, { ...p, email: prev.email ?? p.email, phone: prev.phone ?? p.phone });
+      } else if (!prev.email && p.email) {
+        prev.email = p.email;
+      } else if (!prev.phone && p.phone) {
+        prev.phone = p.phone;
+      }
+    }
+  }
+  for (const p of dedupe.values()) results.push(p);
+
+  // Duplikate gegen bestehende Kontakte am Account markieren (Namens- oder
+  // E-Mail-Match, case-insensitive).
+  const existing = await db.select().from(contactsTable).where(eq(contactsTable.accountId, req.params.id));
+  const existingNames = new Set(existing.map((c) => c.name.trim().toLowerCase()));
+  const existingEmails = new Set(existing.filter((c) => c.email).map((c) => c.email.trim().toLowerCase()));
+  const enriched = results.map((p) => ({
+    ...p,
+    isDuplicate: existingNames.has(p.name.toLowerCase()) ||
+                 (p.email != null && existingEmails.has(p.email.toLowerCase())),
+  }));
+
+  // Sortierung: Entscheider zuerst, dann mit E-Mail, dann Name.
+  enriched.sort((a, b) => {
+    if (a.isDecisionMaker !== b.isDecisionMaker) return a.isDecisionMaker ? -1 : 1;
+    const aE = a.email ? 0 : 1; const bE = b.email ? 0 : 1;
+    if (aE !== bE) return aE - bE;
+    return a.name.localeCompare(b.name);
+  });
+
+  res.json({
+    website: url.origin,
+    pagesCrawled,
+    results: enriched,
+  });
+});
+
 // ── DEALS ──
 router.get('/deals', async (req, res) => {
   if (!validateInline(req, res, { query: Z.ListDealsQueryParams })) return;

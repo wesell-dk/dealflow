@@ -842,6 +842,54 @@ export interface BulkActionResult {
   references?: BulkActionResultReferences;
 }
 
+export interface ContactInput {
+  /** @minLength 1 */
+  name: string;
+  role?: string;
+  /** @nullable */
+  email?: string | null;
+  /** @nullable */
+  phone?: string | null;
+  isDecisionMaker?: boolean;
+}
+
+export interface ContactPatch {
+  /** @minLength 1 */
+  name?: string;
+  role?: string;
+  /** @nullable */
+  email?: string | null;
+  /** @nullable */
+  phone?: string | null;
+  isDecisionMaker?: boolean;
+}
+
+export interface ContactScrapeRequest {
+  /** URL oder Domain (https:// optional). */
+  website: string;
+}
+
+export interface ScrapedContact {
+  name: string;
+  role: string;
+  /** @nullable */
+  email?: string | null;
+  /** @nullable */
+  phone?: string | null;
+  isDecisionMaker: boolean;
+  sourceUrl: string;
+  /** True, wenn am Account bereits ein Kontakt mit gleichem Namen oder gleicher E-Mail existiert. */
+  isDuplicate: boolean;
+}
+
+export interface ContactScrapeResponse {
+  /** Tatsächlich verwendete URL inkl. Schema. */
+  website: string;
+  /** Anzahl der erfolgreich abgerufenen Unterseiten. */
+  pagesCrawled: number;
+  results: ScrapedContact[];
+}
+
 export interface DealInput {
   name: string;
   accountId: string;

@@ -64,6 +64,10 @@ import type {
   CompanyCreate,
   CompanyUpdate,
   Contact,
+  ContactInput,
+  ContactPatch,
+  ContactScrapeRequest,
+  ContactScrapeResponse,
   Contract,
   ContractAmendment,
   ContractAmendmentDetail,
@@ -2603,6 +2607,349 @@ export function useListContacts<
 
   return { ...query, queryKey: queryOptions.queryKey };
 }
+
+/**
+ * @summary Kontakt am Kunden anlegen
+ */
+export const getCreateContactUrl = (id: string) => {
+  return `/api/v1/accounts/${id}/contacts`;
+};
+
+export const createContact = async (
+  id: string,
+  contactInput: ContactInput,
+  options?: RequestInit,
+): Promise<Contact> => {
+  return customFetch<Contact>(getCreateContactUrl(id), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(contactInput),
+  });
+};
+
+export const getCreateContactMutationOptions = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof createContact>>,
+    TError,
+    { id: string; data: BodyType<ContactInput> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof createContact>>,
+  TError,
+  { id: string; data: BodyType<ContactInput> },
+  TContext
+> => {
+  const mutationKey = ["createContact"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof createContact>>,
+    { id: string; data: BodyType<ContactInput> }
+  > = (props) => {
+    const { id, data } = props ?? {};
+
+    return createContact(id, data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type CreateContactMutationResult = NonNullable<
+  Awaited<ReturnType<typeof createContact>>
+>;
+export type CreateContactMutationBody = BodyType<ContactInput>;
+export type CreateContactMutationError = ErrorType<void>;
+
+/**
+ * @summary Kontakt am Kunden anlegen
+ */
+export const useCreateContact = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof createContact>>,
+    TError,
+    { id: string; data: BodyType<ContactInput> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof createContact>>,
+  TError,
+  { id: string; data: BodyType<ContactInput> },
+  TContext
+> => {
+  return useMutation(getCreateContactMutationOptions(options));
+};
+
+/**
+ * Crawlt Startseite + typische Unterseiten (`/impressum`, `/imprint`, `/team`,
+`/ueber-uns`, `/about`, `/kontakt`, `/contact`, `/management`, `/leadership`,
+`/people`) und liefert dedupliziert Personen mit Name, mutmaßlicher Rolle,
+ggf. E-Mail/Telefon und Quell-URL. Geschäftsführer/CEO/Vorstand werden
+als Entscheider markiert.
+
+ * @summary Personen aus typischen Website-Unterseiten vorschlagen
+ */
+export const getScrapeContactsFromWebsiteUrl = (id: string) => {
+  return `/api/v1/accounts/${id}/contacts/scrape-from-website`;
+};
+
+export const scrapeContactsFromWebsite = async (
+  id: string,
+  contactScrapeRequest: ContactScrapeRequest,
+  options?: RequestInit,
+): Promise<ContactScrapeResponse> => {
+  return customFetch<ContactScrapeResponse>(
+    getScrapeContactsFromWebsiteUrl(id),
+    {
+      ...options,
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...options?.headers },
+      body: JSON.stringify(contactScrapeRequest),
+    },
+  );
+};
+
+export const getScrapeContactsFromWebsiteMutationOptions = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof scrapeContactsFromWebsite>>,
+    TError,
+    { id: string; data: BodyType<ContactScrapeRequest> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof scrapeContactsFromWebsite>>,
+  TError,
+  { id: string; data: BodyType<ContactScrapeRequest> },
+  TContext
+> => {
+  const mutationKey = ["scrapeContactsFromWebsite"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof scrapeContactsFromWebsite>>,
+    { id: string; data: BodyType<ContactScrapeRequest> }
+  > = (props) => {
+    const { id, data } = props ?? {};
+
+    return scrapeContactsFromWebsite(id, data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type ScrapeContactsFromWebsiteMutationResult = NonNullable<
+  Awaited<ReturnType<typeof scrapeContactsFromWebsite>>
+>;
+export type ScrapeContactsFromWebsiteMutationBody =
+  BodyType<ContactScrapeRequest>;
+export type ScrapeContactsFromWebsiteMutationError = ErrorType<void>;
+
+/**
+ * @summary Personen aus typischen Website-Unterseiten vorschlagen
+ */
+export const useScrapeContactsFromWebsite = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof scrapeContactsFromWebsite>>,
+    TError,
+    { id: string; data: BodyType<ContactScrapeRequest> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof scrapeContactsFromWebsite>>,
+  TError,
+  { id: string; data: BodyType<ContactScrapeRequest> },
+  TContext
+> => {
+  return useMutation(getScrapeContactsFromWebsiteMutationOptions(options));
+};
+
+export const getUpdateContactUrl = (id: string) => {
+  return `/api/v1/contacts/${id}`;
+};
+
+export const updateContact = async (
+  id: string,
+  contactPatch: ContactPatch,
+  options?: RequestInit,
+): Promise<Contact> => {
+  return customFetch<Contact>(getUpdateContactUrl(id), {
+    ...options,
+    method: "PATCH",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(contactPatch),
+  });
+};
+
+export const getUpdateContactMutationOptions = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof updateContact>>,
+    TError,
+    { id: string; data: BodyType<ContactPatch> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof updateContact>>,
+  TError,
+  { id: string; data: BodyType<ContactPatch> },
+  TContext
+> => {
+  const mutationKey = ["updateContact"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof updateContact>>,
+    { id: string; data: BodyType<ContactPatch> }
+  > = (props) => {
+    const { id, data } = props ?? {};
+
+    return updateContact(id, data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type UpdateContactMutationResult = NonNullable<
+  Awaited<ReturnType<typeof updateContact>>
+>;
+export type UpdateContactMutationBody = BodyType<ContactPatch>;
+export type UpdateContactMutationError = ErrorType<void>;
+
+export const useUpdateContact = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof updateContact>>,
+    TError,
+    { id: string; data: BodyType<ContactPatch> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof updateContact>>,
+  TError,
+  { id: string; data: BodyType<ContactPatch> },
+  TContext
+> => {
+  return useMutation(getUpdateContactMutationOptions(options));
+};
+
+export const getDeleteContactUrl = (id: string) => {
+  return `/api/v1/contacts/${id}`;
+};
+
+export const deleteContact = async (
+  id: string,
+  options?: RequestInit,
+): Promise<void> => {
+  return customFetch<void>(getDeleteContactUrl(id), {
+    ...options,
+    method: "DELETE",
+  });
+};
+
+export const getDeleteContactMutationOptions = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof deleteContact>>,
+    TError,
+    { id: string },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof deleteContact>>,
+  TError,
+  { id: string },
+  TContext
+> => {
+  const mutationKey = ["deleteContact"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof deleteContact>>,
+    { id: string }
+  > = (props) => {
+    const { id } = props ?? {};
+
+    return deleteContact(id, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type DeleteContactMutationResult = NonNullable<
+  Awaited<ReturnType<typeof deleteContact>>
+>;
+
+export type DeleteContactMutationError = ErrorType<void>;
+
+export const useDeleteContact = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof deleteContact>>,
+    TError,
+    { id: string },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof deleteContact>>,
+  TError,
+  { id: string },
+  TContext
+> => {
+  return useMutation(getDeleteContactMutationOptions(options));
+};
 
 export const getListDealsUrl = (params?: ListDealsParams) => {
   const normalizedParams = new URLSearchParams();

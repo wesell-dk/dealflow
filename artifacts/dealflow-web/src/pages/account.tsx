@@ -4,18 +4,30 @@ import { useQueryClient } from "@tanstack/react-query";
 import {
   useGetAccount,
   useUpdateAccount,
+  useDeleteContact,
   useListUsers,
   getGetAccountQueryKey,
   getListAccountsQueryKey,
+  getListContactsQueryKey,
   type AccountPatch,
 } from "@workspace/api-client-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
-import { Building, Phone, Mail, UserCircle2, Plus, Pencil, Globe, MapPin, Receipt, Users } from "lucide-react";
+import {
+  DropdownMenu, DropdownMenuContent, DropdownMenuItem,
+  DropdownMenuSeparator, DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import { Building, Phone, Mail, UserCircle2, Plus, Pencil, Globe, MapPin, Receipt, Users, MoreHorizontal, Trash2, Sparkles } from "lucide-react";
 import { DealFormDialog } from "@/components/deals/deal-form-dialog";
 import { AccountFormDialog } from "@/components/accounts/account-form-dialog";
+import { ContactFormDialog, type EditableContact } from "@/components/contacts/contact-form-dialog";
+import { ContactScrapeDialog } from "@/components/contacts/contact-scrape-dialog";
 import { InlineEditField } from "@/components/patterns/inline-edit-field";
 import { ActivityTimeline } from "@/components/patterns/activity-timeline";
 import { ExternalContractsCard } from "@/components/external-contracts/external-contracts-card";
@@ -27,12 +39,17 @@ export default function Account() {
   const id = params?.id || "";
   const [dealOpen, setDealOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
+  const [contactOpen, setContactOpen] = useState(false);
+  const [contactEdit, setContactEdit] = useState<EditableContact | null>(null);
+  const [scrapeOpen, setScrapeOpen] = useState(false);
+  const [contactToDelete, setContactToDelete] = useState<EditableContact | null>(null);
   const qc = useQueryClient();
   const { toast } = useToast();
 
   const { data: account, isLoading } = useGetAccount(id);
   const { data: users = [] } = useListUsers();
   const updateAccount = useUpdateAccount();
+  const deleteContact = useDeleteContact();
 
   useTrackRecent(account ? { kind: "account", id: account.id, label: account.name, href: `/accounts/${account.id}` } : null);
 
@@ -162,11 +179,30 @@ export default function Account() {
       <div className="grid lg:grid-cols-3 gap-6">
         <div className="lg:col-span-2 space-y-6">
           <Card>
-            <CardHeader><CardTitle>Kontakte</CardTitle></CardHeader>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0">
+              <CardTitle>Kontakte</CardTitle>
+              <div className="flex gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setScrapeOpen(true)}
+                  data-testid="contacts-scrape-button"
+                >
+                  <Sparkles className="h-3.5 w-3.5 mr-1" /> Aus Website vorschlagen
+                </Button>
+                <Button
+                  size="sm"
+                  onClick={() => { setContactEdit(null); setContactOpen(true); }}
+                  data-testid="contacts-add-button"
+                >
+                  <Plus className="h-3.5 w-3.5 mr-1" /> Kontakt hinzufügen
+                </Button>
+              </div>
+            </CardHeader>
             <CardContent>
               <div className="space-y-3">
                 {account.contacts?.map((contact) => (
-                  <div key={contact.id} className="flex flex-col gap-2 p-4 border rounded-lg">
+                  <div key={contact.id} className="flex flex-col gap-2 p-4 border rounded-lg" data-testid={`contact-row-${contact.id}`}>
                     <div className="flex items-start justify-between">
                       <div className="flex items-center gap-2">
                         <UserCircle2 className="h-8 w-8 text-muted-foreground" />
@@ -175,16 +211,66 @@ export default function Account() {
                           <div className="text-sm text-muted-foreground">{contact.role}</div>
                         </div>
                       </div>
-                      {contact.isDecisionMaker && <Badge variant="secondary">Entscheider</Badge>}
+                      <div className="flex items-center gap-2">
+                        {contact.isDecisionMaker && <Badge variant="secondary">Entscheider</Badge>}
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-7 w-7"
+                              aria-label="Aktionen"
+                              data-testid={`contact-actions-${contact.id}`}
+                            >
+                              <MoreHorizontal className="h-4 w-4" />
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end">
+                            <DropdownMenuItem
+                              onSelect={() => {
+                                setContactEdit({
+                                  id: contact.id,
+                                  name: contact.name,
+                                  role: contact.role,
+                                  email: contact.email,
+                                  phone: contact.phone ?? null,
+                                  isDecisionMaker: contact.isDecisionMaker,
+                                });
+                                setContactOpen(true);
+                              }}
+                              data-testid={`contact-edit-${contact.id}`}
+                            >
+                              <Pencil className="h-3.5 w-3.5 mr-2" /> Bearbeiten
+                            </DropdownMenuItem>
+                            <DropdownMenuSeparator />
+                            <DropdownMenuItem
+                              className="text-destructive focus:text-destructive"
+                              onSelect={() => setContactToDelete({
+                                id: contact.id,
+                                name: contact.name,
+                                role: contact.role,
+                                email: contact.email,
+                                phone: contact.phone ?? null,
+                                isDecisionMaker: contact.isDecisionMaker,
+                              })}
+                              data-testid={`contact-delete-${contact.id}`}
+                            >
+                              <Trash2 className="h-3.5 w-3.5 mr-2" /> Löschen
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      </div>
                     </div>
                     <div className="flex gap-4 text-sm text-muted-foreground mt-2">
-                      <span className="flex items-center gap-1"><Mail className="h-3 w-3" /> {contact.email}</span>
+                      {contact.email && <span className="flex items-center gap-1"><Mail className="h-3 w-3" /> {contact.email}</span>}
                       {contact.phone && <span className="flex items-center gap-1"><Phone className="h-3 w-3" /> {contact.phone}</span>}
                     </div>
                   </div>
                 ))}
                 {!account.contacts?.length && (
-                  <div className="text-center py-6 text-muted-foreground text-sm">Noch keine Kontakte hinterlegt.</div>
+                  <div className="text-center py-6 text-muted-foreground text-sm" data-testid="contacts-empty">
+                    Noch keine Kontakte hinterlegt. Lege einen Kontakt an oder lass aus der Website Vorschläge ableiten.
+                  </div>
                 )}
               </div>
             </CardContent>
@@ -243,6 +329,64 @@ export default function Account() {
           sizeBracket: account.sizeBracket,
         }}
       />
+      <ContactFormDialog
+        open={contactOpen}
+        onOpenChange={(o) => { setContactOpen(o); if (!o) setContactEdit(null); }}
+        accountId={id}
+        contact={contactEdit}
+      />
+      <ContactScrapeDialog
+        open={scrapeOpen}
+        onOpenChange={setScrapeOpen}
+        accountId={id}
+        defaultWebsite={account.website}
+      />
+      <AlertDialog
+        open={!!contactToDelete}
+        onOpenChange={(v) => { if (!v) setContactToDelete(null); }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Kontakt löschen</AlertDialogTitle>
+            <AlertDialogDescription>
+              {contactToDelete && (
+                <>
+                  „{contactToDelete.name}" wird endgültig vom Kunden entfernt.
+                  Diese Aktion kann nicht rückgängig gemacht werden.
+                </>
+              )}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={deleteContact.isPending}>Abbrechen</AlertDialogCancel>
+            <AlertDialogAction
+              data-testid="contact-delete-confirm"
+              disabled={deleteContact.isPending}
+              onClick={async (e) => {
+                e.preventDefault();
+                if (!contactToDelete) return;
+                try {
+                  await deleteContact.mutateAsync({ id: contactToDelete.id });
+                  await Promise.all([
+                    qc.invalidateQueries({ queryKey: getGetAccountQueryKey(id) }),
+                    qc.invalidateQueries({ queryKey: getListContactsQueryKey({ accountId: id }) }),
+                  ]);
+                  toast({ title: "Kontakt gelöscht", description: contactToDelete.name });
+                  setContactToDelete(null);
+                } catch (err) {
+                  toast({
+                    title: "Löschen fehlgeschlagen",
+                    description: err instanceof Error ? err.message : "",
+                    variant: "destructive",
+                  });
+                }
+              }}
+            >
+              Löschen
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
