@@ -7395,24 +7395,45 @@ const bulkDeleteSchema = z.object({
 //  4) Land via Nominatim (OSM) reverse-geocoden, sonst TLD-Heuristik.
 // Bewusst defensiv: 8s Timeout, 512 KB Body-Limit, harmlose User-Agents,
 // niemals 5xx zurückgeben — leere Felder sind ein gültiges Ergebnis.
+// SSRF-Schutz: vor JEDEM Fetch (auch Redirect-Hops) wird Hostname statisch
+// geprüft UND DNS-aufgelöst gegen privaten/internen IP-Bereich (assertSafeResolvedUrl).
+// Redirects werden manuell verfolgt (max 4 Hops), damit die SSRF-Prüfung pro Hop
+// greifen kann statt nur am ersten Request.
 async function fetchWithLimit(url: string, ms = 8000, maxBytes = 512 * 1024): Promise<string | null> {
-  try {
-    const ac = new AbortController();
-    const timer = setTimeout(() => ac.abort(), ms);
-    const r = await fetch(url, {
-      signal: ac.signal,
-      redirect: 'follow',
-      headers: { 'user-agent': 'DealFlow.One Enrichment/1.0 (+https://dealflow.one)', 'accept': 'text/html,application/xhtml+xml' },
-    }).finally(() => clearTimeout(timer));
-    if (!r.ok) return null;
-    const ct = r.headers.get('content-type') ?? '';
-    if (!/text\/html|xml/i.test(ct)) return null;
-    const buf = await r.arrayBuffer();
-    if (buf.byteLength > maxBytes) return new TextDecoder().decode(buf.slice(0, maxBytes));
-    return new TextDecoder().decode(buf);
-  } catch {
-    return null;
+  let current = url;
+  for (let hop = 0; hop < 5; hop++) {
+    try {
+      await assertSafeResolvedUrl(current);
+    } catch {
+      return null; // SSRF-Schutz schlägt zu — wie bei jedem anderen Fehler still abbrechen.
+    }
+    try {
+      const ac = new AbortController();
+      const timer = setTimeout(() => ac.abort(), ms);
+      const r = await fetch(current, {
+        signal: ac.signal,
+        redirect: 'manual',
+        headers: { 'user-agent': 'DealFlow.One Enrichment/1.0 (+https://dealflow.one)', 'accept': 'text/html,application/xhtml+xml' },
+      }).finally(() => clearTimeout(timer));
+      // Redirect-Hop folgen, mit erneuter SSRF-Prüfung in der nächsten Iteration.
+      if (r.status >= 300 && r.status < 400) {
+        const loc = r.headers.get('location');
+        if (!loc) return null;
+        try { current = new URL(loc, current).toString(); }
+        catch { return null; }
+        continue;
+      }
+      if (!r.ok) return null;
+      const ct = r.headers.get('content-type') ?? '';
+      if (!/text\/html|xml/i.test(ct)) return null;
+      const buf = await r.arrayBuffer();
+      if (buf.byteLength > maxBytes) return new TextDecoder().decode(buf.slice(0, maxBytes));
+      return new TextDecoder().decode(buf);
+    } catch {
+      return null;
+    }
   }
+  return null; // Zu viele Redirects.
 }
 
 function decodeEntities(s: string): string {
