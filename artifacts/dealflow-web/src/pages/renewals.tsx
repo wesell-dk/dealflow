@@ -118,7 +118,6 @@ export default function RenewalsPage() {
   const updateMut = useUpdateRenewal();
   const runMut = useRunRenewalEngine();
   const issueMut = useIssueRenewalFollowup();
-  const [, setLocation] = useLocation();
 
   function refetchAll() {
     qc.invalidateQueries({ queryKey: getListRenewalsQueryKey() });

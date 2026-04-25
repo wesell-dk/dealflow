@@ -1,5 +1,6 @@
 import { useState, useMemo } from "react";
 import { useTranslation } from "react-i18next";
+import { Link } from "wouter";
 import { useListAuditEntries } from "@workspace/api-client-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -13,7 +14,7 @@ import {
 } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-import { History, Filter, Globe } from "lucide-react";
+import { History, Filter, Globe, ExternalLink } from "lucide-react";
 
 interface ParsedActiveScope {
   tenantWide?: boolean;
@@ -155,7 +156,21 @@ export default function Audit() {
                         <TableCell>
                           <Badge variant={actionVariant[e.action] ?? "outline"}>{e.action}</Badge>
                         </TableCell>
-                        <TableCell className="text-sm">{e.actor}</TableCell>
+                        <TableCell className="text-sm">
+                          {e.actor.startsWith("magic-link:") && e.entityType === "contract" ? (
+                            <Link
+                              href={`/contracts/${e.entityId}?collab=${encodeURIComponent(e.actor.slice("magic-link:".length))}`}
+                              className="inline-flex items-center gap-1 text-primary hover:underline"
+                              data-testid={`audit-actor-link-${e.id}`}
+                              title={t("pages.audit.openExternalAccess")}
+                            >
+                              <ExternalLink className="h-3 w-3" />
+                              {e.actor}
+                            </Link>
+                          ) : (
+                            e.actor
+                          )}
+                        </TableCell>
                         <TableCell className="text-xs">
                           {isFiltered ? (
                             <Tooltip>

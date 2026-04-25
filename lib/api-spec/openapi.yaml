@@ -4281,6 +4281,23 @@ paths:
         "409": { description: already exists }
 
   /external-collaborators/{id}:
+    get:
+      operationId: getExternalCollaborator
+      tags: [external-collaborators]
+      summary: Einzelnen Magic-Link-Mitwirkenden inkl. zugehoerigem Vertrag abrufen
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: ok
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ExternalCollaborator" }
+        "403": { description: forbidden }
+        "404": { description: not found }
     delete:
       operationId: revokeExternalCollaborator
       tags: [external-collaborators]
@@ -4298,6 +4315,51 @@ paths:
               schema: { $ref: "#/components/schemas/ExternalCollaborator" }
         "403": { description: forbidden }
         "404": { description: not found }
+
+  /external-collaborators/{id}/events:
+    get:
+      operationId: listExternalCollaboratorEvents
+      tags: [external-collaborators]
+      summary: Chronologische Aktivitaeten eines Magic-Links (created/viewed/commented/edited_fields/revoked/expired_attempt)
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: ok
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/ExternalCollaboratorEvent" }
+        "403": { description: forbidden }
+        "404": { description: collaborator not found }
+
+  /contracts/{id}/external-events:
+    get:
+      operationId: listContractExternalEvents
+      tags: [external-collaborators]
+      summary: Alle Magic-Link-Aktivitaeten zu einem Vertrag (alle Reviewer, optional gefiltert)
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+        - in: query
+          name: collaboratorId
+          schema: { type: string }
+      responses:
+        "200":
+          description: ok
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/ExternalCollaboratorEvent" }
+        "403": { description: forbidden }
+        "404": { description: contract not found }
 
   /contracts/{id}/comments:
     get:
@@ -8496,6 +8558,24 @@ components:
           minimum: 1
           maximum: 30
           default: 14
+
+    ExternalCollaboratorEvent:
+      description: Aktivitaets-Event eines Magic-Links (Audit-Trail). Tenant-isoliert.
+      type: object
+      required: [id, collaboratorId, contractId, action, payload, createdAt]
+      properties:
+        id: { type: string }
+        collaboratorId: { type: string }
+        contractId: { type: string }
+        action:
+          type: string
+          enum: [created, viewed, commented, edited_fields, revoked, expired_attempt]
+        payload:
+          type: object
+          additionalProperties: true
+        ipAddress: { type: ["string", "null"] }
+        userAgent: { type: ["string", "null"] }
+        createdAt: { type: string, format: date-time }
 
     ExternalContractFieldEdit:
       description: |

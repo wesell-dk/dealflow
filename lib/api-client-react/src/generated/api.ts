@@ -137,6 +137,7 @@ import type {
   ExportGdprSubjectParams,
   ExternalCollaborator,
   ExternalCollaboratorCreate,
+  ExternalCollaboratorEvent,
   ExternalContract,
   ExternalContractCreate,
   ExternalContractDetail,
@@ -176,6 +177,7 @@ import type {
   ListClauseSuggestionsParams,
   ListCompaniesParams,
   ListContactsParams,
+  ListContractExternalEventsParams,
   ListContractPlaybooksParams,
   ListContractsParams,
   ListCopilotInsightsParams,
@@ -19244,6 +19246,95 @@ export const useCreateExternalCollaborator = <
 };
 
 /**
+ * @summary Einzelnen Magic-Link-Mitwirkenden inkl. zugehoerigem Vertrag abrufen
+ */
+export const getGetExternalCollaboratorUrl = (id: string) => {
+  return `/api/v1/external-collaborators/${id}`;
+};
+
+export const getExternalCollaborator = async (
+  id: string,
+  options?: RequestInit,
+): Promise<ExternalCollaborator> => {
+  return customFetch<ExternalCollaborator>(getGetExternalCollaboratorUrl(id), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getGetExternalCollaboratorQueryKey = (id: string) => {
+  return [`/api/v1/external-collaborators/${id}`] as const;
+};
+
+export const getGetExternalCollaboratorQueryOptions = <
+  TData = Awaited<ReturnType<typeof getExternalCollaborator>>,
+  TError = ErrorType<void>,
+>(
+  id: string,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getExternalCollaborator>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey =
+    queryOptions?.queryKey ?? getGetExternalCollaboratorQueryKey(id);
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof getExternalCollaborator>>
+  > = ({ signal }) =>
+    getExternalCollaborator(id, { signal, ...requestOptions });
+
+  return {
+    queryKey,
+    queryFn,
+    enabled: !!id,
+    ...queryOptions,
+  } as UseQueryOptions<
+    Awaited<ReturnType<typeof getExternalCollaborator>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetExternalCollaboratorQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getExternalCollaborator>>
+>;
+export type GetExternalCollaboratorQueryError = ErrorType<void>;
+
+/**
+ * @summary Einzelnen Magic-Link-Mitwirkenden inkl. zugehoerigem Vertrag abrufen
+ */
+
+export function useGetExternalCollaborator<
+  TData = Awaited<ReturnType<typeof getExternalCollaborator>>,
+  TError = ErrorType<void>,
+>(
+  id: string,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getExternalCollaborator>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetExternalCollaboratorQueryOptions(id, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
  * @summary Magic-Link widerrufen
  */
 export const getRevokeExternalCollaboratorUrl = (id: string) => {
@@ -19329,6 +19420,221 @@ export const useRevokeExternalCollaborator = <
 > => {
   return useMutation(getRevokeExternalCollaboratorMutationOptions(options));
 };
+
+/**
+ * @summary Chronologische Aktivitaeten eines Magic-Links (created/viewed/commented/edited_fields/revoked/expired_attempt)
+ */
+export const getListExternalCollaboratorEventsUrl = (id: string) => {
+  return `/api/v1/external-collaborators/${id}/events`;
+};
+
+export const listExternalCollaboratorEvents = async (
+  id: string,
+  options?: RequestInit,
+): Promise<ExternalCollaboratorEvent[]> => {
+  return customFetch<ExternalCollaboratorEvent[]>(
+    getListExternalCollaboratorEventsUrl(id),
+    {
+      ...options,
+      method: "GET",
+    },
+  );
+};
+
+export const getListExternalCollaboratorEventsQueryKey = (id: string) => {
+  return [`/api/v1/external-collaborators/${id}/events`] as const;
+};
+
+export const getListExternalCollaboratorEventsQueryOptions = <
+  TData = Awaited<ReturnType<typeof listExternalCollaboratorEvents>>,
+  TError = ErrorType<void>,
+>(
+  id: string,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof listExternalCollaboratorEvents>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey =
+    queryOptions?.queryKey ?? getListExternalCollaboratorEventsQueryKey(id);
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof listExternalCollaboratorEvents>>
+  > = ({ signal }) =>
+    listExternalCollaboratorEvents(id, { signal, ...requestOptions });
+
+  return {
+    queryKey,
+    queryFn,
+    enabled: !!id,
+    ...queryOptions,
+  } as UseQueryOptions<
+    Awaited<ReturnType<typeof listExternalCollaboratorEvents>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type ListExternalCollaboratorEventsQueryResult = NonNullable<
+  Awaited<ReturnType<typeof listExternalCollaboratorEvents>>
+>;
+export type ListExternalCollaboratorEventsQueryError = ErrorType<void>;
+
+/**
+ * @summary Chronologische Aktivitaeten eines Magic-Links (created/viewed/commented/edited_fields/revoked/expired_attempt)
+ */
+
+export function useListExternalCollaboratorEvents<
+  TData = Awaited<ReturnType<typeof listExternalCollaboratorEvents>>,
+  TError = ErrorType<void>,
+>(
+  id: string,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof listExternalCollaboratorEvents>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getListExternalCollaboratorEventsQueryOptions(
+    id,
+    options,
+  );
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Alle Magic-Link-Aktivitaeten zu einem Vertrag (alle Reviewer, optional gefiltert)
+ */
+export const getListContractExternalEventsUrl = (
+  id: string,
+  params?: ListContractExternalEventsParams,
+) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? "null" : value.toString());
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0
+    ? `/api/v1/contracts/${id}/external-events?${stringifiedParams}`
+    : `/api/v1/contracts/${id}/external-events`;
+};
+
+export const listContractExternalEvents = async (
+  id: string,
+  params?: ListContractExternalEventsParams,
+  options?: RequestInit,
+): Promise<ExternalCollaboratorEvent[]> => {
+  return customFetch<ExternalCollaboratorEvent[]>(
+    getListContractExternalEventsUrl(id, params),
+    {
+      ...options,
+      method: "GET",
+    },
+  );
+};
+
+export const getListContractExternalEventsQueryKey = (
+  id: string,
+  params?: ListContractExternalEventsParams,
+) => {
+  return [
+    `/api/v1/contracts/${id}/external-events`,
+    ...(params ? [params] : []),
+  ] as const;
+};
+
+export const getListContractExternalEventsQueryOptions = <
+  TData = Awaited<ReturnType<typeof listContractExternalEvents>>,
+  TError = ErrorType<void>,
+>(
+  id: string,
+  params?: ListContractExternalEventsParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof listContractExternalEvents>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey =
+    queryOptions?.queryKey ?? getListContractExternalEventsQueryKey(id, params);
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof listContractExternalEvents>>
+  > = ({ signal }) =>
+    listContractExternalEvents(id, params, { signal, ...requestOptions });
+
+  return {
+    queryKey,
+    queryFn,
+    enabled: !!id,
+    ...queryOptions,
+  } as UseQueryOptions<
+    Awaited<ReturnType<typeof listContractExternalEvents>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type ListContractExternalEventsQueryResult = NonNullable<
+  Awaited<ReturnType<typeof listContractExternalEvents>>
+>;
+export type ListContractExternalEventsQueryError = ErrorType<void>;
+
+/**
+ * @summary Alle Magic-Link-Aktivitaeten zu einem Vertrag (alle Reviewer, optional gefiltert)
+ */
+
+export function useListContractExternalEvents<
+  TData = Awaited<ReturnType<typeof listContractExternalEvents>>,
+  TError = ErrorType<void>,
+>(
+  id: string,
+  params?: ListContractExternalEventsParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof listContractExternalEvents>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getListContractExternalEventsQueryOptions(
+    id,
+    params,
+    options,
+  );
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
 
 /**
  * @summary Kommentare zu einem Vertrag (intern + extern) auflisten

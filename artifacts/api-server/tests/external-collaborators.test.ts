@@ -456,4 +456,102 @@ describe("external collaborators — magic-link flow", () => {
     assert.ok(ext.length > 0,
       "Comment-Audit muss actor=magic-link:<id> tragen, nicht User-ID");
   });
+
+  // ── Task #108: Audit-Uebersicht fuer Magic-Link-Zugang ──────────────────
+
+  it("GET /external-collaborators/:id liefert Detail (eigener Tenant) und 404 (fremder)", async () => {
+    const created = await alice.post(`/api/v1/contracts/${worldA.contractId}/external-collaborators`, {
+      email: "detail-jump@example.com",
+      capabilities: ["view"],
+    });
+    const c = created.body as CollabResp;
+
+    const own = await alice.get(`/api/v1/external-collaborators/${c.id}`);
+    assert.equal(own.status, 200);
+    const detail = own.body as CollabResp;
+    assert.equal(detail.id, c.id);
+    assert.equal(detail.email, "detail-jump@example.com");
+    assert.equal(detail.tokenPlaintext, null,
+      "Plaintext-Token darf NIE auf Detail-Endpoint erscheinen");
+
+    const cross = await bob.get(`/api/v1/external-collaborators/${c.id}`);
+    assert.equal(cross.status, 404, "Cross-Tenant muss als 404 leaken");
+  });
+
+  it("GET /external-collaborators/:id/events liefert chronologische Timeline (asc)", async () => {
+    const created = await alice.post(`/api/v1/contracts/${worldA.contractId}/external-collaborators`, {
+      email: "timeline@example.com",
+      capabilities: ["view", "comment"],
+    });
+    const c = created.body as CollabResp;
+    const token = c.tokenPlaintext!;
+
+    // Drei Aktionen ausloesen, die jeweils ein Event schreiben.
+    const v1 = await fetch(`${server.baseUrl}/api/v1/external/${token}`);
+    assert.equal(v1.status, 200);
+    const v2 = await fetch(`${server.baseUrl}/api/v1/external/${token}`);
+    assert.equal(v2.status, 200);
+    const cmt = await fetch(`${server.baseUrl}/api/v1/external/${token}/comments`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ body: "Timeline-Kommentar" }),
+    });
+    assert.equal(cmt.status, 201);
+
+    const evts = await alice.get(`/api/v1/external-collaborators/${c.id}/events`);
+    assert.equal(evts.status, 200);
+    const list = evts.body as { action: string; createdAt: string; collaboratorId: string }[];
+    // Mindestens: created + 2x viewed + commented
+    assert.ok(list.length >= 4, `expected >=4 events, got ${list.length}`);
+    assert.ok(list.every((e) => e.collaboratorId === c.id));
+    const actions = list.map((e) => e.action);
+    assert.equal(actions[0], "created", "erstes Event muss 'created' sein");
+    assert.ok(actions.includes("viewed"));
+    assert.ok(actions.includes("commented"));
+    // chronologisch aufsteigend
+    for (let i = 1; i < list.length; i++) {
+      assert.ok(list[i - 1]!.createdAt <= list[i]!.createdAt,
+        `events nicht chronologisch aufsteigend bei index ${i}`);
+    }
+
+    // Cross-Tenant: 404
+    const cross = await bob.get(`/api/v1/external-collaborators/${c.id}/events`);
+    assert.equal(cross.status, 404);
+  });
+
+  it("GET /contracts/:id/external-events liefert alle Reviewer + filtert per collaboratorId", async () => {
+    // Zwei Magic-Links, beide loesen Events aus.
+    const a = await alice.post(`/api/v1/contracts/${worldA.contractId}/external-collaborators`, {
+      email: "agg-1@example.com",
+      capabilities: ["view"],
+    });
+    const a1 = a.body as CollabResp;
+    const b = await alice.post(`/api/v1/contracts/${worldA.contractId}/external-collaborators`, {
+      email: "agg-2@example.com",
+      capabilities: ["view"],
+    });
+    const a2 = b.body as CollabResp;
+    await fetch(`${server.baseUrl}/api/v1/external/${a1.tokenPlaintext}`);
+    await fetch(`${server.baseUrl}/api/v1/external/${a2.tokenPlaintext}`);
+
+    const all = await alice.get(`/api/v1/contracts/${worldA.contractId}/external-events`);
+    assert.equal(all.status, 200);
+    const allList = all.body as { collaboratorId: string }[];
+    const collabIds = new Set(allList.map((e) => e.collaboratorId));
+    assert.ok(collabIds.has(a1.id), "Aggregat enthaelt Reviewer A");
+    assert.ok(collabIds.has(a2.id), "Aggregat enthaelt Reviewer B");
+
+    const filtered = await alice.get(
+      `/api/v1/contracts/${worldA.contractId}/external-events?collaboratorId=${a1.id}`,
+    );
+    assert.equal(filtered.status, 200);
+    const filteredList = filtered.body as { collaboratorId: string }[];
+    assert.ok(filteredList.length > 0);
+    assert.ok(filteredList.every((e) => e.collaboratorId === a1.id),
+      "Reviewer-Filter darf nur Events von a1 zurueckgeben");
+
+    // Cross-Tenant ist 404 (Vertrag nicht sichtbar).
+    const cross = await bob.get(`/api/v1/contracts/${worldA.contractId}/external-events`);
+    assert.equal(cross.status, 404);
+  });
 });

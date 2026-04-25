@@ -258,7 +258,23 @@
       "extCollabField_jurisdiction": "Gerichtsstand",
       "extCollabIpAllowlist": "IP-Allowlist (optional)",
       "extCollabIpAllowlistHint": "Komma- oder Zeilen-getrennte IPv4/IPv6-Adressen oder CIDR-Blöcke. Leer = keine Einschränkung.",
-      "extCollabExpiresHint": "Maximal 30 Tage."
+      "extCollabExpiresHint": "Maximal 30 Tage.",
+      "extActivityTitle": "Externer Zugriff – Aktivität",
+      "extActivityHint": "Vollständige Audit-Sicht je Magic-Link: wer hat wann geöffnet, kommentiert, Felder bearbeitet oder einen blockierten Versuch ausgelöst (inkl. IP).",
+      "extActivityAllReviewers": "Alle Reviewer",
+      "extActivityNoEvents": "Bisher keine externen Aktivitäten zu diesem Vertrag.",
+      "extActivityEventCount": "{{n}} Ereignisse",
+      "extActivityCaps": "Berechtigungen",
+      "extActivityFields": "Geänderte Felder",
+      "extActivityCommentLen": "{{n}} Zeichen",
+      "extActivityReason": "Grund",
+      "extActivityRevokedBy": "Widerrufen durch",
+      "extActivityAction_created": "Erstellt",
+      "extActivityAction_viewed": "Geöffnet",
+      "extActivityAction_commented": "Kommentiert",
+      "extActivityAction_edited_fields": "Felder bearbeitet",
+      "extActivityAction_revoked": "Widerrufen",
+      "extActivityAction_expired_attempt": "Blockierter Versuch"
     },
     "clauseSuggestions": {
       "title": "Klausel-Vorschläge",
@@ -465,7 +481,8 @@
       "subtitle": "Alle protokollierten Änderungen über das System hinweg",
       "entityType": "Objekttyp",
       "action": "Aktion",
-      "noEntries": "Keine Einträge gefunden"
+      "noEntries": "Keine Einträge gefunden",
+      "openExternalAccess": "Externen Zugriff im Vertrag öffnen"
     },
     "orderConfirmations": {
       "title": "Auftragsbestätigungen",

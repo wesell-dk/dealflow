@@ -13498,6 +13498,89 @@ router.post('/contracts/:id/external-collaborators', async (req, res) => {
   res.status(201).json(mapCollab(row!, { tokenPlaintext }));
 });
 
+// --- GET /external-collaborators/:id (single, fuer Audit-Deeplink) -------
+// Wird vom Audit-Log genutzt, um actor=`magic-link:<id>` direkt aufzuloesen
+// (Email + Vertrags-Kontext + Capabilities sichtbar machen). Die normale
+// Tenant-/Scope-Pruefung greift via loadContractForCollab — dadurch koennen
+// Cross-Tenant-IDs nicht enumeriert werden (404 statt 403).
+router.get('/external-collaborators/:id', async (req, res) => {
+  const scope = getScope(req);
+  const [collab] = await db.select().from(externalCollaboratorsTable)
+    .where(and(
+      eq(externalCollaboratorsTable.id, req.params.id),
+      eq(externalCollaboratorsTable.tenantId, scope.tenantId),
+    ));
+  if (!collab) { res.status(404).json({ error: 'collaborator not found' }); return; }
+  const c = await loadContractForCollab(req, collab.contractId);
+  if (!c) { res.status(404).json({ error: 'collaborator not found' }); return; }
+  res.json(mapCollab(collab));
+});
+
+// --- GET /external-collaborators/:id/events ------------------------------
+// Chronologische Aktivitaets-Timeline EINES Magic-Links. Backend-Filter
+// auf Tenant + Vertrags-Scope (loadContractForCollab) — d.h. ein Reviewer
+// ohne Lesezugriff auf den zugrundeliegenden Vertrag sieht 404, nie das
+// reine Magic-Link-Objekt.
+router.get('/external-collaborators/:id/events', async (req, res) => {
+  const scope = getScope(req);
+  const [collab] = await db.select().from(externalCollaboratorsTable)
+    .where(and(
+      eq(externalCollaboratorsTable.id, req.params.id),
+      eq(externalCollaboratorsTable.tenantId, scope.tenantId),
+    ));
+  if (!collab) { res.status(404).json({ error: 'collaborator not found' }); return; }
+  const c = await loadContractForCollab(req, collab.contractId);
+  if (!c) { res.status(404).json({ error: 'collaborator not found' }); return; }
+  const rows = await db.select().from(externalCollaboratorEventsTable)
+    .where(and(
+      eq(externalCollaboratorEventsTable.tenantId, scope.tenantId),
+      eq(externalCollaboratorEventsTable.collaboratorId, collab.id),
+    ))
+    .orderBy(asc(externalCollaboratorEventsTable.createdAt));
+  res.json(rows.map((r) => ({
+    id: r.id,
+    collaboratorId: r.collaboratorId,
+    contractId: r.contractId,
+    action: r.action,
+    payload: r.payload ?? {},
+    ipAddress: r.ipAddress ?? null,
+    userAgent: r.userAgent ?? null,
+    createdAt: r.createdAt.toISOString(),
+  })));
+});
+
+// --- GET /contracts/:id/external-events ----------------------------------
+// Aggregierte Magic-Link-Aktivitaet UEBER ALLE Reviewer eines Vertrags.
+// Reviewer-Filter via Query-Param `collaboratorId` — die Filterung erfolgt
+// SQL-seitig, damit auch sehr alte Vertraege mit vielen Externen schnell
+// laden. Tenant-Isolation: doppelt durch loadContractForCollab + tenantId
+// im WHERE.
+router.get('/contracts/:id/external-events', async (req, res) => {
+  const scope = getScope(req);
+  const c = await loadContractForCollab(req, req.params.id);
+  if (!c) { res.status(404).json({ error: 'contract not found' }); return; }
+  const filters = [
+    eq(externalCollaboratorEventsTable.tenantId, scope.tenantId),
+    eq(externalCollaboratorEventsTable.contractId, c.id),
+  ];
+  if (typeof req.query.collaboratorId === 'string' && req.query.collaboratorId.length > 0) {
+    filters.push(eq(externalCollaboratorEventsTable.collaboratorId, req.query.collaboratorId));
+  }
+  const rows = await db.select().from(externalCollaboratorEventsTable)
+    .where(and(...filters))
+    .orderBy(asc(externalCollaboratorEventsTable.createdAt));
+  res.json(rows.map((r) => ({
+    id: r.id,
+    collaboratorId: r.collaboratorId,
+    contractId: r.contractId,
+    action: r.action,
+    payload: r.payload ?? {},
+    ipAddress: r.ipAddress ?? null,
+    userAgent: r.userAgent ?? null,
+    createdAt: r.createdAt.toISOString(),
+  })));
+});
+
 // --- DELETE /external-collaborators/:id (revoke) -------------------------
 router.delete('/external-collaborators/:id', async (req, res) => {
   const scope = getScope(req);

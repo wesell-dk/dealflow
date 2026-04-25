@@ -1,5 +1,5 @@
 import { useRoute, useLocation, Link } from "wouter";
-import { useState } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import { useTranslation } from "react-i18next";
 import {
   useGetContract,
@@ -28,6 +28,7 @@ import {
   useListExternalCollaborators,
   useCreateExternalCollaborator,
   useRevokeExternalCollaborator,
+  useListContractExternalEvents,
   getListExternalCollaboratorsQueryKey,
   getGetContractQueryKey,
   getListContractClausesQueryKey,
@@ -41,6 +42,7 @@ import {
   type Obligation,
   type ExternalCollaborator,
   type ExternalCollaboratorCreate,
+  type ExternalCollaboratorEvent,
   type CuadCoverage,
 } from "@workspace/api-client-react";
 import { useAuth } from "@/contexts/auth-context";
@@ -68,7 +70,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { FileText, ShieldAlert, ShieldCheck, Library, Activity, GitCompare, AlertTriangle, FileStack, Plus, Languages, Pencil, Sparkles, Inbox, RotateCcw } from "lucide-react";
+import { FileText, ShieldAlert, ShieldCheck, Library, Activity, GitCompare, AlertTriangle, FileStack, Plus, Languages, Pencil, Sparkles, Inbox, RotateCcw, Eye, MessageSquare, Pencil as PencilIcon, Ban, ShieldOff, Filter as FilterIcon } from "lucide-react";
 import { EntityVersions } from "@/components/ui/entity-versions";
 import { useToast } from "@/hooks/use-toast";
 import { ApiError } from "@workspace/api-client-react";
@@ -451,6 +453,8 @@ export default function Contract() {
       </div>
 
       <ExternalCollaboratorsCard contractId={id} />
+
+      <ExternalAccessActivityCard contractId={id} />
 
       <Dialog open={!!diff} onOpenChange={(o) => !o && setDiff(null)}>
         <DialogContent className="max-w-4xl">
@@ -2129,6 +2133,254 @@ function ExternalCollaboratorsCard({ contractId }: { contractId: string }) {
           )}
         </DialogContent>
       </Dialog>
+    </div>
+  );
+}
+
+// =========================================================================
+// External Access Activity Card — Task #108
+// Compliance-Sicht pro Vertrag: alle Magic-Link-Reviewer mit deren Events
+// (geoeffnet, kommentiert, Felder bearbeitet, Token-Versuche). Filterbar
+// pro Reviewer. Deep-Link via URL-Param `?collab=<id>` (vom Audit-Log).
+// =========================================================================
+
+function actionIcon(action: ExternalCollaboratorEvent["action"]) {
+  switch (action) {
+    case "created": return <Plus className="h-3.5 w-3.5" />;
+    case "viewed": return <Eye className="h-3.5 w-3.5" />;
+    case "commented": return <MessageSquare className="h-3.5 w-3.5" />;
+    case "edited_fields": return <PencilIcon className="h-3.5 w-3.5" />;
+    case "revoked": return <Ban className="h-3.5 w-3.5" />;
+    case "expired_attempt": return <ShieldOff className="h-3.5 w-3.5" />;
+    default: return <Activity className="h-3.5 w-3.5" />;
+  }
+}
+
+function actionToneClass(action: ExternalCollaboratorEvent["action"]) {
+  switch (action) {
+    case "expired_attempt":
+    case "revoked":
+      return "bg-rose-500/10 text-rose-600 border-rose-500/30";
+    case "edited_fields":
+      return "bg-amber-500/10 text-amber-600 border-amber-500/30";
+    case "commented":
+      return "bg-sky-500/10 text-sky-600 border-sky-500/30";
+    case "viewed":
+      return "bg-emerald-500/10 text-emerald-600 border-emerald-500/30";
+    case "created":
+      return "bg-indigo-500/10 text-indigo-600 border-indigo-500/30";
+    default:
+      return "bg-muted text-muted-foreground";
+  }
+}
+
+function ExternalAccessActivityCard({ contractId }: { contractId: string }) {
+  const { t, i18n } = useTranslation();
+  const { data: collabs, isLoading: collabsLoading } = useListExternalCollaborators(contractId);
+  // URL-Deep-Link: ?collab=<id> aus dem Audit-Log → vorselektieren.
+  const [location] = useLocation();
+  const initialCollab = useMemo(() => {
+    if (typeof window === "undefined") return "__all__";
+    const sp = new URLSearchParams(window.location.search);
+    return sp.get("collab") || "__all__";
+  // location is a dependency so the URL parsing re-runs after route changes
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [location]);
+
+  const [reviewerFilter, setReviewerFilter] = useState<string>(initialCollab);
+  // Wenn der URL-Param wechselt (z.B. user navigiert vom Audit-Log via Link),
+  // den Filter re-syncen UND die Karte in den Viewport scrollen.
+  const cardRef = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    if (initialCollab === "__all__") return;
+    setReviewerFilter(initialCollab);
+    // Nach Mount des aktiven Reviewer-Blocks scrollen.
+    const tHandle = window.setTimeout(() => {
+      cardRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    }, 60);
+    return () => window.clearTimeout(tHandle);
+  }, [initialCollab]);
+
+  const eventsQuery = useListContractExternalEvents(
+    contractId,
+    reviewerFilter === "__all__" ? undefined : { collaboratorId: reviewerFilter },
+  );
+  const events = eventsQuery.data ?? [];
+  const isLoading = collabsLoading || eventsQuery.isLoading;
+
+  // Reviewer-Map fuer schnelles Email-Lookup pro Event.
+  const reviewerMap = useMemo(() => {
+    const m = new Map<string, ExternalCollaborator>();
+    for (const c of collabs ?? []) m.set(c.id, c);
+    return m;
+  }, [collabs]);
+
+  // Events nach Collaborator gruppieren — chronologisch absteigend pro Block.
+  const grouped = useMemo(() => {
+    const byCollab = new Map<string, ExternalCollaboratorEvent[]>();
+    for (const e of events) {
+      const arr = byCollab.get(e.collaboratorId) ?? [];
+      arr.push(e);
+      byCollab.set(e.collaboratorId, arr);
+    }
+    // Innerhalb eines Blocks neueste zuerst.
+    for (const arr of byCollab.values()) {
+      arr.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+    }
+    // Sortierung der Bloecke: Reviewer mit juengstem Event zuerst.
+    return Array.from(byCollab.entries()).sort(([, a], [, b]) =>
+      b[0].createdAt.localeCompare(a[0].createdAt),
+    );
+  }, [events]);
+
+  function formatPayloadSummary(e: ExternalCollaboratorEvent): string {
+    const p = e.payload ?? {};
+    switch (e.action) {
+      case "created":
+        return [
+          (p as { capabilities?: unknown }).capabilities
+            ? t("pages.contracts.extActivityCaps") + ": " + ((p as { capabilities: string[] }).capabilities ?? []).join(", ")
+            : null,
+          (p as { ipAllowlistCount?: number }).ipAllowlistCount
+            ? "IP-Lock: " + (p as { ipAllowlistCount: number }).ipAllowlistCount
+            : null,
+        ].filter(Boolean).join(" · ");
+      case "edited_fields":
+        return t("pages.contracts.extActivityFields") + ": " +
+          (((p as { fields?: string[] }).fields ?? []).join(", ") || "—");
+      case "commented":
+        return t("pages.contracts.extActivityCommentLen", {
+          n: (p as { length?: number }).length ?? 0,
+        });
+      case "expired_attempt":
+        return t("pages.contracts.extActivityReason") + ": " +
+          ((p as { reason?: string }).reason ?? "—");
+      case "revoked":
+        return t("pages.contracts.extActivityRevokedBy") + ": " +
+          ((p as { revokedBy?: string }).revokedBy ?? "—");
+      case "viewed":
+        return "";
+      default:
+        return "";
+    }
+  }
+
+  return (
+    <div ref={cardRef} className="space-y-4 pt-4" data-testid="ext-activity-card">
+      <div className="flex items-center justify-between pb-2 border-b">
+        <div className="flex items-center gap-2">
+          <Activity className="h-5 w-5 text-muted-foreground" />
+          <h2 className="text-xl font-semibold">{t("pages.contracts.extActivityTitle")}</h2>
+        </div>
+        <div className="flex items-center gap-2">
+          <FilterIcon className="h-4 w-4 text-muted-foreground" />
+          <Select value={reviewerFilter} onValueChange={setReviewerFilter}>
+            <SelectTrigger className="h-8 w-[260px]" data-testid="ext-activity-reviewer-filter">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="__all__">{t("pages.contracts.extActivityAllReviewers")}</SelectItem>
+              {(collabs ?? []).map((c) => (
+                <SelectItem key={c.id} value={c.id}>
+                  {c.email}{c.organization ? ` · ${c.organization}` : ""}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+      </div>
+      <p className="text-sm text-muted-foreground">{t("pages.contracts.extActivityHint")}</p>
+
+      {isLoading && <Skeleton className="h-32 w-full" />}
+      {!isLoading && (collabs?.length ?? 0) === 0 && (
+        <p className="text-sm text-muted-foreground italic">{t("pages.contracts.extCollabNone")}</p>
+      )}
+      {!isLoading && (collabs?.length ?? 0) > 0 && grouped.length === 0 && (
+        <p className="text-sm text-muted-foreground italic">{t("pages.contracts.extActivityNoEvents")}</p>
+      )}
+      {!isLoading && grouped.length > 0 && (
+        <div className="space-y-4">
+          {grouped.map(([collabId, evts]) => {
+            const c = reviewerMap.get(collabId);
+            const isHighlighted = initialCollab !== "__all__" && initialCollab === collabId;
+            return (
+              <Card
+                key={collabId}
+                className={isHighlighted ? "ring-2 ring-primary/40" : ""}
+                data-testid={`ext-activity-block-${collabId}`}
+              >
+                <CardHeader className="py-3 px-4 bg-muted/10">
+                  <div className="flex flex-wrap items-center gap-3 justify-between">
+                    <div className="flex flex-col gap-1 min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="font-medium truncate">{c?.email ?? collabId}</span>
+                        {c?.organization && (
+                          <span className="text-xs text-muted-foreground">· {c.organization}</span>
+                        )}
+                        {c && (
+                          <Badge variant="outline" className="text-[10px] uppercase tracking-wide">
+                            {c.status}
+                          </Badge>
+                        )}
+                      </div>
+                      <div className="flex flex-wrap items-center gap-1 text-[11px] text-muted-foreground">
+                        {(c?.capabilities ?? []).map((cap) => (
+                          <Badge key={cap} variant="outline" className="text-[10px] uppercase">
+                            {cap}
+                          </Badge>
+                        ))}
+                        {(c?.ipAllowlist ?? []).length > 0 && (
+                          <Badge
+                            variant="outline"
+                            className="text-[10px] uppercase bg-blue-500/10 text-blue-600 border-blue-500/30"
+                            title={(c?.ipAllowlist ?? []).join(", ")}
+                          >
+                            IP-Lock ({(c?.ipAllowlist ?? []).length})
+                          </Badge>
+                        )}
+                        <span className="font-mono">· {collabId}</span>
+                      </div>
+                    </div>
+                    <div className="text-[11px] text-muted-foreground tabular-nums">
+                      {t("pages.contracts.extActivityEventCount", { n: evts.length })}
+                    </div>
+                  </div>
+                </CardHeader>
+                <CardContent className="py-3 px-4">
+                  <ol className="space-y-2 border-l border-muted-foreground/20 pl-4 ml-1">
+                    {evts.map((e) => (
+                      <li key={e.id} className="relative" data-testid={`ext-activity-event-${e.id}`}>
+                        <span className="absolute -left-[22px] top-1 inline-flex items-center justify-center h-4 w-4 rounded-full bg-background border border-muted-foreground/30">
+                          <span className="h-1.5 w-1.5 rounded-full bg-muted-foreground/60"></span>
+                        </span>
+                        <div className="flex flex-wrap items-center gap-2 text-sm">
+                          <Badge variant="outline" className={`${actionToneClass(e.action)} gap-1`}>
+                            {actionIcon(e.action)}
+                            {t(`pages.contracts.extActivityAction_${e.action}`)}
+                          </Badge>
+                          <span className="text-xs text-muted-foreground tabular-nums">
+                            {new Date(e.createdAt).toLocaleString(i18n.resolvedLanguage)}
+                          </span>
+                          {e.ipAddress && (
+                            <span className="text-[11px] font-mono text-muted-foreground">
+                              IP {e.ipAddress}
+                            </span>
+                          )}
+                        </div>
+                        {formatPayloadSummary(e) && (
+                          <div className="text-xs text-muted-foreground mt-0.5 break-words">
+                            {formatPayloadSummary(e)}
+                          </div>
+                        )}
+                      </li>
+                    ))}
+                  </ol>
+                </CardContent>
+              </Card>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }

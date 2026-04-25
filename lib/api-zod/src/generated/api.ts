@@ -7143,6 +7143,54 @@ export const CreateExternalCollaboratorBody = zod.object({
 });
 
 /**
+ * @summary Einzelnen Magic-Link-Mitwirkenden inkl. zugehoerigem Vertrag abrufen
+ */
+export const GetExternalCollaboratorParams = zod.object({
+  id: zod.coerce.string(),
+});
+
+export const GetExternalCollaboratorResponse = zod.object({
+  id: zod.string(),
+  contractId: zod.string(),
+  email: zod.string().email(),
+  name: zod.string().nullish(),
+  organization: zod.string().nullish(),
+  capabilities: zod.array(
+    zod.enum(["view", "comment", "edit_fields", "sign_party"]),
+  ),
+  editableFields: zod
+    .array(
+      zod.enum([
+        "effectiveFrom",
+        "effectiveTo",
+        "governingLaw",
+        "jurisdiction",
+      ]),
+    )
+    .describe(
+      "Whitelist der Vertrags-Felder, die der Magic-Link bearbeiten darf. Nur relevant bei capability `edit_fields`.",
+    ),
+  ipAllowlist: zod
+    .array(zod.string())
+    .describe(
+      "Optionale IP-Allowlist (IPv4\/IPv6\/CIDR). Leer = keine Einschraenkung.",
+    ),
+  status: zod.enum(["active", "expired", "revoked"]),
+  expiresAt: zod.coerce.date(),
+  revokedAt: zod.coerce.date().nullish(),
+  revokedBy: zod.string().nullish(),
+  createdBy: zod.string(),
+  createdAt: zod.coerce.date(),
+  lastUsedAt: zod.coerce.date().nullish(),
+  tokenPlaintext: zod
+    .string()
+    .nullish()
+    .describe(
+      "Wird ausschliesslich beim POST-Create gesetzt — danach IMMER null.",
+    ),
+});
+
+/**
  * @summary Magic-Link widerrufen
  */
 export const RevokeExternalCollaboratorParams = zod.object({
@@ -7189,6 +7237,74 @@ export const RevokeExternalCollaboratorResponse = zod.object({
       "Wird ausschliesslich beim POST-Create gesetzt — danach IMMER null.",
     ),
 });
+
+/**
+ * @summary Chronologische Aktivitaeten eines Magic-Links (created/viewed/commented/edited_fields/revoked/expired_attempt)
+ */
+export const ListExternalCollaboratorEventsParams = zod.object({
+  id: zod.coerce.string(),
+});
+
+export const ListExternalCollaboratorEventsResponseItem = zod
+  .object({
+    id: zod.string(),
+    collaboratorId: zod.string(),
+    contractId: zod.string(),
+    action: zod.enum([
+      "created",
+      "viewed",
+      "commented",
+      "edited_fields",
+      "revoked",
+      "expired_attempt",
+    ]),
+    payload: zod.record(zod.string(), zod.unknown()),
+    ipAddress: zod.string().nullish(),
+    userAgent: zod.string().nullish(),
+    createdAt: zod.coerce.date(),
+  })
+  .describe(
+    "Aktivitaets-Event eines Magic-Links (Audit-Trail). Tenant-isoliert.",
+  );
+export const ListExternalCollaboratorEventsResponse = zod.array(
+  ListExternalCollaboratorEventsResponseItem,
+);
+
+/**
+ * @summary Alle Magic-Link-Aktivitaeten zu einem Vertrag (alle Reviewer, optional gefiltert)
+ */
+export const ListContractExternalEventsParams = zod.object({
+  id: zod.coerce.string(),
+});
+
+export const ListContractExternalEventsQueryParams = zod.object({
+  collaboratorId: zod.coerce.string().optional(),
+});
+
+export const ListContractExternalEventsResponseItem = zod
+  .object({
+    id: zod.string(),
+    collaboratorId: zod.string(),
+    contractId: zod.string(),
+    action: zod.enum([
+      "created",
+      "viewed",
+      "commented",
+      "edited_fields",
+      "revoked",
+      "expired_attempt",
+    ]),
+    payload: zod.record(zod.string(), zod.unknown()),
+    ipAddress: zod.string().nullish(),
+    userAgent: zod.string().nullish(),
+    createdAt: zod.coerce.date(),
+  })
+  .describe(
+    "Aktivitaets-Event eines Magic-Links (Audit-Trail). Tenant-isoliert.",
+  );
+export const ListContractExternalEventsResponse = zod.array(
+  ListContractExternalEventsResponseItem,
+);
 
 /**
  * @summary Kommentare zu einem Vertrag (intern + extern) auflisten

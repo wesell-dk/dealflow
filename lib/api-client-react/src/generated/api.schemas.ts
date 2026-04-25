@@ -4224,6 +4224,36 @@ export interface ExternalCollaboratorCreate {
   expiresInDays?: number;
 }
 
+export type ExternalCollaboratorEventAction =
+  (typeof ExternalCollaboratorEventAction)[keyof typeof ExternalCollaboratorEventAction];
+
+export const ExternalCollaboratorEventAction = {
+  created: "created",
+  viewed: "viewed",
+  commented: "commented",
+  edited_fields: "edited_fields",
+  revoked: "revoked",
+  expired_attempt: "expired_attempt",
+} as const;
+
+export type ExternalCollaboratorEventPayload = { [key: string]: unknown };
+
+/**
+ * Aktivitaets-Event eines Magic-Links (Audit-Trail). Tenant-isoliert.
+ */
+export interface ExternalCollaboratorEvent {
+  id: string;
+  collaboratorId: string;
+  contractId: string;
+  action: ExternalCollaboratorEventAction;
+  payload: ExternalCollaboratorEventPayload;
+  /** @nullable */
+  ipAddress?: string | null;
+  /** @nullable */
+  userAgent?: string | null;
+  createdAt: string;
+}
+
 /**
  * Felder-Edit ueber Magic-Link. Nur die in collab.editableFields freigegebenen Felder
 werden geschrieben; alles andere wird ignoriert/abgelehnt.
@@ -4845,6 +4875,10 @@ export type GetRenewalTrendParams = {
    * @maximum 36
    */
   horizonMonths?: number;
+};
+
+export type ListContractExternalEventsParams = {
+  collaboratorId?: string;
 };
 
 export type ListAiRecommendationsParams = {

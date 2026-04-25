@@ -442,7 +442,23 @@
       "extCollabField_jurisdiction": "Jurisdiction",
       "extCollabIpAllowlist": "IP allowlist (optional)",
       "extCollabIpAllowlistHint": "Comma- or newline-separated IPv4/IPv6 addresses or CIDR blocks. Empty = no restriction.",
-      "extCollabExpiresHint": "Maximum 30 days."
+      "extCollabExpiresHint": "Maximum 30 days.",
+      "extActivityTitle": "External access – activity",
+      "extActivityHint": "Full audit trail per magic link: who opened, commented, edited fields, or triggered a blocked attempt (incl. IP).",
+      "extActivityAllReviewers": "All reviewers",
+      "extActivityNoEvents": "No external activity for this contract yet.",
+      "extActivityEventCount": "{{n}} events",
+      "extActivityCaps": "Capabilities",
+      "extActivityFields": "Edited fields",
+      "extActivityCommentLen": "{{n}} chars",
+      "extActivityReason": "Reason",
+      "extActivityRevokedBy": "Revoked by",
+      "extActivityAction_created": "Created",
+      "extActivityAction_viewed": "Opened",
+      "extActivityAction_commented": "Commented",
+      "extActivityAction_edited_fields": "Edited fields",
+      "extActivityAction_revoked": "Revoked",
+      "extActivityAction_expired_attempt": "Blocked attempt"
     },
     "negotiations": {
       "title": "Negotiations",
@@ -465,6 +481,7 @@
       "subtitle": "All recorded changes across the system",
       "entityType": "Entity Type",
       "action": "Action",
+      "openExternalAccess": "Open external access on contract",
       "noEntries": "No entries found"
     },
     "orderConfirmations": {

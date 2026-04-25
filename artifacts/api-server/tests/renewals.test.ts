@@ -220,6 +220,8 @@ describe("renewals — engine, scope, lifecycle", () => {
       assert.ok(b.atRiskValue <= b.value, `atRiskValue must be <= value for ${b.ym}`);
       assert.ok(b.atRiskCount <= b.count, `atRiskCount must be <= count for ${b.ym}`);
     }
+  });
+
   it("POST /renewals/:id/issue-followup creates successor + flips status to in_progress", async () => {
     // Seed two clauses + an accepted quote linkage on the predecessor so we
     // can verify both the clause snapshot and the quote-context inheritance.
