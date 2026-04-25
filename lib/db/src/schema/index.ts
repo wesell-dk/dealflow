@@ -1036,7 +1036,9 @@ export const renewalOpportunitiesTable = pgTable("renewal_opportunities", {
   valueAmount: numeric("value_amount", { precision: 18, scale: 2 }),
   currency: text("currency"),
   snoozedUntil: date("snoozed_until"),
-  decidedAt: ts("decided_at"),
+  // decidedAt is set only when status transitions to a terminal state
+  // (won/lost/cancelled). Nullable on purpose; do not use ts() here.
+  decidedAt: timestamp("decided_at", { withTimezone: true }),
   decidedBy: text("decided_by"),
   notes: text("notes"),
   createdAt: ts("created_at"),

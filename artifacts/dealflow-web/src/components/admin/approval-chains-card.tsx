@@ -144,8 +144,9 @@ export function ApprovalChainsCard() {
       }
       await refresh();
       setOpen(false); reset();
-    } catch (err: any) {
-      toast({ title: "Speichern fehlgeschlagen", description: err?.message, variant: "destructive" });
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : String(err);
+      toast({ title: "Speichern fehlgeschlagen", description: message, variant: "destructive" });
     }
   };
 
@@ -154,8 +155,9 @@ export function ApprovalChainsCard() {
       await del.mutateAsync({ id: c.id });
       await refresh();
       toast({ title: "Kette gelöscht" });
-    } catch (err: any) {
-      toast({ title: "Löschen fehlgeschlagen", description: err?.message, variant: "destructive" });
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : String(err);
+      toast({ title: "Löschen fehlgeschlagen", description: message, variant: "destructive" });
     }
   };
 
