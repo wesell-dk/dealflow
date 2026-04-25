@@ -3,7 +3,9 @@ import { useQueryClient } from "@tanstack/react-query";
 import {
   useCreateCompany,
   useUpdateCompany,
+  useCreateBrand,
   getListCompaniesQueryKey,
+  getListBrandsQueryKey,
   type Company,
 } from "@workspace/api-client-react";
 import {
@@ -28,12 +30,14 @@ export function CompanyFormDialog({ open, onOpenChange, company }: Props) {
   const qc = useQueryClient();
   const createMut = useCreateCompany();
   const updateMut = useUpdateCompany();
+  const createBrandMut = useCreateBrand();
   const isEdit = !!company;
 
   const [name, setName] = useState("");
   const [legalName, setLegalName] = useState("");
   const [country, setCountry] = useState("DE");
   const [currency, setCurrency] = useState("EUR");
+  const [alsoCreateBrand, setAlsoCreateBrand] = useState(true);
 
   // Werte synchronisieren, wenn Dialog mit anderer Company geöffnet wird.
   useEffect(() => {
@@ -42,6 +46,7 @@ export function CompanyFormDialog({ open, onOpenChange, company }: Props) {
       setLegalName(company?.legalName ?? "");
       setCountry(company?.country ?? "DE");
       setCurrency(company?.currency ?? "EUR");
+      setAlsoCreateBrand(true);
     }
   }, [open, company]);
 
@@ -70,10 +75,37 @@ export function CompanyFormDialog({ open, onOpenChange, company }: Props) {
         });
         toast({ title: "Gesellschaft aktualisiert", description: trimmedName });
       } else {
-        await createMut.mutateAsync({
+        const created = await createMut.mutateAsync({
           data: { name: trimmedName, legalName: trimmedLegal, country: c2, currency: c3 },
         });
         toast({ title: "Gesellschaft angelegt", description: trimmedName });
+
+        // F10: Optional die Firma direkt als Standard-Marke spiegeln, damit
+        // einfache Tenants ohne Sub-Brand-Hierarchie sofort verkaufen können.
+        if (alsoCreateBrand) {
+          try {
+            await createBrandMut.mutateAsync({
+              data: {
+                companyId: created.id,
+                name: trimmedName,
+                voice: "precise",
+                tone: "precise",
+                color: "#2D6CDF",
+                primaryColor: "#2D6CDF",
+                legalEntityName: trimmedLegal,
+              },
+            });
+            await qc.invalidateQueries({ queryKey: getListBrandsQueryKey() });
+            toast({ title: "Standard-Marke angelegt", description: `Marke "${trimmedName}" gespiegelt.` });
+          } catch (be) {
+            // Best-effort: Brand-Anlage darf den Company-Workflow nicht crashen
+            toast({
+              title: "Marke konnte nicht erstellt werden",
+              description: be instanceof Error ? be.message : "Bitte später manuell anlegen.",
+              variant: "destructive",
+            });
+          }
+        }
       }
       await qc.invalidateQueries({ queryKey: getListCompaniesQueryKey() });
       onOpenChange(false);
@@ -122,6 +154,25 @@ export function CompanyFormDialog({ open, onOpenChange, company }: Props) {
               <Input id="company-currency" value={currency} onChange={e => setCurrency(e.target.value.toUpperCase())} maxLength={3} placeholder="EUR" data-testid="input-company-currency" />
             </div>
           </div>
+
+          {!isEdit && (
+            <label className="flex items-start gap-2 rounded-md border bg-muted/30 p-3 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={alsoCreateBrand}
+                onChange={(e) => setAlsoCreateBrand(e.target.checked)}
+                className="mt-0.5"
+                data-testid="checkbox-company-also-brand"
+              />
+              <div className="text-sm flex-1">
+                <div className="font-medium">Auch als Standard-Marke anlegen</div>
+                <div className="text-xs text-muted-foreground mt-0.5">
+                  Spiegelt die Gesellschaft als Top-Level-Marke — du kannst später Sub-Marken
+                  (z. B. Premium / Lite) darunter ergänzen.
+                </div>
+              </div>
+            </label>
+          )}
         </div>
 
         <DialogFooter>

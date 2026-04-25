@@ -288,6 +288,8 @@ export type BrandDefaultClauseVariants = { [key: string]: string };
 export interface Brand {
   id: string;
   companyId: string;
+  /** Optionale Eltern-Marke für Multi-Tier-Hierarchien. */
+  parentBrandId?: string | null;
   name: string;
   color: string;
   voice: string;
@@ -306,6 +308,7 @@ export interface BrandUpdate {
   name?: string;
   color?: string;
   voice?: string;
+  parentBrandId?: string | null;
   logoUrl?: string | null;
   primaryColor?: string | null;
   secondaryColor?: string | null;
@@ -364,6 +367,8 @@ export interface CompanyUpdate {
 
 export interface BrandCreate {
   companyId: string;
+  /** Optional Eltern-Marke (für Sub-Brands). */
+  parentBrandId?: string | null;
   /**
    * @minLength 1
    * @maxLength 200
@@ -499,16 +504,30 @@ export interface Role {
   name: string;
   description: string;
   isSystem: boolean;
+  /** Permission-Keys (z. B. deal:write, approval:approve). Nur bei Custom-Rollen editierbar. */
+  permissions: string[];
 }
 
 export interface RoleCreate {
   name: string;
   description: string;
+  permissions?: string[];
 }
 
 export interface RoleUpdate {
   name?: string;
   description?: string;
+  permissions?: string[];
+}
+
+export interface PermissionCatalogEntry {
+  /** z. B. deal:write */
+  key: string;
+  /** Menschlich lesbarer Text. */
+  label: string;
+  /** z. B. Deals, Approvals, Stammdaten. */
+  group: string;
+  description?: string | null;
 }
 
 export type ScopeTreeCompaniesItemBrandsItem = {
@@ -536,6 +555,33 @@ export interface Account {
   totalValue: number;
   /** @nullable */
   ownerId?: string | null;
+  /**
+   * Optionale Website (z. B. https://example.com).
+   * @nullable
+   */
+  website?: string | null;
+  /**
+   * Telefon-Hauptnummer.
+   * @nullable
+   */
+  phone?: string | null;
+  /**
+   * Rechnungsadresse als Mehrzeiler.
+   * @nullable
+   */
+  billingAddress?: string | null;
+  /**
+   * USt-IdNr. (z. B. DE123456789).
+   * @nullable
+   */
+  vatId?: string | null;
+  /**
+   * Mitarbeitergröße: 1-10 / 11-50 / 51-200 / 201-1000 / 1000+
+   * @nullable
+   */
+  sizeBracket?: string | null;
+  /** @nullable */
+  primaryContactId?: string | null;
 }
 
 export interface Contact {
@@ -580,6 +626,12 @@ export interface AccountInput {
   name: string;
   industry: string;
   country: string;
+  website?: string | null;
+  phone?: string | null;
+  billingAddress?: string | null;
+  vatId?: string | null;
+  sizeBracket?: string | null;
+  ownerId?: string | null;
 }
 
 export interface AccountPatch {
@@ -589,6 +641,38 @@ export interface AccountPatch {
   healthScore?: number;
   /** @nullable */
   ownerId?: string | null;
+  /** @nullable */
+  website?: string | null;
+  /** @nullable */
+  phone?: string | null;
+  /** @nullable */
+  billingAddress?: string | null;
+  /** @nullable */
+  vatId?: string | null;
+  /** @nullable */
+  sizeBracket?: string | null;
+  /** @nullable */
+  primaryContactId?: string | null;
+}
+
+export interface AccountEnrichmentRequest {
+  /** URL oder Domain (https:// optional). */
+  website: string;
+}
+
+/**
+ * Best-effort Vorschläge aus Web-Anreicherung (Nominatim + Impressum-Crawl).
+ */
+export interface AccountEnrichmentSuggestion {
+  name?: string | null;
+  /** ISO-3166 Alpha-2. */
+  country?: string | null;
+  billingAddress?: string | null;
+  phone?: string | null;
+  vatId?: string | null;
+  legalEntityName?: string | null;
+  /** Tatsächlich gefetchte URL (z. B. /impressum). */
+  sourceUrl?: string | null;
 }
 
 export type SavedViewEntityType =
@@ -1149,6 +1233,29 @@ export interface PricePositionInput {
   validFrom: string;
 }
 
+export type PricePositionPatchStatus =
+  (typeof PricePositionPatchStatus)[keyof typeof PricePositionPatchStatus];
+
+export const PricePositionPatchStatus = {
+  draft: "draft",
+  active: "active",
+  archived: "archived",
+} as const;
+
+export interface PricePositionPatch {
+  sku?: string;
+  name?: string;
+  category?: string;
+  listPrice?: number;
+  currency?: string;
+  status?: PricePositionPatchStatus;
+  validFrom?: string;
+  /** @nullable */
+  validUntil?: string | null;
+  brandId?: string;
+  isStandard?: boolean;
+}
+
 export interface PriceRule {
   id: string;
   name: string;
@@ -1157,6 +1264,42 @@ export interface PriceRule {
   effect: string;
   priority: number;
   status: string;
+}
+
+export type PriceRuleInputStatus =
+  (typeof PriceRuleInputStatus)[keyof typeof PriceRuleInputStatus];
+
+export const PriceRuleInputStatus = {
+  draft: "draft",
+  active: "active",
+  archived: "archived",
+} as const;
+
+export interface PriceRuleInput {
+  name: string;
+  scope: string;
+  condition: string;
+  effect: string;
+  priority: number;
+  status?: PriceRuleInputStatus;
+}
+
+export type PriceRulePatchStatus =
+  (typeof PriceRulePatchStatus)[keyof typeof PriceRulePatchStatus];
+
+export const PriceRulePatchStatus = {
+  draft: "draft",
+  active: "active",
+  archived: "archived",
+} as const;
+
+export interface PriceRulePatch {
+  name?: string;
+  scope?: string;
+  condition?: string;
+  effect?: string;
+  priority?: number;
+  status?: PriceRulePatchStatus;
 }
 
 export type PricingSummaryRecentChangesItem = {

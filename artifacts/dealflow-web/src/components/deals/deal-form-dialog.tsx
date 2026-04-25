@@ -109,9 +109,13 @@ export function DealFormDialog({ open, onOpenChange, deal, defaultAccountId, onS
       toast({ title: "Name fehlt", variant: "destructive" });
       return;
     }
-    const numValue = Number(value);
-    if (!isEdit && (Number.isNaN(numValue) || numValue <= 0)) {
-      toast({ title: "Wert ungültig", description: "Bitte einen positiven Betrag angeben.", variant: "destructive" });
+    // Wert ist optional bei Anlage — wird beim ersten akzeptierten Angebot
+    // nachgepflegt (siehe `quote.accept`-Backend). Bei Eingabe muss der Wert
+    // aber positiv sein.
+    const valueProvided = value.trim() !== "";
+    const numValue = valueProvided ? Number(value) : 0;
+    if (valueProvided && (Number.isNaN(numValue) || numValue < 0)) {
+      toast({ title: "Wert ungültig", description: "Bitte einen positiven Betrag angeben oder leer lassen.", variant: "destructive" });
       return;
     }
     if (!isEdit && (!accountId || !brandId || !companyId || !ownerId || !expectedCloseDate)) {
@@ -151,7 +155,9 @@ export function DealFormDialog({ open, onOpenChange, deal, defaultAccountId, onS
           data: {
             name: trimmedName,
             accountId,
-            value: numValue,
+            // Wert ist optional bei Anlage. Wird vom Backend mit 0 initialisiert
+            // und beim ersten akzeptierten Angebot über den Quote-Total gesetzt.
+            value: valueProvided ? numValue : 0,
             stage,
             brandId,
             companyId,
@@ -217,7 +223,7 @@ export function DealFormDialog({ open, onOpenChange, deal, defaultAccountId, onS
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div className="space-y-2">
               <div className="flex items-center gap-1.5">
-                <Label htmlFor="deal-value">Wert (€) *</Label>
+                <Label htmlFor="deal-value">Wert (€)</Label>
                 <FieldHint term={{ group: "concepts", value: "value" }} />
               </div>
               <Input
@@ -228,8 +234,14 @@ export function DealFormDialog({ open, onOpenChange, deal, defaultAccountId, onS
                 step="0.01"
                 value={value}
                 onChange={(e) => setValue(e.target.value)}
+                placeholder="optional – wird aus Angebot übernommen"
                 disabled={pending}
               />
+              {!isEdit && (
+                <p className="text-xs text-muted-foreground">
+                  Leer lassen, wenn der Wert erst aus dem ersten akzeptierten Angebot folgt.
+                </p>
+              )}
             </div>
             <div className="space-y-2">
               <div className="flex items-center gap-1.5">

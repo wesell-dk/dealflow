@@ -22,8 +22,9 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { FileStack, Search, Trash2, Eye } from "lucide-react";
+import { FileStack, Search, Trash2, Eye, Plus } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { TemplateFormDialog } from "@/components/templates/template-form-dialog";
 
 const INDUSTRIES = ["all", "saas", "consulting", "manufacturing", "services", "other"];
 
@@ -34,6 +35,7 @@ export default function Templates() {
   const [filter, setFilter] = useState("");
   const [industry, setIndustry] = useState("all");
   const [previewId, setPreviewId] = useState<string | null>(null);
+  const [createOpen, setCreateOpen] = useState(false);
   const deleteMut = useDeleteQuoteTemplate();
 
   const filtered = useMemo(() => {
@@ -72,6 +74,10 @@ export default function Templates() {
             {t("pages.templates.subtitle")}
           </p>
         </div>
+        <Button onClick={() => setCreateOpen(true)} data-testid="templates-new-button">
+          <Plus className="h-4 w-4 mr-1" />
+          Vorlage erstellen
+        </Button>
       </div>
 
       <div className="flex items-center gap-2">
@@ -168,6 +174,8 @@ export default function Templates() {
           </Card>
         ))}
       </div>
+
+      <TemplateFormDialog open={createOpen} onOpenChange={setCreateOpen} onCreated={() => refetch()} />
 
       <Dialog open={!!previewId} onOpenChange={(o) => !o && setPreviewId(null)}>
         <DialogContent className="max-w-3xl max-h-[85vh] overflow-y-auto">

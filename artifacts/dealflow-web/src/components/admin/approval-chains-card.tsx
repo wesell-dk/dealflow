@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   useListApprovalChains,
@@ -7,6 +7,7 @@ import {
   useDeleteApprovalChain,
   getListApprovalChainsQueryKey,
   useListUsers,
+  useListRoles,
   type ApprovalChainTemplate,
   type ApprovalChainCondition,
   type ApprovalStage,
@@ -32,7 +33,76 @@ const TRIGGER_TYPES = [
   { value: "manual", label: "Manuell" },
 ] as const;
 
-const ROLES = ["sales_rep", "sales_manager", "legal", "finance", "tenant_admin"] as const;
+// ─── Visueller Bedingungs-Builder (F07) ───────────────────────────────────
+// Statt rohem JSON kennt der Builder einen Katalog gängiger Felder pro
+// Trigger-Typ — passend zu den Payload-Keys, die der Backend-Resolver in
+// `lib/approvalChains.ts` auswertet. Unbekannte Felder werden in einen
+// generischen Modus zurückgefallen, sodass historische Chains weiter
+// editierbar bleiben.
+type ConditionFieldDef = {
+  key: string;
+  label: string;
+  type: "number" | "string";
+  hint?: string;
+};
+const CONDITION_FIELDS: Record<string, ConditionFieldDef[]> = {
+  clause_change: [
+    { key: "deltaScore", label: "Δ Risiko-Score (Punkte)", type: "number", hint: "Differenz neu − alt. Höher = riskanter." },
+    { key: "riskScore", label: "Risiko-Score (neu)", type: "number" },
+    { key: "softer", label: "Lockerer Wechsel? (1=ja, 0=nein)", type: "number" },
+    { key: "brandId", label: "Brand-ID", type: "string" },
+  ],
+  discount: [
+    { key: "discountPct", label: "Rabatt %", type: "number" },
+    { key: "dealValue", label: "Deal-Wert (EUR)", type: "number" },
+    { key: "brandId", label: "Brand-ID", type: "string" },
+  ],
+  amendment: [
+    { key: "priceDelta", label: "Preis-Δ (EUR)", type: "number" },
+    { key: "dealValue", label: "Deal-Wert (EUR)", type: "number" },
+  ],
+  manual: [
+    { key: "dealValue", label: "Deal-Wert (EUR)", type: "number" },
+    { key: "brandId", label: "Brand-ID", type: "string" },
+  ],
+};
+const OPERATORS_NUM = [
+  { value: "gte", label: "≥ (mindestens)" },
+  { value: "gt", label: "> (größer als)" },
+  { value: "lte", label: "≤ (höchstens)" },
+  { value: "lt", label: "< (kleiner als)" },
+  { value: "eq", label: "= (gleich)" },
+] as const;
+const OPERATORS_STR = [{ value: "eq", label: "= (gleich)" }] as const;
+
+type ConditionDraft = {
+  field: string;
+  op: ApprovalChainCondition["op"];
+  value: string;
+  valueType: "number" | "string";
+};
+
+function conditionToDraft(c: ApprovalChainCondition, triggerType: string): ConditionDraft {
+  const known = CONDITION_FIELDS[triggerType]?.find(f => f.key === c.field);
+  const valueType: "number" | "string" =
+    known?.type ?? (typeof c.value === "number" ? "number" : "string");
+  return { field: c.field, op: c.op, value: String(c.value), valueType };
+}
+function draftsToConditions(drafts: ConditionDraft[]): ApprovalChainCondition[] | { error: string } {
+  const out: ApprovalChainCondition[] = [];
+  for (const d of drafts) {
+    if (!d.field) return { error: "Bitte alle Bedingungs-Felder wählen." };
+    if (d.value.trim() === "") return { error: `Wert für "${d.field}" fehlt.` };
+    if (d.valueType === "number") {
+      const n = Number(d.value);
+      if (!Number.isFinite(n)) return { error: `"${d.value}" ist keine gültige Zahl für "${d.field}".` };
+      out.push({ field: d.field, op: d.op, value: n });
+    } else {
+      out.push({ field: d.field, op: d.op, value: d.value });
+    }
+  }
+  return out;
+}
 
 type StageDraft = {
   order: number;
@@ -42,12 +112,13 @@ type StageDraft = {
 };
 
 const emptyStage = (order: number): StageDraft => ({
-  order, label: `Stage ${order}`, approverRole: "", approverUserId: "",
+  order, label: `Stufe ${order}`, approverRole: "", approverUserId: "",
 });
 
 export function ApprovalChainsCard() {
   const { data: chains, isLoading } = useListApprovalChains();
   const { data: users } = useListUsers();
+  const { data: roles } = useListRoles();
   const qc = useQueryClient();
   const { toast } = useToast();
   const create = useCreateApprovalChain();
@@ -59,14 +130,25 @@ export function ApprovalChainsCard() {
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [triggerType, setTriggerType] = useState<string>("clause_change");
-  const [conditionsJson, setConditionsJson] = useState<string>("[]");
+  const [conditions, setConditions] = useState<ConditionDraft[]>([]);
   const [priority, setPriority] = useState<number>(100);
   const [active, setActive] = useState(true);
   const [stages, setStages] = useState<StageDraft[]>([emptyStage(1)]);
 
+  // Sammlung aller Rollen-Namen, die irgendwo schon verwendet wurden
+  // (vorhandene Stages, Legacy-Daten). Sicherstellen, dass auch unbekannte
+  // historische Werte als Option im Dropdown sichtbar bleiben — sonst
+  // verschluckt der Edit-Dialog diese stillschweigend.
+  const allRoleNames = useMemo(() => {
+    const set = new Set<string>();
+    (roles ?? []).forEach(r => set.add(r.name));
+    (chains ?? []).forEach(c => c.stages.forEach(s => { if (s.approverRole) set.add(s.approverRole); }));
+    return Array.from(set).sort();
+  }, [roles, chains]);
+
   const reset = () => {
     setEditing(null); setName(""); setDescription("");
-    setTriggerType("clause_change"); setConditionsJson("[]"); setPriority(100);
+    setTriggerType("clause_change"); setConditions([]); setPriority(100);
     setActive(true); setStages([emptyStage(1)]);
   };
   const openCreate = () => { reset(); setOpen(true); };
@@ -74,7 +156,7 @@ export function ApprovalChainsCard() {
     setEditing(c);
     setName(c.name); setDescription(c.description ?? "");
     setTriggerType(c.triggerType);
-    setConditionsJson(JSON.stringify(c.conditions ?? [], null, 2));
+    setConditions((c.conditions ?? []).map(cd => conditionToDraft(cd, c.triggerType)));
     setPriority(c.priority); setActive(c.active);
     setStages(c.stages.map((s, i) => ({
       order: s.order ?? i + 1,
@@ -88,21 +170,14 @@ export function ApprovalChainsCard() {
   const refresh = () => qc.invalidateQueries({ queryKey: getListApprovalChainsQueryKey() });
 
   const onSave = async () => {
-    let conditions: ApprovalChainCondition[] = [];
-    try {
-      const parsed = conditionsJson.trim() ? JSON.parse(conditionsJson) : [];
-      if (!Array.isArray(parsed)) {
-        toast({ title: "Bedingungen müssen ein JSON-Array sein", variant: "destructive" });
-        return;
-      }
-      conditions = parsed as ApprovalChainCondition[];
-    } catch {
-      toast({ title: "Bedingungen sind kein gültiges JSON", variant: "destructive" });
+    const built = draftsToConditions(conditions);
+    if (!Array.isArray(built)) {
+      toast({ title: "Bedingungen ungültig", description: built.error, variant: "destructive" });
       return;
     }
     const stagesPayload: ApprovalStage[] = stages.map((s, i) => ({
       order: i + 1,
-      label: s.label.trim() || `Stage ${i + 1}`,
+      label: s.label.trim() || `Stufe ${i + 1}`,
       approverRole: s.approverRole || null,
       approverUserId: s.approverUserId || null,
       status: "pending",
@@ -114,12 +189,12 @@ export function ApprovalChainsCard() {
       comment: null,
     }));
     if (stagesPayload.length === 0) {
-      toast({ title: "Mindestens eine Stage erforderlich", variant: "destructive" });
+      toast({ title: "Mindestens eine Stufe erforderlich", variant: "destructive" });
       return;
     }
     for (const s of stagesPayload) {
       if (!s.approverRole && !s.approverUserId) {
-        toast({ title: `Stage ${s.order} braucht eine Rolle oder einen User`, variant: "destructive" });
+        toast({ title: `Stufe ${s.order} braucht eine Rolle oder einen User`, variant: "destructive" });
         return;
       }
     }
@@ -129,7 +204,7 @@ export function ApprovalChainsCard() {
           id: editing.id,
           data: {
             name, description: description || null, triggerType,
-            conditions, priority, active, stages: stagesPayload,
+            conditions: built, priority, active, stages: stagesPayload,
           },
         });
         toast({ title: "Genehmigungs-Kette aktualisiert" });
@@ -137,7 +212,7 @@ export function ApprovalChainsCard() {
         await create.mutateAsync({
           data: {
             name: name.trim(), description: description || undefined, triggerType,
-            conditions, priority, active, stages: stagesPayload,
+            conditions: built, priority, active, stages: stagesPayload,
           },
         });
         toast({ title: "Genehmigungs-Kette angelegt" });
@@ -178,6 +253,34 @@ export function ApprovalChainsCard() {
   };
   const addStage = () => setStages(prev => [...prev, emptyStage(prev.length + 1)]);
 
+  // Bedingungen
+  const addCondition = () => {
+    const fields = CONDITION_FIELDS[triggerType] ?? [];
+    const f = fields[0];
+    setConditions(prev => [...prev, {
+      field: f?.key ?? "",
+      op: f?.type === "string" ? "eq" : "gte",
+      value: "",
+      valueType: f?.type ?? "number",
+    }]);
+  };
+  const removeCondition = (idx: number) => {
+    setConditions(prev => prev.filter((_, i) => i !== idx));
+  };
+  const updateCondition = (idx: number, patch: Partial<ConditionDraft>) => {
+    setConditions(prev => prev.map((c, i) => i === idx ? { ...c, ...patch } : c));
+  };
+  const onTriggerChange = (next: string) => {
+    setTriggerType(next);
+    // Beim Trigger-Wechsel Bedingungen mit unbekannten Feldern verwerfen,
+    // damit der User nicht im Builder ein Feld sieht, das gar nicht zum
+    // neuen Trigger passt.
+    const knownKeys = new Set((CONDITION_FIELDS[next] ?? []).map(f => f.key));
+    setConditions(prev => prev.filter(c => knownKeys.has(c.field)));
+  };
+
+  const fieldDefs = CONDITION_FIELDS[triggerType] ?? [];
+
   return (
     <Card data-testid="card-approval-chains">
       <CardHeader className="flex flex-row items-start justify-between gap-2">
@@ -189,7 +292,7 @@ export function ApprovalChainsCard() {
               Definieren Sie mehrstufige Approval-Workflows. Ein Trigger (z. B. Klausel-Änderung
               oder Amendment) wird beim Erstellen eines Approvals gegen alle aktiven Templates
               geprüft; bei mehreren Treffern gewinnt das Template mit der niedrigsten
-              Prioritäts-Zahl (Default 100). Jede Stage benötigt entweder eine Rolle oder
+              Prioritäts-Zahl (Default 100). Jede Stufe benötigt entweder eine Rolle oder
               einen konkreten User als Approver.
             </p>
           </div>
@@ -212,7 +315,7 @@ export function ApprovalChainsCard() {
               <TableRow>
                 <TableHead>Name</TableHead>
                 <TableHead>Trigger</TableHead>
-                <TableHead>Stages</TableHead>
+                <TableHead>Stufen</TableHead>
                 <TableHead>Priorität</TableHead>
                 <TableHead>Aktiv</TableHead>
                 <TableHead className="text-right">Aktion</TableHead>
@@ -263,11 +366,12 @@ export function ApprovalChainsCard() {
           <AlertDialogHeader>
             <AlertDialogTitle>{editing ? "Kette bearbeiten" : "Neue Genehmigungs-Kette"}</AlertDialogTitle>
             <AlertDialogDescription>
-              Bedingungen werden als JSON-Array von <code>{`{ field, op, value }`}</code> geprüft, z. B.{" "}
-              <code className="text-xs">{`[{"field":"deltaScore","op":"gte","value":3}]`}</code>.
+              Bedingungen prüfen Werte aus dem Trigger-Kontext (z. B. <span className="font-medium">Δ Risiko-Score</span>{" "}
+              bei Klausel-Änderungen oder <span className="font-medium">Rabatt %</span>). Alle Bedingungen müssen erfüllt sein
+              (UND-Verknüpfung), damit die Kette greift.
             </AlertDialogDescription>
           </AlertDialogHeader>
-          <div className="grid gap-3 py-2 max-h-[60vh] overflow-y-auto">
+          <div className="grid gap-3 py-2 max-h-[65vh] overflow-y-auto">
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <Label>Name</Label>
@@ -288,7 +392,7 @@ export function ApprovalChainsCard() {
                 <select
                   className="w-full border rounded h-9 px-2 bg-background"
                   value={triggerType}
-                  onChange={e => setTriggerType(e.target.value)}
+                  onChange={e => onTriggerChange(e.target.value)}
                   data-testid="select-chain-trigger"
                 >
                   {TRIGGER_TYPES.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
@@ -299,66 +403,136 @@ export function ApprovalChainsCard() {
                 <Label htmlFor="chain-active">Aktiv</Label>
               </div>
             </div>
-            <div>
-              <Label>Bedingungen (JSON)</Label>
-              <textarea
-                className="w-full border rounded p-2 font-mono text-xs h-24 bg-background"
-                value={conditionsJson}
-                onChange={e => setConditionsJson(e.target.value)}
-                data-testid="textarea-chain-conditions"
-              />
-            </div>
+
+            {/* ── Bedingungs-Builder (F07) ─────────────────────────────────── */}
             <div className="space-y-2 border-t pt-3">
               <div className="flex items-center justify-between">
-                <Label>Stages (sequenziell)</Label>
-                <Button size="sm" variant="outline" onClick={addStage} data-testid="button-add-stage">
-                  <Plus className="h-3 w-3 mr-1" /> Stage hinzufügen
+                <Label>Bedingungen</Label>
+                <Button size="sm" variant="outline" onClick={addCondition} disabled={fieldDefs.length === 0} data-testid="button-add-condition">
+                  <Plus className="h-3 w-3 mr-1" /> Bedingung hinzufügen
                 </Button>
               </div>
-              {stages.map((s, i) => (
-                <div key={i} className="grid grid-cols-12 gap-2 items-end border rounded p-2 bg-muted/10" data-testid={`stage-row-${i}`}>
-                  <div className="col-span-1 text-center font-mono text-sm pt-2">{i + 1}.</div>
-                  <div className="col-span-3">
-                    <Label className="text-xs">Bezeichnung</Label>
-                    <Input value={s.label} onChange={e => updateStage(i, { label: e.target.value })} data-testid={`input-stage-label-${i}`} />
-                  </div>
-                  <div className="col-span-3">
-                    <Label className="text-xs">Rolle</Label>
-                    <select
-                      className="w-full border rounded h-9 px-2 bg-background"
-                      value={s.approverRole}
-                      onChange={e => updateStage(i, { approverRole: e.target.value, approverUserId: "" })}
-                      data-testid={`select-stage-role-${i}`}
-                    >
-                      <option value="">— Rolle —</option>
-                      {ROLES.map(r => <option key={r} value={r}>{r}</option>)}
-                    </select>
-                  </div>
-                  <div className="col-span-3">
-                    <Label className="text-xs">oder konkreter User</Label>
-                    <select
-                      className="w-full border rounded h-9 px-2 bg-background"
-                      value={s.approverUserId}
-                      onChange={e => updateStage(i, { approverUserId: e.target.value, approverRole: "" })}
-                      data-testid={`select-stage-user-${i}`}
-                    >
-                      <option value="">—</option>
-                      {(users ?? []).map(u => <option key={u.id} value={u.id}>{u.name}</option>)}
-                    </select>
-                  </div>
-                  <div className="col-span-2 flex justify-end gap-1">
-                    <Button size="sm" variant="ghost" onClick={() => moveStage(i, -1)} disabled={i === 0} data-testid={`button-stage-up-${i}`}>
-                      <ArrowUp className="h-3 w-3" />
-                    </Button>
-                    <Button size="sm" variant="ghost" onClick={() => moveStage(i, 1)} disabled={i === stages.length - 1} data-testid={`button-stage-down-${i}`}>
-                      <ArrowDown className="h-3 w-3" />
-                    </Button>
-                    <Button size="sm" variant="ghost" onClick={() => removeStage(i)} disabled={stages.length === 1} data-testid={`button-stage-remove-${i}`}>
-                      <Trash2 className="h-3 w-3" />
-                    </Button>
-                  </div>
+              {conditions.length === 0 ? (
+                <p className="text-xs text-muted-foreground italic">
+                  Keine Bedingungen — die Kette greift bei jedem {triggerType}-Trigger.
+                </p>
+              ) : (
+                <div className="space-y-2">
+                  {conditions.map((c, i) => {
+                    const def = fieldDefs.find(f => f.key === c.field);
+                    const ops = (def?.type ?? c.valueType) === "string" ? OPERATORS_STR : OPERATORS_NUM;
+                    const isUnknownField = !def;
+                    return (
+                      <div key={i} className="grid grid-cols-12 gap-2 items-end border rounded p-2 bg-muted/10" data-testid={`condition-row-${i}`}>
+                        <div className="col-span-5">
+                          <Label className="text-xs">Feld</Label>
+                          <select
+                            className="w-full border rounded h-9 px-2 bg-background"
+                            value={c.field}
+                            onChange={e => {
+                              const next = e.target.value;
+                              const nextDef = fieldDefs.find(f => f.key === next);
+                              updateCondition(i, {
+                                field: next,
+                                valueType: nextDef?.type ?? "number",
+                                op: nextDef?.type === "string" ? "eq" : c.op,
+                              });
+                            }}
+                            data-testid={`select-condition-field-${i}`}
+                          >
+                            {isUnknownField && <option value={c.field}>{c.field} (unbekannt)</option>}
+                            {fieldDefs.map(f => <option key={f.key} value={f.key}>{f.label}</option>)}
+                          </select>
+                          {def?.hint && <p className="text-xs text-muted-foreground mt-0.5">{def.hint}</p>}
+                        </div>
+                        <div className="col-span-3">
+                          <Label className="text-xs">Operator</Label>
+                          <select
+                            className="w-full border rounded h-9 px-2 bg-background"
+                            value={c.op}
+                            onChange={e => updateCondition(i, { op: e.target.value as ApprovalChainCondition["op"] })}
+                            data-testid={`select-condition-op-${i}`}
+                          >
+                            {ops.map(op => <option key={op.value} value={op.value}>{op.label}</option>)}
+                          </select>
+                        </div>
+                        <div className="col-span-3">
+                          <Label className="text-xs">Wert</Label>
+                          <Input
+                            type={c.valueType === "number" ? "number" : "text"}
+                            value={c.value}
+                            onChange={e => updateCondition(i, { value: e.target.value })}
+                            data-testid={`input-condition-value-${i}`}
+                          />
+                        </div>
+                        <div className="col-span-1 flex justify-end">
+                          <Button size="sm" variant="ghost" onClick={() => removeCondition(i)} data-testid={`button-condition-remove-${i}`}>
+                            <Trash2 className="h-3 w-3" />
+                          </Button>
+                        </div>
+                      </div>
+                    );
+                  })}
                 </div>
-              ))}
+              )}
+            </div>
+
+            {/* ── Stages ───────────────────────────────────────────────────── */}
+            <div className="space-y-2 border-t pt-3">
+              <div className="flex items-center justify-between">
+                <Label>Stufen (sequenziell)</Label>
+                <Button size="sm" variant="outline" onClick={addStage} data-testid="button-add-stage">
+                  <Plus className="h-3 w-3 mr-1" /> Stufe hinzufügen
+                </Button>
+              </div>
+              {stages.map((s, i) => {
+                const roleKnown = !s.approverRole || allRoleNames.includes(s.approverRole);
+                return (
+                  <div key={i} className="grid grid-cols-12 gap-2 items-end border rounded p-2 bg-muted/10" data-testid={`stage-row-${i}`}>
+                    <div className="col-span-1 text-center font-mono text-sm pt-2">{i + 1}.</div>
+                    <div className="col-span-3">
+                      <Label className="text-xs">Bezeichnung</Label>
+                      <Input value={s.label} onChange={e => updateStage(i, { label: e.target.value })} data-testid={`input-stage-label-${i}`} />
+                    </div>
+                    <div className="col-span-3">
+                      <Label className="text-xs">Rolle</Label>
+                      <select
+                        className="w-full border rounded h-9 px-2 bg-background"
+                        value={s.approverRole}
+                        onChange={e => updateStage(i, { approverRole: e.target.value, approverUserId: "" })}
+                        data-testid={`select-stage-role-${i}`}
+                      >
+                        <option value="">— Rolle —</option>
+                        {!roleKnown && <option value={s.approverRole}>{s.approverRole} (Legacy)</option>}
+                        {allRoleNames.map(r => <option key={r} value={r}>{r}</option>)}
+                      </select>
+                    </div>
+                    <div className="col-span-3">
+                      <Label className="text-xs">oder konkreter User</Label>
+                      <select
+                        className="w-full border rounded h-9 px-2 bg-background"
+                        value={s.approverUserId}
+                        onChange={e => updateStage(i, { approverUserId: e.target.value, approverRole: "" })}
+                        data-testid={`select-stage-user-${i}`}
+                      >
+                        <option value="">—</option>
+                        {(users ?? []).map(u => <option key={u.id} value={u.id}>{u.name}</option>)}
+                      </select>
+                    </div>
+                    <div className="col-span-2 flex justify-end gap-1">
+                      <Button size="sm" variant="ghost" onClick={() => moveStage(i, -1)} disabled={i === 0} data-testid={`button-stage-up-${i}`}>
+                        <ArrowUp className="h-3 w-3" />
+                      </Button>
+                      <Button size="sm" variant="ghost" onClick={() => moveStage(i, 1)} disabled={i === stages.length - 1} data-testid={`button-stage-down-${i}`}>
+                        <ArrowDown className="h-3 w-3" />
+                      </Button>
+                      <Button size="sm" variant="ghost" onClick={() => removeStage(i)} disabled={stages.length === 1} data-testid={`button-stage-remove-${i}`}>
+                        <Trash2 className="h-3 w-3" />
+                      </Button>
+                    </div>
+                  </div>
+                );
+              })}
             </div>
           </div>
           <AlertDialogFooter>

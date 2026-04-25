@@ -8,8 +8,7 @@ Multi-tenant, multi-company, multi-brand. Deal-centric.
  * OpenAPI spec version: 0.1.0
  */
 
-export interface RoleUpdate {
-  name?: string;
-  description?: string;
-  permissions?: string[];
+export interface AccountEnrichmentRequest {
+  /** URL oder Domain (https:// optional). */
+  website: string;
 }

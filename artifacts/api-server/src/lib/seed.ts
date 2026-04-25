@@ -368,11 +368,11 @@ export async function seedIfEmpty(): Promise<void> {
   ]);
 
   await db.insert(priceRulesTable).values([
-    { id: "pr_001", name: "Volume tier > 500k EUR", scope: "global", condition: "deal.value > 500000", effect: "auto-discount up to 8%", priority: 10, status: "active" },
-    { id: "pr_002", name: "Multi-year commitment uplift", scope: "global", condition: "term >= 36 months", effect: "additional 5% discount", priority: 20, status: "active" },
-    { id: "pr_003", name: "Strategic account exception", scope: "co_helix", condition: "account.tier = strategic", effect: "deal-desk approval required", priority: 5, status: "active" },
-    { id: "pr_004", name: "Hardware bundle margin floor", scope: "co_helix", condition: "category = Hardware", effect: "block discount > 12%", priority: 15, status: "active" },
-    { id: "pr_005", name: "UK FY26 list price", scope: "co_helix_uk", condition: "currency = GBP", effect: "use UK price book v2", priority: 1, status: "draft" },
+    { id: "pr_001", tenantId: "tn_root", name: "Volume tier > 500k EUR", scope: "global", condition: "deal.value > 500000", effect: "auto-discount up to 8%", priority: 10, status: "active" },
+    { id: "pr_002", tenantId: "tn_root", name: "Multi-year commitment uplift", scope: "global", condition: "term >= 36 months", effect: "additional 5% discount", priority: 20, status: "active" },
+    { id: "pr_003", tenantId: "tn_root", name: "Strategic account exception", scope: "co_helix", condition: "account.tier = strategic", effect: "deal-desk approval required", priority: 5, status: "active" },
+    { id: "pr_004", tenantId: "tn_root", name: "Hardware bundle margin floor", scope: "co_helix", condition: "category = Hardware", effect: "block discount > 12%", priority: 15, status: "active" },
+    { id: "pr_005", tenantId: "tn_root", name: "UK FY26 list price", scope: "co_helix_uk", condition: "currency = GBP", effect: "use UK price book v2", priority: 1, status: "draft" },
   ]);
 
   // Approvals

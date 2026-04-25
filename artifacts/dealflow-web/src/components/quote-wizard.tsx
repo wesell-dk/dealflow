@@ -371,9 +371,18 @@ export function QuoteWizard({ open, onOpenChange, initialDealId }: Props) {
                     <div className="font-semibold mb-1">
                       {t("quoteWizard.configurator.title")}
                     </div>
-                    <div className="text-muted-foreground">
+                    <div className="text-muted-foreground mb-2">
                       {t("quoteWizard.configurator.subtitle")}
                     </div>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      onClick={() => navigate("/admin#industry-profiles")}
+                      data-testid="button-configure-industry"
+                    >
+                      Branche konfigurieren →
+                    </Button>
                   </div>
                 ) : null}
               </div>

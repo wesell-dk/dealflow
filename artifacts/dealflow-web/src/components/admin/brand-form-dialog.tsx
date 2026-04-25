@@ -2,7 +2,10 @@ import { useEffect, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   useCreateBrand,
+  useUpdateBrand,
+  useListBrands,
   getListBrandsQueryKey,
+  type Brand,
   type Company,
 } from "@workspace/api-client-react";
 import {
@@ -18,6 +21,7 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import { Loader2, Upload, Image as ImageIcon, X, Sparkles } from "lucide-react";
 import { extractLogoColors, foregroundFor, isTooLightForPaper } from "@/lib/extract-logo-colors";
+import { toAssetSrc } from "@/lib/asset-url";
 
 interface Props {
   open: boolean;
@@ -25,6 +29,8 @@ interface Props {
   companies: Company[];
   /** Optional vorausgewählte Gesellschaft. */
   defaultCompanyId?: string;
+  /** Falls gesetzt: Edit-Modus, sonst Create. */
+  brand?: Brand | null;
 }
 
 const TONES: Array<{ value: string; label: string; hint: string }> = [
@@ -37,13 +43,18 @@ const TONES: Array<{ value: string; label: string; hint: string }> = [
 const HEX_RE = /^#[0-9a-fA-F]{6}$/;
 const ALLOWED_LOGO_MIME = ["image/png", "image/jpeg", "image/svg+xml", "image/webp"];
 const MAX_LOGO_BYTES = 5 * 1024 * 1024;
+const NO_PARENT = "_none_";
 
-export function BrandFormDialog({ open, onOpenChange, companies, defaultCompanyId }: Props) {
+export function BrandFormDialog({ open, onOpenChange, companies, defaultCompanyId, brand }: Props) {
   const { toast } = useToast();
   const qc = useQueryClient();
   const createMut = useCreateBrand();
+  const updateMut = useUpdateBrand();
+  const { data: allBrands } = useListBrands();
+  const isEdit = !!brand;
 
   const [companyId, setCompanyId] = useState(defaultCompanyId ?? companies[0]?.id ?? "");
+  const [parentBrandId, setParentBrandId] = useState<string>(NO_PARENT);
   const [name, setName] = useState("");
   const [tone, setTone] = useState("precise");
   const [primaryColor, setPrimaryColor] = useState("#2D6CDF");
@@ -57,57 +68,60 @@ export function BrandFormDialog({ open, onOpenChange, companies, defaultCompanyI
   const [secondaryTouched, setSecondaryTouched] = useState(false);
   const [colorsExtracted, setColorsExtracted] = useState<{ primary: string; secondary: string | null } | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
-  // Refs spiegeln die touched-Flags, damit der asynchrone Upload-Handler beim
-  // Anwenden der extrahierten Farben den jeweils aktuellen Stand sieht — und
-  // nicht den, der beim Drop in die Closure capture-d wurde. Sonst könnte ein
-  // Color-Picker-Edit während des Uploads von der Auto-Extraction überschrieben werden.
   const primaryTouchedRef = useRef(false);
   const secondaryTouchedRef = useRef(false);
-  // Monoton steigender Token, damit bei mehreren parallelen Uploads (User dropt
-  // schnell ein zweites Logo) nur der jüngste Lauf das State-Update gewinnt.
   const uploadTokenRef = useRef(0);
 
   useEffect(() => {
     if (open) {
-      setCompanyId(defaultCompanyId ?? companies[0]?.id ?? "");
-      setName("");
-      setTone("precise");
-      setPrimaryColor("#2D6CDF");
-      setSecondaryColor("");
-      setLegalEntityName("");
-      setAddressLine("");
-      setLogoUrl("");
+      setCompanyId(brand?.companyId ?? defaultCompanyId ?? companies[0]?.id ?? "");
+      setParentBrandId(brand?.parentBrandId ?? NO_PARENT);
+      setName(brand?.name ?? "");
+      setTone(brand?.tone ?? brand?.voice ?? "precise");
+      setPrimaryColor(brand?.primaryColor ?? brand?.color ?? "#2D6CDF");
+      setSecondaryColor(brand?.secondaryColor ?? "");
+      setLegalEntityName(brand?.legalEntityName ?? "");
+      setAddressLine(brand?.addressLine ?? "");
+      setLogoUrl(brand?.logoUrl ?? "");
       setPrimaryTouched(false);
       setSecondaryTouched(false);
       primaryTouchedRef.current = false;
       secondaryTouchedRef.current = false;
       setColorsExtracted(null);
     }
-  }, [open, defaultCompanyId, companies]);
+  }, [open, defaultCompanyId, companies, brand]);
+
+  // Kandidaten für Parent-Brand: gleiche Company, nicht das Brand selbst,
+  // und keine Brands die dieses Brand als (transitiven) Eltern haben — sonst
+  // entsteht ein Zyklus. Backend schützt zusätzlich (lib/brands.ts).
+  const parentCandidates = (allBrands ?? []).filter((b) => {
+    if (b.companyId !== companyId) return false;
+    if (brand && b.id === brand.id) return false;
+    if (brand) {
+      // Walk up b.parentBrandId chain — if we hit `brand.id`, b is a descendant.
+      let cur: string | null | undefined = b.parentBrandId;
+      const seen = new Set<string>();
+      while (cur && !seen.has(cur)) {
+        if (cur === brand.id) return false;
+        seen.add(cur);
+        cur = (allBrands ?? []).find((x) => x.id === cur)?.parentBrandId;
+      }
+    }
+    return true;
+  });
 
   const onUpload = async (file: File) => {
     if (!ALLOWED_LOGO_MIME.includes(file.type)) {
-      toast({
-        title: "Format nicht unterstützt",
-        description: `${file.name || "Datei"} — erlaubt: PNG, JPEG, SVG, WebP.`,
-        variant: "destructive",
-      });
+      toast({ title: "Format nicht unterstützt", description: `${file.name || "Datei"} — erlaubt: PNG, JPEG, SVG, WebP.`, variant: "destructive" });
       return;
     }
     if (file.size > MAX_LOGO_BYTES) {
-      toast({
-        title: "Logo zu groß",
-        description: `${(file.size / 1024 / 1024).toFixed(1)} MB — Maximum 5 MB.`,
-        variant: "destructive",
-      });
+      toast({ title: "Logo zu groß", description: `${(file.size / 1024 / 1024).toFixed(1)} MB — Maximum 5 MB.`, variant: "destructive" });
       return;
     }
     setUploading(true);
     const myToken = ++uploadTokenRef.current;
-    // Farben asynchron aus dem File ableiten — independent vom Upload, damit
-    // der User selbst bei Upload-Fehlschlag eine Farbpalette bekommt.
     const colorsPromise = extractLogoColors(file).catch(() => null);
-    // Helper: Farben anwenden, falls dieser Lauf noch der jüngste ist.
     const applyColors = async () => {
       const colors = await colorsPromise;
       if (myToken !== uploadTokenRef.current) return;
@@ -118,15 +132,9 @@ export function BrandFormDialog({ open, onOpenChange, companies, defaultCompanyI
     };
     try {
       const res = await fetch(`${import.meta.env.BASE_URL}api/storage/uploads/request-url`, {
-        method: "POST",
-        credentials: "include",
+        method: "POST", credentials: "include",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          name: file.name,
-          size: file.size,
-          contentType: file.type,
-          kind: "logo",
-        }),
+        body: JSON.stringify({ name: file.name, size: file.size, contentType: file.type, kind: "logo" }),
       });
       if (!res.ok) {
         const body = await res.json().catch(() => ({}));
@@ -137,25 +145,15 @@ export function BrandFormDialog({ open, onOpenChange, companies, defaultCompanyI
         throw new Error(msg);
       }
       const { uploadURL, objectPath } = await res.json();
-      const put = await fetch(uploadURL, {
-        method: "PUT",
-        headers: { "Content-Type": file.type },
-        body: file,
-      });
+      const put = await fetch(uploadURL, { method: "PUT", headers: { "Content-Type": file.type }, body: file });
       if (!put.ok) throw new Error(`Upload fehlgeschlagen (${put.status})`);
       if (myToken === uploadTokenRef.current) {
         setLogoUrl(`/api/storage${objectPath}`);
       }
       await applyColors();
     } catch (e: unknown) {
-      // Farben trotzdem anwenden — der lokale Browser konnte sie ableiten,
-      // auch wenn der Server-Upload daneben ging.
       await applyColors();
-      toast({
-        title: "Logo-Upload fehlgeschlagen",
-        description: e instanceof Error ? e.message : "Unbekannt",
-        variant: "destructive",
-      });
+      toast({ title: "Logo-Upload fehlgeschlagen", description: e instanceof Error ? e.message : "Unbekannt", variant: "destructive" });
     } finally {
       setUploading(false);
     }
@@ -164,7 +162,6 @@ export function BrandFormDialog({ open, onOpenChange, companies, defaultCompanyI
   const onFileInput = (e: React.ChangeEvent<HTMLInputElement>) => {
     const f = e.target.files?.[0];
     if (f) void onUpload(f);
-    // Eingabe leeren, damit dieselbe Datei erneut gewählt werden kann
     if (fileInputRef.current) fileInputRef.current.value = "";
   };
 
@@ -193,40 +190,63 @@ export function BrandFormDialog({ open, onOpenChange, companies, defaultCompanyI
       toast({ title: "Sekundärfarbe ungültig", description: "Bitte #RRGGBB oder leer lassen.", variant: "destructive" });
       return;
     }
+    const parent = parentBrandId === NO_PARENT ? null : parentBrandId;
     try {
-      await createMut.mutateAsync({
-        data: {
-          companyId,
-          name: trimmed,
-          color: primaryColor,
-          voice: tone,
-          tone,
-          primaryColor,
-          secondaryColor: secondaryColor || null,
-          legalEntityName: legalEntityName.trim() || null,
-          addressLine: addressLine.trim() || null,
-          logoUrl: logoUrl.trim() || null,
-        },
-      });
+      if (isEdit && brand) {
+        await updateMut.mutateAsync({
+          id: brand.id,
+          data: {
+            name: trimmed,
+            color: primaryColor,
+            voice: tone,
+            tone,
+            primaryColor,
+            secondaryColor: secondaryColor || null,
+            legalEntityName: legalEntityName.trim() || null,
+            addressLine: addressLine.trim() || null,
+            logoUrl: logoUrl.trim() || null,
+            parentBrandId: parent,
+          },
+        });
+        toast({ title: "Brand aktualisiert", description: trimmed });
+      } else {
+        await createMut.mutateAsync({
+          data: {
+            companyId,
+            parentBrandId: parent,
+            name: trimmed,
+            color: primaryColor,
+            voice: tone,
+            tone,
+            primaryColor,
+            secondaryColor: secondaryColor || null,
+            legalEntityName: legalEntityName.trim() || null,
+            addressLine: addressLine.trim() || null,
+            logoUrl: logoUrl.trim() || null,
+          },
+        });
+        toast({ title: "Brand angelegt", description: trimmed });
+      }
       await qc.invalidateQueries({ queryKey: getListBrandsQueryKey() });
-      toast({ title: "Brand angelegt", description: trimmed });
       onOpenChange(false);
     } catch (e: unknown) {
       const status = (e as { response?: { status?: number } })?.response?.status;
       const body = (e as { response?: { data?: { error?: string } } })?.response?.data;
       toast({
-        title: status === 409 ? "Name bereits vergeben" : "Anlegen fehlgeschlagen",
+        title: status === 409 ? "Name bereits vergeben" : isEdit ? "Speichern fehlgeschlagen" : "Anlegen fehlgeschlagen",
         description: body?.error ?? (e instanceof Error ? e.message : "Unbekannter Fehler"),
         variant: "destructive",
       });
     }
   };
 
+  const busy = createMut.isPending || updateMut.isPending;
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-lg">
+      <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>Neuen Brand anlegen</DialogTitle>
+          <DialogTitle>{isEdit ? "Brand bearbeiten" : "Neuen Brand anlegen"}</DialogTitle>
           <DialogDescription>
             Markenauftritt einer Gesellschaft — bestimmt Logo, Farben, Tonalität und juristisches Impressum
             in generierten Angeboten und Verträgen.
@@ -236,7 +256,7 @@ export function BrandFormDialog({ open, onOpenChange, companies, defaultCompanyI
         <div className="space-y-4 py-2">
           <div className="space-y-1.5">
             <Label htmlFor="brand-company">Gesellschaft *</Label>
-            <Select value={companyId} onValueChange={setCompanyId}>
+            <Select value={companyId} onValueChange={setCompanyId} disabled={isEdit}>
               <SelectTrigger id="brand-company" data-testid="select-brand-company">
                 <SelectValue>{companies.find(c => c.id === companyId)?.name ?? "Wählen…"}</SelectValue>
               </SelectTrigger>
@@ -251,6 +271,23 @@ export function BrandFormDialog({ open, onOpenChange, companies, defaultCompanyI
                 ))}
               </SelectContent>
             </Select>
+            {isEdit && <p className="text-xs text-muted-foreground">Gesellschaft eines bestehenden Brands kann nicht gewechselt werden.</p>}
+          </div>
+
+          <div className="space-y-1.5">
+            <Label htmlFor="brand-parent">Eltern-Marke</Label>
+            <Select value={parentBrandId} onValueChange={setParentBrandId}>
+              <SelectTrigger id="brand-parent" data-testid="select-brand-parent">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value={NO_PARENT}>— Keine (Top-Level) —</SelectItem>
+                {parentCandidates.map((b) => (
+                  <SelectItem key={b.id} value={b.id} textValue={b.name}>{b.name}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <p className="text-xs text-muted-foreground">Optional — Sub-Brand unter einer übergeordneten Marke (z. B. WFS → weCREATE).</p>
           </div>
 
           <div className="space-y-1.5">
@@ -278,7 +315,7 @@ export function BrandFormDialog({ open, onOpenChange, companies, defaultCompanyI
             <p className="text-xs text-muted-foreground">Steuert Ansprache und Wortwahl in generierten Texten.</p>
           </div>
 
-          {/* Logo: Drag-&-Drop oder klassisches Hochladen */}
+          {/* Logo */}
           <div className="space-y-1.5">
             <Label>Logo</Label>
             <div
@@ -301,10 +338,8 @@ export function BrandFormDialog({ open, onOpenChange, companies, defaultCompanyI
               />
               <div className="flex items-center gap-4 p-4">
                 {logoUrl ? (
-                  // Großes Preview (96 px) statt der vorigen 56 px — bei 14×14
-                  // war das Logo kaum erkennbar.
                   <div className="flex-shrink-0 h-24 w-24 rounded-md border bg-white p-2 flex items-center justify-center">
-                    <img src={logoUrl} alt="Logo-Vorschau" className="max-h-full max-w-full object-contain" />
+                    <img src={toAssetSrc(logoUrl)} alt="Logo-Vorschau" className="max-h-full max-w-full object-contain" />
                   </div>
                 ) : (
                   <div className="flex-shrink-0 h-24 w-24 rounded-md bg-muted flex items-center justify-center text-muted-foreground">
@@ -324,23 +359,15 @@ export function BrandFormDialog({ open, onOpenChange, companies, defaultCompanyI
                     </>
                   ) : (
                     <>
-                      <p className="text-sm font-medium">
-                        Datei hierher ziehen oder klicken
-                      </p>
-                      <p className="text-xs text-muted-foreground mt-1">
-                        PNG, JPEG, SVG, WebP — bis 5 MB
-                      </p>
+                      <p className="text-sm font-medium">Datei hierher ziehen oder klicken</p>
+                      <p className="text-xs text-muted-foreground mt-1">PNG, JPEG, SVG, WebP — bis 5 MB</p>
                     </>
                   )}
                 </div>
                 {logoUrl && !uploading && (
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="ghost"
+                  <Button type="button" size="sm" variant="ghost"
                     onClick={(e) => { e.stopPropagation(); setLogoUrl(""); setColorsExtracted(null); }}
-                    aria-label="Logo entfernen"
-                  >
+                    aria-label="Logo entfernen">
                     <X className="h-4 w-4" />
                   </Button>
                 )}
@@ -351,18 +378,16 @@ export function BrandFormDialog({ open, onOpenChange, companies, defaultCompanyI
                   </Button>
                 )}
               </div>
-              {/* Kontrast-Preview: Logo + Primärfarbe gegen Weiß und Dunkel,
-                  damit das Druck-/Web-Verhalten sofort sichtbar ist. */}
               {logoUrl && !uploading && (
                 <div className="border-t grid grid-cols-2 gap-px bg-muted/30">
                   <div className="bg-white p-3 flex items-center justify-center gap-2" title="Wirkung auf weißem Papier (DIN A4)">
-                    <img src={logoUrl} alt="" className="h-8 w-8 object-contain" />
+                    <img src={toAssetSrc(logoUrl)} alt="" className="h-8 w-8 object-contain" />
                     <span className="px-2 py-1 rounded text-xs font-medium" style={{ background: primaryColor || "#ffffff", color: foregroundFor(primaryColor || "#ffffff") }}>
                       auf Weiß
                     </span>
                   </div>
                   <div className="bg-slate-900 p-3 flex items-center justify-center gap-2" title="Wirkung auf dunklem Header (App)">
-                    <img src={logoUrl} alt="" className="h-8 w-8 object-contain" />
+                    <img src={toAssetSrc(logoUrl)} alt="" className="h-8 w-8 object-contain" />
                     <span className="px-2 py-1 rounded text-xs font-medium" style={{ background: primaryColor || "#ffffff", color: foregroundFor(primaryColor || "#ffffff") }}>
                       auf Dunkel
                     </span>
@@ -371,9 +396,6 @@ export function BrandFormDialog({ open, onOpenChange, companies, defaultCompanyI
               )}
             </div>
 
-            {/* URL-Eingabe für CDN/externe Logos — collapsed, da im 99 % der
-                Fälle der Drag-&-Drop reicht und die lange objectPath-URL die
-                UI sonst zumüllt. */}
             <details className="text-xs">
               <summary className="cursor-pointer text-muted-foreground hover:text-foreground">URL manuell eintragen…</summary>
               <Input
@@ -399,7 +421,7 @@ export function BrandFormDialog({ open, onOpenChange, companies, defaultCompanyI
                 <Input
                   id="brand-primary"
                   type="color"
-                  value={primaryColor}
+                  value={HEX_RE.test(primaryColor) ? primaryColor : "#2D6CDF"}
                   onChange={e => { setPrimaryColor(e.target.value); setPrimaryTouched(true); primaryTouchedRef.current = true; }}
                   className="w-14 p-1"
                 />
@@ -409,6 +431,9 @@ export function BrandFormDialog({ open, onOpenChange, companies, defaultCompanyI
                   className="flex-1"
                 />
               </div>
+              {isTooLightForPaper(primaryColor || "#ffffff") && (
+                <p className="text-xs text-amber-700">⚠ Sehr hell — auf weißem Papier kaum sichtbar.</p>
+              )}
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="brand-secondary">Sekundärfarbe (optional)</Label>
@@ -416,7 +441,7 @@ export function BrandFormDialog({ open, onOpenChange, companies, defaultCompanyI
                 <Input
                   id="brand-secondary"
                   type="color"
-                  value={secondaryColor || "#000000"}
+                  value={HEX_RE.test(secondaryColor) ? secondaryColor : "#000000"}
                   onChange={e => { setSecondaryColor(e.target.value); setSecondaryTouched(true); secondaryTouchedRef.current = true; }}
                   className="w-14 p-1"
                 />
@@ -441,10 +466,10 @@ export function BrandFormDialog({ open, onOpenChange, companies, defaultCompanyI
         </div>
 
         <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)} disabled={createMut.isPending}>Abbrechen</Button>
-          <Button onClick={submit} disabled={createMut.isPending || uploading} data-testid="button-brand-submit">
-            {createMut.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-            Anlegen
+          <Button variant="outline" onClick={() => onOpenChange(false)} disabled={busy}>Abbrechen</Button>
+          <Button onClick={submit} disabled={busy || uploading} data-testid="button-brand-submit">
+            {busy && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+            {isEdit ? "Speichern" : "Anlegen"}
           </Button>
         </DialogFooter>
       </DialogContent>

@@ -45,6 +45,9 @@ export const companiesTable = pgTable("companies", {
 export const brandsTable = pgTable("brands", {
   id: id(),
   companyId: text("company_id").notNull(),
+  // Optional Eltern-Brand für Multi-Tier-Hierarchien
+  // (z. B. "Abundance" → "weCREATE", "ReturnSuite").
+  parentBrandId: text("parent_brand_id"),
   name: text("name").notNull(),
   color: text("color").notNull(),
   voice: text("voice").notNull(),
@@ -91,6 +94,11 @@ export const rolesTable = pgTable("roles", {
   description: text("description").notNull().default(""),
   isSystem: boolean("is_system").notNull().default(false),
   tenantId: text("tenant_id").notNull().default("tn_root"),
+  // Liste der Permission-Keys (z. B. "deal:write", "approval:approve").
+  // Für System-Rollen ist das eine read-only Information; bei Custom-Rollen
+  // editierbar. Backend prüft nicht permissions[] direkt, sondern mappt die
+  // Rolle des Users auf die Permission-Liste in `routes/dealflow.ts`.
+  permissions: jsonb("permissions").$type<string[]>().default([]).notNull(),
 });
 
 export const sessionsTable = pgTable("sessions", {
@@ -108,6 +116,15 @@ export const accountsTable = pgTable("accounts", {
   country: text("country").notNull(),
   healthScore: integer("health_score").notNull(),
   ownerId: text("owner_id"),
+  // Erweiterte Stammdaten (alle optional). Werden im Detail/Anlage-Dialog
+  // gepflegt und können per Web-Anreicherung (Nominatim/Impressum) automatisch
+  // vorgeschlagen werden.
+  website: text("website"),
+  phone: text("phone"),
+  billingAddress: text("billing_address"),
+  vatId: text("vat_id"),
+  sizeBracket: text("size_bracket"), // z. B. "1-10", "11-50", "51-200", ...
+  primaryContactId: text("primary_contact_id"),
 });
 
 export const contactsTable = pgTable("contacts", {
@@ -356,6 +373,7 @@ export const pricePositionBundleItemsTable = pgTable("price_position_bundle_item
 
 export const priceRulesTable = pgTable("price_rules", {
   id: id(),
+  tenantId: text("tenant_id").notNull(),
   name: text("name").notNull(),
   scope: text("scope").notNull(),
   condition: text("condition").notNull(),

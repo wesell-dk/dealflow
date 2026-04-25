@@ -12,6 +12,8 @@ import type { BrandDefaultClauseVariants } from "./brandDefaultClauseVariants";
 export interface Brand {
   id: string;
   companyId: string;
+  /** Optionale Eltern-Marke für Multi-Tier-Hierarchien. */
+  parentBrandId?: string | null;
   name: string;
   color: string;
   voice: string;

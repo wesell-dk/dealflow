@@ -375,6 +375,20 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/AdminUser" }
 
+  /admin/permissions/catalog:
+    get:
+      operationId: listPermissionCatalog
+      tags: [admin]
+      summary: "Liste aller verfügbaren Permission-Keys (Quelle für Custom-Rollen-Editor)."
+      responses:
+        "200":
+          description: ok
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/PermissionCatalogEntry" }
+
   /admin/roles:
     get:
       operationId: listRoles
@@ -1033,6 +1047,17 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/IndustryProfile" }
+    delete:
+      operationId: deleteIndustryProfile
+      tags: [quotes]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        "204":
+          description: deleted
 
   # ───────────── PRICING ─────────────
 
@@ -1063,6 +1088,38 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/PricePosition" }
 
+  /price-positions/{id}:
+    patch:
+      operationId: updatePricePosition
+      tags: [pricing]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/PricePositionPatch" }
+      responses:
+        "200":
+          description: ok
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PricePosition" }
+    delete:
+      operationId: deletePricePosition
+      tags: [pricing]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        "204":
+          description: deleted
+
   /price-rules:
     get:
       operationId: listPriceRules
@@ -1075,6 +1132,52 @@ paths:
               schema:
                 type: array
                 items: { $ref: "#/components/schemas/PriceRule" }
+    post:
+      operationId: createPriceRule
+      tags: [pricing]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/PriceRuleInput" }
+      responses:
+        "201":
+          description: created
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PriceRule" }
+
+  /price-rules/{id}:
+    patch:
+      operationId: updatePriceRule
+      tags: [pricing]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/PriceRulePatch" }
+      responses:
+        "200":
+          description: ok
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PriceRule" }
+    delete:
+      operationId: deletePriceRule
+      tags: [pricing]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        "204":
+          description: deleted
 
   /pricing/summary:
     get:
@@ -2510,6 +2613,23 @@ paths:
         "404": { description: not found }
 
   # ───────────── BULK ACTIONS ─────────────
+  /accounts/enrich-from-website:
+    post:
+      operationId: enrichAccountFromWebsite
+      tags: [accounts]
+      summary: "Best-effort Anreicherung aus Website (Nominatim + Impressum-Crawl)."
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/AccountEnrichmentRequest" }
+      responses:
+        "200":
+          description: ok
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AccountEnrichmentSuggestion" }
+
   /accounts/bulk/owner:
     post:
       operationId: bulkUpdateAccountOwner
@@ -3862,6 +3982,7 @@ components:
       properties:
         id: { type: string }
         companyId: { type: string }
+        parentBrandId: { type: string, nullable: true, description: "Optionale Eltern-Marke für Multi-Tier-Hierarchien." }
         name: { type: string }
         color: { type: string }
         voice: { type: string }
@@ -3882,6 +4003,7 @@ components:
         name: { type: string }
         color: { type: string }
         voice: { type: string }
+        parentBrandId: { type: string, nullable: true }
         logoUrl: { type: string, nullable: true }
         primaryColor: { type: string, nullable: true }
         secondaryColor: { type: string, nullable: true }
@@ -3919,6 +4041,7 @@ components:
       required: [companyId, name]
       properties:
         companyId: { type: string }
+        parentBrandId: { type: string, nullable: true, description: "Optional Eltern-Marke (für Sub-Brands)." }
         name: { type: string, minLength: 1, maxLength: 200 }
         color:
           type: string
@@ -4088,12 +4211,16 @@ components:
 
     Role:
       type: object
-      required: [id, name, description, isSystem]
+      required: [id, name, description, isSystem, permissions]
       properties:
         id: { type: string }
         name: { type: string }
         description: { type: string }
         isSystem: { type: boolean }
+        permissions:
+          type: array
+          items: { type: string }
+          description: "Permission-Keys (z. B. deal:write, approval:approve). Nur bei Custom-Rollen editierbar."
 
     RoleCreate:
       type: object
@@ -4101,12 +4228,27 @@ components:
       properties:
         name: { type: string }
         description: { type: string }
+        permissions:
+          type: array
+          items: { type: string }
 
     RoleUpdate:
       type: object
       properties:
         name: { type: string }
         description: { type: string }
+        permissions:
+          type: array
+          items: { type: string }
+
+    PermissionCatalogEntry:
+      type: object
+      required: [key, label, group]
+      properties:
+        key: { type: string, description: "z. B. deal:write" }
+        label: { type: string, description: "Menschlich lesbarer Text." }
+        group: { type: string, description: "z. B. Deals, Approvals, Stammdaten." }
+        description: { type: string, nullable: true }
 
     ScopeTree:
       type: object
@@ -4143,6 +4285,12 @@ components:
         totalValue: { type: number }
         ownerId:
           type: ["string", "null"]
+        website: { type: ["string", "null"], description: "Optionale Website (z. B. https://example.com)." }
+        phone: { type: ["string", "null"], description: "Telefon-Hauptnummer." }
+        billingAddress: { type: ["string", "null"], description: "Rechnungsadresse als Mehrzeiler." }
+        vatId: { type: ["string", "null"], description: "USt-IdNr. (z. B. DE123456789)." }
+        sizeBracket: { type: ["string", "null"], description: "Mitarbeitergröße: 1-10 / 11-50 / 51-200 / 201-1000 / 1000+" }
+        primaryContactId: { type: ["string", "null"] }
 
     AccountDetail:
       allOf:
@@ -4164,6 +4312,12 @@ components:
         name: { type: string }
         industry: { type: string }
         country: { type: string }
+        website: { type: string, nullable: true }
+        phone: { type: string, nullable: true }
+        billingAddress: { type: string, nullable: true }
+        vatId: { type: string, nullable: true }
+        sizeBracket: { type: string, nullable: true }
+        ownerId: { type: string, nullable: true }
 
     AccountPatch:
       type: object
@@ -4173,6 +4327,30 @@ components:
         country: { type: string }
         healthScore: { type: integer }
         ownerId: { type: ["string", "null"] }
+        website: { type: ["string", "null"] }
+        phone: { type: ["string", "null"] }
+        billingAddress: { type: ["string", "null"] }
+        vatId: { type: ["string", "null"] }
+        sizeBracket: { type: ["string", "null"] }
+        primaryContactId: { type: ["string", "null"] }
+
+    AccountEnrichmentRequest:
+      type: object
+      required: [website]
+      properties:
+        website: { type: string, description: "URL oder Domain (https:// optional)." }
+
+    AccountEnrichmentSuggestion:
+      type: object
+      description: "Best-effort Vorschläge aus Web-Anreicherung (Nominatim + Impressum-Crawl)."
+      properties:
+        name: { type: string, nullable: true }
+        country: { type: string, nullable: true, description: "ISO-3166 Alpha-2." }
+        billingAddress: { type: string, nullable: true }
+        phone: { type: string, nullable: true }
+        vatId: { type: string, nullable: true }
+        legalEntityName: { type: string, nullable: true }
+        sourceUrl: { type: string, nullable: true, description: "Tatsächlich gefetchte URL (z. B. /impressum)." }
 
     SavedView:
       type: object
@@ -4731,6 +4909,22 @@ components:
         companyId: { type: string }
         validFrom: { type: string, format: date }
 
+    PricePositionPatch:
+      type: object
+      properties:
+        sku: { type: string }
+        name: { type: string }
+        category: { type: string }
+        listPrice: { type: number }
+        currency: { type: string }
+        status: { type: string, enum: [draft, active, archived] }
+        validFrom: { type: string, format: date }
+        validUntil:
+          type: ["string", "null"]
+          format: date
+        brandId: { type: string }
+        isStandard: { type: boolean }
+
     PriceRule:
       type: object
       required: [id, name, scope, condition, effect, priority, status]
@@ -4742,6 +4936,27 @@ components:
         effect: { type: string }
         priority: { type: integer }
         status: { type: string }
+
+    PriceRuleInput:
+      type: object
+      required: [name, scope, condition, effect, priority]
+      properties:
+        name: { type: string }
+        scope: { type: string }
+        condition: { type: string }
+        effect: { type: string }
+        priority: { type: integer }
+        status: { type: string, enum: [draft, active, archived] }
+
+    PriceRulePatch:
+      type: object
+      properties:
+        name: { type: string }
+        scope: { type: string }
+        condition: { type: string }
+        effect: { type: string }
+        priority: { type: integer }
+        status: { type: string, enum: [draft, active, archived] }
 
     PricingSummary:
       type: object

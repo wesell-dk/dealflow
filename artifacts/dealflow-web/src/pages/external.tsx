@@ -6,6 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { FileText, ShieldAlert, MessageSquare, Lock } from "lucide-react";
+import { toAssetSrc } from "@/lib/asset-url";
 
 interface Comment {
   id: string;
@@ -111,7 +112,7 @@ export default function ExternalContractPage() {
       >
         <div className="max-w-4xl mx-auto flex items-center gap-3">
           {data?.brand?.logoUrl ? (
-            <img src={data.brand.logoUrl} alt={data.brand.name} className="h-8 w-auto" />
+            <img src={toAssetSrc(data.brand.logoUrl)} alt={data.brand.name} className="h-8 w-auto" />
           ) : (
             <FileText className="h-8 w-8 text-muted-foreground" />
           )}

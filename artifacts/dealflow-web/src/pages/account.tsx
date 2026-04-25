@@ -13,8 +13,9 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
-import { Building, Phone, Mail, UserCircle2, Plus } from "lucide-react";
+import { Building, Phone, Mail, UserCircle2, Plus, Pencil, Globe, MapPin, Receipt, Users } from "lucide-react";
 import { DealFormDialog } from "@/components/deals/deal-form-dialog";
+import { AccountFormDialog } from "@/components/accounts/account-form-dialog";
 import { InlineEditField } from "@/components/patterns/inline-edit-field";
 import { ActivityTimeline } from "@/components/patterns/activity-timeline";
 import { ExternalContractsCard } from "@/components/external-contracts/external-contracts-card";
@@ -25,6 +26,7 @@ export default function Account() {
   const [, params] = useRoute("/accounts/:id");
   const id = params?.id || "";
   const [dealOpen, setDealOpen] = useState(false);
+  const [editOpen, setEditOpen] = useState(false);
   const qc = useQueryClient();
   const { toast } = useToast();
 
@@ -93,9 +95,14 @@ export default function Account() {
             </div>
           </div>
           <div className="flex flex-col items-end gap-3">
-            <Button size="sm" onClick={() => setDealOpen(true)} data-testid="account-new-deal-button">
-              <Plus className="h-4 w-4 mr-1" /> Deal anlegen
-            </Button>
+            <div className="flex gap-2">
+              <Button size="sm" variant="outline" onClick={() => setEditOpen(true)} data-testid="account-edit-button">
+                <Pencil className="h-4 w-4 mr-1" /> Bearbeiten
+              </Button>
+              <Button size="sm" onClick={() => setDealOpen(true)} data-testid="account-new-deal-button">
+                <Plus className="h-4 w-4 mr-1" /> Deal anlegen
+              </Button>
+            </div>
             <div className="text-sm font-medium text-muted-foreground">Health Score</div>
             <div className="flex items-center gap-3">
               <span className="text-2xl font-bold tabular-nums">{account.healthScore}</span>
@@ -106,7 +113,7 @@ export default function Account() {
           </div>
         </div>
 
-        <div className="flex gap-6 mt-2">
+        <div className="flex flex-wrap gap-6 mt-2">
           <div>
             <div className="text-sm text-muted-foreground">Offene Deals</div>
             <div className="text-xl font-semibold tabular-nums">{account.openDeals}</div>
@@ -115,7 +122,41 @@ export default function Account() {
             <div className="text-sm text-muted-foreground">Volumen</div>
             <div className="text-xl font-semibold tabular-nums">{account.totalValue.toLocaleString("de-DE")}</div>
           </div>
+          {account.website && (
+            <div>
+              <div className="text-sm text-muted-foreground flex items-center gap-1"><Globe className="h-3.5 w-3.5" /> Website</div>
+              <a href={account.website.startsWith("http") ? account.website : `https://${account.website}`}
+                 target="_blank" rel="noreferrer"
+                 className="text-sm font-medium text-primary hover:underline">
+                {account.website.replace(/^https?:\/\//, "")}
+              </a>
+            </div>
+          )}
+          {account.phone && (
+            <div>
+              <div className="text-sm text-muted-foreground flex items-center gap-1"><Phone className="h-3.5 w-3.5" /> Telefon</div>
+              <div className="text-sm font-medium">{account.phone}</div>
+            </div>
+          )}
+          {account.vatId && (
+            <div>
+              <div className="text-sm text-muted-foreground flex items-center gap-1"><Receipt className="h-3.5 w-3.5" /> USt-IdNr.</div>
+              <div className="text-sm font-medium">{account.vatId}</div>
+            </div>
+          )}
+          {account.sizeBracket && (
+            <div>
+              <div className="text-sm text-muted-foreground flex items-center gap-1"><Users className="h-3.5 w-3.5" /> Größe</div>
+              <div className="text-sm font-medium">{account.sizeBracket} MA</div>
+            </div>
+          )}
         </div>
+        {account.billingAddress && (
+          <div className="text-sm text-muted-foreground flex items-start gap-1.5 mt-1">
+            <MapPin className="h-3.5 w-3.5 mt-0.5 shrink-0" />
+            <span className="whitespace-pre-line">{account.billingAddress}</span>
+          </div>
+        )}
       </div>
 
       <div className="grid lg:grid-cols-3 gap-6">
@@ -186,6 +227,22 @@ export default function Account() {
       </div>
 
       <DealFormDialog open={dealOpen} onOpenChange={setDealOpen} defaultAccountId={account.id} />
+      <AccountFormDialog
+        open={editOpen}
+        onOpenChange={setEditOpen}
+        account={{
+          id: account.id,
+          name: account.name,
+          industry: account.industry,
+          country: account.country,
+          healthScore: account.healthScore,
+          website: account.website,
+          phone: account.phone,
+          billingAddress: account.billingAddress,
+          vatId: account.vatId,
+          sizeBracket: account.sizeBracket,
+        }}
+      />
     </div>
   );
 }

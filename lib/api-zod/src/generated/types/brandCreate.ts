@@ -10,6 +10,8 @@ Multi-tenant, multi-company, multi-brand. Deal-centric.
 
 export interface BrandCreate {
   companyId: string;
+  /** Optional Eltern-Marke (für Sub-Brands). */
+  parentBrandId?: string | null;
   /**
    * @minLength 1
    * @maxLength 200

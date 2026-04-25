@@ -434,6 +434,7 @@ router.post('/orgs/brands', async (req, res) => {
   const scope = getScope(req);
   const b = req.body as {
     companyId: string; name: string;
+    parentBrandId?: string | null;
     color?: string | null; voice?: string | null;
     logoUrl?: string | null; primaryColor?: string | null; secondaryColor?: string | null;
     tone?: string | null; legalEntityName?: string | null; addressLine?: string | null;
@@ -443,6 +444,15 @@ router.post('/orgs/brands', async (req, res) => {
   if (company.tenantId !== scope.tenantId) { res.status(403).json({ error: 'forbidden' }); return; }
   const name = b.name.trim();
   if (!name) { res.status(422).json({ error: 'name must not be empty' }); return; }
+  let parentBrandId: string | null = null;
+  if (b.parentBrandId !== undefined && b.parentBrandId !== null && b.parentBrandId !== '') {
+    const [parent] = await db.select().from(brandsTable).where(eq(brandsTable.id, b.parentBrandId));
+    if (!parent) { res.status(422).json({ error: 'parentBrandId not found' }); return; }
+    if (parent.companyId !== b.companyId) {
+      res.status(422).json({ error: 'parent brand must belong to same company' }); return;
+    }
+    parentBrandId = parent.id;
+  }
   const dup = await db.select().from(brandsTable)
     .where(and(eq(brandsTable.companyId, b.companyId), eq(brandsTable.name, name)));
   if (dup.length) { res.status(409).json({ error: `brand "${name}" already exists for this company` }); return; }
@@ -458,6 +468,7 @@ router.post('/orgs/brands', async (req, res) => {
   const row: typeof brandsTable.$inferInsert = {
     id: newId,
     companyId: b.companyId,
+    parentBrandId,
     name,
     color,
     voice: (b.voice ?? b.tone ?? 'precise').trim() || 'precise',
@@ -660,11 +671,27 @@ router.get('/accounts', async (req, res) => {
 
 router.post('/accounts', async (req, res) => {
   if (!validateInline(req, res, { body: Z.CreateAccountBody })) return;
-  const body = req.body;
+  const body = req.body as {
+    name: string; industry: string; country: string;
+    website?: string | null; phone?: string | null;
+    billingAddress?: string | null; vatId?: string | null;
+    sizeBracket?: string | null; ownerId?: string | null;
+  };
   const id = `acc_${randomUUID().slice(0, 8)}`;
+  let resolvedOwnerId: string | null = getScope(req).user.id;
+  if (body.ownerId !== undefined) {
+    const ownerCheck = await resolveOwnerId(req, res, body.ownerId);
+    if (!ownerCheck.ok) return;
+    resolvedOwnerId = ownerCheck.value;
+  }
   await db.insert(accountsTable).values({
     id, name: body.name, industry: body.industry, country: body.country,
-    healthScore: 70, ownerId: getScope(req).user.id,
+    healthScore: 70, ownerId: resolvedOwnerId,
+    website: body.website?.trim() || null,
+    phone: body.phone?.trim() || null,
+    billingAddress: body.billingAddress?.trim() || null,
+    vatId: body.vatId?.trim() || null,
+    sizeBracket: body.sizeBracket?.trim() || null,
   });
   const [a] = await db.select().from(accountsTable).where(eq(accountsTable.id, id));
   res.status(201).json({ ...a, openDeals: 0, totalValue: 0 });
@@ -714,7 +741,13 @@ async function resolveOwnerId(
 router.patch('/accounts/:id', async (req, res) => {
   if (!validateInline(req, res, { params: Z.UpdateAccountParams, body: Z.UpdateAccountBody })) return;
   if (!(await gateAccount(req, res, req.params.id))) return;
-  const b = req.body as { name?: string; industry?: string; country?: string; healthScore?: number; ownerId?: string | null };
+  const b = req.body as {
+    name?: string; industry?: string; country?: string; healthScore?: number;
+    ownerId?: string | null;
+    website?: string | null; phone?: string | null;
+    billingAddress?: string | null; vatId?: string | null;
+    sizeBracket?: string | null; primaryContactId?: string | null;
+  };
   const update: Record<string, unknown> = { updatedAt: new Date() };
   if (b.name !== undefined) update.name = b.name;
   if (b.industry !== undefined) update.industry = b.industry;
@@ -724,6 +757,18 @@ router.patch('/accounts/:id', async (req, res) => {
     const ownerCheck = await resolveOwnerId(req, res, b.ownerId);
     if (!ownerCheck.ok) return;
     update.ownerId = ownerCheck.value;
+  }
+  // Optionale Stammdatenfelder — alle nullable; leere Strings → null normalisieren.
+  const optStr = (v: unknown): string | null | undefined => {
+    if (v === undefined) return undefined;
+    if (v === null) return null;
+    if (typeof v !== 'string') return undefined;
+    const t = v.trim();
+    return t === '' ? null : t;
+  };
+  for (const k of ['website', 'phone', 'billingAddress', 'vatId', 'sizeBracket', 'primaryContactId'] as const) {
+    const norm = optStr((b as Record<string, unknown>)[k]);
+    if (norm !== undefined) update[k] = norm;
   }
   await db.update(accountsTable).set(update).where(eq(accountsTable.id, req.params.id));
   const [a] = await db.select().from(accountsTable).where(eq(accountsTable.id, req.params.id));
@@ -1204,6 +1249,29 @@ router.post('/quotes/:id/accept', async (req, res) => {
   const [q] = await db.select().from(quotesTable).where(eq(quotesTable.id, req.params.id));
   if (!q) { res.status(404).json({ error: 'not found' }); return; }
   const [d] = await db.select().from(dealsTable).where(eq(dealsTable.id, q.dealId));
+
+  // Auto-Fill: Wenn der Deal noch keinen Wert hat (== 0), übernehme den
+  // totalAmount der neusten Quote-Version. So können Vertriebler einen Deal
+  // ohne Wert anlegen und ihn nach Angebotsannahme automatisch befüllen lassen.
+  if (d && (Number(d.value) === 0 || d.value === null)) {
+    const [latest] = await db.select().from(quoteVersionsTable)
+      .where(eq(quoteVersionsTable.quoteId, q.id))
+      .orderBy(desc(quoteVersionsTable.version))
+      .limit(1);
+    const total = latest ? Number(latest.totalAmount) : 0;
+    if (total > 0) {
+      await db.update(dealsTable)
+        .set({ value: String(total), updatedAt: new Date() })
+        .where(eq(dealsTable.id, d.id));
+      await writeAuditFromReq(req, {
+        entityType: 'deal', entityId: d.id, action: 'value_autofill',
+        summary: `Deal-Wert automatisch aus akzeptiertem Angebot übernommen: ${total.toLocaleString('de-DE')} €`,
+        before: { value: d.value },
+        after: { value: total },
+      });
+    }
+  }
+
   void emitEvent(getScope(req).tenantId, 'quote.accepted', { quoteId: q.id, dealId: q.dealId });
   res.json(await enrichQuote(q, d?.name ?? 'Unknown'));
 });
@@ -1553,6 +1621,19 @@ router.patch('/industry-profiles/:id', async (req, res) => {
   res.json(mapIndustryProfile(p!));
 });
 
+router.delete('/industry-profiles/:id', async (req, res) => {
+  if (!validateInline(req, res, { params: Z.DeleteIndustryProfileParams })) return;
+  const scope = getScope(req);
+  const [existing] = await db.select().from(industryProfilesTable).where(eq(industryProfilesTable.id, req.params.id));
+  if (!existing || existing.tenantId !== scope.tenantId) { res.status(404).json({ error: 'not found' }); return; }
+  await db.delete(industryProfilesTable).where(eq(industryProfilesTable.id, req.params.id));
+  await writeAuditFromReq(req, {
+    entityType: 'industry_profile', entityId: req.params.id, action: 'deleted',
+    summary: `Branchen-Profil "${existing.label}" gelöscht`,
+  });
+  res.status(204).end();
+});
+
 // ── QUOTE FROM TEMPLATE / LINE ITEMS / ATTACHMENTS ──
 function calcLineTotal(item: { quantity: number; unitPrice: number; discountPct: number }) {
   return Math.round(item.quantity * item.unitPrice * (1 - item.discountPct / 100));
@@ -1867,6 +1948,56 @@ router.post('/price-positions', async (req, res) => {
   res.status(201).json(mapPricePosition(p!, brands.get(p!.brandId)?.name ?? '', companies.get(p!.companyId)?.name ?? ''));
 });
 
+router.patch('/price-positions/:id', async (req, res) => {
+  if (!validateInline(req, res, { params: Z.UpdatePricePositionParams, body: Z.UpdatePricePositionBody })) return;
+  const stP = await entityScopeStatus(req, 'price_position', req.params.id);
+  if (stP !== 'ok') { res.status(stP === 'missing' ? 404 : 403).json({ error: stP === 'missing' ? 'not found' : 'forbidden' }); return; }
+  const [existing] = await db.select().from(pricePositionsTable).where(eq(pricePositionsTable.id, req.params.id));
+  if (!existing) { res.status(404).json({ error: 'not found' }); return; }
+  const b = req.body;
+  // Brand-Wechsel respektiert das Scope-Modell: das neue Brand muss im Tenant sein.
+  if (b.brandId && b.brandId !== existing.brandId) {
+    const [br] = await db.select().from(brandsTable).where(eq(brandsTable.id, b.brandId));
+    if (!br || br.companyId !== existing.companyId) { res.status(422).json({ error: 'brand outside company scope' }); return; }
+  }
+  const patch: Partial<typeof pricePositionsTable.$inferInsert> = {};
+  if (b.sku !== undefined) patch.sku = b.sku;
+  if (b.name !== undefined) patch.name = b.name;
+  if (b.category !== undefined) patch.category = b.category;
+  if (b.listPrice !== undefined) patch.listPrice = String(b.listPrice);
+  if (b.currency !== undefined) patch.currency = b.currency;
+  if (b.status !== undefined) patch.status = b.status;
+  if (b.validFrom !== undefined) patch.validFrom = b.validFrom;
+  if (b.validUntil !== undefined) patch.validUntil = b.validUntil;
+  if (b.brandId !== undefined) patch.brandId = b.brandId;
+  if (b.isStandard !== undefined) patch.isStandard = b.isStandard;
+  if (Object.keys(patch).length > 0) {
+    await db.update(pricePositionsTable).set(patch).where(eq(pricePositionsTable.id, req.params.id));
+  }
+  await writeAuditFromReq(req, {
+    entityType: 'price_position', entityId: req.params.id, action: 'updated',
+    summary: `Preis ${existing.sku} aktualisiert`,
+  });
+  const [p] = await db.select().from(pricePositionsTable).where(eq(pricePositionsTable.id, req.params.id));
+  const brands = await getBrandMap();
+  const companies = await getCompanyMap();
+  res.json(mapPricePosition(p!, brands.get(p!.brandId)?.name ?? '', companies.get(p!.companyId)?.name ?? ''));
+});
+
+router.delete('/price-positions/:id', async (req, res) => {
+  if (!validateInline(req, res, { params: Z.DeletePricePositionParams })) return;
+  const stP = await entityScopeStatus(req, 'price_position', req.params.id);
+  if (stP !== 'ok') { res.status(stP === 'missing' ? 404 : 403).json({ error: stP === 'missing' ? 'not found' : 'forbidden' }); return; }
+  const [existing] = await db.select().from(pricePositionsTable).where(eq(pricePositionsTable.id, req.params.id));
+  if (!existing) { res.status(404).json({ error: 'not found' }); return; }
+  await db.delete(pricePositionsTable).where(eq(pricePositionsTable.id, req.params.id));
+  await writeAuditFromReq(req, {
+    entityType: 'price_position', entityId: req.params.id, action: 'deleted',
+    summary: `Preis ${existing.sku} gelöscht`,
+  });
+  res.status(204).end();
+});
+
 router.get('/price-rules', async (req, res) => {
   const scope = getScope(req);
   // Tenant-bound: rule-scope must be 'global' or a companyId/brandId inside
@@ -1880,7 +2011,7 @@ router.get('/price-rules', async (req, res) => {
   ]);
   const tenantCos = new Set(tenantCoRows.map(c => c.id));
   const tenantBrs = new Set(tenantBrRows.map(b => b.id));
-  const rows = await db.select().from(priceRulesTable);
+  const rows = await db.select().from(priceRulesTable).where(eq(priceRulesTable.tenantId, scope.tenantId));
   const tenantRows = rows.filter(r =>
     r.scope === 'global' || tenantCos.has(r.scope) || tenantBrs.has(r.scope));
   if (scope.tenantWide && !hasActiveScopeFilter(scope)) { res.json(tenantRows); return; }
@@ -1888,6 +2019,108 @@ router.get('/price-rules', async (req, res) => {
   const allowedCompaniesArr = await allowedCompanyIds(req);
   const allowedScopes = new Set<string>(['global', ...allowedCompaniesArr, ...allowedBrandsArr]);
   res.json(tenantRows.filter(r => allowedScopes.has(r.scope)));
+});
+
+// F03 PriceRule CRUD: scope ist 'global' | brandId | companyId — alle drei Pfade müssen
+// auf den eigenen Tenant beschränkt bleiben, sonst kann ein Tenant globale Rules
+// für andere überschreiben (Sicherheitsrelevant).
+// Hinweis: Tenant-Ownership existierender Rules wird über `priceRulesTable.tenantId`
+// vor dem Aufruf geprüft (siehe PATCH/DELETE). Diese Funktion validiert nur den
+// *Ziel*-Scope-String relativ zum aufrufenden Tenant + Permission-Scope.
+async function ensureRuleScopeAllowed(req: import('express').Request, scopeStr: string): Promise<true | { status: number; error: string }> {
+  if (scopeStr === 'global') return true;
+  // Tenant-bound check
+  const scope = getScope(req);
+  const [co] = await db.select().from(companiesTable).where(eq(companiesTable.id, scopeStr));
+  if (co) {
+    if (co.tenantId !== scope.tenantId) return { status: 403, error: 'forbidden' };
+    if (!scope.tenantWide || hasActiveScopeFilter(scope)) {
+      const allowed = await allowedCompanyIds(req);
+      if (!allowed.includes(co.id)) return { status: 403, error: 'forbidden' };
+    }
+    return true;
+  }
+  const [br] = await db.select().from(brandsTable).where(eq(brandsTable.id, scopeStr));
+  if (br) {
+    const [bco] = await db.select().from(companiesTable).where(eq(companiesTable.id, br.companyId));
+    if (!bco || bco.tenantId !== scope.tenantId) return { status: 403, error: 'forbidden' };
+    if (!scope.tenantWide || hasActiveScopeFilter(scope)) {
+      const allowed = await allowedBrandIds(req);
+      if (!allowed.includes(br.id)) return { status: 403, error: 'forbidden' };
+    }
+    return true;
+  }
+  return { status: 422, error: 'unknown scope (must be "global", companyId or brandId)' };
+}
+
+router.post('/price-rules', async (req, res) => {
+  if (!validateInline(req, res, { body: Z.CreatePriceRuleBody })) return;
+  const b = req.body;
+  const ok = await ensureRuleScopeAllowed(req, b.scope);
+  if (ok !== true) { res.status(ok.status).json({ error: ok.error }); return; }
+  const scope = getScope(req);
+  const id = `pr_${randomUUID().slice(0, 8)}`;
+  await db.insert(priceRulesTable).values({
+    id, tenantId: scope.tenantId,
+    name: b.name, scope: b.scope, condition: b.condition, effect: b.effect,
+    priority: b.priority, status: b.status ?? 'draft',
+  });
+  await writeAuditFromReq(req, {
+    entityType: 'price_rule', entityId: id, action: 'created',
+    summary: `Pricing-Regel "${b.name}" angelegt`,
+  });
+  const [r] = await db.select().from(priceRulesTable).where(eq(priceRulesTable.id, id));
+  res.status(201).json(r);
+});
+
+router.patch('/price-rules/:id', async (req, res) => {
+  if (!validateInline(req, res, { params: Z.UpdatePriceRuleParams, body: Z.UpdatePriceRuleBody })) return;
+  const [existing] = await db.select().from(priceRulesTable).where(eq(priceRulesTable.id, req.params.id));
+  if (!existing) { res.status(404).json({ error: 'not found' }); return; }
+  // Tenant-Ownership zuerst (auch für scope='global'!).
+  const callerScope = getScope(req);
+  if (existing.tenantId !== callerScope.tenantId) { res.status(404).json({ error: 'not found' }); return; }
+  // Permission-Scope für aktuellen Scope-String.
+  const ok1 = await ensureRuleScopeAllowed(req, existing.scope);
+  if (ok1 !== true) { res.status(ok1.status).json({ error: ok1.error }); return; }
+  const b = req.body;
+  // Bei Scope-Wechsel zusätzlich Ziel-Scope prüfen.
+  if (b.scope && b.scope !== existing.scope) {
+    const ok2 = await ensureRuleScopeAllowed(req, b.scope);
+    if (ok2 !== true) { res.status(ok2.status).json({ error: ok2.error }); return; }
+  }
+  const patch: Partial<typeof priceRulesTable.$inferInsert> = {};
+  if (b.name !== undefined) patch.name = b.name;
+  if (b.scope !== undefined) patch.scope = b.scope;
+  if (b.condition !== undefined) patch.condition = b.condition;
+  if (b.effect !== undefined) patch.effect = b.effect;
+  if (b.priority !== undefined) patch.priority = b.priority;
+  if (b.status !== undefined) patch.status = b.status;
+  if (Object.keys(patch).length > 0) {
+    await db.update(priceRulesTable).set(patch).where(eq(priceRulesTable.id, req.params.id));
+  }
+  await writeAuditFromReq(req, {
+    entityType: 'price_rule', entityId: req.params.id, action: 'updated',
+    summary: `Pricing-Regel "${existing.name}" aktualisiert`,
+  });
+  const [r] = await db.select().from(priceRulesTable).where(eq(priceRulesTable.id, req.params.id));
+  res.json(r);
+});
+
+router.delete('/price-rules/:id', async (req, res) => {
+  if (!validateInline(req, res, { params: Z.DeletePriceRuleParams })) return;
+  const [existing] = await db.select().from(priceRulesTable).where(eq(priceRulesTable.id, req.params.id));
+  if (!existing) { res.status(404).json({ error: 'not found' }); return; }
+  const callerScope = getScope(req);
+  if (existing.tenantId !== callerScope.tenantId) { res.status(404).json({ error: 'not found' }); return; }
+  const ok = await ensureRuleScopeAllowed(req, existing.scope);
+  if (ok !== true) { res.status(ok.status).json({ error: ok.error }); return; }
+  await db.delete(priceRulesTable).where(eq(priceRulesTable.id, req.params.id));
+  await writeAuditFromReq(req, {
+    entityType: 'price_rule', entityId: req.params.id, action: 'deleted',
+    summary: `Pricing-Regel "${existing.name}" gelöscht`,
+  });
+  res.status(204).end();
 });
 
 router.get('/pricing/summary', async (req, res) => {
@@ -2407,6 +2640,7 @@ function mapBrand(b: typeof brandsTable.$inferSelect) {
     tone: b.tone ?? null,
     legalEntityName: b.legalEntityName ?? null,
     addressLine: b.addressLine ?? null,
+    parentBrandId: b.parentBrandId ?? null,
   };
 }
 
@@ -2454,6 +2688,33 @@ router.patch('/brands/:id', async (req, res) => {
   }
   const body: Record<string, unknown> = req.body ?? {};
   const patch: Partial<typeof brandsTable.$inferInsert> = {};
+  // parentBrandId separat behandeln (nullable, mit Self-/Company-Validation).
+  if ('parentBrandId' in body) {
+    const v = body.parentBrandId;
+    if (v === null || v === '') {
+      patch.parentBrandId = null;
+    } else if (typeof v === 'string') {
+      if (v === existing.id) { res.status(422).json({ error: 'parentBrandId must not equal own id' }); return; }
+      const [parent] = await db.select().from(brandsTable).where(eq(brandsTable.id, v));
+      if (!parent) { res.status(422).json({ error: 'parentBrandId not found' }); return; }
+      if (parent.companyId !== existing.companyId) {
+        res.status(422).json({ error: 'parent brand must belong to same company' }); return;
+      }
+      // Verhindere triviale Zyklen: kein Vorfahre darf sich auf existing.id beziehen.
+      let cur: typeof brandsTable.$inferSelect | null = parent;
+      const visited = new Set<string>();
+      while (cur && cur.parentBrandId) {
+        if (visited.has(cur.id)) break;
+        visited.add(cur.id);
+        if (cur.parentBrandId === existing.id) {
+          res.status(422).json({ error: 'parentBrandId would create a cycle' }); return;
+        }
+        const [next] = await db.select().from(brandsTable).where(eq(brandsTable.id, cur.parentBrandId));
+        cur = next ?? null;
+      }
+      patch.parentBrandId = v;
+    }
+  }
   const strFields = ['name', 'color', 'voice', 'logoUrl', 'primaryColor', 'secondaryColor', 'tone', 'legalEntityName', 'addressLine'] as const;
   const hexRe = /^#[0-9a-fA-F]{6}$/;
   for (const k of strFields) {
@@ -6525,11 +6786,54 @@ router.patch('/admin/users/:id', async (req, res) => {
   res.json(await mapAdminUser(updated!));
 });
 
+// Katalog aller Permission-Keys, die Custom-Rollen zugewiesen werden können.
+// System-Rollen haben implizit alle (oder eine kuratierte Untermenge); siehe
+// `SYSTEM_ROLE_PERMISSIONS` weiter unten.
+const PERMISSION_CATALOG: ReadonlyArray<{ key: string; label: string; group: string; description?: string }> = [
+  { key: 'deal:read',         label: 'Deals einsehen',                 group: 'Deals' },
+  { key: 'deal:write',        label: 'Deals anlegen & bearbeiten',     group: 'Deals' },
+  { key: 'deal:delete',       label: 'Deals löschen',                  group: 'Deals' },
+  { key: 'account:read',      label: 'Kunden einsehen',                group: 'Stammdaten' },
+  { key: 'account:write',     label: 'Kunden anlegen & bearbeiten',    group: 'Stammdaten' },
+  { key: 'quote:read',        label: 'Angebote einsehen',              group: 'Angebote' },
+  { key: 'quote:write',       label: 'Angebote anlegen & bearbeiten',  group: 'Angebote' },
+  { key: 'quote:approve',     label: 'Angebote freigeben',             group: 'Angebote' },
+  { key: 'contract:read',     label: 'Verträge einsehen',              group: 'Verträge' },
+  { key: 'contract:write',    label: 'Verträge anlegen & bearbeiten',  group: 'Verträge' },
+  { key: 'approval:approve',  label: 'Freigaben erteilen',             group: 'Approvals',  description: 'Stage-Approvals in Approval-Chains.' },
+  { key: 'admin:tenant',      label: 'Tenant-Administration',          group: 'Admin',      description: 'Vollzugriff auf Admin-Bereich.' },
+  { key: 'admin:users',       label: 'Nutzer & Rollen verwalten',      group: 'Admin' },
+  { key: 'admin:branding',    label: 'Marken & Klauseln pflegen',      group: 'Admin' },
+  { key: 'admin:pricing',     label: 'Preise & Bundles pflegen',       group: 'Admin' },
+  { key: 'reports:read',      label: 'Reports & Dashboards',           group: 'Analytics' },
+];
+
+router.get('/admin/permissions/catalog', async (req, res) => {
+  if (!requireTenantAdmin(req, res)) return;
+  res.json(PERMISSION_CATALOG.map(p => ({ ...p })));
+});
+
+const VALID_PERMISSION_KEYS = new Set(PERMISSION_CATALOG.map(p => p.key));
+
+function normalizePermissions(input: unknown): string[] | null {
+  if (!Array.isArray(input)) return null;
+  const out: string[] = [];
+  for (const k of input) {
+    if (typeof k !== 'string') return null;
+    if (!VALID_PERMISSION_KEYS.has(k)) return null;
+    if (!out.includes(k)) out.push(k);
+  }
+  return out;
+}
+
 router.get('/admin/roles', async (req, res) => {
   if (!requireTenantAdmin(req, res)) return;
   const scope = getScope(req);
   const rows = await db.select().from(rolesTable).where(eq(rolesTable.tenantId, scope.tenantId));
-  res.json(rows.map(r => ({ id: r.id, name: r.name, description: r.description, isSystem: r.isSystem })));
+  res.json(rows.map(r => ({
+    id: r.id, name: r.name, description: r.description, isSystem: r.isSystem,
+    permissions: Array.isArray(r.permissions) ? r.permissions : [],
+  })));
 });
 
 router.post('/admin/roles', async (req, res) => {
@@ -6541,20 +6845,26 @@ router.post('/admin/roles', async (req, res) => {
     res.status(400).json({ error: 'name and description required' });
     return;
   }
+  let permissions: string[] = [];
+  if (b.permissions !== undefined) {
+    const norm = normalizePermissions(b.permissions);
+    if (norm === null) { res.status(422).json({ error: 'invalid permissions' }); return; }
+    permissions = norm;
+  }
   const [dup] = await db.select().from(rolesTable)
     .where(and(eq(rolesTable.tenantId, scope.tenantId), eq(rolesTable.name, b.name.trim())));
   if (dup) { res.status(409).json({ error: 'role name already exists' }); return; }
   const id = `ro_${randomUUID().slice(0, 8)}`;
   const [ins] = await db.insert(rolesTable).values({
     id, name: b.name.trim(), description: b.description.trim(),
-    isSystem: false, tenantId: scope.tenantId,
+    isSystem: false, tenantId: scope.tenantId, permissions,
   }).returning();
   await writeAuditFromReq(req, {    entityType: 'role', entityId: id, action: 'create',
     summary: `Rolle angelegt: ${b.name}`,
-    after: { name: b.name, description: b.description },
+    after: { name: b.name, description: b.description, permissions },
     actor: scope.user.name,
   });
-  res.status(201).json({ id: ins!.id, name: ins!.name, description: ins!.description, isSystem: ins!.isSystem });
+  res.status(201).json({ id: ins!.id, name: ins!.name, description: ins!.description, isSystem: ins!.isSystem, permissions: ins!.permissions ?? [] });
 });
 
 router.patch('/admin/roles/:id', async (req, res) => {
@@ -6568,6 +6878,11 @@ router.patch('/admin/roles/:id', async (req, res) => {
   const patch: Partial<typeof rolesTable.$inferInsert> = {};
   if (typeof b.name === 'string' && b.name.trim()) patch.name = b.name.trim();
   if (typeof b.description === 'string' && b.description.trim()) patch.description = b.description.trim();
+  if (b.permissions !== undefined) {
+    const norm = normalizePermissions(b.permissions);
+    if (norm === null) { res.status(422).json({ error: 'invalid permissions' }); return; }
+    patch.permissions = norm;
+  }
   if (Object.keys(patch).length > 0) {
     if (patch.name && patch.name !== r.name) {
       const [dup] = await db.select().from(rolesTable)
@@ -6579,13 +6894,13 @@ router.patch('/admin/roles/:id', async (req, res) => {
     await db.update(rolesTable).set(patch).where(eq(rolesTable.id, r.id));
     await writeAuditFromReq(req, {      entityType: 'role', entityId: r.id, action: 'update',
       summary: `Rolle aktualisiert: ${r.name}`,
-      before: { name: r.name, description: r.description },
+      before: { name: r.name, description: r.description, permissions: r.permissions ?? [] },
       after: patch,
       actor: scope.user.name,
     });
   }
   const [updated] = await db.select().from(rolesTable).where(eq(rolesTable.id, r.id));
-  res.json({ id: updated!.id, name: updated!.name, description: updated!.description, isSystem: updated!.isSystem });
+  res.json({ id: updated!.id, name: updated!.name, description: updated!.description, isSystem: updated!.isSystem, permissions: updated!.permissions ?? [] });
 });
 
 router.delete('/admin/roles/:id', async (req, res) => {
@@ -7063,6 +7378,151 @@ const bulkOwnerStrictSchema = z.object({
 });
 const bulkStageSchema = z.object({ ids: z.array(z.string()).min(1).max(500), stage: z.string().min(1) });
 const bulkDeleteSchema = z.object({ ids: z.array(z.string()).min(1).max(500) });
+
+// ─── Account: Best-effort Web-Anreicherung ──────────────────────────────────
+// Holt Impressum/Über-uns einer Website und extrahiert per Regex Adresse/Tel/USt-ID.
+// Land wird über Nominatim (OpenStreetMap, kein API-Key) reverse-geocoded.
+// Bewusst defensiv: 8s Timeout, 256 KB Body-Limit, harmlose User-Agents,
+// niemals 5xx zurückgeben — leere Felder sind ein gültiges Ergebnis.
+async function fetchWithLimit(url: string, ms = 8000, maxBytes = 256 * 1024): Promise<string | null> {
+  try {
+    const ac = new AbortController();
+    const timer = setTimeout(() => ac.abort(), ms);
+    const r = await fetch(url, {
+      signal: ac.signal,
+      redirect: 'follow',
+      headers: { 'user-agent': 'DealFlow.One Enrichment/1.0 (+https://dealflow.one)', 'accept': 'text/html,application/xhtml+xml' },
+    }).finally(() => clearTimeout(timer));
+    if (!r.ok) return null;
+    const ct = r.headers.get('content-type') ?? '';
+    if (!/text\/html|xml/i.test(ct)) return null;
+    const buf = await r.arrayBuffer();
+    if (buf.byteLength > maxBytes) return new TextDecoder().decode(buf.slice(0, maxBytes));
+    return new TextDecoder().decode(buf);
+  } catch {
+    return null;
+  }
+}
+
+function stripTags(html: string): string {
+  return html
+    .replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, ' ')
+    .replace(/<style\b[^>]*>[\s\S]*?<\/style>/gi, ' ')
+    .replace(/<br\s*\/?>/gi, '\n')
+    .replace(/<\/(p|div|li|tr)>/gi, '\n')
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/&nbsp;/gi, ' ')
+    .replace(/&amp;/gi, '&')
+    .replace(/&quot;/gi, '"')
+    .replace(/&#39;/gi, "'")
+    .replace(/[ \t]+/g, ' ')
+    .replace(/\n\s*\n+/g, '\n')
+    .trim();
+}
+
+function extractTitle(html: string): string | null {
+  const m = html.match(/<title[^>]*>([^<]+)<\/title>/i);
+  if (!m) return null;
+  return m[1]!.replace(/[|–—-]\s*(Impressum|Imprint|Home|Startseite).*$/i, '').trim() || null;
+}
+
+function extractEmailLessText(html: string): string {
+  return stripTags(html);
+}
+
+router.post('/accounts/enrich-from-website', async (req, res) => {
+  const raw = (req.body as { website?: unknown })?.website;
+  if (typeof raw !== 'string' || !raw.trim()) {
+    res.status(422).json({ error: 'website required' }); return;
+  }
+  let url: URL;
+  try {
+    const trimmed = raw.trim();
+    const withProto = /^https?:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`;
+    url = new URL(withProto);
+    if (!/^https?:$/i.test(url.protocol)) throw new Error('bad proto');
+  } catch {
+    res.status(422).json({ error: 'invalid website url' }); return;
+  }
+  // Block internal/loopback Hosts (SSRF-Schutz).
+  const host = url.hostname.toLowerCase();
+  if (host === 'localhost' || host === '0.0.0.0' || host.endsWith('.local') ||
+      /^(127|10|192\.168|169\.254|172\.(1[6-9]|2\d|3[01]))\./.test(host)) {
+    res.status(422).json({ error: 'host not allowed' }); return;
+  }
+
+  // 1) Try /impressum then /imprint then root.
+  const candidates = [
+    `${url.origin}/impressum`,
+    `${url.origin}/imprint`,
+    `${url.origin}/legal`,
+    `${url.origin}/about`,
+    url.origin + (url.pathname === '/' ? '' : url.pathname),
+    url.origin,
+  ];
+  let html: string | null = null;
+  let sourceUrl: string | null = null;
+  for (const cand of candidates) {
+    const h = await fetchWithLimit(cand);
+    if (h && h.length > 200) { html = h; sourceUrl = cand; break; }
+  }
+
+  const out: {
+    name: string | null; country: string | null; billingAddress: string | null;
+    phone: string | null; vatId: string | null; legalEntityName: string | null;
+    sourceUrl: string | null;
+  } = { name: null, country: null, billingAddress: null, phone: null, vatId: null, legalEntityName: null, sourceUrl };
+
+  if (html) {
+    const text = extractEmailLessText(html);
+    out.name = extractTitle(html);
+
+    // USt-ID (DE/AT/CH/EU): "DE" + 9 Ziffern, "ATU" + 8 Ziffern, "CHE-" + 9 Ziffern.
+    const vat = text.match(/\b(DE\d{9}|ATU\d{8}|CHE-?\d{3}\.?\d{3}\.?\d{3}(?:\s?(?:MWST|TVA|IVA))?|[A-Z]{2}\d{8,12})\b/i);
+    if (vat) out.vatId = vat[0].toUpperCase().replace(/\s+/g, ' ').trim();
+
+    // Telefon: gängige internationale + deutsche Formate.
+    const tel = text.match(/(?:Tel(?:efon)?\.?|Phone)[:\s]*((?:\+|00)\d[\d\s().\/-]{6,}\d)/i)
+              ?? text.match(/\b(\+\d{1,3}[\s().\/-]?\d[\d\s().\/-]{5,}\d)\b/);
+    if (tel) out.phone = tel[1]!.replace(/[\s().\/-]+/g, ' ').replace(/\s+/g, ' ').trim();
+
+    // Adresse: typischer deutscher PLZ-Block "Strasse 12, 12345 Stadt" oder mehrzeilig.
+    const addr = text.match(/([A-ZÄÖÜ][\wäöüß.\-\s]{2,40}\s+\d+[a-z]?)\s*[,\n]\s*(\d{4,5})\s+([A-ZÄÖÜ][\wäöüß.\-\s]{2,40})/);
+    if (addr) {
+      out.billingAddress = `${addr[1]!.trim()}\n${addr[2]} ${addr[3]!.trim()}`;
+    }
+
+    // Legal Entity: zwischen "Firma:", "Anbieter:" o.ä. — best effort.
+    const le = text.match(/(?:Firma|Anbieter|Verantwortlich|Inhaber)[:\s]+([A-ZÄÖÜ][\w\säöüß.&,\-]+?(?:GmbH|AG|UG|KG|OHG|e\.K\.|GbR|Ltd|LLC|Inc))/);
+    if (le) out.legalEntityName = le[1]!.trim();
+  }
+
+  // 2) Land via Nominatim — basierend auf gefundener Adresse, sonst Domain-TLD-Heuristik.
+  if (out.billingAddress) {
+    const q = encodeURIComponent(out.billingAddress.replace(/\n/g, ', '));
+    try {
+      const ac = new AbortController();
+      const timer = setTimeout(() => ac.abort(), 6000);
+      const nm = await fetch(`https://nominatim.openstreetmap.org/search?format=json&limit=1&addressdetails=1&q=${q}`, {
+        signal: ac.signal,
+        headers: { 'user-agent': 'DealFlow.One Enrichment/1.0 (+contact@dealflow.one)' },
+      }).finally(() => clearTimeout(timer));
+      if (nm.ok) {
+        const j = await nm.json() as Array<{ address?: { country_code?: string } }>;
+        const cc = j[0]?.address?.country_code;
+        if (cc && cc.length === 2) out.country = cc.toUpperCase();
+      }
+    } catch { /* ignore */ }
+  }
+  if (!out.country) {
+    // TLD-Heuristik als Fallback.
+    const tld = host.split('.').pop();
+    const tldMap: Record<string, string> = { de: 'DE', at: 'AT', ch: 'CH', fr: 'FR', it: 'IT', es: 'ES', uk: 'GB', us: 'US' };
+    if (tld && tldMap[tld]) out.country = tldMap[tld];
+  }
+
+  res.json(out);
+});
 
 router.post('/accounts/bulk/owner', async (req, res) => {
   const parsed = bulkOwnerSchema.safeParse(req.body);

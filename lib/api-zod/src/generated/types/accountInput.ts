@@ -12,4 +12,10 @@ export interface AccountInput {
   name: string;
   industry: string;
   country: string;
+  website?: string | null;
+  phone?: string | null;
+  billingAddress?: string | null;
+  vatId?: string | null;
+  sizeBracket?: string | null;
+  ownerId?: string | null;
 }

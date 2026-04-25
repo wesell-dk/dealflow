@@ -8,8 +8,11 @@ Multi-tenant, multi-company, multi-brand. Deal-centric.
  * OpenAPI spec version: 0.1.0
  */
 
-export interface RoleUpdate {
-  name?: string;
-  description?: string;
-  permissions?: string[];
-}
+export type PriceRuleInputStatus =
+  (typeof PriceRuleInputStatus)[keyof typeof PriceRuleInputStatus];
+
+export const PriceRuleInputStatus = {
+  draft: "draft",
+  active: "active",
+  archived: "archived",
+} as const;

@@ -7,9 +7,13 @@ Multi-tenant, multi-company, multi-brand. Deal-centric.
 
  * OpenAPI spec version: 0.1.0
  */
+import type { PriceRuleInputStatus } from "./priceRuleInputStatus";
 
-export interface RoleCreate {
+export interface PriceRuleInput {
   name: string;
-  description: string;
-  permissions?: string[];
+  scope: string;
+  condition: string;
+  effect: string;
+  priority: number;
+  status?: PriceRuleInputStatus;
 }

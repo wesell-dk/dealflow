@@ -161,6 +161,10 @@ export const ListBrandsQueryParams = zod.object({
 export const ListBrandsResponseItem = zod.object({
   id: zod.string(),
   companyId: zod.string(),
+  parentBrandId: zod
+    .string()
+    .nullish()
+    .describe("Optionale Eltern-Marke für Multi-Tier-Hierarchien."),
   name: zod.string(),
   color: zod.string(),
   voice: zod.string(),
@@ -184,6 +188,10 @@ export const createBrandBodyNameMax = 200;
 
 export const CreateBrandBody = zod.object({
   companyId: zod.string(),
+  parentBrandId: zod
+    .string()
+    .nullish()
+    .describe("Optional Eltern-Marke (für Sub-Brands)."),
   name: zod.string().min(1).max(createBrandBodyNameMax),
   color: zod.string().optional().describe("Primärfarbe als"),
   voice: zod
@@ -210,6 +218,10 @@ export const DeleteBrandParams = zod.object({
 export const ListBrandsWithDefaultsResponseItem = zod.object({
   id: zod.string(),
   companyId: zod.string(),
+  parentBrandId: zod
+    .string()
+    .nullish()
+    .describe("Optionale Eltern-Marke für Multi-Tier-Hierarchien."),
   name: zod.string(),
   color: zod.string(),
   voice: zod.string(),
@@ -236,6 +248,7 @@ export const UpdateBrandBody = zod.object({
   name: zod.string().optional(),
   color: zod.string().optional(),
   voice: zod.string().optional(),
+  parentBrandId: zod.string().nullish(),
   logoUrl: zod.string().nullish(),
   primaryColor: zod.string().nullish(),
   secondaryColor: zod.string().nullish(),
@@ -247,6 +260,10 @@ export const UpdateBrandBody = zod.object({
 export const UpdateBrandResponse = zod.object({
   id: zod.string(),
   companyId: zod.string(),
+  parentBrandId: zod
+    .string()
+    .nullish()
+    .describe("Optionale Eltern-Marke für Multi-Tier-Hierarchien."),
   name: zod.string(),
   color: zod.string(),
   voice: zod.string(),
@@ -273,6 +290,10 @@ export const UpdateBrandDefaultClausesBody = zod.object({
 export const UpdateBrandDefaultClausesResponse = zod.object({
   id: zod.string(),
   companyId: zod.string(),
+  parentBrandId: zod
+    .string()
+    .nullish()
+    .describe("Optionale Eltern-Marke für Multi-Tier-Hierarchien."),
   name: zod.string(),
   color: zod.string(),
   voice: zod.string(),
@@ -410,17 +431,36 @@ export const UpdateAdminUserResponse = zod.object({
   scopeSummary: zod.string().optional(),
 });
 
+/**
+ * @summary Liste aller verfügbaren Permission-Keys (Quelle für Custom-Rollen-Editor).
+ */
+export const ListPermissionCatalogResponseItem = zod.object({
+  key: zod.string().describe("z. B. deal:write"),
+  label: zod.string().describe("Menschlich lesbarer Text."),
+  group: zod.string().describe("z. B. Deals, Approvals, Stammdaten."),
+  description: zod.string().nullish(),
+});
+export const ListPermissionCatalogResponse = zod.array(
+  ListPermissionCatalogResponseItem,
+);
+
 export const ListRolesResponseItem = zod.object({
   id: zod.string(),
   name: zod.string(),
   description: zod.string(),
   isSystem: zod.boolean(),
+  permissions: zod
+    .array(zod.string())
+    .describe(
+      "Permission-Keys (z. B. deal:write, approval:approve). Nur bei Custom-Rollen editierbar.",
+    ),
 });
 export const ListRolesResponse = zod.array(ListRolesResponseItem);
 
 export const CreateRoleBody = zod.object({
   name: zod.string(),
   description: zod.string(),
+  permissions: zod.array(zod.string()).optional(),
 });
 
 export const UpdateRoleParams = zod.object({
@@ -430,6 +470,7 @@ export const UpdateRoleParams = zod.object({
 export const UpdateRoleBody = zod.object({
   name: zod.string().optional(),
   description: zod.string().optional(),
+  permissions: zod.array(zod.string()).optional(),
 });
 
 export const UpdateRoleResponse = zod.object({
@@ -437,6 +478,11 @@ export const UpdateRoleResponse = zod.object({
   name: zod.string(),
   description: zod.string(),
   isSystem: zod.boolean(),
+  permissions: zod
+    .array(zod.string())
+    .describe(
+      "Permission-Keys (z. B. deal:write, approval:approve). Nur bei Custom-Rollen editierbar.",
+    ),
 });
 
 export const DeleteRoleParams = zod.object({
@@ -467,6 +513,21 @@ export const ListAccountsResponseItem = zod.object({
   openDeals: zod.number(),
   totalValue: zod.number(),
   ownerId: zod.string().nullish(),
+  website: zod
+    .string()
+    .nullish()
+    .describe("Optionale Website (z. B. https:\/\/example.com)."),
+  phone: zod.string().nullish().describe("Telefon-Hauptnummer."),
+  billingAddress: zod
+    .string()
+    .nullish()
+    .describe("Rechnungsadresse als Mehrzeiler."),
+  vatId: zod.string().nullish().describe("USt-IdNr. (z. B. DE123456789)."),
+  sizeBracket: zod
+    .string()
+    .nullish()
+    .describe("Mitarbeitergröße: 1-10 \/ 11-50 \/ 51-200 \/ 201-1000 \/ 1000+"),
+  primaryContactId: zod.string().nullish(),
 });
 export const ListAccountsResponse = zod.array(ListAccountsResponseItem);
 
@@ -474,6 +535,12 @@ export const CreateAccountBody = zod.object({
   name: zod.string(),
   industry: zod.string(),
   country: zod.string(),
+  website: zod.string().nullish(),
+  phone: zod.string().nullish(),
+  billingAddress: zod.string().nullish(),
+  vatId: zod.string().nullish(),
+  sizeBracket: zod.string().nullish(),
+  ownerId: zod.string().nullish(),
 });
 
 export const GetAccountParams = zod.object({
@@ -490,6 +557,23 @@ export const GetAccountResponse = zod
     openDeals: zod.number(),
     totalValue: zod.number(),
     ownerId: zod.string().nullish(),
+    website: zod
+      .string()
+      .nullish()
+      .describe("Optionale Website (z. B. https:\/\/example.com)."),
+    phone: zod.string().nullish().describe("Telefon-Hauptnummer."),
+    billingAddress: zod
+      .string()
+      .nullish()
+      .describe("Rechnungsadresse als Mehrzeiler."),
+    vatId: zod.string().nullish().describe("USt-IdNr. (z. B. DE123456789)."),
+    sizeBracket: zod
+      .string()
+      .nullish()
+      .describe(
+        "Mitarbeitergröße: 1-10 \/ 11-50 \/ 51-200 \/ 201-1000 \/ 1000+",
+      ),
+    primaryContactId: zod.string().nullish(),
   })
   .and(
     zod.object({
@@ -539,6 +623,12 @@ export const UpdateAccountBody = zod.object({
   country: zod.string().optional(),
   healthScore: zod.number().optional(),
   ownerId: zod.string().nullish(),
+  website: zod.string().nullish(),
+  phone: zod.string().nullish(),
+  billingAddress: zod.string().nullish(),
+  vatId: zod.string().nullish(),
+  sizeBracket: zod.string().nullish(),
+  primaryContactId: zod.string().nullish(),
 });
 
 export const UpdateAccountResponse = zod.object({
@@ -550,6 +640,21 @@ export const UpdateAccountResponse = zod.object({
   openDeals: zod.number(),
   totalValue: zod.number(),
   ownerId: zod.string().nullish(),
+  website: zod
+    .string()
+    .nullish()
+    .describe("Optionale Website (z. B. https:\/\/example.com)."),
+  phone: zod.string().nullish().describe("Telefon-Hauptnummer."),
+  billingAddress: zod
+    .string()
+    .nullish()
+    .describe("Rechnungsadresse als Mehrzeiler."),
+  vatId: zod.string().nullish().describe("USt-IdNr. (z. B. DE123456789)."),
+  sizeBracket: zod
+    .string()
+    .nullish()
+    .describe("Mitarbeitergröße: 1-10 \/ 11-50 \/ 51-200 \/ 201-1000 \/ 1000+"),
+  primaryContactId: zod.string().nullish(),
 });
 
 export const ListContactsQueryParams = zod.object({
@@ -1328,6 +1433,10 @@ export const UpdateIndustryProfileResponse = zod.object({
   createdAt: zod.coerce.date(),
 });
 
+export const DeleteIndustryProfileParams = zod.object({
+  id: zod.coerce.string(),
+});
+
 export const ListPricePositionsResponseItem = zod.object({
   id: zod.string(),
   sku: zod.string(),
@@ -1360,6 +1469,45 @@ export const CreatePricePositionBody = zod.object({
   validFrom: zod.coerce.date(),
 });
 
+export const UpdatePricePositionParams = zod.object({
+  id: zod.coerce.string(),
+});
+
+export const UpdatePricePositionBody = zod.object({
+  sku: zod.string().optional(),
+  name: zod.string().optional(),
+  category: zod.string().optional(),
+  listPrice: zod.number().optional(),
+  currency: zod.string().optional(),
+  status: zod.enum(["draft", "active", "archived"]).optional(),
+  validFrom: zod.coerce.date().optional(),
+  validUntil: zod.coerce.date().nullish(),
+  brandId: zod.string().optional(),
+  isStandard: zod.boolean().optional(),
+});
+
+export const UpdatePricePositionResponse = zod.object({
+  id: zod.string(),
+  sku: zod.string(),
+  name: zod.string(),
+  category: zod.string(),
+  listPrice: zod.number(),
+  currency: zod.string(),
+  status: zod.string(),
+  validFrom: zod.coerce.date(),
+  validUntil: zod.coerce.date().nullish(),
+  brandId: zod.string(),
+  brandName: zod.string(),
+  companyId: zod.string(),
+  companyName: zod.string(),
+  version: zod.number(),
+  isStandard: zod.boolean(),
+});
+
+export const DeletePricePositionParams = zod.object({
+  id: zod.coerce.string(),
+});
+
 export const ListPriceRulesResponseItem = zod.object({
   id: zod.string(),
   name: zod.string(),
@@ -1370,6 +1518,42 @@ export const ListPriceRulesResponseItem = zod.object({
   status: zod.string(),
 });
 export const ListPriceRulesResponse = zod.array(ListPriceRulesResponseItem);
+
+export const CreatePriceRuleBody = zod.object({
+  name: zod.string(),
+  scope: zod.string(),
+  condition: zod.string(),
+  effect: zod.string(),
+  priority: zod.number(),
+  status: zod.enum(["draft", "active", "archived"]).optional(),
+});
+
+export const UpdatePriceRuleParams = zod.object({
+  id: zod.coerce.string(),
+});
+
+export const UpdatePriceRuleBody = zod.object({
+  name: zod.string().optional(),
+  scope: zod.string().optional(),
+  condition: zod.string().optional(),
+  effect: zod.string().optional(),
+  priority: zod.number().optional(),
+  status: zod.enum(["draft", "active", "archived"]).optional(),
+});
+
+export const UpdatePriceRuleResponse = zod.object({
+  id: zod.string(),
+  name: zod.string(),
+  scope: zod.string(),
+  condition: zod.string(),
+  effect: zod.string(),
+  priority: zod.number(),
+  status: zod.string(),
+});
+
+export const DeletePriceRuleParams = zod.object({
+  id: zod.coerce.string(),
+});
 
 /**
  * @summary KPIs for the pricing workspace
@@ -3615,6 +3799,30 @@ export const UpdateSavedViewResponse = zod.object({
 export const DeleteSavedViewParams = zod.object({
   id: zod.coerce.string(),
 });
+
+/**
+ * @summary Best-effort Anreicherung aus Website (Nominatim + Impressum-Crawl).
+ */
+export const EnrichAccountFromWebsiteBody = zod.object({
+  website: zod.string().describe("URL oder Domain (https:\/\/ optional)."),
+});
+
+export const EnrichAccountFromWebsiteResponse = zod
+  .object({
+    name: zod.string().nullish(),
+    country: zod.string().nullish().describe("ISO-3166 Alpha-2."),
+    billingAddress: zod.string().nullish(),
+    phone: zod.string().nullish(),
+    vatId: zod.string().nullish(),
+    legalEntityName: zod.string().nullish(),
+    sourceUrl: zod
+      .string()
+      .nullish()
+      .describe("Tatsächlich gefetchte URL (z. B. \/impressum)."),
+  })
+  .describe(
+    "Best-effort Vorschläge aus Web-Anreicherung (Nominatim + Impressum-Crawl).",
+  );
 
 export const BulkUpdateAccountOwnerBody = zod.object({
   ids: zod.array(zod.string()).min(1),

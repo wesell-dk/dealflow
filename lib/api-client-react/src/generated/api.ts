@@ -21,6 +21,8 @@ import type {
 import type {
   Account,
   AccountDetail,
+  AccountEnrichmentRequest,
+  AccountEnrichmentSuggestion,
   AccountInput,
   AccountPatch,
   ActiveScopeUpdateResult,
@@ -170,6 +172,7 @@ import type {
   OrderConfirmationHandoverInput,
   PatchAmendmentInput,
   PerformanceReport,
+  PermissionCatalogEntry,
   PlatformTenant,
   PlatformTenantCreate,
   PriceBundle,
@@ -182,7 +185,10 @@ import type {
   PriceIncreaseResponseInput,
   PricePosition,
   PricePositionInput,
+  PricePositionPatch,
   PriceRule,
+  PriceRuleInput,
+  PriceRulePatch,
   PricingReviewEnvelope,
   PricingSummary,
   Quote,
@@ -1740,6 +1746,81 @@ export const useUpdateAdminUser = <
 > => {
   return useMutation(getUpdateAdminUserMutationOptions(options));
 };
+
+/**
+ * @summary Liste aller verfügbaren Permission-Keys (Quelle für Custom-Rollen-Editor).
+ */
+export const getListPermissionCatalogUrl = () => {
+  return `/api/v1/admin/permissions/catalog`;
+};
+
+export const listPermissionCatalog = async (
+  options?: RequestInit,
+): Promise<PermissionCatalogEntry[]> => {
+  return customFetch<PermissionCatalogEntry[]>(getListPermissionCatalogUrl(), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getListPermissionCatalogQueryKey = () => {
+  return [`/api/v1/admin/permissions/catalog`] as const;
+};
+
+export const getListPermissionCatalogQueryOptions = <
+  TData = Awaited<ReturnType<typeof listPermissionCatalog>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof listPermissionCatalog>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getListPermissionCatalogQueryKey();
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof listPermissionCatalog>>
+  > = ({ signal }) => listPermissionCatalog({ signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof listPermissionCatalog>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type ListPermissionCatalogQueryResult = NonNullable<
+  Awaited<ReturnType<typeof listPermissionCatalog>>
+>;
+export type ListPermissionCatalogQueryError = ErrorType<unknown>;
+
+/**
+ * @summary Liste aller verfügbaren Permission-Keys (Quelle für Custom-Rollen-Editor).
+ */
+
+export function useListPermissionCatalog<
+  TData = Awaited<ReturnType<typeof listPermissionCatalog>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof listPermissionCatalog>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getListPermissionCatalogQueryOptions(options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
 
 export const getListRolesUrl = () => {
   return `/api/v1/admin/roles`;
@@ -4773,6 +4854,84 @@ export const useUpdateIndustryProfile = <
   return useMutation(getUpdateIndustryProfileMutationOptions(options));
 };
 
+export const getDeleteIndustryProfileUrl = (id: string) => {
+  return `/api/v1/industry-profiles/${id}`;
+};
+
+export const deleteIndustryProfile = async (
+  id: string,
+  options?: RequestInit,
+): Promise<void> => {
+  return customFetch<void>(getDeleteIndustryProfileUrl(id), {
+    ...options,
+    method: "DELETE",
+  });
+};
+
+export const getDeleteIndustryProfileMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof deleteIndustryProfile>>,
+    TError,
+    { id: string },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof deleteIndustryProfile>>,
+  TError,
+  { id: string },
+  TContext
+> => {
+  const mutationKey = ["deleteIndustryProfile"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof deleteIndustryProfile>>,
+    { id: string }
+  > = (props) => {
+    const { id } = props ?? {};
+
+    return deleteIndustryProfile(id, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type DeleteIndustryProfileMutationResult = NonNullable<
+  Awaited<ReturnType<typeof deleteIndustryProfile>>
+>;
+
+export type DeleteIndustryProfileMutationError = ErrorType<unknown>;
+
+export const useDeleteIndustryProfile = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof deleteIndustryProfile>>,
+    TError,
+    { id: string },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof deleteIndustryProfile>>,
+  TError,
+  { id: string },
+  TContext
+> => {
+  return useMutation(getDeleteIndustryProfileMutationOptions(options));
+};
+
 export const getListPricePositionsUrl = () => {
   return `/api/v1/price-positions`;
 };
@@ -4921,6 +5080,165 @@ export const useCreatePricePosition = <
   return useMutation(getCreatePricePositionMutationOptions(options));
 };
 
+export const getUpdatePricePositionUrl = (id: string) => {
+  return `/api/v1/price-positions/${id}`;
+};
+
+export const updatePricePosition = async (
+  id: string,
+  pricePositionPatch: PricePositionPatch,
+  options?: RequestInit,
+): Promise<PricePosition> => {
+  return customFetch<PricePosition>(getUpdatePricePositionUrl(id), {
+    ...options,
+    method: "PATCH",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(pricePositionPatch),
+  });
+};
+
+export const getUpdatePricePositionMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof updatePricePosition>>,
+    TError,
+    { id: string; data: BodyType<PricePositionPatch> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof updatePricePosition>>,
+  TError,
+  { id: string; data: BodyType<PricePositionPatch> },
+  TContext
+> => {
+  const mutationKey = ["updatePricePosition"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof updatePricePosition>>,
+    { id: string; data: BodyType<PricePositionPatch> }
+  > = (props) => {
+    const { id, data } = props ?? {};
+
+    return updatePricePosition(id, data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type UpdatePricePositionMutationResult = NonNullable<
+  Awaited<ReturnType<typeof updatePricePosition>>
+>;
+export type UpdatePricePositionMutationBody = BodyType<PricePositionPatch>;
+export type UpdatePricePositionMutationError = ErrorType<unknown>;
+
+export const useUpdatePricePosition = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof updatePricePosition>>,
+    TError,
+    { id: string; data: BodyType<PricePositionPatch> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof updatePricePosition>>,
+  TError,
+  { id: string; data: BodyType<PricePositionPatch> },
+  TContext
+> => {
+  return useMutation(getUpdatePricePositionMutationOptions(options));
+};
+
+export const getDeletePricePositionUrl = (id: string) => {
+  return `/api/v1/price-positions/${id}`;
+};
+
+export const deletePricePosition = async (
+  id: string,
+  options?: RequestInit,
+): Promise<void> => {
+  return customFetch<void>(getDeletePricePositionUrl(id), {
+    ...options,
+    method: "DELETE",
+  });
+};
+
+export const getDeletePricePositionMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof deletePricePosition>>,
+    TError,
+    { id: string },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof deletePricePosition>>,
+  TError,
+  { id: string },
+  TContext
+> => {
+  const mutationKey = ["deletePricePosition"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof deletePricePosition>>,
+    { id: string }
+  > = (props) => {
+    const { id } = props ?? {};
+
+    return deletePricePosition(id, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type DeletePricePositionMutationResult = NonNullable<
+  Awaited<ReturnType<typeof deletePricePosition>>
+>;
+
+export type DeletePricePositionMutationError = ErrorType<unknown>;
+
+export const useDeletePricePosition = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof deletePricePosition>>,
+    TError,
+    { id: string },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof deletePricePosition>>,
+  TError,
+  { id: string },
+  TContext
+> => {
+  return useMutation(getDeletePricePositionMutationOptions(options));
+};
+
 export const getListPriceRulesUrl = () => {
   return `/api/v1/price-rules`;
 };
@@ -4988,6 +5306,245 @@ export function useListPriceRules<
 
   return { ...query, queryKey: queryOptions.queryKey };
 }
+
+export const getCreatePriceRuleUrl = () => {
+  return `/api/v1/price-rules`;
+};
+
+export const createPriceRule = async (
+  priceRuleInput: PriceRuleInput,
+  options?: RequestInit,
+): Promise<PriceRule> => {
+  return customFetch<PriceRule>(getCreatePriceRuleUrl(), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(priceRuleInput),
+  });
+};
+
+export const getCreatePriceRuleMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof createPriceRule>>,
+    TError,
+    { data: BodyType<PriceRuleInput> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof createPriceRule>>,
+  TError,
+  { data: BodyType<PriceRuleInput> },
+  TContext
+> => {
+  const mutationKey = ["createPriceRule"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof createPriceRule>>,
+    { data: BodyType<PriceRuleInput> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return createPriceRule(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type CreatePriceRuleMutationResult = NonNullable<
+  Awaited<ReturnType<typeof createPriceRule>>
+>;
+export type CreatePriceRuleMutationBody = BodyType<PriceRuleInput>;
+export type CreatePriceRuleMutationError = ErrorType<unknown>;
+
+export const useCreatePriceRule = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof createPriceRule>>,
+    TError,
+    { data: BodyType<PriceRuleInput> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof createPriceRule>>,
+  TError,
+  { data: BodyType<PriceRuleInput> },
+  TContext
+> => {
+  return useMutation(getCreatePriceRuleMutationOptions(options));
+};
+
+export const getUpdatePriceRuleUrl = (id: string) => {
+  return `/api/v1/price-rules/${id}`;
+};
+
+export const updatePriceRule = async (
+  id: string,
+  priceRulePatch: PriceRulePatch,
+  options?: RequestInit,
+): Promise<PriceRule> => {
+  return customFetch<PriceRule>(getUpdatePriceRuleUrl(id), {
+    ...options,
+    method: "PATCH",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(priceRulePatch),
+  });
+};
+
+export const getUpdatePriceRuleMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof updatePriceRule>>,
+    TError,
+    { id: string; data: BodyType<PriceRulePatch> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof updatePriceRule>>,
+  TError,
+  { id: string; data: BodyType<PriceRulePatch> },
+  TContext
+> => {
+  const mutationKey = ["updatePriceRule"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof updatePriceRule>>,
+    { id: string; data: BodyType<PriceRulePatch> }
+  > = (props) => {
+    const { id, data } = props ?? {};
+
+    return updatePriceRule(id, data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type UpdatePriceRuleMutationResult = NonNullable<
+  Awaited<ReturnType<typeof updatePriceRule>>
+>;
+export type UpdatePriceRuleMutationBody = BodyType<PriceRulePatch>;
+export type UpdatePriceRuleMutationError = ErrorType<unknown>;
+
+export const useUpdatePriceRule = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof updatePriceRule>>,
+    TError,
+    { id: string; data: BodyType<PriceRulePatch> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof updatePriceRule>>,
+  TError,
+  { id: string; data: BodyType<PriceRulePatch> },
+  TContext
+> => {
+  return useMutation(getUpdatePriceRuleMutationOptions(options));
+};
+
+export const getDeletePriceRuleUrl = (id: string) => {
+  return `/api/v1/price-rules/${id}`;
+};
+
+export const deletePriceRule = async (
+  id: string,
+  options?: RequestInit,
+): Promise<void> => {
+  return customFetch<void>(getDeletePriceRuleUrl(id), {
+    ...options,
+    method: "DELETE",
+  });
+};
+
+export const getDeletePriceRuleMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof deletePriceRule>>,
+    TError,
+    { id: string },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof deletePriceRule>>,
+  TError,
+  { id: string },
+  TContext
+> => {
+  const mutationKey = ["deletePriceRule"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof deletePriceRule>>,
+    { id: string }
+  > = (props) => {
+    const { id } = props ?? {};
+
+    return deletePriceRule(id, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type DeletePriceRuleMutationResult = NonNullable<
+  Awaited<ReturnType<typeof deletePriceRule>>
+>;
+
+export type DeletePriceRuleMutationError = ErrorType<unknown>;
+
+export const useDeletePriceRule = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof deletePriceRule>>,
+    TError,
+    { id: string },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof deletePriceRule>>,
+  TError,
+  { id: string },
+  TContext
+> => {
+  return useMutation(getDeletePriceRuleMutationOptions(options));
+};
 
 /**
  * @summary KPIs for the pricing workspace
@@ -11410,6 +11967,96 @@ export const useDeleteSavedView = <
   TContext
 > => {
   return useMutation(getDeleteSavedViewMutationOptions(options));
+};
+
+/**
+ * @summary Best-effort Anreicherung aus Website (Nominatim + Impressum-Crawl).
+ */
+export const getEnrichAccountFromWebsiteUrl = () => {
+  return `/api/v1/accounts/enrich-from-website`;
+};
+
+export const enrichAccountFromWebsite = async (
+  accountEnrichmentRequest: AccountEnrichmentRequest,
+  options?: RequestInit,
+): Promise<AccountEnrichmentSuggestion> => {
+  return customFetch<AccountEnrichmentSuggestion>(
+    getEnrichAccountFromWebsiteUrl(),
+    {
+      ...options,
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...options?.headers },
+      body: JSON.stringify(accountEnrichmentRequest),
+    },
+  );
+};
+
+export const getEnrichAccountFromWebsiteMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof enrichAccountFromWebsite>>,
+    TError,
+    { data: BodyType<AccountEnrichmentRequest> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof enrichAccountFromWebsite>>,
+  TError,
+  { data: BodyType<AccountEnrichmentRequest> },
+  TContext
+> => {
+  const mutationKey = ["enrichAccountFromWebsite"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof enrichAccountFromWebsite>>,
+    { data: BodyType<AccountEnrichmentRequest> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return enrichAccountFromWebsite(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type EnrichAccountFromWebsiteMutationResult = NonNullable<
+  Awaited<ReturnType<typeof enrichAccountFromWebsite>>
+>;
+export type EnrichAccountFromWebsiteMutationBody =
+  BodyType<AccountEnrichmentRequest>;
+export type EnrichAccountFromWebsiteMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Best-effort Anreicherung aus Website (Nominatim + Impressum-Crawl).
+ */
+export const useEnrichAccountFromWebsite = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof enrichAccountFromWebsite>>,
+    TError,
+    { data: BodyType<AccountEnrichmentRequest> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof enrichAccountFromWebsite>>,
+  TError,
+  { data: BodyType<AccountEnrichmentRequest> },
+  TContext
+> => {
+  return useMutation(getEnrichAccountFromWebsiteMutationOptions(options));
 };
 
 export const getBulkUpdateAccountOwnerUrl = () => {

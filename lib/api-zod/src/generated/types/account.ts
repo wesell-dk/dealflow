@@ -18,4 +18,31 @@ export interface Account {
   totalValue: number;
   /** @nullable */
   ownerId?: string | null;
+  /**
+   * Optionale Website (z. B. https://example.com).
+   * @nullable
+   */
+  website?: string | null;
+  /**
+   * Telefon-Hauptnummer.
+   * @nullable
+   */
+  phone?: string | null;
+  /**
+   * Rechnungsadresse als Mehrzeiler.
+   * @nullable
+   */
+  billingAddress?: string | null;
+  /**
+   * USt-IdNr. (z. B. DE123456789).
+   * @nullable
+   */
+  vatId?: string | null;
+  /**
+   * Mitarbeitergröße: 1-10 / 11-50 / 51-200 / 201-1000 / 1000+
+   * @nullable
+   */
+  sizeBracket?: string | null;
+  /** @nullable */
+  primaryContactId?: string | null;
 }

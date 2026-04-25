@@ -5,11 +5,18 @@ import {
   useGetPricingSummary,
   useListPricePositions,
   useListPriceRules,
+  useDeletePricePosition,
+  useDeletePriceRule,
   resolvePrice,
   type ResolvedPrice,
+  type PricePosition,
+  type PriceRule,
   useListPriceBundles,
   useDeletePriceBundle,
   getListPriceBundlesQueryKey,
+  getListPricePositionsQueryKey,
+  getListPriceRulesQueryKey,
+  getGetPricingSummaryQueryKey,
   type PriceBundle,
 } from "@workspace/api-client-react";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -26,6 +33,8 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import { ArrowRight, Tag, Shield, Percent, Clock, AlertTriangle, Layers, CheckCircle2, Circle, Plus, Pencil, Trash2, Package } from "lucide-react";
 import { BundleFormDialog } from "@/components/pricing/bundle-form-dialog";
+import { PricePositionFormDialog } from "@/components/pricing/price-position-form-dialog";
+import { PriceRuleFormDialog } from "@/components/pricing/price-rule-form-dialog";
 
 function ResolvePanel() {
   const { t } = useTranslation();
@@ -212,6 +221,268 @@ function BundlesPanel() {
   );
 }
 
+function PositionsPanel({ positions }: { positions: PricePosition[] | undefined }) {
+  const qc = useQueryClient();
+  const { toast } = useToast();
+  const [dialogOpen, setDialogOpen] = useState(false);
+  const [editing, setEditing] = useState<PricePosition | undefined>(undefined);
+  const [confirmDelete, setConfirmDelete] = useState<PricePosition | null>(null);
+  const del = useDeletePricePosition();
+
+  const onDelete = async () => {
+    if (!confirmDelete) return;
+    try {
+      await del.mutateAsync({ id: confirmDelete.id });
+      await Promise.all([
+        qc.invalidateQueries({ queryKey: getListPricePositionsQueryKey() }),
+        qc.invalidateQueries({ queryKey: getGetPricingSummaryQueryKey() }),
+      ]);
+      toast({ title: "Preis-Position gelöscht", description: confirmDelete.sku });
+      setConfirmDelete(null);
+    } catch (e: unknown) {
+      const body = (e as { response?: { data?: { error?: string } } })?.response?.data;
+      toast({
+        title: "Löschen fehlgeschlagen",
+        description: body?.error ?? (e instanceof Error ? e.message : "Unbekannt"),
+        variant: "destructive",
+      });
+    }
+  };
+
+  return (
+    <>
+      <div className="flex justify-between items-center mb-3">
+        <div className="text-sm text-muted-foreground">{positions?.length ?? 0} Preis-Positionen</div>
+        <Button
+          size="sm"
+          onClick={() => { setEditing(undefined); setDialogOpen(true); }}
+          data-testid="button-new-price-position"
+        >
+          <Plus className="mr-2 h-4 w-4" /> Neue Preis-Position
+        </Button>
+      </div>
+      <div className="border rounded-md bg-card">
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>SKU</TableHead>
+              <TableHead>Name</TableHead>
+              <TableHead>Category</TableHead>
+              <TableHead>Brand / Company</TableHead>
+              <TableHead className="text-right">List Price</TableHead>
+              <TableHead>Version</TableHead>
+              <TableHead>Status</TableHead>
+              <TableHead className="w-24 text-right">Aktionen</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {positions?.map((pos) => (
+              <TableRow key={pos.id} data-testid={`row-position-${pos.id}`}>
+                <TableCell className="font-medium text-xs font-mono">{pos.sku}</TableCell>
+                <TableCell>
+                  <div className="flex items-center gap-2">
+                    {pos.name}
+                    {pos.isStandard && <Badge variant="secondary" className="text-[10px]">STD</Badge>}
+                  </div>
+                </TableCell>
+                <TableCell className="text-muted-foreground text-sm">{pos.category}</TableCell>
+                <TableCell className="text-sm">
+                  <div>{pos.brandName}</div>
+                  <div className="text-xs text-muted-foreground">{pos.companyName}</div>
+                </TableCell>
+                <TableCell className="text-right font-medium">{pos.listPrice.toLocaleString()} {pos.currency}</TableCell>
+                <TableCell>v{pos.version}</TableCell>
+                <TableCell>
+                  <Badge variant={pos.status === 'active' ? 'default' : 'outline'} className={pos.status === 'active' ? 'bg-green-500 hover:bg-green-600' : ''}>
+                    {pos.status}
+                  </Badge>
+                </TableCell>
+                <TableCell className="text-right">
+                  <div className="flex justify-end gap-1">
+                    <Button
+                      size="icon"
+                      variant="ghost"
+                      onClick={() => { setEditing(pos); setDialogOpen(true); }}
+                      data-testid={`button-edit-position-${pos.id}`}
+                      aria-label="Bearbeiten"
+                    >
+                      <Pencil className="h-4 w-4" />
+                    </Button>
+                    <Button
+                      size="icon"
+                      variant="ghost"
+                      onClick={() => setConfirmDelete(pos)}
+                      data-testid={`button-delete-position-${pos.id}`}
+                      aria-label="Löschen"
+                    >
+                      <Trash2 className="h-4 w-4 text-destructive" />
+                    </Button>
+                  </div>
+                </TableCell>
+              </TableRow>
+            ))}
+            {positions?.length === 0 && (
+              <TableRow>
+                <TableCell colSpan={8} className="h-24 text-center text-muted-foreground">
+                  Noch keine Preis-Positionen — über „Neue Preis-Position" anlegen.
+                </TableCell>
+              </TableRow>
+            )}
+          </TableBody>
+        </Table>
+      </div>
+
+      <PricePositionFormDialog
+        open={dialogOpen}
+        onOpenChange={(v) => { setDialogOpen(v); if (!v) setEditing(undefined); }}
+        position={editing}
+      />
+
+      <AlertDialog open={!!confirmDelete} onOpenChange={(v) => { if (!v) setConfirmDelete(null); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Preis-Position löschen?</AlertDialogTitle>
+            <AlertDialogDescription>
+              {confirmDelete?.sku} — {confirmDelete?.name}. Versions-Historie wird mit gelöscht.
+              Diese Aktion kann nicht rückgängig gemacht werden.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Abbrechen</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={onDelete}
+              className="bg-destructive hover:bg-destructive/90"
+              data-testid="button-confirm-delete-position"
+            >
+              Löschen
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </>
+  );
+}
+
+function RulesPanel({ rules }: { rules: PriceRule[] | undefined }) {
+  const qc = useQueryClient();
+  const { toast } = useToast();
+  const [dialogOpen, setDialogOpen] = useState(false);
+  const [editing, setEditing] = useState<PriceRule | undefined>(undefined);
+  const [confirmDelete, setConfirmDelete] = useState<PriceRule | null>(null);
+  const del = useDeletePriceRule();
+
+  const onDelete = async () => {
+    if (!confirmDelete) return;
+    try {
+      await del.mutateAsync({ id: confirmDelete.id });
+      await qc.invalidateQueries({ queryKey: getListPriceRulesQueryKey() });
+      toast({ title: "Regel gelöscht", description: confirmDelete.name });
+      setConfirmDelete(null);
+    } catch (e: unknown) {
+      const body = (e as { response?: { data?: { error?: string } } })?.response?.data;
+      toast({
+        title: "Löschen fehlgeschlagen",
+        description: body?.error ?? (e instanceof Error ? e.message : "Unbekannt"),
+        variant: "destructive",
+      });
+    }
+  };
+
+  return (
+    <>
+      <div className="flex justify-between items-center mb-3">
+        <div className="text-sm text-muted-foreground">{rules?.length ?? 0} Pricing-Regeln</div>
+        <Button
+          size="sm"
+          onClick={() => { setEditing(undefined); setDialogOpen(true); }}
+          data-testid="button-new-price-rule"
+        >
+          <Plus className="mr-2 h-4 w-4" /> Neue Pricing-Regel
+        </Button>
+      </div>
+      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+        {rules?.map((rule) => (
+          <Card key={rule.id} data-testid={`card-rule-${rule.id}`}>
+            <CardHeader className="pb-2">
+              <div className="flex justify-between items-start">
+                <CardTitle className="text-base font-semibold">{rule.name}</CardTitle>
+                <Badge variant={rule.status === 'active' ? 'default' : 'outline'} className={rule.status === 'active' ? 'bg-green-500 hover:bg-green-600' : ''}>
+                  {rule.status}
+                </Badge>
+              </div>
+              <Badge variant="secondary" className="w-fit">{rule.scope}</Badge>
+            </CardHeader>
+            <CardContent className="pt-2 text-sm">
+              <div className="flex flex-col gap-2 p-3 bg-muted/20 rounded-md border">
+                <div className="font-mono text-xs p-1.5 bg-background rounded border">{rule.condition}</div>
+                <div className="flex justify-center text-muted-foreground"><ArrowRight className="h-4 w-4" /></div>
+                <div className="font-mono text-xs p-1.5 bg-primary/10 text-primary-foreground font-semibold rounded border border-primary/20 bg-primary text-primary-foreground text-center">{rule.effect}</div>
+              </div>
+              <div className="mt-4 text-xs text-muted-foreground flex justify-between items-center">
+                <span>Priority: <span className="font-medium text-foreground">{rule.priority}</span></span>
+                <div className="flex gap-1">
+                  <Button
+                    size="icon"
+                    variant="ghost"
+                    className="h-7 w-7"
+                    onClick={() => { setEditing(rule); setDialogOpen(true); }}
+                    data-testid={`button-edit-rule-${rule.id}`}
+                    aria-label="Bearbeiten"
+                  >
+                    <Pencil className="h-3.5 w-3.5" />
+                  </Button>
+                  <Button
+                    size="icon"
+                    variant="ghost"
+                    className="h-7 w-7"
+                    onClick={() => setConfirmDelete(rule)}
+                    data-testid={`button-delete-rule-${rule.id}`}
+                    aria-label="Löschen"
+                  >
+                    <Trash2 className="h-3.5 w-3.5 text-destructive" />
+                  </Button>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        ))}
+        {rules?.length === 0 && (
+          <div className="col-span-full p-8 text-center border rounded-md text-muted-foreground bg-muted/10">
+            Noch keine Pricing-Regeln — über „Neue Pricing-Regel" anlegen.
+          </div>
+        )}
+      </div>
+
+      <PriceRuleFormDialog
+        open={dialogOpen}
+        onOpenChange={(v) => { setDialogOpen(v); if (!v) setEditing(undefined); }}
+        rule={editing}
+      />
+
+      <AlertDialog open={!!confirmDelete} onOpenChange={(v) => { if (!v) setConfirmDelete(null); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Pricing-Regel löschen?</AlertDialogTitle>
+            <AlertDialogDescription>
+              {confirmDelete?.name}. Diese Aktion kann nicht rückgängig gemacht werden.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Abbrechen</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={onDelete}
+              className="bg-destructive hover:bg-destructive/90"
+              data-testid="button-confirm-delete-rule"
+            >
+              Löschen
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </>
+  );
+}
+
 export default function Pricing() {
   const { t } = useTranslation();
   const { data: summary, isLoading: isLoadingSummary } = useGetPricingSummary();
@@ -287,82 +558,11 @@ export default function Pricing() {
         </TabsContent>
         
         <TabsContent value="positions" className="mt-4">
-          <div className="border rounded-md bg-card">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>SKU</TableHead>
-                  <TableHead>Name</TableHead>
-                  <TableHead>Category</TableHead>
-                  <TableHead>Brand / Company</TableHead>
-                  <TableHead className="text-right">List Price</TableHead>
-                  <TableHead>Version</TableHead>
-                  <TableHead>Status</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {positions?.map((pos) => (
-                  <TableRow key={pos.id}>
-                    <TableCell className="font-medium text-xs font-mono">{pos.sku}</TableCell>
-                    <TableCell>
-                      <div className="flex items-center gap-2">
-                        {pos.name}
-                        {pos.isStandard && <Badge variant="secondary" className="text-[10px]">STD</Badge>}
-                      </div>
-                    </TableCell>
-                    <TableCell className="text-muted-foreground text-sm">{pos.category}</TableCell>
-                    <TableCell className="text-sm">
-                      <div>{pos.brandName}</div>
-                      <div className="text-xs text-muted-foreground">{pos.companyName}</div>
-                    </TableCell>
-                    <TableCell className="text-right font-medium">{pos.listPrice.toLocaleString()} {pos.currency}</TableCell>
-                    <TableCell>v{pos.version}</TableCell>
-                    <TableCell>
-                      <Badge variant={pos.status === 'active' ? 'default' : 'outline'} className={pos.status === 'active' ? 'bg-green-500 hover:bg-green-600' : ''}>
-                        {pos.status}
-                      </Badge>
-                    </TableCell>
-                  </TableRow>
-                ))}
-                {positions?.length === 0 && (
-                  <TableRow>
-                    <TableCell colSpan={7} className="h-24 text-center text-muted-foreground">No price positions found.</TableCell>
-                  </TableRow>
-                )}
-              </TableBody>
-            </Table>
-          </div>
+          <PositionsPanel positions={positions} />
         </TabsContent>
-        
+
         <TabsContent value="rules" className="mt-4">
-          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-            {rules?.map((rule) => (
-              <Card key={rule.id}>
-                <CardHeader className="pb-2">
-                  <div className="flex justify-between items-start">
-                    <CardTitle className="text-base font-semibold">{rule.name}</CardTitle>
-                    <Badge variant={rule.status === 'active' ? 'default' : 'outline'} className={rule.status === 'active' ? 'bg-green-500 hover:bg-green-600' : ''}>
-                      {rule.status}
-                    </Badge>
-                  </div>
-                  <Badge variant="secondary" className="w-fit">{rule.scope}</Badge>
-                </CardHeader>
-                <CardContent className="pt-2 text-sm">
-                  <div className="flex flex-col gap-2 p-3 bg-muted/20 rounded-md border">
-                    <div className="font-mono text-xs p-1.5 bg-background rounded border">{rule.condition}</div>
-                    <div className="flex justify-center text-muted-foreground"><ArrowRight className="h-4 w-4" /></div>
-                    <div className="font-mono text-xs p-1.5 bg-primary/10 text-primary-foreground font-semibold rounded border border-primary/20 bg-primary text-primary-foreground text-center">{rule.effect}</div>
-                  </div>
-                  <div className="mt-4 text-xs text-muted-foreground flex justify-between items-center">
-                    <span>Priority: <span className="font-medium text-foreground">{rule.priority}</span></span>
-                  </div>
-                </CardContent>
-              </Card>
-            ))}
-            {rules?.length === 0 && (
-              <div className="col-span-full p-8 text-center border rounded-md text-muted-foreground bg-muted/10">No pricing rules found.</div>
-            )}
-          </div>
+          <RulesPanel rules={rules} />
         </TabsContent>
       </Tabs>
 

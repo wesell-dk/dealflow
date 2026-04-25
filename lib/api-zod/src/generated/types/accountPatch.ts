@@ -15,4 +15,16 @@ export interface AccountPatch {
   healthScore?: number;
   /** @nullable */
   ownerId?: string | null;
+  /** @nullable */
+  website?: string | null;
+  /** @nullable */
+  phone?: string | null;
+  /** @nullable */
+  billingAddress?: string | null;
+  /** @nullable */
+  vatId?: string | null;
+  /** @nullable */
+  sizeBracket?: string | null;
+  /** @nullable */
+  primaryContactId?: string | null;
 }

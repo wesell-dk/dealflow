@@ -1,5 +1,6 @@
-import { useState, useCallback, useRef } from "react";
+import { useState, useCallback, useRef, useMemo } from "react";
 import { extractLogoColors, foregroundFor, isTooLightForPaper } from "@/lib/extract-logo-colors";
+import { toAssetSrc } from "@/lib/asset-url";
 import { useTranslation } from "react-i18next";
 import {
   useGetTenant,
@@ -41,8 +42,16 @@ import {
   useListClauseFamilies,
   getListContractTypesQueryKey,
   getListContractPlaybooksQueryKey,
+  useListIndustryProfiles,
+  useCreateIndustryProfile,
+  useUpdateIndustryProfile,
+  useDeleteIndustryProfile,
+  getListIndustryProfilesQueryKey,
+  useListPermissionCatalog,
   type ContractType,
   type ContractPlaybook,
+  type IndustryProfile,
+  type PermissionCatalogEntry,
 } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
@@ -63,6 +72,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Settings, Shield, Building2, Users, Download, Trash2, Eye, Play, ShieldAlert, Webhook, Plus, RefreshCw, Lock, Upload, X, Image as ImageIcon, ChevronDown, Sparkles } from "lucide-react";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { useEffect } from "react";
@@ -397,6 +407,8 @@ export default function Admin() {
 
       <RolesCard />
 
+      <IndustryProfilesCard />
+
       <ContractTypesCard />
 
       <ContractPlaybooksCard />
@@ -658,6 +670,22 @@ function BrandRow({ brand }: { brand: Brand }) {
     tone: brand.tone ?? brand.voice ?? "",
     legalEntityName: brand.legalEntityName ?? "",
     addressLine: brand.addressLine ?? "",
+    parentBrandId: brand.parentBrandId ?? null,
+  });
+  const allBrandsQ = useListBrands();
+  const NO_PARENT = "_none_";
+  const parentCandidates = (allBrandsQ.data ?? []).filter(b => {
+    if (b.companyId !== brand.companyId) return false;
+    if (b.id === brand.id) return false;
+    // Block descendants
+    let cur: string | null | undefined = b.parentBrandId;
+    const seen = new Set<string>();
+    while (cur && !seen.has(cur)) {
+      if (cur === brand.id) return false;
+      seen.add(cur);
+      cur = (allBrandsQ.data ?? []).find(x => x.id === cur)?.parentBrandId;
+    }
+    return true;
   });
   const update = useUpdateBrand();
   const del = useDeleteBrand();
@@ -784,9 +812,17 @@ function BrandRow({ brand }: { brand: Brand }) {
     <>
       <TableRow>
         <TableCell>
-          <div className="flex items-center gap-2">
-            <div className="h-4 w-4 rounded-full border" style={{ backgroundColor: brand.primaryColor ?? brand.color }}></div>
-            <span className="font-medium">{brand.name}</span>
+          <div className="flex flex-col gap-0.5">
+            <div className="flex items-center gap-2">
+              <div className="h-4 w-4 rounded-full border" style={{ backgroundColor: brand.primaryColor ?? brand.color }}></div>
+              <span className="font-medium">{brand.name}</span>
+            </div>
+            {brand.parentBrandId && (() => {
+              const parent = (allBrandsQ.data ?? []).find(b => b.id === brand.parentBrandId);
+              return parent ? (
+                <span className="text-[11px] text-muted-foreground pl-6">↳ Sub-Marke unter <span className="font-medium">{parent.name}</span></span>
+              ) : null;
+            })()}
           </div>
         </TableCell>
         <TableCell className="text-muted-foreground">{brand.companyId}</TableCell>
@@ -831,7 +867,7 @@ function BrandRow({ brand }: { brand: Brand }) {
                       // Großes Preview damit das Logo wirklich erkennbar ist —
                       // klein war's vorher kaum aussagekräftig (User-Feedback).
                       <div className="flex-shrink-0 h-24 w-24 rounded-md border bg-white p-2 flex items-center justify-center">
-                        <img src={draft.logoUrl} alt="Logo-Vorschau" className="max-h-full max-w-full object-contain" />
+                        <img src={toAssetSrc(draft.logoUrl)} alt="Logo-Vorschau" className="max-h-full max-w-full object-contain" />
                       </div>
                     ) : (
                       <div className="flex-shrink-0 h-24 w-24 rounded-md bg-muted flex items-center justify-center text-muted-foreground">
@@ -871,13 +907,13 @@ function BrandRow({ brand }: { brand: Brand }) {
                   {draft.logoUrl && !uploading && (
                     <div className="border-t grid grid-cols-2 gap-px bg-muted/30">
                       <div className="bg-white p-3 flex items-center justify-center gap-3" title="Wirkung auf weißem Papier (DIN A4 / Briefkopf)">
-                        <img src={draft.logoUrl} alt="" className="h-10 w-10 object-contain" />
+                        <img src={toAssetSrc(draft.logoUrl)} alt="" className="h-10 w-10 object-contain" />
                         <span className="px-2 py-1 rounded text-xs font-medium" style={{ background: draft.primaryColor || "#ffffff", color: foregroundFor(draft.primaryColor || "#ffffff") }}>
                           Primär · auf Weiß
                         </span>
                       </div>
                       <div className="bg-slate-900 p-3 flex items-center justify-center gap-3" title="Wirkung auf dunklem Header (App / Web)">
-                        <img src={draft.logoUrl} alt="" className="h-10 w-10 object-contain" />
+                        <img src={toAssetSrc(draft.logoUrl)} alt="" className="h-10 w-10 object-contain" />
                         <span className="px-2 py-1 rounded text-xs font-medium" style={{ background: draft.primaryColor || "#ffffff", color: foregroundFor(draft.primaryColor || "#ffffff") }}>
                           Primär · auf Dunkel
                         </span>
@@ -898,6 +934,22 @@ function BrandRow({ brand }: { brand: Brand }) {
                     Farben aus Logo abgeleitet — kannst du unten anpassen.
                   </p>
                 )}
+              </div>
+              <div className="col-span-2">
+                <Label>Eltern-Marke</Label>
+                <Select
+                  value={draft.parentBrandId ?? NO_PARENT}
+                  onValueChange={(v) => setDraft({ ...draft, parentBrandId: v === NO_PARENT ? null : v })}
+                >
+                  <SelectTrigger data-testid={`select-brand-parent-${brand.id}`}><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value={NO_PARENT}>— Keine (Top-Level) —</SelectItem>
+                    {parentCandidates.map(b => (
+                      <SelectItem key={b.id} value={b.id} textValue={b.name}>{b.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-muted-foreground mt-1">Optional — Sub-Brand unter einer übergeordneten Marke.</p>
               </div>
               <div>
                 <Label>Tone / Voice</Label>
@@ -1346,137 +1398,214 @@ function UserAdminRow(props: {
 
 function RolesCard() {
   const roles = useListRoles();
+  const { data: catalog } = useListPermissionCatalog();
   const createRole = useCreateRole();
   const updateRole = useUpdateRole();
   const deleteRole = useDeleteRole();
-  const [newName, setNewName] = useState("");
-  const [newDesc, setNewDesc] = useState("");
+  const { toast } = useToast();
+
+  const [open, setOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
-  const [editName, setEditName] = useState("");
-  const [editDesc, setEditDesc] = useState("");
+  const [editingIsSystem, setEditingIsSystem] = useState(false);
+  const [name, setName] = useState("");
+  const [desc, setDesc] = useState("");
+  const [perms, setPerms] = useState<string[]>([]);
   const [error, setError] = useState<string | null>(null);
 
-  const onCreate = async () => {
+  // Gruppiert die Permission-Catalog-Einträge nach `category`, damit der
+  // Dialog sie als sinnvolle Blöcke (Deals, Quotes, Approvals, …) zeigt
+  // statt als einer langen flachen Liste mit 16+ Checkboxen.
+  const grouped = useMemo(() => {
+    const out: Record<string, PermissionCatalogEntry[]> = {};
+    (catalog ?? []).forEach(p => {
+      const cat = p.group || "Sonstige";
+      if (!out[cat]) out[cat] = [];
+      out[cat].push(p);
+    });
+    return out;
+  }, [catalog]);
+
+  const reset = () => {
+    setEditingId(null); setEditingIsSystem(false);
+    setName(""); setDesc(""); setPerms([]); setError(null);
+  };
+  const openCreate = () => { reset(); setOpen(true); };
+  const openEdit = (r: { id: string; name: string; description: string; isSystem: boolean; permissions?: string[] }) => {
+    reset();
+    setEditingId(r.id); setEditingIsSystem(r.isSystem);
+    setName(r.name); setDesc(r.description); setPerms(r.permissions ?? []);
+    setOpen(true);
+  };
+  const togglePerm = (key: string) => {
+    setPerms(p => p.includes(key) ? p.filter(x => x !== key) : [...p, key]);
+  };
+  const onSave = async () => {
     setError(null);
-    // Beschreibung ist optional — User-Feedback: das Pflichtfeld war nervig.
-    if (!newName.trim()) { setError("Name ist erforderlich."); return; }
+    if (!name.trim()) { setError("Name ist erforderlich."); return; }
     try {
-      await createRole.mutateAsync({ data: { name: newName.trim(), description: newDesc.trim() || "—" } });
-      setNewName(""); setNewDesc("");
+      if (editingId) {
+        await updateRole.mutateAsync({ id: editingId, data: { name: name.trim(), description: desc.trim() || "—", permissions: perms } });
+        toast({ title: "Rolle aktualisiert", description: name.trim() });
+      } else {
+        await createRole.mutateAsync({ data: { name: name.trim(), description: desc.trim() || "—", permissions: perms } });
+        toast({ title: "Rolle angelegt", description: name.trim() });
+      }
       roles.refetch();
+      setOpen(false); reset();
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Anlegen fehlgeschlagen.");
+      setError(e instanceof Error ? e.message : "Speichern fehlgeschlagen.");
     }
   };
-
-  const onEdit = (r: { id: string; name: string; description: string }) => {
-    setEditingId(r.id); setEditName(r.name); setEditDesc(r.description);
-  };
-
-  const onSaveEdit = async (id: string) => {
-    await updateRole.mutateAsync({ id, data: { name: editName.trim(), description: editDesc.trim() } });
-    setEditingId(null);
-    roles.refetch();
-  };
-
   const onDelete = async (r: { id: string; name: string }) => {
     if (!window.confirm(`Rolle "${r.name}" löschen?`)) return;
     try {
       await deleteRole.mutateAsync({ id: r.id });
       roles.refetch();
+      toast({ title: "Rolle gelöscht", description: r.name });
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Löschen fehlgeschlagen (Rolle evtl. in Benutzung).");
+      toast({ title: "Löschen fehlgeschlagen", description: e instanceof Error ? e.message : "Rolle evtl. in Benutzung.", variant: "destructive" });
     }
   };
 
   return (
     <Card>
-      <CardHeader>
-        <div className="flex items-center gap-2">
-          <Shield className="h-5 w-5 text-primary" />
-          <CardTitle>Rollen-Definitionen</CardTitle>
+      <CardHeader className="flex flex-row items-start justify-between gap-2">
+        <div>
+          <div className="flex items-center gap-2">
+            <Shield className="h-5 w-5 text-primary" />
+            <CardTitle>Rollen-Definitionen</CardTitle>
+          </div>
+          <p className="text-sm text-muted-foreground mt-1">
+            Rollen gelten innerhalb deines Mandanten. <span className="font-medium">System-Rollen</span> (Tenant Admin,
+            Account Executive, Deal Desk) sind fix verdrahtet — sie tragen Berechtigungen und können nicht editiert
+            oder gelöscht werden. Lege bei Bedarf eigene <span className="font-medium">Custom-Rollen</span> an
+            (z. B. „Sales Lead DACH" oder „Legal Reviewer") und weise ihnen feingranulare Berechtigungen zu.
+          </p>
         </div>
-        <p className="text-sm text-muted-foreground mt-1">
-          Rollen gelten innerhalb deines Mandanten. <span className="font-medium">System-Rollen</span> (Tenant Admin,
-          Account Executive, Deal Desk) sind fix verdrahtet — sie tragen Berechtigungen und können nicht editiert
-          oder gelöscht werden. Lege bei Bedarf eigene <span className="font-medium">Custom-Rollen</span> an
-          (z. B. „Sales Lead DACH" oder „Legal Reviewer").
-        </p>
+        <Button size="sm" onClick={openCreate} data-testid="button-create-role">
+          <Plus className="h-4 w-4 mr-1" /> Neue Rolle
+        </Button>
       </CardHeader>
       <CardContent className="space-y-4">
-        <div className="grid grid-cols-1 md:grid-cols-[1fr_2fr_auto] gap-2 items-end">
-          <div>
-            <Label>Neue Rolle</Label>
-            <Input placeholder="Name (z. B. Sales Lead DACH)" value={newName} onChange={e => setNewName(e.target.value)} data-testid="input-role-name" />
-          </div>
-          <div>
-            <Label>Beschreibung <span className="text-xs text-muted-foreground">(optional)</span></Label>
-            <Input placeholder="Wofür ist diese Rolle zuständig?" value={newDesc} onChange={e => setNewDesc(e.target.value)} data-testid="input-role-desc" />
-          </div>
-          <Button onClick={onCreate} disabled={createRole.isPending} data-testid="button-create-role">Hinzufügen</Button>
-        </div>
-        {error && <p className="text-sm text-destructive" data-testid="text-role-error">{error}</p>}
         <div className="border rounded-md">
           <Table>
             <TableHeader>
               <TableRow>
                 <TableHead>Name</TableHead>
                 <TableHead>Beschreibung</TableHead>
+                <TableHead>Berechtigungen</TableHead>
                 <TableHead>Typ</TableHead>
                 <TableHead className="text-right">Aktionen</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {roles.data?.map(r => (
-                <TableRow key={r.id}>
-                  {editingId === r.id ? (
-                    <>
-                      <TableCell><Input value={editName} onChange={e => setEditName(e.target.value)} /></TableCell>
-                      <TableCell><Input value={editDesc} onChange={e => setEditDesc(e.target.value)} /></TableCell>
-                      <TableCell>
-                        {r.isSystem
-                          ? <Badge variant="outline">System</Badge>
-                          : <Badge variant="outline" className="bg-blue-50">Custom</Badge>}
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <div className="flex justify-end gap-2">
-                          <Button size="sm" variant="outline" onClick={() => setEditingId(null)}>Abbrechen</Button>
-                          <Button size="sm" onClick={() => onSaveEdit(r.id)} disabled={updateRole.isPending}>Speichern</Button>
-                        </div>
-                      </TableCell>
-                    </>
-                  ) : (
-                    <>
-                      <TableCell className="font-medium">{r.name}</TableCell>
-                      <TableCell className="text-sm text-muted-foreground">{r.description}</TableCell>
-                      <TableCell>
-                        {r.isSystem
-                          ? <Badge variant="outline">System</Badge>
-                          : <Badge variant="outline" className="bg-blue-50">Custom</Badge>}
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <div className="flex justify-end gap-2">
-                          {/* native title statt Tooltip-Komponente: wirkt auch
-                              auf disabled Buttons und reicht hier völlig. */}
-                          <span title={r.isSystem ? "System-Rolle — nicht editierbar. Lege eine Custom-Rolle an." : ""}>
-                            <Button size="sm" variant="outline" onClick={() => onEdit(r)} disabled={r.isSystem} data-testid={`button-edit-role-${r.id}`}>Bearbeiten</Button>
-                          </span>
-                          <span title={r.isSystem ? "System-Rolle — nicht löschbar." : ""}>
-                            <Button size="sm" variant="outline" onClick={() => onDelete(r)} disabled={r.isSystem} data-testid={`button-delete-role-${r.id}`}>Löschen</Button>
-                          </span>
-                        </div>
-                      </TableCell>
-                    </>
-                  )}
+                <TableRow key={r.id} data-testid={`row-role-${r.id}`}>
+                  <TableCell className="font-medium">{r.name}</TableCell>
+                  <TableCell className="text-sm text-muted-foreground">{r.description}</TableCell>
+                  <TableCell className="text-xs">
+                    {r.isSystem ? (
+                      <Badge variant="outline" className="text-muted-foreground">implizit (System)</Badge>
+                    ) : (r.permissions?.length ?? 0) === 0 ? (
+                      <span className="text-amber-700 dark:text-amber-400">— keine —</span>
+                    ) : (
+                      <span>{r.permissions!.length} Berechtigung{r.permissions!.length === 1 ? "" : "en"}</span>
+                    )}
+                  </TableCell>
+                  <TableCell>
+                    {r.isSystem
+                      ? <Badge variant="outline">System</Badge>
+                      : <Badge variant="outline" className="bg-blue-50">Custom</Badge>}
+                  </TableCell>
+                  <TableCell className="text-right">
+                    <div className="flex justify-end gap-2">
+                      <span title={r.isSystem ? "System-Rolle — Berechtigungen sind fest verdrahtet." : ""}>
+                        <Button size="sm" variant="outline" onClick={() => openEdit(r)} disabled={r.isSystem} data-testid={`button-edit-role-${r.id}`}>Bearbeiten</Button>
+                      </span>
+                      <span title={r.isSystem ? "System-Rolle — nicht löschbar." : ""}>
+                        <Button size="sm" variant="outline" onClick={() => onDelete(r)} disabled={r.isSystem} data-testid={`button-delete-role-${r.id}`}>Löschen</Button>
+                      </span>
+                    </div>
+                  </TableCell>
                 </TableRow>
               ))}
               {!roles.data?.length && (
-                <TableRow><TableCell colSpan={4} className="text-center h-16">Keine Rollen</TableCell></TableRow>
+                <TableRow><TableCell colSpan={5} className="text-center h-16">Keine Rollen</TableCell></TableRow>
               )}
             </TableBody>
           </Table>
         </div>
       </CardContent>
+
+      <AlertDialog open={open} onOpenChange={setOpen}>
+        <AlertDialogContent className="max-w-3xl max-h-[85vh] overflow-y-auto">
+          <AlertDialogHeader>
+            <AlertDialogTitle>{editingId ? "Rolle bearbeiten" : "Neue Rolle"}</AlertDialogTitle>
+            <AlertDialogDescription>
+              Wähle Berechtigungen aus dem Katalog. Diese werden vom Backend bei jedem Request gegen den eingeloggten User geprüft.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <div className="space-y-3">
+            <div className="grid md:grid-cols-2 gap-3">
+              <div className="space-y-1">
+                <Label>Name</Label>
+                <Input value={name} onChange={e => setName(e.target.value)} placeholder="z. B. Sales Lead DACH" disabled={editingIsSystem} data-testid="input-role-name" />
+              </div>
+              <div className="space-y-1">
+                <Label>Beschreibung <span className="text-xs text-muted-foreground">(optional)</span></Label>
+                <Input value={desc} onChange={e => setDesc(e.target.value)} placeholder="Wofür ist diese Rolle zuständig?" disabled={editingIsSystem} data-testid="input-role-desc" />
+              </div>
+            </div>
+            <div>
+              <Label>Berechtigungen</Label>
+              <p className="text-xs text-muted-foreground mb-2">
+                {perms.length} von {catalog?.length ?? 0} ausgewählt.
+              </p>
+              {!catalog?.length ? (
+                <Skeleton className="h-32 w-full" />
+              ) : (
+                <div className="space-y-3 border rounded-md p-3 max-h-80 overflow-y-auto">
+                  {(Object.entries(grouped) as Array<[string, PermissionCatalogEntry[]]>).map(([cat, entries]) => (
+                    <div key={cat}>
+                      <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-1.5">{cat}</div>
+                      <div className="grid md:grid-cols-2 gap-1.5">
+                        {entries.map(p => (
+                          <label
+                            key={p.key}
+                            className="flex items-start gap-2 px-2 py-1.5 text-sm rounded hover:bg-muted/40 cursor-pointer"
+                            data-testid={`option-perm-${p.key}`}
+                          >
+                            <input
+                              type="checkbox"
+                              checked={perms.includes(p.key)}
+                              onChange={() => togglePerm(p.key)}
+                              disabled={editingIsSystem}
+                              className="mt-0.5"
+                              data-testid={`checkbox-perm-${p.key}`}
+                            />
+                            <div className="flex-1 min-w-0">
+                              <div className="font-medium text-xs"><code>{p.key}</code></div>
+                              <div className="text-xs text-muted-foreground">{p.label}</div>
+                              {p.description ? <div className="text-xs text-muted-foreground/80 mt-0.5">{p.description}</div> : null}
+                            </div>
+                          </label>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+            {error && <p className="text-sm text-destructive" data-testid="text-role-error">{error}</p>}
+          </div>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Abbrechen</AlertDialogCancel>
+            <AlertDialogAction onClick={onSave} disabled={editingIsSystem || !name.trim() || createRole.isPending || updateRole.isPending} data-testid="button-save-role">
+              Speichern
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </Card>
   );
 }
@@ -1777,6 +1906,217 @@ function CsvTagInput({
   );
 }
 
+// ─── ClauseFamilyMultiSelect ──────────────────────────────────────────────
+// Multi-Checkbox-Picker für Klauselfamilien. Ersetzt das frühere CSV-Eingabe-
+// feld, das User zwang, kryptische `cf_xxx`-IDs zu tippen. `excludeIds` blendet
+// Familien aus, die im Gegenstück (Pflicht↔Verboten) bereits gewählt sind, um
+// inkonsistente Konfigurationen zu verhindern.
+function ClauseFamilyMultiSelect({
+  families,
+  selected,
+  onChange,
+  testIdPrefix,
+  excludeIds = [],
+}: {
+  families: { id: string; name: string; description?: string }[];
+  selected: string[];
+  onChange: (next: string[]) => void;
+  testIdPrefix: string;
+  excludeIds?: string[];
+}) {
+  const excluded = new Set(excludeIds);
+  const toggle = (id: string) => {
+    if (selected.includes(id)) onChange(selected.filter(x => x !== id));
+    else onChange([...selected, id]);
+  };
+  if (families.length === 0) {
+    return (
+      <div className="text-sm text-muted-foreground border rounded-md p-3 bg-muted/20">
+        Noch keine Klauselfamilien gepflegt. Lege zuerst welche an, dann tauchen sie hier zur Auswahl auf.
+      </div>
+    );
+  }
+  return (
+    <div className="border rounded-md max-h-48 overflow-y-auto divide-y" data-testid={`multiselect-${testIdPrefix}`}>
+      {families.map(f => {
+        const isSel = selected.includes(f.id);
+        const isExcl = excluded.has(f.id);
+        return (
+          <label
+            key={f.id}
+            className={`flex items-start gap-2 px-3 py-2 text-sm cursor-pointer hover:bg-muted/30 ${isExcl ? "opacity-50 pointer-events-none" : ""}`}
+            data-testid={`option-${testIdPrefix}-${f.id}`}
+          >
+            <input
+              type="checkbox"
+              checked={isSel}
+              onChange={() => toggle(f.id)}
+              disabled={isExcl}
+              className="mt-0.5"
+              data-testid={`checkbox-${testIdPrefix}-${f.id}`}
+            />
+            <div className="flex-1 min-w-0">
+              <div className="font-medium">{f.name}</div>
+              {f.description ? (
+                <div className="text-xs text-muted-foreground truncate">{f.description}</div>
+              ) : null}
+              {isExcl ? (
+                <div className="text-xs text-amber-700 dark:text-amber-400 mt-0.5">
+                  Bereits in der Gegenliste gewählt — hier nicht wählbar.
+                </div>
+              ) : null}
+            </div>
+          </label>
+        );
+      })}
+    </div>
+  );
+}
+
+// ─── IndustryProfilesCard ──────────────────────────────────────────────────
+// Verwaltung von Branchen-Profilen, die im Quote-Wizard als Defaults dienen
+// (Beschreibung, Standard-Vorlage, Anhangs-Bibliothek). Wird vom Wizard per
+// "Branche konfigurieren"-Link unter `#industry-profiles` angesprungen.
+function IndustryProfilesCard() {
+  const { data: profiles, isLoading } = useListIndustryProfiles();
+  const qc = useQueryClient();
+  const { toast } = useToast();
+  const create = useCreateIndustryProfile();
+  const update = useUpdateIndustryProfile();
+  const del = useDeleteIndustryProfile();
+
+  const [open, setOpen] = useState(false);
+  const [editing, setEditing] = useState<IndustryProfile | null>(null);
+  const [industry, setIndustry] = useState("");
+  const [label, setLabel] = useState("");
+  const [description, setDescription] = useState("");
+
+  const openCreate = () => {
+    setEditing(null);
+    setIndustry("");
+    setLabel("");
+    setDescription("");
+    setOpen(true);
+  };
+  const openEdit = (p: IndustryProfile) => {
+    setEditing(p);
+    setIndustry(p.industry);
+    setLabel(p.label);
+    setDescription(p.description ?? "");
+    setOpen(true);
+  };
+  const onSave = async () => {
+    const ind = industry.trim().toLowerCase();
+    const lab = label.trim();
+    if (!ind || !lab) {
+      toast({ title: "Pflichtfelder fehlen", description: "Branche und Label sind erforderlich.", variant: "destructive" });
+      return;
+    }
+    try {
+      const body = { industry: ind, label: lab, description: description.trim() };
+      if (editing) {
+        await update.mutateAsync({ id: editing.id, data: body });
+        toast({ title: "Profil aktualisiert", description: lab });
+      } else {
+        await create.mutateAsync({ data: body });
+        toast({ title: "Profil angelegt", description: lab });
+      }
+      await qc.invalidateQueries({ queryKey: getListIndustryProfilesQueryKey() });
+      setOpen(false);
+    } catch (e) {
+      toast({ title: "Speichern fehlgeschlagen", description: e instanceof Error ? e.message : "Unbekannt", variant: "destructive" });
+    }
+  };
+  const onDelete = async (p: IndustryProfile) => {
+    if (!confirm(`Profil "${p.label}" wirklich löschen?`)) return;
+    try {
+      await del.mutateAsync({ id: p.id });
+      await qc.invalidateQueries({ queryKey: getListIndustryProfilesQueryKey() });
+      toast({ title: "Profil gelöscht", description: p.label });
+    } catch (e) {
+      toast({ title: "Löschen fehlgeschlagen", description: e instanceof Error ? e.message : "Unbekannt", variant: "destructive" });
+    }
+  };
+
+  return (
+    <Card data-testid="card-industry-profiles" id="industry-profiles">
+      <CardHeader className="flex flex-row items-center justify-between">
+        <div>
+          <CardTitle>Branchen-Profile</CardTitle>
+          <p className="text-sm text-muted-foreground mt-1">
+            Definiere Branchen mit Beschreibung und Default-Vorlagen — werden im Angebots-Wizard als Vorauswahl genutzt.
+          </p>
+        </div>
+        <Button size="sm" onClick={openCreate} data-testid="button-new-industry-profile">
+          <Plus className="h-4 w-4 mr-2" />Profil anlegen
+        </Button>
+      </CardHeader>
+      <CardContent>
+        {isLoading ? <Skeleton className="h-24 w-full" /> : !profiles?.length ? (
+          <div className="text-sm text-muted-foreground py-4 text-center">Noch keine Branchen-Profile angelegt.</div>
+        ) : (
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Branche</TableHead>
+                <TableHead>Label</TableHead>
+                <TableHead>Beschreibung</TableHead>
+                <TableHead className="w-32 text-right">Aktionen</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {profiles.map(p => (
+                <TableRow key={p.id} data-testid={`row-industry-profile-${p.industry}`}>
+                  <TableCell><code className="text-xs">{p.industry}</code></TableCell>
+                  <TableCell className="font-medium">{p.label}</TableCell>
+                  <TableCell className="text-sm text-muted-foreground max-w-md truncate">{p.description || "—"}</TableCell>
+                  <TableCell className="text-right">
+                    <Button size="sm" variant="ghost" onClick={() => openEdit(p)} data-testid={`button-edit-industry-${p.industry}`}>Bearbeiten</Button>
+                    <Button size="sm" variant="ghost" onClick={() => onDelete(p)} data-testid={`button-delete-industry-${p.industry}`}>
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        )}
+      </CardContent>
+
+      <AlertDialog open={open} onOpenChange={setOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>{editing ? "Profil bearbeiten" : "Branchen-Profil anlegen"}</AlertDialogTitle>
+            <AlertDialogDescription>
+              Branche ist ein Code-Schlüssel (z. B. <code>saas</code>), Label ist der Anzeigename.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <div className="space-y-3">
+            <div className="space-y-1">
+              <Label>Branche (Schlüssel)</Label>
+              <Input value={industry} onChange={e => setIndustry(e.target.value)} placeholder="saas" disabled={!!editing} data-testid="input-industry-key" />
+            </div>
+            <div className="space-y-1">
+              <Label>Label</Label>
+              <Input value={label} onChange={e => setLabel(e.target.value)} placeholder="Software-as-a-Service" data-testid="input-industry-label" />
+            </div>
+            <div className="space-y-1">
+              <Label>Beschreibung</Label>
+              <Input value={description} onChange={e => setDescription(e.target.value)} placeholder="Wofür dieses Profil typisch ist…" data-testid="input-industry-description" />
+            </div>
+          </div>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Abbrechen</AlertDialogCancel>
+            <AlertDialogAction onClick={onSave} disabled={!industry.trim() || !label.trim()} data-testid="button-save-industry">
+              {editing ? "Speichern" : "Anlegen"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </Card>
+  );
+}
+
 function ContractTypesCard() {
   const { data: types, isLoading } = useListContractTypes();
   const { data: families } = useListClauseFamilies();
@@ -1972,15 +2312,30 @@ function ContractTypesCard() {
               <Input value={description} onChange={e => setDescription(e.target.value)} data-testid="input-ct-description" />
             </div>
             <div>
-              <Label>Pflicht-Klauselfamilien (IDs, Komma-getrennt)</Label>
-              <CsvTagInput value={mandatory} onChange={setMandatory} placeholder="cf_xxx, cf_yyy" testId="input-ct-mandatory" />
-              {(families?.length ?? 0) > 0 && (
-                <p className="text-xs text-muted-foreground mt-1">Verfügbar: {families!.map(f => f.id).join(", ")}</p>
-              )}
+              <Label>Pflicht-Klauselfamilien</Label>
+              <p className="text-xs text-muted-foreground mb-1.5">
+                Diese Familien müssen in jedem Vertrag dieses Typs vorkommen.
+              </p>
+              <ClauseFamilyMultiSelect
+                families={families ?? []}
+                selected={mandatory}
+                onChange={setMandatory}
+                testIdPrefix="ct-mandatory"
+                excludeIds={forbidden}
+              />
             </div>
             <div>
-              <Label>Verbotene Klauselfamilien (IDs, Komma-getrennt)</Label>
-              <CsvTagInput value={forbidden} onChange={setForbidden} placeholder="cf_xxx" testId="input-ct-forbidden" />
+              <Label>Verbotene Klauselfamilien</Label>
+              <p className="text-xs text-muted-foreground mb-1.5">
+                Diese Familien dürfen in einem Vertrag dieses Typs nicht vorkommen.
+              </p>
+              <ClauseFamilyMultiSelect
+                families={families ?? []}
+                selected={forbidden}
+                onChange={setForbidden}
+                testIdPrefix="ct-forbidden"
+                excludeIds={mandatory}
+              />
             </div>
             <div className="flex items-center gap-2">
               <input

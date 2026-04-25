@@ -13,4 +13,6 @@ export interface Role {
   name: string;
   description: string;
   isSystem: boolean;
+  /** Permission-Keys (z. B. deal:write, approval:approve). Nur bei Custom-Rollen editierbar. */
+  permissions: string[];
 }

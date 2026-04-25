@@ -12,6 +12,7 @@ export interface BrandUpdate {
   name?: string;
   color?: string;
   voice?: string;
+  parentBrandId?: string | null;
   logoUrl?: string | null;
   primaryColor?: string | null;
   secondaryColor?: string | null;
