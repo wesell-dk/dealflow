@@ -5,7 +5,11 @@ import { BlockList } from 'node:net';
 import { ObjectStorageService } from '../lib/objectStorage';
 import { extractTextFromUpload } from '../lib/extractContractText';
 import { validateInline } from '../middlewares/validate';
-import { sendCollaboratorInviteEmail } from '../lib/collaboratorEmail';
+import {
+  sendCollaboratorInviteEmail,
+  sendCollaboratorSignConfirmationEmail,
+  sendOwnerCounterSignNotificationEmail,
+} from '../lib/collaboratorEmail';
 import { buildMagicLinkUrl } from '../lib/magicLinkUrl';
 import {
   sanitizeCompanyName,
@@ -14718,6 +14722,166 @@ router.post('/external/:token/sign', async (req, res) => {
       ip: req.ip ?? null,
     },
     activeScope: null,
+  });
+
+  // ── Bestätigungs- und Benachrichtigungs-E-Mails ───────────────────────
+  // Externer Anwalt erhält eine Empfangsbestätigung mit Signatur-Kontext;
+  // der Vertrags-/Deal-Owner wird parallel informiert, damit das interne
+  // Team die Mitzeichnung nicht erst durch Polling der Pipeline mitbekommt.
+  // Beide Sends laufen ueber das gemeinsame sendEmail() (log-Provider in
+  // Dev/Test, Resend in Prod) und werfen nicht — ein Mail-Fehler darf den
+  // Signatur-Erfolg nicht blockieren. Erfolg/Fehler landen sowohl auf der
+  // Collaborator-Events-Timeline als auch im Audit-Log.
+  const [dealForNotify] = await db.select().from(dealsTable).where(eq(dealsTable.id, c.dealId));
+  const [brandForNotify] = dealForNotify
+    ? await db.select().from(brandsTable).where(eq(brandsTable.id, dealForNotify.brandId))
+    : [];
+  const [ownerForNotify] = dealForNotify
+    ? await db.select().from(usersTable).where(eq(usersTable.id, dealForNotify.ownerId))
+    : [];
+  const backLinkUrl = buildMagicLinkUrl(req, undefined, req.params.token);
+
+  // 1) Empfangsbestätigung an den externen Mitzeichner.
+  try {
+    const collabResult = await sendCollaboratorSignConfirmationEmail({
+      recipientEmail: collab.email,
+      signerName: name,
+      organization: collab.organization ?? null,
+      brandName: brandForNotify?.name ?? null,
+      contractTitle: c.title,
+      dealName: dealForNotify?.name ?? null,
+      signedAt,
+      magicLinkUrl: backLinkUrl,
+      ownerName: ownerForNotify?.name ?? null,
+      ownerEmail: ownerForNotify?.email ?? null,
+    });
+    await recordCollabEvent(
+      collab,
+      collabResult.ok ? 'sign_confirmation_emailed' : 'sign_confirmation_email_failed',
+      {
+        provider: collabResult.provider,
+        messageId: collabResult.messageId ?? null,
+        error: collabResult.error ?? null,
+        signerId,
+      },
+      req,
+    );
+    await writeAudit({
+      tenantId: collab.tenantId,
+      entityType: 'contract',
+      entityId: c.id,
+      action: collabResult.ok
+        ? 'external_collaborator_sign_confirmation_sent'
+        : 'external_collaborator_sign_confirmation_failed',
+      actor: magicLinkActor(collab),
+      summary: collabResult.ok
+        ? `Bestätigungs-E-Mail an ${collab.email} verschickt (${collabResult.provider})`
+        : `Bestätigungs-E-Mail an ${collab.email} fehlgeschlagen (${collabResult.provider})`,
+      after: {
+        collaboratorId: collab.id,
+        provider: collabResult.provider,
+        error: collabResult.error ?? null,
+      },
+      activeScope: null,
+    });
+  } catch (err) {
+    // Defense-in-depth: sendEmail wirft eigentlich nicht, aber falls doch
+    // (z. B. unerwarteter Builder-Fehler), darf das die Signatur nicht
+    // killen — wir vermerken den Fehler und machen weiter.
+    const message = err instanceof Error ? err.message : String(err);
+    await recordCollabEvent(collab, 'sign_confirmation_email_failed', {
+      error: message,
+      signerId,
+    }, req);
+  }
+
+  // 2) Interne Benachrichtigung an den Deal-/Vertrags-Owner. Wir senden nur,
+  // wenn ein Owner mit gueltiger E-Mail-Adresse aufloesbar ist; Verträge
+  // ohne Owner-Datensatz wären sonst stille Fehlerquellen — der Vorfall
+  // wird stattdessen im Audit-Log dokumentiert.
+  if (ownerForNotify?.email) {
+    try {
+      const ownerResult = await sendOwnerCounterSignNotificationEmail({
+        recipientEmail: ownerForNotify.email,
+        recipientName: ownerForNotify.name ?? null,
+        signerName: name,
+        signerEmail: collab.email,
+        organization: collab.organization ?? null,
+        brandName: brandForNotify?.name ?? null,
+        contractTitle: c.title,
+        dealName: dealForNotify?.name ?? null,
+        signedAt,
+        magicLinkUrl: backLinkUrl,
+      });
+      await recordCollabEvent(
+        collab,
+        ownerResult.ok ? 'sign_owner_notified' : 'sign_owner_notify_failed',
+        {
+          provider: ownerResult.provider,
+          messageId: ownerResult.messageId ?? null,
+          error: ownerResult.error ?? null,
+          ownerUserId: ownerForNotify.id,
+          ownerEmail: ownerForNotify.email,
+        },
+        req,
+      );
+      await writeAudit({
+        tenantId: collab.tenantId,
+        entityType: 'contract',
+        entityId: c.id,
+        action: ownerResult.ok
+          ? 'external_signature_owner_notified'
+          : 'external_signature_owner_notify_failed',
+        actor: magicLinkActor(collab),
+        summary: ownerResult.ok
+          ? `Owner ${ownerForNotify.email} über externe Mitzeichnung informiert (${ownerResult.provider})`
+          : `Owner ${ownerForNotify.email} konnte nicht informiert werden (${ownerResult.provider})`,
+        after: {
+          collaboratorId: collab.id,
+          ownerUserId: ownerForNotify.id,
+          provider: ownerResult.provider,
+          error: ownerResult.error ?? null,
+        },
+        activeScope: null,
+      });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      await recordCollabEvent(collab, 'sign_owner_notify_failed', {
+        error: message,
+        ownerUserId: ownerForNotify.id,
+        ownerEmail: ownerForNotify.email,
+      }, req);
+    }
+  } else {
+    // Kein Owner / keine E-Mail auflösbar — als Audit-Hinweis vermerken,
+    // damit Tenant-Admins das Stammdaten-Loch sehen.
+    await writeAudit({
+      tenantId: collab.tenantId,
+      entityType: 'contract',
+      entityId: c.id,
+      action: 'external_signature_owner_notify_skipped',
+      actor: magicLinkActor(collab),
+      summary: 'Externe Mitzeichnung — kein Owner mit E-Mail-Adresse zum Benachrichtigen.',
+      after: {
+        collaboratorId: collab.id,
+        dealId: c.dealId,
+        ownerUserId: dealForNotify?.ownerId ?? null,
+      },
+      activeScope: null,
+    });
+  }
+
+  // In-App-Notification fuer das interne Team: Timeline-Event auf dem Deal.
+  // Erscheint im Activity-Feed des Deals und in der globalen Activity-Liste,
+  // sodass der Owner die Mitzeichnung auch ohne E-Mail-Postfach mitbekommt.
+  await db.insert(timelineEventsTable).values({
+    id: `tl_${randomUUID().slice(0, 8)}`,
+    tenantId: collab.tenantId,
+    type: 'signature',
+    title: 'Externe Mitzeichnung eingegangen',
+    description: `${name}${collab.organization ? ` (${collab.organization})` : ''} hat „${c.title}“ mitgezeichnet.`,
+    actor: magicLinkActor(collab),
+    dealId: c.dealId,
   });
 
   // Wenn diese Mitzeichnung die letzte fehlende Unterschrift war, muss das

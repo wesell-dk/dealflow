@@ -12,6 +12,7 @@ import {
   signersTable,
   signaturePackagesTable,
   orderConfirmationsTable,
+  timelineEventsTable,
 } from "@workspace/db";
 import {
   createTestWorld,
@@ -854,6 +855,82 @@ describe("external collaborators — magic-link flow", () => {
       body: JSON.stringify({ name: "Dr. Susi Sign" }),
     });
     assert.equal(dup.status, 409, "Doppel-Signatur muss mit 409 abgewiesen werden");
+  });
+
+  it("POST /external/:token/sign verschickt Bestätigungs- + Owner-Mail und schreibt Timeline-Eintrag", async () => {
+    // Eigenes Magic-Link + Vertrag in einem frischen Welt-Setup, damit der
+    // bereits in der vorigen Sign-Test "completed" gesetzte Package-State
+    // nicht stoert. Wir nutzen worldB (eigener Tenant) fuer maximale
+    // Isolation gegenueber dem ersten Mitzeichnen-Test.
+    const created = await bob.post(
+      `/api/v1/contracts/${worldB.contractId}/external-collaborators`,
+      {
+        email: "confirm-lawyer@kanzlei.example",
+        name: "Dr. Conny Confirm",
+        organization: "Kanzlei Confirm GmbH",
+        capabilities: ["view", "sign_party"],
+      },
+    );
+    assert.equal(created.status, 201);
+    const c = created.body as CollabResp;
+    const token = c.tokenPlaintext!;
+
+    const r = await fetch(`${server.baseUrl}/api/v1/external/${token}/sign`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ name: "Dr. Conny Confirm" }),
+    });
+    assert.equal(r.status, 201, "Sign-Endpoint muss 201 Created liefern");
+
+    // Collaborator-Events: 'sign_confirmation_emailed' + 'sign_owner_notified'
+    // muessen direkt nach 'signed' geschrieben sein.
+    const events = await db.select().from(externalCollaboratorEventsTable)
+      .where(eq(externalCollaboratorEventsTable.collaboratorId, c.id));
+    const confirmEvent = events.find(
+      (e) => e.action === "sign_confirmation_emailed" || e.action === "sign_confirmation_email_failed",
+    );
+    assert.ok(
+      confirmEvent && confirmEvent.action === "sign_confirmation_emailed",
+      "Bestätigungs-E-Mail an externen Anwalt muss als Event protokolliert sein",
+    );
+    const ownerEvent = events.find(
+      (e) => e.action === "sign_owner_notified" || e.action === "sign_owner_notify_failed",
+    );
+    assert.ok(
+      ownerEvent && ownerEvent.action === "sign_owner_notified",
+      "Owner-Benachrichtigung muss als Collaborator-Event protokolliert sein",
+    );
+    const ownerPayload = ownerEvent.payload as { ownerEmail?: string; ownerUserId?: string } | null;
+    assert.equal(ownerPayload?.ownerEmail, worldB.userEmail,
+      "Owner-Event muss die E-Mail-Adresse des Deal-Owners tragen");
+    assert.equal(ownerPayload?.ownerUserId, worldB.userId,
+      "Owner-Event muss die User-ID des Deal-Owners tragen");
+
+    // Audit-Log: beide Sends erscheinen mit actor=magic-link:<id>.
+    const audits = await db.select().from(auditLogTable)
+      .where(eq(auditLogTable.entityId, worldB.contractId));
+    const confirmAudit = audits.find((a) =>
+      a.action === "external_collaborator_sign_confirmation_sent" &&
+      a.actor === `magic-link:${c.id}`);
+    assert.ok(confirmAudit, "Audit-Eintrag fuer Bestätigungs-E-Mail muss existieren");
+    const ownerAudit = audits.find((a) =>
+      a.action === "external_signature_owner_notified" &&
+      a.actor === `magic-link:${c.id}`);
+    assert.ok(ownerAudit, "Audit-Eintrag fuer Owner-Benachrichtigung muss existieren");
+
+    // In-App-Notification: Timeline-Eintrag auf dem Deal mit Signer-Name.
+    const timeline = await db.select().from(timelineEventsTable)
+      .where(eq(timelineEventsTable.dealId, worldB.dealId));
+    const tlMatch = timeline.find((t) =>
+      t.title === "Externe Mitzeichnung eingegangen" &&
+      t.description?.includes("Dr. Conny Confirm"));
+    assert.ok(tlMatch, "Timeline-Eintrag fuer externe Mitzeichnung muss existieren");
+
+    // Auftragsbestätigung, die durch die End-of-Pipeline entstanden ist,
+    // beim Cleanup deterministisch entfernen.
+    const [pkg] = await db.select().from(signaturePackagesTable)
+      .where(eq(signaturePackagesTable.id, worldB.signaturePackageId));
+    if (pkg?.orderConfirmationId) extraOcIds.push(pkg.orderConfirmationId);
   });
 
   it("POST /external/:token/sign verweigert leeren oder zu langen Namen + ungueltige Signatur", async () => {
