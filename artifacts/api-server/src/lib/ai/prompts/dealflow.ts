@@ -667,6 +667,122 @@ export const externalContractExtract: PromptDefinition<
   toolName: 'report_external_contract_extract',
 };
 
+// ───────────────────────── Clause-Import (Task #76) ─────────────────────────
+//
+// Segmentiert einen importierten Vertrags-Rohtext (PDF/DOCX-Layer) in einzelne
+// Klausel-Kandidaten und ordnet jeden Kandidaten einer existierenden
+// Klausel-Familie zu (oder markiert "neue Familie noetig"). Zusaetzlich gibt
+// die KI bis zu 3 alternative Familien-Vorschlaege mit Konfidenz, einen
+// Variants-Match (wenn ein bestehender Variant-Text inhaltlich sehr aehnlich
+// ist) und einen Tonfall-/Severity-Vorschlag zurueck.
+//
+// Wichtige Constraints:
+//   - extractedText ist 1:1 aus dem Original (keine Umformulierung) — nur
+//     White-Space und Bullet-Marker werden normalisiert.
+//   - suggestedFamilyId MUSS aus der mitgelieferten Liste stammen oder null
+//     sein. Niemals frei erfundene Family-Ids.
+//   - matchedVariantId nur, wenn die KI sich sehr sicher ist (> 0.6 cos-sim).
+//   - Maximal 50 Segmente pro Dokument — der Rest wird abgeschnitten.
+
+const ImportClauseSegment = z.object({
+  // Kurz-Name (40-60 Zeichen) fuer den Klausel-Editor in der Review-UI.
+  suggestedName: z.string().min(3).max(120),
+  // 1-2-Satz-Zusammenfassung — wird als clauseVariants.summary uebernommen.
+  suggestedSummary: z.string().min(0).max(400),
+  // Volltext der Klausel, normalisiert (keine Umformulierung).
+  extractedText: z.string().min(20).max(8000),
+  // Heuristische Seitenzahl (1-basiert), null wenn unbekannt.
+  pageHint: z.number().int().min(1).max(2000).nullable(),
+  // Tonfall — passt zur clauseVariantsTable.tone-Enumeration.
+  suggestedTone: z.union([
+    z.literal("zart"),
+    z.literal("moderat"),
+    z.literal("standard"),
+    z.literal("streng"),
+    z.literal("hart"),
+  ]),
+  // Severity gemaess clauseVariantsTable.severity.
+  suggestedSeverity: z.union([
+    z.literal("low"),
+    z.literal("medium"),
+    z.literal("high"),
+  ]),
+  // Best-Match aus der mitgegebenen Familien-Taxonomie. null = neue Familie.
+  suggestedFamilyId: z.string().nullable(),
+  // Bis zu 3 weitere Vorschlaege mit Konfidenz 0..1.
+  alternativeMatches: z.array(z.object({
+    familyId: z.string(),
+    confidence: z.number().min(0).max(1),
+  })).max(3),
+  // Optional: aehnlichste vorhandene Variante (nur wenn cos-sim > ~0.6).
+  matchedVariantId: z.string().nullable(),
+  similarityScore: z.number().min(0).max(1).nullable(),
+});
+
+const ClauseImportSegmentOutput = z.object({
+  segments: z.array(ImportClauseSegment).max(50),
+  notes: z.array(z.string().min(2).max(240)).max(8),
+});
+
+export interface ClauseImportSegmentInput {
+  rawText: string;
+  fileName: string;
+  language: "de" | "en";
+  contractTypeCode: string | null;
+  // Familien-Taxonomie als Lookup. KI MUSS suggestedFamilyId aus dieser
+  // Liste waehlen oder null zurueckgeben.
+  families: Array<{ id: string; name: string; description: string }>;
+  // Bestehende Varianten als Lookup fuer matchedVariantId. KI vergleicht
+  // extractedText nur mit Varianten in der gleichen vorgeschlagenen Familie.
+  variants: Array<{ id: string; familyId: string; name: string; summary: string }>;
+}
+
+export const clauseImportSegment: PromptDefinition<
+  ClauseImportSegmentInput,
+  z.infer<typeof ClauseImportSegmentOutput>
+> = {
+  key: "clause.import.segment",
+  model: "claude-sonnet-4-6",
+  system:
+    "Du bist DealFlow-Copilot im Modus Clause-Library Import. Du erhaelst " +
+    "den Rohtext eines hochgeladenen Bestandsvertrags und segmentierst ihn " +
+    "in einzelne Klauseln (z. B. Vertraulichkeit, Haftung, Kuendigung). Pro " +
+    "Klausel ordnest du sie der besten Familie aus der mitgelieferten " +
+    "Taxonomie zu oder markierst sie als 'neue Familie noetig' (familyId=null). " +
+    "Wenn der Klausel-Text inhaltlich nahezu identisch zu einer bestehenden " +
+    "Variante ist (geschaetzte cos-Aehnlichkeit > 0.6), trag matchedVariantId " +
+    "und similarityScore ein, sonst null. extractedText ist 1:1 aus dem " +
+    "Original — nur White-Space und Bullet-Marker normalisierst du. Niemals " +
+    "umformulieren. Niemals zusammenfassen. Maximal 50 Segmente; wenn das " +
+    "Dokument groesser ist, segmentiere die wichtigsten ersten 50 und " +
+    "vermerk das in notes. " +
+    SAFE_GERMAN_HINT,
+  buildUser: (input) => {
+    const familyList = input.families
+      .map((f) => `- ${f.id}: ${f.name} — ${f.description}`)
+      .join("\n");
+    const variantList = input.variants
+      .slice(0, 200)
+      .map((v) => `- ${v.id} (familyId=${v.familyId}): ${v.name} | ${v.summary}`)
+      .join("\n");
+    return (
+      `Datei: ${input.fileName}\n` +
+      `Sprache: ${input.language}\n` +
+      (input.contractTypeCode ? `Vertrags-Typ: ${input.contractTypeCode}\n` : "") +
+      `\nVerfuegbare Klausel-Familien (id: name — beschreibung):\n${familyList}\n` +
+      `\nVorhandene Varianten in diesen Familien:\n${variantList || "(keine)"}\n` +
+      `\nVertrags-Rohtext (gekuerzt):\n"""${input.rawText}"""`
+    );
+  },
+  outputSchema: ClauseImportSegmentOutput,
+  toolDescription:
+    "Liefert eine Liste von Klausel-Segmenten mit suggestedName, " +
+    "suggestedSummary, extractedText (1:1), pageHint, suggestedTone, " +
+    "suggestedSeverity, suggestedFamilyId (aus Liste oder null), " +
+    "alternativeMatches (max 3) und matchedVariantId (optional).",
+  toolName: "report_clause_import_segments",
+};
+
 // ───────────────────────── Bundle ─────────────────────────
 
 export const DEALFLOW_PROMPTS = {
@@ -682,4 +798,5 @@ export const DEALFLOW_PROMPTS = {
   [commercialHealthCheck.key]: commercialHealthCheck,
   [helpAssistant.key]: helpAssistant,
   [externalContractExtract.key]: externalContractExtract,
+  [clauseImportSegment.key]: clauseImportSegment,
 } as const;

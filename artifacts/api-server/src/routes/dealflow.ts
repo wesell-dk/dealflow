@@ -97,6 +97,8 @@ import {
   uploadedObjectsTable,
   savedViewsTable,
   externalContractsTable,
+  clauseImportJobsTable,
+  clauseImportSuggestionsTable,
   renewalOpportunitiesTable,
   brandClauseVariantOverridesTable,
   clauseVariantTranslationsTable,
@@ -10134,6 +10136,750 @@ router.delete('/external-contracts/:id', async (req, res) => {
     entityId: existing.id,
     action: 'delete',
     summary: `Bestandsvertrag „${existing.title}" gelöscht`,
+    actor: scope.user?.name,
+    before: existing,
+  });
+  res.status(204).end();
+});
+
+
+// ────────────────────────────────────────────────────────────────────────────
+// Klausel-Import (Task #76)
+// Admin laedt PDF/DOCX hoch → POST /clause-imports erzeugt einen Job, extrahiert
+// Text, ruft die Segmentierungs-AI auf, persistiert Suggestions im Status
+// pending_review. Im Frontend entscheidet der Editor pro Suggestion: accept
+// (→ neue clauseVariant ODER neue Translation auf existierender Variante) oder
+// reject. Die Job-Counts werden bei jeder Entscheidung aktualisiert; sobald
+// pendingCount==0 wird der Job auf "completed" gesetzt. Alle Mutationen sind
+// admin-gated und schreiben einen audit-log-Eintrag.
+// ────────────────────────────────────────────────────────────────────────────
+
+const SUPPORTED_CLAUSE_IMPORT_MIME = SUPPORTED_EXT_CONTRACT_MIME;
+const MAX_CLAUSE_IMPORT_BYTES = MAX_EXT_CONTRACT_BYTES;
+const SUPPORTED_CLAUSE_IMPORT_LANGUAGES = ['de', 'en'] as const;
+
+type ClauseImportSuggestionRow = typeof clauseImportSuggestionsTable.$inferSelect;
+type ClauseImportJobRow = typeof clauseImportJobsTable.$inferSelect;
+
+function severityScoreFor(severity: string): number {
+  if (severity === 'low') return 2;
+  if (severity === 'high') return 4;
+  return 3;
+}
+
+async function mapClauseImportJob(
+  row: ClauseImportJobRow,
+  ctx?: {
+    brands?: Map<string, typeof brandsTable.$inferSelect>;
+    users?: Map<string, typeof usersTable.$inferSelect>;
+  },
+) {
+  const brands = ctx?.brands ?? (await getBrandMap());
+  const users = ctx?.users ?? (await getUserMap(row.tenantId));
+  return {
+    id: row.id,
+    tenantId: row.tenantId,
+    brandId: row.brandId,
+    brandName: row.brandId ? (brands.get(row.brandId)?.name ?? null) : null,
+    contractTypeCode: row.contractTypeCode,
+    language: row.language as 'de' | 'en',
+    note: row.note,
+    objectPath: row.objectPath,
+    fileName: row.fileName,
+    fileSize: row.fileSize,
+    mimeType: row.mimeType,
+    status: row.status as
+      'extracting' | 'processing' | 'awaiting_review' | 'completed' | 'failed',
+    suggestionCount: row.suggestionCount,
+    acceptedCount: row.acceptedCount,
+    rejectedCount: row.rejectedCount,
+    pendingCount: row.pendingCount,
+    aiInvocationId: row.aiInvocationId,
+    charCount: row.charCount,
+    truncated: row.truncated,
+    errorMessage: row.errorMessage,
+    uploadedBy: row.uploadedBy,
+    uploadedByName: row.uploadedBy ? (users.get(row.uploadedBy)?.name ?? null) : null,
+    createdAt: iso(row.createdAt)!,
+    updatedAt: iso(row.updatedAt)!,
+  };
+}
+
+function mapClauseImportSuggestion(
+  s: ClauseImportSuggestionRow,
+  ctx: {
+    families: Map<string, typeof clauseFamiliesTable.$inferSelect>;
+    variants: Map<string, typeof clauseVariantsTable.$inferSelect>;
+  },
+) {
+  const family = s.suggestedFamilyId ? ctx.families.get(s.suggestedFamilyId) : undefined;
+  const variant = s.matchedVariantId ? ctx.variants.get(s.matchedVariantId) : undefined;
+  return {
+    id: s.id,
+    jobId: s.jobId,
+    orderIndex: s.orderIndex,
+    suggestedName: s.suggestedName,
+    suggestedSummary: s.suggestedSummary,
+    extractedText: s.extractedText,
+    pageHint: s.pageHint,
+    suggestedTone: s.suggestedTone as 'zart' | 'moderat' | 'standard' | 'streng' | 'hart',
+    suggestedSeverity: s.suggestedSeverity as 'low' | 'medium' | 'high',
+    suggestedFamilyId: s.suggestedFamilyId,
+    suggestedFamilyName: family?.name ?? s.suggestedFamilyName ?? null,
+    matchedVariantId: s.matchedVariantId,
+    matchedVariantName: variant?.name ?? null,
+    similarityScore: s.similarityScore == null ? null : Number(s.similarityScore),
+    alternativeMatches: (s.alternativeMatches ?? []).map((alt) => ({
+      familyId: alt.familyId,
+      familyName: ctx.families.get(alt.familyId)?.name ?? alt.familyName ?? alt.familyId,
+      confidence: alt.confidence,
+    })),
+    status: s.status as 'pending_review' | 'accepted' | 'rejected',
+    createdVariantId: s.createdVariantId,
+    createdTranslationId: s.createdTranslationId,
+    decisionNote: s.decisionNote,
+    decidedBy: s.decidedBy,
+    decidedAt: iso(s.decidedAt),
+    createdAt: iso(s.createdAt)!,
+    updatedAt: iso(s.updatedAt)!,
+  };
+}
+
+async function buildClauseImportJobDetail(req: Request, jobRow: ClauseImportJobRow) {
+  const suggestions = await db
+    .select()
+    .from(clauseImportSuggestionsTable)
+    .where(eq(clauseImportSuggestionsTable.jobId, jobRow.id))
+    .orderBy(asc(clauseImportSuggestionsTable.orderIndex));
+  const familyRows = await db.select().from(clauseFamiliesTable);
+  const variantRows = await db.select().from(clauseVariantsTable);
+  const ctx = {
+    families: new Map(familyRows.map((f) => [f.id, f])),
+    variants: new Map(variantRows.map((v) => [v.id, v])),
+  };
+  let downloadUrl = '';
+  try {
+    const svc = new ObjectStorageService();
+    const file = await svc.getObjectEntityFile(jobRow.objectPath);
+    const [signed] = await file.getSignedUrl({
+      action: 'read',
+      expires: Date.now() + 15 * 60_000,
+      version: 'v4',
+    });
+    downloadUrl = signed;
+  } catch (err) {
+    req.log.warn({ err }, 'clause-import: signed download url failed');
+    downloadUrl = '';
+  }
+  const dto = await mapClauseImportJob(jobRow);
+  return {
+    ...dto,
+    downloadUrl,
+    suggestions: suggestions.map((s) => mapClauseImportSuggestion(s, ctx)),
+  };
+}
+
+async function recomputeClauseImportJobCounts(jobId: string): Promise<ClauseImportJobRow> {
+  const all = await db
+    .select()
+    .from(clauseImportSuggestionsTable)
+    .where(eq(clauseImportSuggestionsTable.jobId, jobId));
+  const accepted = all.filter((s) => s.status === 'accepted').length;
+  const rejected = all.filter((s) => s.status === 'rejected').length;
+  const pending = all.filter((s) => s.status === 'pending_review').length;
+  const total = all.length;
+  const [job] = await db
+    .select()
+    .from(clauseImportJobsTable)
+    .where(eq(clauseImportJobsTable.id, jobId));
+  // Status-Wechsel: solange noch pending → awaiting_review;
+  // sobald nichts mehr pending → completed. failed bleibt failed.
+  let nextStatus = job.status;
+  if (job.status !== 'failed' && total > 0) {
+    nextStatus = pending === 0 ? 'completed' : 'awaiting_review';
+  }
+  await db
+    .update(clauseImportJobsTable)
+    .set({
+      suggestionCount: total,
+      acceptedCount: accepted,
+      rejectedCount: rejected,
+      pendingCount: pending,
+      status: nextStatus,
+      updatedAt: new Date(),
+    })
+    .where(eq(clauseImportJobsTable.id, jobId));
+  const [updated] = await db
+    .select()
+    .from(clauseImportJobsTable)
+    .where(eq(clauseImportJobsTable.id, jobId));
+  return updated;
+}
+
+async function loadVisibleClauseImportJob(
+  req: Request,
+  id: string,
+): Promise<ClauseImportJobRow | null> {
+  const scope = getScope(req);
+  const [row] = await db
+    .select()
+    .from(clauseImportJobsTable)
+    .where(and(
+      eq(clauseImportJobsTable.id, id),
+      eq(clauseImportJobsTable.tenantId, scope.tenantId),
+    ));
+  if (!row) return null;
+  // Brand-Scope: wenn der Job an einen brandId gebunden ist, muss der User
+  // diesen Brand sehen duerfen.
+  if (row.brandId && (!scope.tenantWide || hasActiveScopeFilter(scope))) {
+    const allowed = await allowedBrandIds(req);
+    if (!allowed.includes(row.brandId)) return null;
+  }
+  return row;
+}
+
+const ClauseImportCreateBody = z.object({
+  objectPath: z.string().min(1),
+  fileName: z.string().min(1).max(240),
+  fileSize: z.number().int().positive(),
+  mimeType: z.string().min(1).max(200),
+  brandId: z.string().nullable().optional(),
+  contractTypeCode: z.string().nullable().optional(),
+  language: z.enum(['de', 'en']),
+  note: z.string().max(500).nullable().optional(),
+});
+
+const ClauseImportSuggestionDecisionBody = z.object({
+  decision: z.enum(['accept', 'reject']),
+  familyId: z.string().nullable().optional(),
+  targetVariantId: z.string().nullable().optional(),
+  nameOverride: z.string().min(1).max(160).nullable().optional(),
+  summaryOverride: z.string().max(400).nullable().optional(),
+  bodyOverride: z.string().max(20000).nullable().optional(),
+  toneOverride: z.enum(['zart', 'moderat', 'standard', 'streng', 'hart'])
+    .nullable().optional(),
+  severityOverride: z.enum(['low', 'medium', 'high']).nullable().optional(),
+  decisionNote: z.string().max(500).nullable().optional(),
+});
+
+// 1) Signed PUT URL
+router.post('/clause-imports/upload-url', async (req, res) => {
+  if (!requireAdmin(req, res)) return;
+  const scope = getScope(req);
+  const Body = z.object({
+    fileName: z.string().min(1).max(240),
+    size: z.number().int().positive(),
+    contentType: z.string().min(1).max(200),
+  });
+  const parsed = Body.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: 'invalid request', details: parsed.error.issues });
+    return;
+  }
+  const { size, contentType } = parsed.data;
+  if (!SUPPORTED_CLAUSE_IMPORT_MIME.has(contentType)) {
+    res.status(400).json({ error: 'contentType must be application/pdf or DOCX' });
+    return;
+  }
+  if (size <= 0 || size > MAX_CLAUSE_IMPORT_BYTES) {
+    res.status(400).json({ error: `size must be 1..${MAX_CLAUSE_IMPORT_BYTES} bytes` });
+    return;
+  }
+  try {
+    const svc = new ObjectStorageService();
+    const uploadURL = await svc.getObjectEntityUploadURL();
+    const objectPath = svc.normalizeObjectEntityPath(uploadURL);
+    await db.insert(uploadedObjectsTable).values({
+      objectPath,
+      tenantId: scope.tenantId,
+      userId: scope.user?.id ?? null,
+      kind: 'document',
+      contentType,
+      size,
+    }).onConflictDoNothing();
+    res.json({ uploadURL, objectPath });
+  } catch (err) {
+    req.log.error({ err }, 'clause-import upload-url failed');
+    res.status(500).json({ error: 'failed to generate upload url' });
+  }
+});
+
+// 2) GET list
+router.get('/clause-imports', async (req, res) => {
+  if (!requireAdmin(req, res)) return;
+  const scope = getScope(req);
+  const filters = [eq(clauseImportJobsTable.tenantId, scope.tenantId)];
+  if (req.query.status) {
+    filters.push(eq(clauseImportJobsTable.status, String(req.query.status)));
+  }
+  const rows = await db
+    .select()
+    .from(clauseImportJobsTable)
+    .where(and(...filters))
+    .orderBy(desc(clauseImportJobsTable.createdAt));
+  let visible = rows;
+  if (!scope.tenantWide || hasActiveScopeFilter(scope)) {
+    const allowed = await allowedBrandIds(req);
+    visible = rows.filter((r) => !r.brandId || allowed.includes(r.brandId));
+  }
+  const ctx = {
+    brands: await getBrandMap(),
+    users: await getUserMap(scope.tenantId),
+  };
+  const mapped = await Promise.all(visible.map((r) => mapClauseImportJob(r, ctx)));
+  res.json(mapped);
+});
+
+// 3) POST create — synchroner Job: extract + AI segmentation
+router.post('/clause-imports', async (req, res) => {
+  if (!requireAdmin(req, res)) return;
+  const scope = getScope(req);
+  const parsed = ClauseImportCreateBody.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: 'invalid request', details: parsed.error.issues });
+    return;
+  }
+  const b = parsed.data;
+  if (!SUPPORTED_CLAUSE_IMPORT_MIME.has(b.mimeType)) {
+    res.status(400).json({ error: 'mimeType must be PDF or DOCX' });
+    return;
+  }
+  if (!await assertOwnedObjectPath(req, res, scope, b.objectPath)) return;
+  // Brand-Tenant-Bindung erzwingen analog external-contracts.
+  if (b.brandId) {
+    const [brandRow] = await db
+      .select({ companyTenantId: companiesTable.tenantId })
+      .from(brandsTable)
+      .innerJoin(companiesTable, eq(companiesTable.id, brandsTable.companyId))
+      .where(eq(brandsTable.id, b.brandId));
+    if (!brandRow || brandRow.companyTenantId !== scope.tenantId) {
+      res.status(403).json({ error: 'brand not in tenant' });
+      return;
+    }
+    const allowed = await allowedBrandIds(req);
+    if (!scope.tenantWide || hasActiveScopeFilter(scope)) {
+      if (!allowed.includes(b.brandId)) {
+        res.status(403).json({ error: 'brand not in scope' });
+        return;
+      }
+    }
+  }
+
+  const jobId = `cij_${randomUUID().slice(0, 12)}`;
+  await db.insert(clauseImportJobsTable).values({
+    id: jobId,
+    tenantId: scope.tenantId,
+    brandId: b.brandId ?? null,
+    contractTypeCode: b.contractTypeCode ?? null,
+    language: b.language,
+    note: b.note ?? null,
+    objectPath: b.objectPath,
+    fileName: b.fileName,
+    fileSize: b.fileSize,
+    mimeType: b.mimeType,
+    status: 'extracting',
+    uploadedBy: scope.user?.id ?? null,
+  });
+
+  // Schritt 1: Datei aus Object-Storage laden + Text extrahieren.
+  let buffer: Buffer;
+  try {
+    const svc = new ObjectStorageService();
+    const file = await svc.getObjectEntityFile(b.objectPath);
+    const [buf] = await file.download();
+    buffer = buf;
+  } catch (err) {
+    req.log.warn({ err, objectPath: b.objectPath }, 'clause-import: download failed');
+    await db.update(clauseImportJobsTable).set({
+      status: 'failed',
+      errorMessage: 'object_not_found',
+      updatedAt: new Date(),
+    }).where(eq(clauseImportJobsTable.id, jobId));
+    const [row] = await db.select().from(clauseImportJobsTable)
+      .where(eq(clauseImportJobsTable.id, jobId));
+    res.status(201).json(await buildClauseImportJobDetail(req, row));
+    return;
+  }
+
+  let extractedText: string;
+  let truncated = false;
+  let charCount = 0;
+  try {
+    const out = await extractTextFromUpload(buffer, b.mimeType);
+    extractedText = out.text;
+    truncated = out.truncated;
+    charCount = out.charCount;
+  } catch (err) {
+    req.log.warn({ err }, 'clause-import: text extraction failed');
+    await db.update(clauseImportJobsTable).set({
+      status: 'failed',
+      errorMessage: 'text_extraction_failed',
+      updatedAt: new Date(),
+    }).where(eq(clauseImportJobsTable.id, jobId));
+    const [row] = await db.select().from(clauseImportJobsTable)
+      .where(eq(clauseImportJobsTable.id, jobId));
+    res.status(201).json(await buildClauseImportJobDetail(req, row));
+    return;
+  }
+
+  // Schritt 2: Familien + Varianten als Lookup an die KI mitgeben.
+  await db.update(clauseImportJobsTable).set({
+    status: 'processing',
+    charCount,
+    truncated,
+    updatedAt: new Date(),
+  }).where(eq(clauseImportJobsTable.id, jobId));
+
+  if (!isAIConfigured()) {
+    await db.update(clauseImportJobsTable).set({
+      status: 'failed',
+      errorMessage: 'ai_not_configured',
+      updatedAt: new Date(),
+    }).where(eq(clauseImportJobsTable.id, jobId));
+    const [row] = await db.select().from(clauseImportJobsTable)
+      .where(eq(clauseImportJobsTable.id, jobId));
+    res.status(201).json(await buildClauseImportJobDetail(req, row));
+    return;
+  }
+
+  const familyRows = await db.select().from(clauseFamiliesTable);
+  const variantRows = await db.select().from(clauseVariantsTable);
+  const familyMap = new Map(familyRows.map((f) => [f.id, f]));
+
+  let aiResult;
+  try {
+    aiResult = await runStructured<
+      {
+        rawText: string;
+        fileName: string;
+        language: 'de' | 'en';
+        contractTypeCode: string | null;
+        families: Array<{ id: string; name: string; description: string }>;
+        variants: Array<{ id: string; familyId: string; name: string; summary: string }>;
+      },
+      {
+        segments: Array<{
+          suggestedName: string;
+          suggestedSummary: string;
+          extractedText: string;
+          pageHint: number | null;
+          suggestedTone: 'zart' | 'moderat' | 'standard' | 'streng' | 'hart';
+          suggestedSeverity: 'low' | 'medium' | 'high';
+          suggestedFamilyId: string | null;
+          alternativeMatches: Array<{ familyId: string; confidence: number }>;
+          matchedVariantId: string | null;
+          similarityScore: number | null;
+        }>;
+        notes: string[];
+      }
+    >({
+      promptKey: 'clause.import.segment',
+      input: {
+        rawText: extractedText,
+        fileName: b.fileName,
+        language: b.language,
+        contractTypeCode: b.contractTypeCode ?? null,
+        families: familyRows.map((f) => ({
+          id: f.id, name: f.name, description: f.description,
+        })),
+        variants: variantRows.map((v) => ({
+          id: v.id, familyId: v.familyId, name: v.name, summary: v.summary,
+        })),
+      },
+      scope,
+      entityRef: { entityType: 'clause_import_job', entityId: jobId },
+    });
+  } catch (err) {
+    req.log.warn({ err }, 'clause-import: AI segmentation failed');
+    const code = err instanceof AIOrchestrationError ? err.code : 'ai_failed';
+    await db.update(clauseImportJobsTable).set({
+      status: 'failed',
+      errorMessage: code,
+      updatedAt: new Date(),
+    }).where(eq(clauseImportJobsTable.id, jobId));
+    const [row] = await db.select().from(clauseImportJobsTable)
+      .where(eq(clauseImportJobsTable.id, jobId));
+    res.status(201).json(await buildClauseImportJobDetail(req, row));
+    return;
+  }
+
+  // Schritt 3: Suggestions persistieren. Die KI kann frei erfundene
+  // familyIds/variantIds nicht zurueckgeben (die Liste ist im Prompt
+  // pinned), aber zur Sicherheit filtern wir Unbekanntes hier raus.
+  const variantSet = new Set(variantRows.map((v) => v.id));
+  const segments = aiResult.output.segments;
+  for (let i = 0; i < segments.length; i++) {
+    const seg = segments[i]!;
+    const familyId = seg.suggestedFamilyId && familyMap.has(seg.suggestedFamilyId)
+      ? seg.suggestedFamilyId : null;
+    const familyName = familyId ? (familyMap.get(familyId)?.name ?? null) : null;
+    const matchedVariantId = seg.matchedVariantId && variantSet.has(seg.matchedVariantId)
+      ? seg.matchedVariantId : null;
+    const altMatches = (seg.alternativeMatches ?? [])
+      .filter((alt) => familyMap.has(alt.familyId))
+      .slice(0, 3)
+      .map((alt) => ({
+        familyId: alt.familyId,
+        familyName: familyMap.get(alt.familyId)?.name ?? alt.familyId,
+        confidence: alt.confidence,
+      }));
+    await db.insert(clauseImportSuggestionsTable).values({
+      id: `cis_${randomUUID().slice(0, 12)}`,
+      jobId,
+      tenantId: scope.tenantId,
+      orderIndex: i,
+      suggestedName: seg.suggestedName.slice(0, 160),
+      suggestedSummary: (seg.suggestedSummary ?? '').slice(0, 400),
+      extractedText: seg.extractedText.slice(0, 8000),
+      pageHint: seg.pageHint ?? null,
+      suggestedTone: seg.suggestedTone ?? 'standard',
+      suggestedSeverity: seg.suggestedSeverity ?? 'medium',
+      suggestedFamilyId: familyId,
+      suggestedFamilyName: familyName,
+      matchedVariantId,
+      similarityScore: seg.similarityScore == null ? null : String(seg.similarityScore),
+      alternativeMatches: altMatches,
+      status: 'pending_review',
+    });
+  }
+
+  await db.update(clauseImportJobsTable).set({
+    aiInvocationId: aiResult.invocationId ?? null,
+    suggestionCount: segments.length,
+    pendingCount: segments.length,
+    acceptedCount: 0,
+    rejectedCount: 0,
+    status: segments.length === 0 ? 'completed' : 'awaiting_review',
+    updatedAt: new Date(),
+  }).where(eq(clauseImportJobsTable.id, jobId));
+
+  const [jobAfter] = await db.select().from(clauseImportJobsTable)
+    .where(eq(clauseImportJobsTable.id, jobId));
+  await writeAuditFromReq(req, {
+    entityType: 'clause_import_job',
+    entityId: jobId,
+    action: 'create',
+    summary: `Klausel-Import gestartet: ${b.fileName} (${segments.length} Kandidaten)`,
+    actor: scope.user?.name,
+    after: jobAfter,
+  });
+  res.status(201).json(await buildClauseImportJobDetail(req, jobAfter));
+});
+
+// 4) GET single + signed download URL + suggestions
+router.get('/clause-imports/:id', async (req, res) => {
+  if (!requireAdmin(req, res)) return;
+  const row = await loadVisibleClauseImportJob(req, req.params.id);
+  if (!row) {
+    res.status(404).json({ error: 'not found' });
+    return;
+  }
+  res.json(await buildClauseImportJobDetail(req, row));
+});
+
+// 5) PATCH suggestion — accept (→ Variant/Translation) oder reject
+router.patch('/clause-imports/:id/suggestions/:sid', async (req, res) => {
+  if (!requireAdmin(req, res)) return;
+  const scope = getScope(req);
+  const job = await loadVisibleClauseImportJob(req, req.params.id);
+  if (!job) {
+    res.status(404).json({ error: 'job not found' });
+    return;
+  }
+  const [suggestion] = await db
+    .select()
+    .from(clauseImportSuggestionsTable)
+    .where(and(
+      eq(clauseImportSuggestionsTable.id, req.params.sid),
+      eq(clauseImportSuggestionsTable.jobId, job.id),
+    ));
+  if (!suggestion) {
+    res.status(404).json({ error: 'suggestion not found' });
+    return;
+  }
+  if (suggestion.status !== 'pending_review') {
+    res.status(400).json({ error: 'suggestion already decided' });
+    return;
+  }
+  const parsed = ClauseImportSuggestionDecisionBody.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: 'invalid request', details: parsed.error.issues });
+    return;
+  }
+  const b = parsed.data;
+  const now = new Date();
+  const decisionNote = b.decisionNote ?? null;
+  const sourceLabel = `clause-import:${job.fileName}${suggestion.pageHint ? `#p${suggestion.pageHint}` : ''}`;
+
+  if (b.decision === 'reject') {
+    await db.update(clauseImportSuggestionsTable).set({
+      status: 'rejected',
+      decidedBy: scope.user?.id ?? null,
+      decidedAt: now,
+      decisionNote,
+      updatedAt: now,
+    }).where(eq(clauseImportSuggestionsTable.id, suggestion.id));
+    await writeAuditFromReq(req, {
+      entityType: 'clause_import_suggestion',
+      entityId: suggestion.id,
+      action: 'reject',
+      summary: `Klausel-Vorschlag „${suggestion.suggestedName}" verworfen`,
+      actor: scope.user?.name,
+      before: suggestion,
+    });
+    const updated = await recomputeClauseImportJobCounts(job.id);
+    res.json(await buildClauseImportJobDetail(req, updated));
+    return;
+  }
+
+  // accept-Pfad
+  const familyId = b.familyId ?? suggestion.suggestedFamilyId;
+  if (!familyId) {
+    res.status(400).json({ error: 'familyId required for accept (no suggested family)' });
+    return;
+  }
+  const [familyRow] = await db.select().from(clauseFamiliesTable)
+    .where(eq(clauseFamiliesTable.id, familyId));
+  if (!familyRow) {
+    res.status(400).json({ error: 'familyId not found' });
+    return;
+  }
+  const name = (b.nameOverride ?? suggestion.suggestedName).trim();
+  const summary = (b.summaryOverride ?? suggestion.suggestedSummary ?? '').trim();
+  const body = (b.bodyOverride ?? suggestion.extractedText).trim();
+  const tone = b.toneOverride ?? suggestion.suggestedTone;
+  const severity = b.severityOverride ?? suggestion.suggestedSeverity;
+
+  let createdVariantId: string | null = null;
+  let createdTranslationId: string | null = null;
+
+  // Translation-Pfad: targetVariantId gesetzt ODER Job-Sprache != "de"
+  // (in dem Fall haengen wir den Text als Translation an die existierende
+  // Basis-Variante; ohne targetVariantId ist das nicht moeglich, weil
+  // wir keine Basis-Variante in der Fremd-Sprache anlegen wollen).
+  const isTranslationCase = !!b.targetVariantId || job.language !== 'de';
+  if (isTranslationCase) {
+    const targetId = b.targetVariantId ?? suggestion.matchedVariantId;
+    if (!targetId) {
+      res.status(400).json({
+        error: 'targetVariantId required for non-de language without matched variant',
+      });
+      return;
+    }
+    const [targetVariant] = await db.select().from(clauseVariantsTable)
+      .where(eq(clauseVariantsTable.id, targetId));
+    if (!targetVariant) {
+      res.status(400).json({ error: 'targetVariantId not found' });
+      return;
+    }
+    if (targetVariant.familyId !== familyId) {
+      res.status(400).json({ error: 'targetVariant family mismatch' });
+      return;
+    }
+    const locale = job.language;
+    const [existingTr] = await db.select().from(clauseVariantTranslationsTable)
+      .where(and(
+        eq(clauseVariantTranslationsTable.variantId, targetVariant.id),
+        eq(clauseVariantTranslationsTable.locale, locale),
+      ));
+    if (existingTr) {
+      // Existierende Translation aktualisieren — nur wenn der Editor das
+      // explizit will (bodyOverride/nameOverride angegeben). Sonst Fehler,
+      // damit nichts versehentlich ueberschrieben wird.
+      if (b.nameOverride == null && b.bodyOverride == null && b.summaryOverride == null) {
+        res.status(409).json({
+          error: 'translation_exists',
+          existingTranslationId: existingTr.id,
+        });
+        return;
+      }
+      await db.update(clauseVariantTranslationsTable).set({
+        name, summary, body,
+        source: sourceLabel,
+        updatedAt: now,
+      }).where(eq(clauseVariantTranslationsTable.id, existingTr.id));
+      createdTranslationId = existingTr.id;
+    } else {
+      const trId = `cvt_${randomUUID().slice(0, 8)}`;
+      await db.insert(clauseVariantTranslationsTable).values({
+        id: trId,
+        variantId: targetVariant.id,
+        locale,
+        name,
+        summary,
+        body,
+        source: sourceLabel,
+      });
+      createdTranslationId = trId;
+    }
+    createdVariantId = targetVariant.id;
+  } else {
+    // Basis-Variant-Pfad (Job-Sprache=de, kein expliziter Translation-Wunsch).
+    // Hier ist b.targetVariantId nicht erlaubt (sonst waere das oben gegangen).
+    const variantId = `cv_${randomUUID().slice(0, 10)}`;
+    await db.insert(clauseVariantsTable).values({
+      id: variantId,
+      familyId,
+      name,
+      severity,
+      severityScore: severityScoreFor(severity),
+      summary,
+      body,
+      tone,
+    });
+    createdVariantId = variantId;
+  }
+
+  await db.update(clauseImportSuggestionsTable).set({
+    status: 'accepted',
+    createdVariantId,
+    createdTranslationId,
+    decidedBy: scope.user?.id ?? null,
+    decidedAt: now,
+    decisionNote,
+    updatedAt: now,
+  }).where(eq(clauseImportSuggestionsTable.id, suggestion.id));
+
+  await writeAuditFromReq(req, {
+    entityType: 'clause_import_suggestion',
+    entityId: suggestion.id,
+    action: 'accept',
+    summary: createdTranslationId
+      ? `Klausel-Vorschlag „${name}" als Übersetzung angenommen (${job.language})`
+      : `Klausel-Vorschlag „${name}" als Variante angelegt (Familie ${familyRow.name})`,
+    actor: scope.user?.name,
+    after: { createdVariantId, createdTranslationId, familyId },
+  });
+
+  const updated = await recomputeClauseImportJobCounts(job.id);
+  res.json(await buildClauseImportJobDetail(req, updated));
+});
+
+// 6) DELETE job
+router.delete('/clause-imports/:id', async (req, res) => {
+  if (!requireAdmin(req, res)) return;
+  const scope = getScope(req);
+  const existing = await loadVisibleClauseImportJob(req, req.params.id);
+  if (!existing) {
+    res.status(404).json({ error: 'not found' });
+    return;
+  }
+  await db.delete(clauseImportSuggestionsTable)
+    .where(eq(clauseImportSuggestionsTable.jobId, existing.id));
+  await db.delete(clauseImportJobsTable)
+    .where(eq(clauseImportJobsTable.id, existing.id));
+  try {
+    const svc = new ObjectStorageService();
+    const file = await svc.getObjectEntityFile(existing.objectPath);
+    await file.delete({ ignoreNotFound: true });
+  } catch (err) {
+    req.log.warn({ err, objectPath: existing.objectPath }, 'clause-import: object delete failed');
+  }
+  await writeAuditFromReq(req, {
+    entityType: 'clause_import_job',
+    entityId: existing.id,
+    action: 'delete',
+    summary: `Klausel-Import „${existing.fileName}" gelöscht`,
     actor: scope.user?.name,
     before: existing,
   });

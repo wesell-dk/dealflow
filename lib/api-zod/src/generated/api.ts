@@ -5645,6 +5645,311 @@ export const DeleteExternalContractParams = zod.object({
 });
 
 /**
+ * @summary Signed PUT-URL fuer PDF/DOCX-Upload (max 20 MB, Admin only)
+ */
+export const RequestClauseImportUploadUrlBody = zod.object({
+  fileName: zod.string(),
+  size: zod.number(),
+  contentType: zod.string(),
+});
+
+export const RequestClauseImportUploadUrlResponse = zod.object({
+  uploadURL: zod.string(),
+  objectPath: zod.string(),
+});
+
+/**
+ * @summary Klausel-Import-Jobs auflisten (Admin only)
+ */
+export const ListClauseImportsQueryParams = zod.object({
+  status: zod
+    .enum([
+      "extracting",
+      "processing",
+      "awaiting_review",
+      "completed",
+      "failed",
+    ])
+    .optional(),
+});
+
+export const ListClauseImportsResponseItem = zod.object({
+  id: zod.string(),
+  tenantId: zod.string(),
+  brandId: zod.string().nullish(),
+  brandName: zod.string().nullish(),
+  contractTypeCode: zod.string().nullish(),
+  language: zod.enum(["de", "en"]),
+  note: zod.string().nullish(),
+  objectPath: zod.string(),
+  fileName: zod.string(),
+  fileSize: zod.number(),
+  mimeType: zod.string(),
+  status: zod.enum([
+    "extracting",
+    "processing",
+    "awaiting_review",
+    "completed",
+    "failed",
+  ]),
+  suggestionCount: zod.number(),
+  acceptedCount: zod.number(),
+  rejectedCount: zod.number(),
+  pendingCount: zod.number(),
+  aiInvocationId: zod.string().nullish(),
+  charCount: zod.number().nullish(),
+  truncated: zod.boolean(),
+  errorMessage: zod.string().nullish(),
+  uploadedBy: zod.string().nullish(),
+  uploadedByName: zod.string().nullish(),
+  createdAt: zod.coerce.date(),
+  updatedAt: zod.coerce.date(),
+});
+export const ListClauseImportsResponse = zod.array(
+  ListClauseImportsResponseItem,
+);
+
+/**
+ * Synchron: laedt das Dokument aus Object-Storage, extrahiert Text,
+ruft die Segmentierungs-AI auf und persistiert Job + Suggestions.
+Suggestions sind initial im Status `pending_review`. Wenn Text- oder
+AI-Extraktion fehlschlaegt, wird der Job mit status=`failed` und
+einer errorMessage angelegt — der Aufrufer kann ihn dann loeschen
+oder das Dokument neu hochladen.
+
+ * @summary Klausel-Import-Job anlegen, Text extrahieren und KI-Segmentierung starten
+ */
+export const CreateClauseImportBody = zod.object({
+  objectPath: zod.string(),
+  fileName: zod.string(),
+  fileSize: zod.number(),
+  mimeType: zod.string(),
+  brandId: zod.string().nullish(),
+  contractTypeCode: zod.string().nullable(),
+  language: zod.enum(["de", "en"]),
+  note: zod.string().nullish(),
+});
+
+export const GetClauseImportParams = zod.object({
+  id: zod.coerce.string(),
+});
+
+export const getClauseImportResponseTwoSuggestionsItemAlternativeMatchesItemConfidenceMin = 0;
+export const getClauseImportResponseTwoSuggestionsItemAlternativeMatchesItemConfidenceMax = 1;
+
+export const GetClauseImportResponse = zod
+  .object({
+    id: zod.string(),
+    tenantId: zod.string(),
+    brandId: zod.string().nullish(),
+    brandName: zod.string().nullish(),
+    contractTypeCode: zod.string().nullish(),
+    language: zod.enum(["de", "en"]),
+    note: zod.string().nullish(),
+    objectPath: zod.string(),
+    fileName: zod.string(),
+    fileSize: zod.number(),
+    mimeType: zod.string(),
+    status: zod.enum([
+      "extracting",
+      "processing",
+      "awaiting_review",
+      "completed",
+      "failed",
+    ]),
+    suggestionCount: zod.number(),
+    acceptedCount: zod.number(),
+    rejectedCount: zod.number(),
+    pendingCount: zod.number(),
+    aiInvocationId: zod.string().nullish(),
+    charCount: zod.number().nullish(),
+    truncated: zod.boolean(),
+    errorMessage: zod.string().nullish(),
+    uploadedBy: zod.string().nullish(),
+    uploadedByName: zod.string().nullish(),
+    createdAt: zod.coerce.date(),
+    updatedAt: zod.coerce.date(),
+  })
+  .and(
+    zod.object({
+      downloadUrl: zod
+        .string()
+        .describe("Signed download URL (TTL 15min) fuer Original-Dokument."),
+      suggestions: zod.array(
+        zod.object({
+          id: zod.string(),
+          jobId: zod.string(),
+          orderIndex: zod.number(),
+          suggestedName: zod.string(),
+          suggestedSummary: zod.string(),
+          extractedText: zod.string(),
+          pageHint: zod.number().nullish(),
+          suggestedTone: zod.enum([
+            "zart",
+            "moderat",
+            "standard",
+            "streng",
+            "hart",
+          ]),
+          suggestedSeverity: zod.enum(["low", "medium", "high"]),
+          suggestedFamilyId: zod.string().nullish(),
+          suggestedFamilyName: zod.string().nullish(),
+          matchedVariantId: zod.string().nullish(),
+          matchedVariantName: zod.string().nullish(),
+          similarityScore: zod.number().nullish(),
+          alternativeMatches: zod.array(
+            zod.object({
+              familyId: zod.string(),
+              familyName: zod.string(),
+              confidence: zod
+                .number()
+                .min(
+                  getClauseImportResponseTwoSuggestionsItemAlternativeMatchesItemConfidenceMin,
+                )
+                .max(
+                  getClauseImportResponseTwoSuggestionsItemAlternativeMatchesItemConfidenceMax,
+                ),
+            }),
+          ),
+          status: zod.enum(["pending_review", "accepted", "rejected"]),
+          createdVariantId: zod.string().nullish(),
+          createdTranslationId: zod.string().nullish(),
+          decisionNote: zod.string().nullish(),
+          decidedBy: zod.string().nullish(),
+          decidedAt: zod.coerce.date().nullish(),
+          createdAt: zod.coerce.date(),
+          updatedAt: zod.coerce.date(),
+        }),
+      ),
+    }),
+  );
+
+/**
+ * @summary Job + Object-Storage-Datei + Suggestions loeschen
+ */
+export const DeleteClauseImportParams = zod.object({
+  id: zod.coerce.string(),
+});
+
+/**
+ * decision=accept → erstellt eine neue clauseVariant in der gewaehlten
+  Familie ODER eine Translation auf einer existierenden Variante,
+  je nach Job-Sprache (de=Basis, en=Translation). Wenn
+  targetVariantId gesetzt ist, wird stattdessen eine Translation
+  fuer diese Variante angelegt (auch bei language=de).
+decision=reject → markiert die Suggestion als verworfen, ohne
+  eine Variante anzulegen.
+
+ * @summary Suggestion akzeptieren (→Variante anlegen) oder verwerfen
+ */
+export const DecideClauseImportSuggestionParams = zod.object({
+  id: zod.coerce.string(),
+  sid: zod.coerce.string(),
+});
+
+export const DecideClauseImportSuggestionBody = zod.object({
+  decision: zod.enum(["accept", "reject"]),
+  familyId: zod.string().nullish(),
+  targetVariantId: zod.string().nullish(),
+  nameOverride: zod.string().nullish(),
+  summaryOverride: zod.string().nullish(),
+  bodyOverride: zod.string().nullish(),
+  toneOverride: zod.string().nullish(),
+  severityOverride: zod.string().nullish(),
+  decisionNote: zod.string().nullish(),
+});
+
+export const decideClauseImportSuggestionResponseTwoSuggestionsItemAlternativeMatchesItemConfidenceMin = 0;
+export const decideClauseImportSuggestionResponseTwoSuggestionsItemAlternativeMatchesItemConfidenceMax = 1;
+
+export const DecideClauseImportSuggestionResponse = zod
+  .object({
+    id: zod.string(),
+    tenantId: zod.string(),
+    brandId: zod.string().nullish(),
+    brandName: zod.string().nullish(),
+    contractTypeCode: zod.string().nullish(),
+    language: zod.enum(["de", "en"]),
+    note: zod.string().nullish(),
+    objectPath: zod.string(),
+    fileName: zod.string(),
+    fileSize: zod.number(),
+    mimeType: zod.string(),
+    status: zod.enum([
+      "extracting",
+      "processing",
+      "awaiting_review",
+      "completed",
+      "failed",
+    ]),
+    suggestionCount: zod.number(),
+    acceptedCount: zod.number(),
+    rejectedCount: zod.number(),
+    pendingCount: zod.number(),
+    aiInvocationId: zod.string().nullish(),
+    charCount: zod.number().nullish(),
+    truncated: zod.boolean(),
+    errorMessage: zod.string().nullish(),
+    uploadedBy: zod.string().nullish(),
+    uploadedByName: zod.string().nullish(),
+    createdAt: zod.coerce.date(),
+    updatedAt: zod.coerce.date(),
+  })
+  .and(
+    zod.object({
+      downloadUrl: zod
+        .string()
+        .describe("Signed download URL (TTL 15min) fuer Original-Dokument."),
+      suggestions: zod.array(
+        zod.object({
+          id: zod.string(),
+          jobId: zod.string(),
+          orderIndex: zod.number(),
+          suggestedName: zod.string(),
+          suggestedSummary: zod.string(),
+          extractedText: zod.string(),
+          pageHint: zod.number().nullish(),
+          suggestedTone: zod.enum([
+            "zart",
+            "moderat",
+            "standard",
+            "streng",
+            "hart",
+          ]),
+          suggestedSeverity: zod.enum(["low", "medium", "high"]),
+          suggestedFamilyId: zod.string().nullish(),
+          suggestedFamilyName: zod.string().nullish(),
+          matchedVariantId: zod.string().nullish(),
+          matchedVariantName: zod.string().nullish(),
+          similarityScore: zod.number().nullish(),
+          alternativeMatches: zod.array(
+            zod.object({
+              familyId: zod.string(),
+              familyName: zod.string(),
+              confidence: zod
+                .number()
+                .min(
+                  decideClauseImportSuggestionResponseTwoSuggestionsItemAlternativeMatchesItemConfidenceMin,
+                )
+                .max(
+                  decideClauseImportSuggestionResponseTwoSuggestionsItemAlternativeMatchesItemConfidenceMax,
+                ),
+            }),
+          ),
+          status: zod.enum(["pending_review", "accepted", "rejected"]),
+          createdVariantId: zod.string().nullish(),
+          createdTranslationId: zod.string().nullish(),
+          decisionNote: zod.string().nullish(),
+          decidedBy: zod.string().nullish(),
+          decidedAt: zod.coerce.date().nullish(),
+          createdAt: zod.coerce.date(),
+          updatedAt: zod.coerce.date(),
+        }),
+      ),
+    }),
+  );
+
+/**
  * @summary Renewal-Opportunities auflisten (Brand-Scope-konform)
  */
 export const listRenewalsQueryMinRiskMin = 0;

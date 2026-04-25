@@ -1180,6 +1180,122 @@ export const renewalOpportunitiesTable = pgTable("renewal_opportunities", {
   byTenantBrand: index("renewals_tenant_brand_idx").on(t.tenantId, t.brandId),
 }));
 
+// Klausel-Import (Task #76) — pro hochgeladener Datei wird ein Job angelegt.
+// Ein Job hat 0..n Suggestions (= durch die KI segmentierte Klausel-Kandidaten),
+// die der Klausel-Editor in der Review-UI per Suggestion einzeln entscheidet
+// (accept→Variante anlegen / reject / discard). Der Job dient als Container
+// fuer die Datei-Metadaten, das AI-Invocation-Trace und die Audit-Spur.
+//
+// Status-Flow:
+//   extracting       — Datei wurde gerade hochgeladen, Text-Extraktion laeuft
+//   processing       — Text liegt vor, AI-Segmentierung laeuft
+//   awaiting_review  — Suggestions stehen, Editor muss entscheiden
+//   completed        — alle Suggestions entschieden (accept/reject)
+//   failed           — Text- oder AI-Fehler; errorMessage erklaert die Ursache
+export const clauseImportJobsTable = pgTable("clause_import_jobs", {
+  id: id(),
+  tenantId: text("tenant_id").notNull(),
+  // Brand fuer den die Klauseln vorgesehen sind. Optional, weil eine
+  // Anwalts-NDA bibliotheksweit verwendbar sein kann.
+  brandId: text("brand_id"),
+  // Vertrags-Typ-Code aus contractTypesTable.code (z. B. "nda", "msa").
+  // Frei-Text-Fallback erlaubt, weil Sprache/Quelle stark variieren kann.
+  contractTypeCode: text("contract_type_code"),
+  // ISO-639-1 Sprach-Code (de | en). Bestimmt, ob accepted-Suggestions als
+  // Basis-Variante (de) oder als Translation auf einer existierenden
+  // Variante (en) angelegt werden.
+  language: text("language").notNull().default("de"),
+  // Optionaler Kurz-Hinweis des Importers
+  // (z. B. "Standard-NDA bis 2024 von Kanzlei X geprueft").
+  note: text("note"),
+  // Datei-Metadaten — analog externalContractsTable.
+  objectPath: text("object_path").notNull(),
+  fileName: text("file_name").notNull(),
+  fileSize: integer("file_size").notNull(),
+  mimeType: text("mime_type").notNull(),
+  // extracting | processing | awaiting_review | completed | failed
+  status: text("status").notNull().default("extracting"),
+  // Aggregat-Counts werden bei jeder Suggestion-Entscheidung neu berechnet.
+  suggestionCount: integer("suggestion_count").notNull().default(0),
+  acceptedCount: integer("accepted_count").notNull().default(0),
+  rejectedCount: integer("rejected_count").notNull().default(0),
+  pendingCount: integer("pending_count").notNull().default(0),
+  // AI-Invocation-Id der Segmentierung (fuer Audit + Replay).
+  aiInvocationId: text("ai_invocation_id"),
+  // Optional: Anzahl Zeichen im extrahierten Text + ob er gekuerzt wurde
+  // (Limit aus extractContractText.ts).
+  charCount: integer("char_count"),
+  truncated: boolean("truncated").notNull().default(false),
+  // Letzte Fehlermeldung (Text-Extraktion oder AI). Nur befuellt, wenn
+  // status='failed'. Wird im Frontend als Begruendung angezeigt.
+  errorMessage: text("error_message"),
+  uploadedBy: text("uploaded_by"),
+  createdAt: ts("created_at"),
+  updatedAt: ts("updated_at"),
+}, (t) => ({
+  byTenantStatus: index("clause_import_jobs_tenant_status_idx").on(t.tenantId, t.status),
+  byTenantCreated: index("clause_import_jobs_tenant_created_idx").on(t.tenantId, t.createdAt),
+}));
+
+// Pro Job 0..n Suggestions = ein Klausel-Kandidat aus der Segmentierung.
+// Die Suggestion traegt die Roh-Daten (extractedText, vorgeschlagene
+// Familie/Variante, Alternativen) UND die spaetere User-Entscheidung
+// (accept/reject + ggf. createdVariantId). Damit ist die Importgeschichte
+// vollstaendig rekonstruierbar.
+export const clauseImportSuggestionsTable = pgTable("clause_import_suggestions", {
+  id: id(),
+  jobId: text("job_id").notNull(),
+  tenantId: text("tenant_id").notNull(),
+  // Sortierung im Original-Dokument (von oben nach unten).
+  orderIndex: integer("order_index").notNull(),
+  // Der von der KI vorgeschlagene Klausel-Name (z. B. "Vertraulichkeit (5J)").
+  suggestedName: text("suggested_name").notNull(),
+  // Kurz-Zusammenfassung in 1-2 Saetzen, vom Modell.
+  suggestedSummary: text("suggested_summary").notNull().default(""),
+  // Volltext der Klausel, wie aus dem Dokument extrahiert.
+  extractedText: text("extracted_text").notNull(),
+  // Heuristisch geschaetzte Seitenzahl im Original-Dokument (1-basiert).
+  // Optional, weil PDFs ohne Seiten-Marker nur Text liefern.
+  pageHint: integer("page_hint"),
+  // Vorgeschlagener Tonfall: zart | moderat | standard | streng | hart.
+  suggestedTone: text("suggested_tone").notNull().default("standard"),
+  // low | medium | high — Severity-Score wird aus tone abgeleitet, ein
+  // separater Score-Wert ist fuer den Initial-Insert nicht noetig.
+  suggestedSeverity: text("suggested_severity").notNull().default("medium"),
+  // Best-Match aus der bestehenden Familien-Taxonomie (clauseFamiliesTable.id).
+  // null = "keine passende Familie gefunden, neue Familie noetig".
+  suggestedFamilyId: text("suggested_family_id"),
+  suggestedFamilyName: text("suggested_family_name"),
+  // Optional: aehnlichste vorhandene Variante (clauseVariantsTable.id),
+  // mit Aehnlichkeits-Score 0..1. Wenn vorhanden, schlaegt das Frontend
+  // "an existierende Variante anhaengen" vor (z. B. als Translation oder
+  // Brand-Override).
+  matchedVariantId: text("matched_variant_id"),
+  similarityScore: numeric("similarity_score", { precision: 5, scale: 4 }),
+  // Bis zu 3 alternative Familien-Vorschlaege mit Konfidenz; werden im
+  // Review-UI als Drop-Down angeboten, wenn der Editor den primaeren
+  // Vorschlag ablehnt.
+  alternativeMatches: jsonb("alternative_matches")
+    .$type<Array<{ familyId: string; familyName: string; confidence: number }>>()
+    .notNull()
+    .default([]),
+  // pending_review | accepted | rejected
+  status: text("status").notNull().default("pending_review"),
+  // Wenn akzeptiert: id der entstandenen Klausel-Variante
+  // (oder, bei language!='de', der Translation-id, dann ist
+  // createdVariantId die Parent-Variant-id).
+  createdVariantId: text("created_variant_id"),
+  createdTranslationId: text("created_translation_id"),
+  decisionNote: text("decision_note"),
+  decidedBy: text("decided_by"),
+  decidedAt: timestamp("decided_at", { withTimezone: true }),
+  createdAt: ts("created_at"),
+  updatedAt: ts("updated_at"),
+}, (t) => ({
+  byJobOrder: index("clause_import_suggestions_job_order_idx").on(t.jobId, t.orderIndex),
+  byTenantStatus: index("clause_import_suggestions_tenant_status_idx").on(t.tenantId, t.status),
+}));
+
 // Magic-Link-Zugang fuer externe Anwaelte/Berater. Pro Vertrag werden ein
 // oder mehrere Collaborator-Datensaetze angelegt, jeder mit einem eigenen
 // gehashten Token (Plaintext nur 1x bei Erstellung zurueck), Capabilities

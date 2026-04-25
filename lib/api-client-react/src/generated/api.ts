@@ -61,6 +61,12 @@ import type {
   ClauseDiff,
   ClauseFamily,
   ClauseFamilyCuadMapping,
+  ClauseImportCreate,
+  ClauseImportJob,
+  ClauseImportJobDetail,
+  ClauseImportSuggestionDecision,
+  ClauseImportUploadUrlRequest,
+  ClauseImportUploadUrlResponse,
   ClauseVariantTranslation,
   ClauseVariantTranslationUpsert,
   Company,
@@ -154,6 +160,7 @@ import type {
   ListAttachmentLibraryParams,
   ListAuditEntriesParams,
   ListBrandsParams,
+  ListClauseImportsParams,
   ListCompaniesParams,
   ListContactsParams,
   ListContractPlaybooksParams,
@@ -16461,6 +16468,550 @@ export const useDeleteExternalContract = <
   TContext
 > => {
   return useMutation(getDeleteExternalContractMutationOptions(options));
+};
+
+/**
+ * @summary Signed PUT-URL fuer PDF/DOCX-Upload (max 20 MB, Admin only)
+ */
+export const getRequestClauseImportUploadUrlUrl = () => {
+  return `/api/v1/clause-imports/upload-url`;
+};
+
+export const requestClauseImportUploadUrl = async (
+  clauseImportUploadUrlRequest: ClauseImportUploadUrlRequest,
+  options?: RequestInit,
+): Promise<ClauseImportUploadUrlResponse> => {
+  return customFetch<ClauseImportUploadUrlResponse>(
+    getRequestClauseImportUploadUrlUrl(),
+    {
+      ...options,
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...options?.headers },
+      body: JSON.stringify(clauseImportUploadUrlRequest),
+    },
+  );
+};
+
+export const getRequestClauseImportUploadUrlMutationOptions = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof requestClauseImportUploadUrl>>,
+    TError,
+    { data: BodyType<ClauseImportUploadUrlRequest> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof requestClauseImportUploadUrl>>,
+  TError,
+  { data: BodyType<ClauseImportUploadUrlRequest> },
+  TContext
+> => {
+  const mutationKey = ["requestClauseImportUploadUrl"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof requestClauseImportUploadUrl>>,
+    { data: BodyType<ClauseImportUploadUrlRequest> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return requestClauseImportUploadUrl(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type RequestClauseImportUploadUrlMutationResult = NonNullable<
+  Awaited<ReturnType<typeof requestClauseImportUploadUrl>>
+>;
+export type RequestClauseImportUploadUrlMutationBody =
+  BodyType<ClauseImportUploadUrlRequest>;
+export type RequestClauseImportUploadUrlMutationError = ErrorType<void>;
+
+/**
+ * @summary Signed PUT-URL fuer PDF/DOCX-Upload (max 20 MB, Admin only)
+ */
+export const useRequestClauseImportUploadUrl = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof requestClauseImportUploadUrl>>,
+    TError,
+    { data: BodyType<ClauseImportUploadUrlRequest> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof requestClauseImportUploadUrl>>,
+  TError,
+  { data: BodyType<ClauseImportUploadUrlRequest> },
+  TContext
+> => {
+  return useMutation(getRequestClauseImportUploadUrlMutationOptions(options));
+};
+
+/**
+ * @summary Klausel-Import-Jobs auflisten (Admin only)
+ */
+export const getListClauseImportsUrl = (params?: ListClauseImportsParams) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? "null" : value.toString());
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0
+    ? `/api/v1/clause-imports?${stringifiedParams}`
+    : `/api/v1/clause-imports`;
+};
+
+export const listClauseImports = async (
+  params?: ListClauseImportsParams,
+  options?: RequestInit,
+): Promise<ClauseImportJob[]> => {
+  return customFetch<ClauseImportJob[]>(getListClauseImportsUrl(params), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getListClauseImportsQueryKey = (
+  params?: ListClauseImportsParams,
+) => {
+  return [`/api/v1/clause-imports`, ...(params ? [params] : [])] as const;
+};
+
+export const getListClauseImportsQueryOptions = <
+  TData = Awaited<ReturnType<typeof listClauseImports>>,
+  TError = ErrorType<void>,
+>(
+  params?: ListClauseImportsParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof listClauseImports>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey =
+    queryOptions?.queryKey ?? getListClauseImportsQueryKey(params);
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof listClauseImports>>
+  > = ({ signal }) => listClauseImports(params, { signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof listClauseImports>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type ListClauseImportsQueryResult = NonNullable<
+  Awaited<ReturnType<typeof listClauseImports>>
+>;
+export type ListClauseImportsQueryError = ErrorType<void>;
+
+/**
+ * @summary Klausel-Import-Jobs auflisten (Admin only)
+ */
+
+export function useListClauseImports<
+  TData = Awaited<ReturnType<typeof listClauseImports>>,
+  TError = ErrorType<void>,
+>(
+  params?: ListClauseImportsParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof listClauseImports>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getListClauseImportsQueryOptions(params, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * Synchron: laedt das Dokument aus Object-Storage, extrahiert Text,
+ruft die Segmentierungs-AI auf und persistiert Job + Suggestions.
+Suggestions sind initial im Status `pending_review`. Wenn Text- oder
+AI-Extraktion fehlschlaegt, wird der Job mit status=`failed` und
+einer errorMessage angelegt — der Aufrufer kann ihn dann loeschen
+oder das Dokument neu hochladen.
+
+ * @summary Klausel-Import-Job anlegen, Text extrahieren und KI-Segmentierung starten
+ */
+export const getCreateClauseImportUrl = () => {
+  return `/api/v1/clause-imports`;
+};
+
+export const createClauseImport = async (
+  clauseImportCreate: ClauseImportCreate,
+  options?: RequestInit,
+): Promise<ClauseImportJobDetail> => {
+  return customFetch<ClauseImportJobDetail>(getCreateClauseImportUrl(), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(clauseImportCreate),
+  });
+};
+
+export const getCreateClauseImportMutationOptions = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof createClauseImport>>,
+    TError,
+    { data: BodyType<ClauseImportCreate> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof createClauseImport>>,
+  TError,
+  { data: BodyType<ClauseImportCreate> },
+  TContext
+> => {
+  const mutationKey = ["createClauseImport"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof createClauseImport>>,
+    { data: BodyType<ClauseImportCreate> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return createClauseImport(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type CreateClauseImportMutationResult = NonNullable<
+  Awaited<ReturnType<typeof createClauseImport>>
+>;
+export type CreateClauseImportMutationBody = BodyType<ClauseImportCreate>;
+export type CreateClauseImportMutationError = ErrorType<void>;
+
+/**
+ * @summary Klausel-Import-Job anlegen, Text extrahieren und KI-Segmentierung starten
+ */
+export const useCreateClauseImport = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof createClauseImport>>,
+    TError,
+    { data: BodyType<ClauseImportCreate> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof createClauseImport>>,
+  TError,
+  { data: BodyType<ClauseImportCreate> },
+  TContext
+> => {
+  return useMutation(getCreateClauseImportMutationOptions(options));
+};
+
+export const getGetClauseImportUrl = (id: string) => {
+  return `/api/v1/clause-imports/${id}`;
+};
+
+export const getClauseImport = async (
+  id: string,
+  options?: RequestInit,
+): Promise<ClauseImportJobDetail> => {
+  return customFetch<ClauseImportJobDetail>(getGetClauseImportUrl(id), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getGetClauseImportQueryKey = (id: string) => {
+  return [`/api/v1/clause-imports/${id}`] as const;
+};
+
+export const getGetClauseImportQueryOptions = <
+  TData = Awaited<ReturnType<typeof getClauseImport>>,
+  TError = ErrorType<void>,
+>(
+  id: string,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getClauseImport>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getGetClauseImportQueryKey(id);
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof getClauseImport>>> = ({
+    signal,
+  }) => getClauseImport(id, { signal, ...requestOptions });
+
+  return {
+    queryKey,
+    queryFn,
+    enabled: !!id,
+    ...queryOptions,
+  } as UseQueryOptions<
+    Awaited<ReturnType<typeof getClauseImport>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetClauseImportQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getClauseImport>>
+>;
+export type GetClauseImportQueryError = ErrorType<void>;
+
+export function useGetClauseImport<
+  TData = Awaited<ReturnType<typeof getClauseImport>>,
+  TError = ErrorType<void>,
+>(
+  id: string,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getClauseImport>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetClauseImportQueryOptions(id, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Job + Object-Storage-Datei + Suggestions loeschen
+ */
+export const getDeleteClauseImportUrl = (id: string) => {
+  return `/api/v1/clause-imports/${id}`;
+};
+
+export const deleteClauseImport = async (
+  id: string,
+  options?: RequestInit,
+): Promise<void> => {
+  return customFetch<void>(getDeleteClauseImportUrl(id), {
+    ...options,
+    method: "DELETE",
+  });
+};
+
+export const getDeleteClauseImportMutationOptions = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof deleteClauseImport>>,
+    TError,
+    { id: string },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof deleteClauseImport>>,
+  TError,
+  { id: string },
+  TContext
+> => {
+  const mutationKey = ["deleteClauseImport"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof deleteClauseImport>>,
+    { id: string }
+  > = (props) => {
+    const { id } = props ?? {};
+
+    return deleteClauseImport(id, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type DeleteClauseImportMutationResult = NonNullable<
+  Awaited<ReturnType<typeof deleteClauseImport>>
+>;
+
+export type DeleteClauseImportMutationError = ErrorType<void>;
+
+/**
+ * @summary Job + Object-Storage-Datei + Suggestions loeschen
+ */
+export const useDeleteClauseImport = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof deleteClauseImport>>,
+    TError,
+    { id: string },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof deleteClauseImport>>,
+  TError,
+  { id: string },
+  TContext
+> => {
+  return useMutation(getDeleteClauseImportMutationOptions(options));
+};
+
+/**
+ * decision=accept → erstellt eine neue clauseVariant in der gewaehlten
+  Familie ODER eine Translation auf einer existierenden Variante,
+  je nach Job-Sprache (de=Basis, en=Translation). Wenn
+  targetVariantId gesetzt ist, wird stattdessen eine Translation
+  fuer diese Variante angelegt (auch bei language=de).
+decision=reject → markiert die Suggestion als verworfen, ohne
+  eine Variante anzulegen.
+
+ * @summary Suggestion akzeptieren (→Variante anlegen) oder verwerfen
+ */
+export const getDecideClauseImportSuggestionUrl = (id: string, sid: string) => {
+  return `/api/v1/clause-imports/${id}/suggestions/${sid}`;
+};
+
+export const decideClauseImportSuggestion = async (
+  id: string,
+  sid: string,
+  clauseImportSuggestionDecision: ClauseImportSuggestionDecision,
+  options?: RequestInit,
+): Promise<ClauseImportJobDetail> => {
+  return customFetch<ClauseImportJobDetail>(
+    getDecideClauseImportSuggestionUrl(id, sid),
+    {
+      ...options,
+      method: "PATCH",
+      headers: { "Content-Type": "application/json", ...options?.headers },
+      body: JSON.stringify(clauseImportSuggestionDecision),
+    },
+  );
+};
+
+export const getDecideClauseImportSuggestionMutationOptions = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof decideClauseImportSuggestion>>,
+    TError,
+    { id: string; sid: string; data: BodyType<ClauseImportSuggestionDecision> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof decideClauseImportSuggestion>>,
+  TError,
+  { id: string; sid: string; data: BodyType<ClauseImportSuggestionDecision> },
+  TContext
+> => {
+  const mutationKey = ["decideClauseImportSuggestion"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof decideClauseImportSuggestion>>,
+    { id: string; sid: string; data: BodyType<ClauseImportSuggestionDecision> }
+  > = (props) => {
+    const { id, sid, data } = props ?? {};
+
+    return decideClauseImportSuggestion(id, sid, data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type DecideClauseImportSuggestionMutationResult = NonNullable<
+  Awaited<ReturnType<typeof decideClauseImportSuggestion>>
+>;
+export type DecideClauseImportSuggestionMutationBody =
+  BodyType<ClauseImportSuggestionDecision>;
+export type DecideClauseImportSuggestionMutationError = ErrorType<void>;
+
+/**
+ * @summary Suggestion akzeptieren (→Variante anlegen) oder verwerfen
+ */
+export const useDecideClauseImportSuggestion = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof decideClauseImportSuggestion>>,
+    TError,
+    { id: string; sid: string; data: BodyType<ClauseImportSuggestionDecision> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof decideClauseImportSuggestion>>,
+  TError,
+  { id: string; sid: string; data: BodyType<ClauseImportSuggestionDecision> },
+  TContext
+> => {
+  return useMutation(getDecideClauseImportSuggestionMutationOptions(options));
 };
 
 /**

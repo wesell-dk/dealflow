@@ -3602,6 +3602,139 @@ paths:
         "204": { description: deleted }
         "404": { description: not found }
 
+  /clause-imports/upload-url:
+    post:
+      operationId: requestClauseImportUploadUrl
+      tags: [clause-imports]
+      summary: Signed PUT-URL fuer PDF/DOCX-Upload (max 20 MB, Admin only)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ClauseImportUploadUrlRequest" }
+      responses:
+        "200":
+          description: ok
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ClauseImportUploadUrlResponse" }
+        "400": { description: invalid mime/size }
+        "403": { description: admin rights required }
+
+  /clause-imports:
+    get:
+      operationId: listClauseImports
+      tags: [clause-imports]
+      summary: Klausel-Import-Jobs auflisten (Admin only)
+      parameters:
+        - in: query
+          name: status
+          required: false
+          schema:
+            type: string
+            enum: [extracting, processing, awaiting_review, completed, failed]
+      responses:
+        "200":
+          description: ok
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/ClauseImportJob" }
+        "403": { description: admin rights required }
+    post:
+      operationId: createClauseImport
+      tags: [clause-imports]
+      summary: Klausel-Import-Job anlegen, Text extrahieren und KI-Segmentierung starten
+      description: |
+        Synchron: laedt das Dokument aus Object-Storage, extrahiert Text,
+        ruft die Segmentierungs-AI auf und persistiert Job + Suggestions.
+        Suggestions sind initial im Status `pending_review`. Wenn Text- oder
+        AI-Extraktion fehlschlaegt, wird der Job mit status=`failed` und
+        einer errorMessage angelegt — der Aufrufer kann ihn dann loeschen
+        oder das Dokument neu hochladen.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ClauseImportCreate" }
+      responses:
+        "201":
+          description: created
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ClauseImportJobDetail" }
+        "400": { description: invalid input }
+        "403": { description: admin rights required }
+
+  /clause-imports/{id}:
+    get:
+      operationId: getClauseImport
+      tags: [clause-imports]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: ok
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ClauseImportJobDetail" }
+        "403": { description: admin rights required }
+        "404": { description: not found }
+    delete:
+      operationId: deleteClauseImport
+      tags: [clause-imports]
+      summary: Job + Object-Storage-Datei + Suggestions loeschen
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        "204": { description: deleted }
+        "403": { description: admin rights required }
+        "404": { description: not found }
+
+  /clause-imports/{id}/suggestions/{sid}:
+    patch:
+      operationId: decideClauseImportSuggestion
+      tags: [clause-imports]
+      summary: Suggestion akzeptieren (→Variante anlegen) oder verwerfen
+      description: |
+        decision=accept → erstellt eine neue clauseVariant in der gewaehlten
+          Familie ODER eine Translation auf einer existierenden Variante,
+          je nach Job-Sprache (de=Basis, en=Translation). Wenn
+          targetVariantId gesetzt ist, wird stattdessen eine Translation
+          fuer diese Variante angelegt (auch bei language=de).
+        decision=reject → markiert die Suggestion als verworfen, ohne
+          eine Variante anzulegen.
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+        - in: path
+          name: sid
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ClauseImportSuggestionDecision" }
+      responses:
+        "200":
+          description: ok
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ClauseImportJobDetail" }
+        "400": { description: invalid input }
+        "403": { description: admin rights required }
+        "404": { description: not found }
+
   /renewals:
     get:
       operationId: listRenewals
@@ -4259,6 +4392,157 @@ components:
           items: { $ref: "#/components/schemas/ExternalContractClauseFamily" }
         notes: { type: ["string", "null"] }
 
+
+    ClauseImportUploadUrlRequest:
+      type: object
+      required: [fileName, size, contentType]
+      properties:
+        fileName: { type: string }
+        size: { type: integer }
+        contentType: { type: string }
+
+    ClauseImportUploadUrlResponse:
+      type: object
+      required: [uploadURL, objectPath]
+      properties:
+        uploadURL: { type: string }
+        objectPath: { type: string }
+
+    ClauseImportCreate:
+      type: object
+      required: [objectPath, fileName, fileSize, mimeType, contractTypeCode, language]
+      properties:
+        objectPath: { type: string }
+        fileName: { type: string }
+        fileSize: { type: integer }
+        mimeType: { type: string }
+        brandId: { type: ["string", "null"] }
+        contractTypeCode: { type: ["string", "null"] }
+        language:
+          type: string
+          enum: [de, en]
+        note: { type: ["string", "null"] }
+
+    ClauseImportJob:
+      type: object
+      required:
+        [ id, tenantId, language, objectPath, fileName, fileSize, mimeType,
+          status, suggestionCount, acceptedCount, rejectedCount, pendingCount,
+          truncated, createdAt, updatedAt ]
+      properties:
+        id: { type: string }
+        tenantId: { type: string }
+        brandId: { type: ["string", "null"] }
+        brandName: { type: ["string", "null"] }
+        contractTypeCode: { type: ["string", "null"] }
+        language: { type: string, enum: [de, en] }
+        note: { type: ["string", "null"] }
+        objectPath: { type: string }
+        fileName: { type: string }
+        fileSize: { type: integer }
+        mimeType: { type: string }
+        status:
+          type: string
+          enum: [extracting, processing, awaiting_review, completed, failed]
+        suggestionCount: { type: integer }
+        acceptedCount: { type: integer }
+        rejectedCount: { type: integer }
+        pendingCount: { type: integer }
+        aiInvocationId: { type: ["string", "null"] }
+        charCount: { type: ["integer", "null"] }
+        truncated: { type: boolean }
+        errorMessage: { type: ["string", "null"] }
+        uploadedBy: { type: ["string", "null"] }
+        uploadedByName: { type: ["string", "null"] }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+
+    ClauseImportSuggestion:
+      type: object
+      required:
+        [ id, jobId, orderIndex, suggestedName, suggestedSummary,
+          extractedText, suggestedTone, suggestedSeverity,
+          alternativeMatches, status, createdAt, updatedAt ]
+      properties:
+        id: { type: string }
+        jobId: { type: string }
+        orderIndex: { type: integer }
+        suggestedName: { type: string }
+        suggestedSummary: { type: string }
+        extractedText: { type: string }
+        pageHint: { type: ["integer", "null"] }
+        suggestedTone:
+          type: string
+          enum: [zart, moderat, standard, streng, hart]
+        suggestedSeverity:
+          type: string
+          enum: [low, medium, high]
+        suggestedFamilyId: { type: ["string", "null"] }
+        suggestedFamilyName: { type: ["string", "null"] }
+        matchedVariantId: { type: ["string", "null"] }
+        matchedVariantName: { type: ["string", "null"] }
+        similarityScore: { type: ["number", "null"] }
+        alternativeMatches:
+          type: array
+          items:
+            type: object
+            required: [familyId, familyName, confidence]
+            properties:
+              familyId: { type: string }
+              familyName: { type: string }
+              confidence: { type: number, minimum: 0, maximum: 1 }
+        status:
+          type: string
+          enum: [pending_review, accepted, rejected]
+        createdVariantId: { type: ["string", "null"] }
+        createdTranslationId: { type: ["string", "null"] }
+        decisionNote: { type: ["string", "null"] }
+        decidedBy: { type: ["string", "null"] }
+        decidedAt: { type: ["string", "null"], format: date-time }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+
+    ClauseImportJobDetail:
+      allOf:
+        - $ref: "#/components/schemas/ClauseImportJob"
+        - type: object
+          required: [suggestions, downloadUrl]
+          properties:
+            downloadUrl:
+              type: string
+              description: Signed download URL (TTL 15min) fuer Original-Dokument.
+            suggestions:
+              type: array
+              items: { $ref: "#/components/schemas/ClauseImportSuggestion" }
+
+    ClauseImportSuggestionDecision:
+      type: object
+      required: [decision]
+      properties:
+        decision:
+          type: string
+          enum: [accept, reject]
+        # Bei accept: Pflicht — Familie, in der die neue Variante landen soll
+        # (entweder aus suggestedFamilyId oder eine vom Editor manuell
+        # gewaehlte). Bei reject ignoriert.
+        familyId: { type: ["string", "null"] }
+        # Optional: bei accept, wenn der Editor stattdessen eine Translation
+        # auf einer existierenden Variante anlegen will (z. B. Job-Sprache=en,
+        # Match auf eine bestehende DE-Basis). Wenn null bei language=de:
+        # neue Basis-Variante in familyId. Wenn null bei language=en:
+        # Fehler "targetVariantId required for translation".
+        targetVariantId: { type: ["string", "null"] }
+        # Override fuer Name/Tonalitaet/Severity (Editor kann KI-Vorschlag
+        # vor Save anpassen). Wenn null: KI-Vorschlag uebernehmen.
+        nameOverride: { type: ["string", "null"] }
+        summaryOverride: { type: ["string", "null"] }
+        bodyOverride: { type: ["string", "null"] }
+        toneOverride:
+          type: ["string", "null"]
+        severityOverride:
+          type: ["string", "null"]
+        # Optionaler Editor-Kommentar zur Entscheidung (Audit).
+        decisionNote: { type: ["string", "null"] }
 
     UploadUrlRequest:
       type: object

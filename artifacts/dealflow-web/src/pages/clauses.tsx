@@ -49,7 +49,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Library, Palette, Save, Pencil, Trash2, Link2, Plus, Languages } from "lucide-react";
+import { Library, Palette, Save, Pencil, Trash2, Link2, Plus, Languages, FileUp } from "lucide-react";
+import { Link } from "wouter";
 import { useToast } from "@/hooks/use-toast";
 
 function toneClass(tone: string) {
@@ -109,13 +110,21 @@ export default function Clauses() {
           <h1 className="text-3xl font-bold tracking-tight">{t("pages.clauses.title")}</h1>
           <p className="text-muted-foreground text-sm mt-1">{t("pages.clauses.subtitle")}</p>
         </div>
-        <div className="ml-auto flex gap-2 text-sm">
+        <div className="ml-auto flex items-center gap-2 text-sm">
           <Badge variant="outline" className="text-sm px-3 py-1">
             {families?.length ?? 0} {t("pages.clauses.families")}
           </Badge>
           <Badge variant="outline" className="text-sm px-3 py-1">
             {totalVariants} {t("pages.clauses.variants")}
           </Badge>
+          {isTenantAdmin && (
+            <Link href="/clauses/import">
+              <Button variant="default" size="sm" className="ml-2" data-testid="link-clauses-import">
+                <FileUp className="h-4 w-4 mr-2" />
+                {t("pages.clauses.importNavTitle")}
+              </Button>
+            </Link>
+          )}
         </div>
       </div>
 

@@ -228,6 +228,204 @@ export interface ExternalContractPatch {
   notes?: string | null;
 }
 
+export interface ClauseImportUploadUrlRequest {
+  fileName: string;
+  size: number;
+  contentType: string;
+}
+
+export interface ClauseImportUploadUrlResponse {
+  uploadURL: string;
+  objectPath: string;
+}
+
+export type ClauseImportCreateLanguage =
+  (typeof ClauseImportCreateLanguage)[keyof typeof ClauseImportCreateLanguage];
+
+export const ClauseImportCreateLanguage = {
+  de: "de",
+  en: "en",
+} as const;
+
+export interface ClauseImportCreate {
+  objectPath: string;
+  fileName: string;
+  fileSize: number;
+  mimeType: string;
+  /** @nullable */
+  brandId?: string | null;
+  /** @nullable */
+  contractTypeCode: string | null;
+  language: ClauseImportCreateLanguage;
+  /** @nullable */
+  note?: string | null;
+}
+
+export type ClauseImportJobLanguage =
+  (typeof ClauseImportJobLanguage)[keyof typeof ClauseImportJobLanguage];
+
+export const ClauseImportJobLanguage = {
+  de: "de",
+  en: "en",
+} as const;
+
+export type ClauseImportJobStatus =
+  (typeof ClauseImportJobStatus)[keyof typeof ClauseImportJobStatus];
+
+export const ClauseImportJobStatus = {
+  extracting: "extracting",
+  processing: "processing",
+  awaiting_review: "awaiting_review",
+  completed: "completed",
+  failed: "failed",
+} as const;
+
+export interface ClauseImportJob {
+  id: string;
+  tenantId: string;
+  /** @nullable */
+  brandId?: string | null;
+  /** @nullable */
+  brandName?: string | null;
+  /** @nullable */
+  contractTypeCode?: string | null;
+  language: ClauseImportJobLanguage;
+  /** @nullable */
+  note?: string | null;
+  objectPath: string;
+  fileName: string;
+  fileSize: number;
+  mimeType: string;
+  status: ClauseImportJobStatus;
+  suggestionCount: number;
+  acceptedCount: number;
+  rejectedCount: number;
+  pendingCount: number;
+  /** @nullable */
+  aiInvocationId?: string | null;
+  /** @nullable */
+  charCount?: number | null;
+  truncated: boolean;
+  /** @nullable */
+  errorMessage?: string | null;
+  /** @nullable */
+  uploadedBy?: string | null;
+  /** @nullable */
+  uploadedByName?: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export type ClauseImportSuggestionSuggestedTone =
+  (typeof ClauseImportSuggestionSuggestedTone)[keyof typeof ClauseImportSuggestionSuggestedTone];
+
+export const ClauseImportSuggestionSuggestedTone = {
+  zart: "zart",
+  moderat: "moderat",
+  standard: "standard",
+  streng: "streng",
+  hart: "hart",
+} as const;
+
+export type ClauseImportSuggestionSuggestedSeverity =
+  (typeof ClauseImportSuggestionSuggestedSeverity)[keyof typeof ClauseImportSuggestionSuggestedSeverity];
+
+export const ClauseImportSuggestionSuggestedSeverity = {
+  low: "low",
+  medium: "medium",
+  high: "high",
+} as const;
+
+export type ClauseImportSuggestionAlternativeMatchesItem = {
+  familyId: string;
+  familyName: string;
+  /**
+   * @minimum 0
+   * @maximum 1
+   */
+  confidence: number;
+};
+
+export type ClauseImportSuggestionStatus =
+  (typeof ClauseImportSuggestionStatus)[keyof typeof ClauseImportSuggestionStatus];
+
+export const ClauseImportSuggestionStatus = {
+  pending_review: "pending_review",
+  accepted: "accepted",
+  rejected: "rejected",
+} as const;
+
+export interface ClauseImportSuggestion {
+  id: string;
+  jobId: string;
+  orderIndex: number;
+  suggestedName: string;
+  suggestedSummary: string;
+  extractedText: string;
+  /** @nullable */
+  pageHint?: number | null;
+  suggestedTone: ClauseImportSuggestionSuggestedTone;
+  suggestedSeverity: ClauseImportSuggestionSuggestedSeverity;
+  /** @nullable */
+  suggestedFamilyId?: string | null;
+  /** @nullable */
+  suggestedFamilyName?: string | null;
+  /** @nullable */
+  matchedVariantId?: string | null;
+  /** @nullable */
+  matchedVariantName?: string | null;
+  /** @nullable */
+  similarityScore?: number | null;
+  alternativeMatches: ClauseImportSuggestionAlternativeMatchesItem[];
+  status: ClauseImportSuggestionStatus;
+  /** @nullable */
+  createdVariantId?: string | null;
+  /** @nullable */
+  createdTranslationId?: string | null;
+  /** @nullable */
+  decisionNote?: string | null;
+  /** @nullable */
+  decidedBy?: string | null;
+  /** @nullable */
+  decidedAt?: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export type ClauseImportJobDetail = ClauseImportJob & {
+  /** Signed download URL (TTL 15min) fuer Original-Dokument. */
+  downloadUrl: string;
+  suggestions: ClauseImportSuggestion[];
+};
+
+export type ClauseImportSuggestionDecisionDecision =
+  (typeof ClauseImportSuggestionDecisionDecision)[keyof typeof ClauseImportSuggestionDecisionDecision];
+
+export const ClauseImportSuggestionDecisionDecision = {
+  accept: "accept",
+  reject: "reject",
+} as const;
+
+export interface ClauseImportSuggestionDecision {
+  decision: ClauseImportSuggestionDecisionDecision;
+  /** @nullable */
+  familyId?: string | null;
+  /** @nullable */
+  targetVariantId?: string | null;
+  /** @nullable */
+  nameOverride?: string | null;
+  /** @nullable */
+  summaryOverride?: string | null;
+  /** @nullable */
+  bodyOverride?: string | null;
+  /** @nullable */
+  toneOverride?: string | null;
+  /** @nullable */
+  severityOverride?: string | null;
+  /** @nullable */
+  decisionNote?: string | null;
+}
+
 /**
  * logo (admin only, 2MB images) or document (any user, 25MB docs+images). Default: logo for backward compatibility.
  */
@@ -4004,6 +4202,21 @@ export type ListExternalContractsParams = {
   accountId?: string;
   brandId?: string;
 };
+
+export type ListClauseImportsParams = {
+  status?: ListClauseImportsStatus;
+};
+
+export type ListClauseImportsStatus =
+  (typeof ListClauseImportsStatus)[keyof typeof ListClauseImportsStatus];
+
+export const ListClauseImportsStatus = {
+  extracting: "extracting",
+  processing: "processing",
+  awaiting_review: "awaiting_review",
+  completed: "completed",
+  failed: "failed",
+} as const;
 
 export type ListRenewalsParams = {
   bucket?: ListRenewalsBucket;
