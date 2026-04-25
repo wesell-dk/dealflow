@@ -4,6 +4,11 @@ import { randomUUID, randomBytes } from 'node:crypto';
 import { ObjectStorageService } from '../lib/objectStorage';
 import { extractTextFromUpload } from '../lib/extractContractText';
 import { validateInline } from '../middlewares/validate';
+import {
+  computeRenewalRiskScore,
+  type RenewalRiskFactor,
+  type RenewalRiskInput,
+} from '../lib/renewalRisk';
 import * as Z from '@workspace/api-zod';
 import { z } from 'zod';
 
@@ -11552,79 +11557,10 @@ router.delete('/clause-imports/:id', async (req, res) => {
 const RENEWAL_LOOKAHEAD_DAYS = 180;
 const RENEWAL_DUE_SOON_DAYS = 30;
 
-type RenewalRiskFactor = {
-  key: string;
-  label: string;
-  points: number;
-  detail?: string;
-};
-
-type RenewalRiskInput = {
-  openObligationsCount: number;
-  accountHealthScore: number | null;
-  avgDiscountPct: number | null;
-  daysSinceLastTouch: number | null;
-};
-
-function computeRenewalRiskScore(input: RenewalRiskInput): {
-  score: number;
-  factors: RenewalRiskFactor[];
-} {
-  const factors: RenewalRiskFactor[] = [];
-  let score = 0;
-
-  // Offene Pflichten: 5 Punkte je offener derived-obligation, max 25
-  const obPts = Math.min(25, input.openObligationsCount * 5);
-  if (obPts > 0) {
-    score += obPts;
-    factors.push({
-      key: 'openObligations',
-      label: `Offene Pflichten (${input.openObligationsCount})`,
-      points: obPts,
-    });
-  }
-
-  // Account-Health: niedriger Health → Risiko. (100-health)/2, max 25
-  if (input.accountHealthScore != null) {
-    const hpPts = Math.max(0, Math.min(25, Math.round((100 - input.accountHealthScore) / 2)));
-    if (hpPts > 0) {
-      score += hpPts;
-      factors.push({
-        key: 'accountHealth',
-        label: `Niedrige Account-Health (${input.accountHealthScore})`,
-        points: hpPts,
-      });
-    }
-  }
-
-  // Discount-Drift: hoher durchschn. Discount → Pricing fragil, max 25
-  if (input.avgDiscountPct != null) {
-    const dPts = Math.max(0, Math.min(25, Math.round(input.avgDiscountPct - 10)));
-    if (dPts > 0) {
-      score += dPts;
-      factors.push({
-        key: 'discountDrift',
-        label: `Hoher Discount (Ø ${input.avgDiscountPct.toFixed(1)} %)`,
-        points: dPts,
-      });
-    }
-  }
-
-  // Inaktivität: keine Aktivität ≥ 60 Tage → +25
-  if (input.daysSinceLastTouch != null && input.daysSinceLastTouch >= 60) {
-    score += 25;
-    factors.push({
-      key: 'inactivity',
-      label: `Lange keine Aktivität (${input.daysSinceLastTouch} Tage)`,
-      points: 25,
-    });
-  }
-
-  // Cap 0..100
-  if (score > 100) score = 100;
-  if (score < 0) score = 0;
-  return { score, factors };
-}
+// Re-export für die übrigen Helfer in dieser Datei. Die eigentliche
+// Score-Formel + Typen leben in ../lib/renewalRisk.ts (DB-frei, unit-testbar).
+export type { RenewalRiskFactor, RenewalRiskInput };
+export { computeRenewalRiskScore };
 
 function addDays(d: Date, n: number): Date {
   const x = new Date(d);
@@ -11691,7 +11627,7 @@ async function gatherRenewalRiskInput(
   return { openObligationsCount, accountHealthScore, avgDiscountPct, daysSinceLastTouch };
 }
 
-interface RenewalRunResult {
+export interface RenewalRunResult {
   scanned: number;
   created: number;
   updated: number;
@@ -11699,7 +11635,7 @@ interface RenewalRunResult {
   skipped: number;
 }
 
-async function materializeRenewalsForTenant(tenantId: string): Promise<RenewalRunResult> {
+export async function materializeRenewalsForTenant(tenantId: string): Promise<RenewalRunResult> {
   const today = new Date();
   const horizon = addDays(today, RENEWAL_LOOKAHEAD_DAYS);
   // Nur signierte/aktive Verträge mit autoRenewal=true und gesetztem effectiveTo

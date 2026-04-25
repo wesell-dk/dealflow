@@ -9,6 +9,7 @@
     "start": "node --enable-source-maps ./dist/index.mjs",
     "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tests/tsconfig.json --noEmit",
     "test:isolation": "node --import tsx --test --test-reporter=spec tests/tenant-isolation.test.ts tests/validation-negative.test.ts",
+    "test:risk-score": "node --import tsx --test --test-reporter=spec tests/renewal-risk-score.test.ts",
     "test:renewals": "node --import tsx --test --test-reporter=spec tests/renewals.test.ts",
     "test:approvals": "node --import tsx --test --test-reporter=spec tests/approval-chains.test.ts",
     "test:external": "node --import tsx --test --test-reporter=spec tests/external-contracts.test.ts",
@@ -17,7 +18,7 @@
     "test:airec": "node --import tsx --test --test-reporter=spec --test-timeout=60000 tests/ai-recommendations.test.ts",
     "test:cuad": "node --import tsx --test --test-reporter=spec tests/cuad-coverage.test.ts",
     "test:contract-lang": "node --import tsx --test --test-reporter=spec tests/contract-language-switching.test.ts",
-    "test": "pnpm run test:isolation && pnpm run test:renewals && pnpm run test:approvals && pnpm run test:external && pnpm run test:clauses && pnpm run test:external-collab && pnpm run test:airec && pnpm run test:cuad && pnpm run test:contract-lang"
+    "test": "pnpm run test:risk-score && pnpm run test:isolation && pnpm run test:renewals && pnpm run test:approvals && pnpm run test:external && pnpm run test:clauses && pnpm run test:external-collab && pnpm run test:airec && pnpm run test:cuad && pnpm run test:contract-lang"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.90.0",
