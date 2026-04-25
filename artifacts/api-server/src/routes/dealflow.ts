@@ -2099,9 +2099,13 @@ router.post('/approvals/:id/decide', async (req, res) => {
 });
 
 // ── APPROVAL CHAIN TEMPLATES (Tenant-Admin) ──
+// Achtung: tenantWide bedeutet nur volle Daten-Sichtbarkeit, NICHT Admin.
+// Admin-Rechte verlangen explizit role="Tenant Admin" (oder Platform-Admin).
 function isTenantAdmin(req: Request): boolean {
   const u = getScope(req).user;
-  return u.tenantWide || u.isPlatformAdmin;
+  if (u.isPlatformAdmin) return true;
+  const role = (u.role ?? '').trim().toLowerCase();
+  return role === 'tenant admin' || role === 'tenant_admin';
 }
 
 function mapChain(t: typeof approvalChainTemplatesTable.$inferSelect) {
