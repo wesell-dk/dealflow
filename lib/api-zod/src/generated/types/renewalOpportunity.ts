@@ -7,15 +7,22 @@ Multi-tenant, multi-company, multi-brand. Deal-centric.
 
  * OpenAPI spec version: 0.1.0
  */
+import type { RenewalOpportunityKind } from "./renewalOpportunityKind";
 import type { RenewalOpportunityStatus } from "./renewalOpportunityStatus";
 import type { RenewalRiskFactor } from "./renewalRiskFactor";
 
 export interface RenewalOpportunity {
   id: string;
   tenantId: string;
-  contractId: string;
+  /** @nullable */
+  contractId?: string | null;
   /** @nullable */
   contractTitle?: string | null;
+  /** @nullable */
+  externalContractId?: string | null;
+  /** @nullable */
+  externalContractTitle?: string | null;
+  kind: RenewalOpportunityKind;
   accountId: string;
   /** @nullable */
   accountName?: string | null;

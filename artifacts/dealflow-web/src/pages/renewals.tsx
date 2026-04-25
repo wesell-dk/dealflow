@@ -371,7 +371,16 @@ export default function RenewalsPage() {
                     data-testid={`row-renewal-${r.id}`}
                   >
                     <TableCell>{r.accountName ?? r.accountId}</TableCell>
-                    <TableCell>{r.contractTitle ?? r.contractId}</TableCell>
+                    <TableCell>
+                      <span className="flex items-center gap-2">
+                        {r.kind === "external"
+                          ? r.externalContractTitle ?? r.externalContractId ?? "—"
+                          : r.contractTitle ?? r.contractId ?? "—"}
+                        {r.kind === "external" && (
+                          <Badge variant="secondary" className="text-[10px] uppercase">Extern</Badge>
+                        )}
+                      </span>
+                    </TableCell>
                     <TableCell>{fmtDate(r.noticeDeadline)}</TableCell>
                     <TableCell>{fmtDate(r.dueDate)}</TableCell>
                     <TableCell>{fmtCurrency(r.valueAmount ?? null, r.currency ?? "EUR")}</TableCell>
@@ -392,7 +401,12 @@ export default function RenewalsPage() {
               <SheetHeader>
                 <SheetTitle className="flex items-center gap-2">
                   <CalendarClock className="h-5 w-5" />
-                  {selected.contractTitle ?? selected.contractId}
+                  {selected.kind === "external"
+                    ? selected.externalContractTitle ?? selected.externalContractId ?? "—"
+                    : selected.contractTitle ?? selected.contractId ?? "—"}
+                  {selected.kind === "external" && (
+                    <Badge variant="secondary" className="text-[10px] uppercase">Extern</Badge>
+                  )}
                 </SheetTitle>
                 <SheetDescription>
                   {selected.accountName ?? selected.accountId}
@@ -440,9 +454,21 @@ export default function RenewalsPage() {
 
                 <div>
                   <div className="text-xs text-muted-foreground mb-1">{t("pages.renewals.detail.contract")}</div>
-                  <Link href={`/contracts/${selected.contractId}`} className="inline-flex items-center gap-1 text-primary hover:underline">
-                    <FileSignature className="h-4 w-4" /> {selected.contractTitle ?? selected.contractId}
-                  </Link>
+                  {selected.kind === "external" ? (
+                    // Externe Bestandsverträge haben keine eigene Detail-Seite —
+                    // wir verlinken stattdessen den Account, dort steht die
+                    // Externe-Verträge-Karte.
+                    <Link href={`/accounts/${selected.accountId}`} className="inline-flex items-center gap-1 text-primary hover:underline">
+                      <FileSignature className="h-4 w-4" />
+                      {selected.externalContractTitle ?? selected.externalContractId ?? "—"}
+                    </Link>
+                  ) : selected.contractId ? (
+                    <Link href={`/contracts/${selected.contractId}`} className="inline-flex items-center gap-1 text-primary hover:underline">
+                      <FileSignature className="h-4 w-4" /> {selected.contractTitle ?? selected.contractId}
+                    </Link>
+                  ) : (
+                    <span className="text-muted-foreground">—</span>
+                  )}
                 </div>
 
                 {selected.followupContractId && (

@@ -415,6 +415,7 @@ export * from "./reactionInput";
 export * from "./renewalBucketStat";
 export * from "./renewalFollowupResult";
 export * from "./renewalOpportunity";
+export * from "./renewalOpportunityKind";
 export * from "./renewalOpportunityStatus";
 export * from "./renewalPatch";
 export * from "./renewalPatchStatus";

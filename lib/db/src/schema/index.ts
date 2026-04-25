@@ -10,6 +10,7 @@ import {
   uniqueIndex,
   index,
 } from "drizzle-orm/pg-core";
+import { sql } from "drizzle-orm";
 
 const id = () => text("id").primaryKey();
 const ts = (name: string) =>
@@ -1213,7 +1214,10 @@ export const externalContractsTable = pgTable("external_contracts", {
 export const renewalOpportunitiesTable = pgTable("renewal_opportunities", {
   id: id(),
   tenantId: text("tenant_id").notNull(),
-  contractId: text("contract_id").notNull(),
+  // contractId/externalContractId sind polymorph: genau einer ist gesetzt.
+  // contractId zeigt auf einen DealFlow-internen Vertrag, externalContractId
+  // auf einen extern hochgeladenen Bestandsvertrag (siehe Task #67).
+  contractId: text("contract_id"),
   externalContractId: text("external_contract_id"),
   accountId: text("account_id").notNull(),
   brandId: text("brand_id"),
@@ -1240,7 +1244,14 @@ export const renewalOpportunitiesTable = pgTable("renewal_opportunities", {
   updatedAt: ts("updated_at"),
 }, (t) => ({
   byTenantStatus: index("renewals_tenant_status_idx").on(t.tenantId, t.status),
-  byContractDue: uniqueIndex("renewals_contract_due_uq").on(t.contractId, t.dueDate),
+  // Idempotenz pro Quell-Vertrag — als partielle Indexe, weil immer nur
+  // eine der beiden Spalten gesetzt ist.
+  byContractDue: uniqueIndex("renewals_contract_due_uq")
+    .on(t.contractId, t.dueDate)
+    .where(sql`${t.contractId} is not null`),
+  byExternalContractDue: uniqueIndex("renewals_ext_contract_due_uq")
+    .on(t.externalContractId, t.dueDate)
+    .where(sql`${t.externalContractId} is not null`),
   byNoticeDeadline: index("renewals_notice_deadline_idx").on(t.tenantId, t.noticeDeadline),
   byTenantBrand: index("renewals_tenant_brand_idx").on(t.tenantId, t.brandId),
 }));

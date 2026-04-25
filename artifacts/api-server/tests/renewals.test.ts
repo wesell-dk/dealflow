@@ -9,6 +9,8 @@ import {
   usersTable,
   auditLogTable,
   obligationsTable,
+  externalContractsTable,
+  uploadedObjectsTable,
 } from "@workspace/db";
 import {
   createTestWorld,
@@ -392,6 +394,85 @@ describe("renewals — engine, scope, lifecycle", () => {
     seededFollowupContractIds.push(okBody.contract.id);
   });
 
+  it("external contracts with autoRenewal+effectiveTo are materialised by the engine", async () => {
+    // Externer Bestandsvertrag im Notice-Korridor anlegen.
+    const objectPath = `/objects/test-rn-ext-${worldA.runId}`;
+    await db.insert(uploadedObjectsTable).values({
+      objectPath,
+      tenantId: worldA.tenantId,
+      userId: worldA.userId,
+      kind: "document",
+      contentType: "application/pdf",
+      size: 1024,
+    }).onConflictDoNothing();
+    const extId = `${worldA.runId}_xct`;
+    await db.insert(externalContractsTable).values({
+      id: extId,
+      tenantId: worldA.tenantId,
+      accountId: worldA.accountId,
+      brandId: worldA.brandId,
+      objectPath,
+      fileName: "ext-renewal.pdf",
+      fileSize: 1024,
+      mimeType: "application/pdf",
+      status: "confirmed",
+      title: "Externer Renewal-Vertrag",
+      parties: [{ role: "customer", name: "Acme GmbH" }],
+      currency: "EUR",
+      valueAmount: "75000",
+      effectiveTo: fmtDate(addDays(120)),
+      autoRenewal: true,
+      renewalNoticeDays: 90,
+      uploadedBy: worldA.userId,
+    });
+
+    try {
+      const run = await aliceAdmin.post("/api/renewals/run");
+      assert.equal(run.status, 200, `expected 200, got ${run.status}: ${JSON.stringify(run.body)}`);
+
+      // Renewal-Opportunity für externen Vertrag muss existieren
+      const rows = await db.select().from(renewalOpportunitiesTable).where(and(
+        eq(renewalOpportunitiesTable.tenantId, worldA.tenantId),
+        eq(renewalOpportunitiesTable.externalContractId, extId),
+      ));
+      assert.equal(rows.length, 1, "exactly one external renewal opportunity must be created");
+      const opp = rows[0]!;
+      assert.equal(opp.contractId, null, "contractId must be null for external renewals");
+      assert.equal(opp.accountId, worldA.accountId);
+      assert.equal(opp.brandId, worldA.brandId);
+      assert.equal(opp.status, "open");
+
+      // Liste liefert kind=external + externalContractTitle
+      const list = await aliceAdmin.get("/api/renewals");
+      assert.equal(list.status, 200);
+      const externalRow = (list.body as Array<{
+        id: string;
+        kind: string;
+        externalContractId: string | null;
+        externalContractTitle: string | null;
+        contractId: string | null;
+      }>).find(r => r.id === opp.id);
+      assert.ok(externalRow, "external renewal must appear in /renewals list");
+      assert.equal(externalRow!.kind, "external");
+      assert.equal(externalRow!.externalContractId, extId);
+      assert.equal(externalRow!.externalContractTitle, "Externer Renewal-Vertrag");
+      assert.equal(externalRow!.contractId, null);
+
+      // Idempotenz: zweiter Run erzeugt keine Dublette
+      const second = await aliceAdmin.post("/api/renewals/run");
+      assert.equal(second.status, 200);
+      const after = await db.select().from(renewalOpportunitiesTable).where(and(
+        eq(renewalOpportunitiesTable.tenantId, worldA.tenantId),
+        eq(renewalOpportunitiesTable.externalContractId, extId),
+      ));
+      assert.equal(after.length, 1, "second run must not duplicate external renewals");
+    } finally {
+      await db.delete(renewalOpportunitiesTable).where(eq(renewalOpportunitiesTable.externalContractId, extId));
+      await db.delete(externalContractsTable).where(eq(externalContractsTable.id, extId));
+      await db.delete(uploadedObjectsTable).where(eq(uploadedObjectsTable.objectPath, objectPath));
+    }
+  });
+
   it("PATCH /renewals/:id snooze sets status + snoozedUntil and writes audit", async () => {
     // Issue-followup test left the renewal as in_progress with a successor; reset
     // so the snooze test still sees a snoozable open renewal.
@@ -424,4 +505,5 @@ describe("renewals — engine, scope, lifecycle", () => {
     ));
     assert.ok(audit.length >= 1, "expected audit row for renewal patch");
   });
+});
 });

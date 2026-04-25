@@ -12177,7 +12177,21 @@ export async function materializeRenewalsForTenant(tenantId: string): Promise<Re
     sql`${contractsTable.effectiveTo} is not null`,
     sql`${contractsTable.status} in ('signed','active','executed')`,
   ));
-  const result: RenewalRunResult = { scanned: candidates.length, created: 0, updated: 0, dueSoon: 0, skipped: 0 };
+  // Externe Bestandsverträge (Task #67): autoRenewal=true + effectiveTo gesetzt.
+  // Externe Verträge sind per Definition bereits aktiv — kein Status-Filter.
+  const externalCandidates = await db.select().from(externalContractsTable).where(and(
+    eq(externalContractsTable.tenantId, tenantId),
+    eq(externalContractsTable.autoRenewal, true),
+    sql`${externalContractsTable.effectiveTo} is not null`,
+  ));
+
+  const result: RenewalRunResult = {
+    scanned: candidates.length + externalCandidates.length,
+    created: 0,
+    updated: 0,
+    dueSoon: 0,
+    skipped: 0,
+  };
 
   for (const c of candidates) {
     if (!c.effectiveTo || !c.accountId) { result.skipped++; continue; }
@@ -12218,6 +12232,7 @@ export async function materializeRenewalsForTenant(tenantId: string): Promise<Re
         currency: c.valueCurrency ?? c.currency ?? null,
       }).onConflictDoNothing({
         target: [renewalOpportunitiesTable.contractId, renewalOpportunitiesTable.dueDate],
+        where: sql`${renewalOpportunitiesTable.contractId} is not null`,
       }).returning({ id: renewalOpportunitiesTable.id });
       if (ins.length === 0) {
         result.skipped++;
@@ -12256,6 +12271,90 @@ export async function materializeRenewalsForTenant(tenantId: string): Promise<Re
       }
     }
   }
+
+  // ── Externe Bestandsverträge: gleiche Window-Logik, reduzierte Risk-Datenbasis.
+  // Für externe Verträge gibt es keine Quote-Discounts, keine derived Obligations
+  // und kein internes Audit; wir nutzen ausschliesslich die Account-Health.
+  for (const x of externalCandidates) {
+    if (!x.effectiveTo || !x.accountId) { result.skipped++; continue; }
+    const dueDate = new Date(`${x.effectiveTo}T00:00:00.000Z`);
+    const noticeDays = x.renewalNoticeDays ?? 90;
+    const noticeDeadline = addDays(dueDate, -noticeDays);
+    const inWindow =
+      (noticeDeadline >= today && noticeDeadline <= horizon) ||
+      (dueDate >= today && dueDate <= horizon);
+    if (!inWindow) { result.skipped++; continue; }
+
+    const dueDateStr = toDateOnly(dueDate)!;
+    const noticeStr = toDateOnly(noticeDeadline)!;
+    const [acc] = await db.select().from(accountsTable).where(eq(accountsTable.id, x.accountId));
+    const { score, factors } = computeRenewalRiskScore({
+      openObligationsCount: 0,
+      accountHealthScore: acc?.healthScore ?? null,
+      avgDiscountPct: null,
+      daysSinceLastTouch: null,
+    });
+
+    const existing = await db.select().from(renewalOpportunitiesTable).where(and(
+      eq(renewalOpportunitiesTable.externalContractId, x.id),
+      eq(renewalOpportunitiesTable.dueDate, dueDateStr),
+    ));
+    if (existing.length === 0) {
+      const id = `rn_${randomUUID().slice(0, 12)}`;
+      const ins = await db.insert(renewalOpportunitiesTable).values({
+        id,
+        tenantId,
+        contractId: null,
+        externalContractId: x.id,
+        accountId: x.accountId,
+        brandId: x.brandId ?? null,
+        dueDate: dueDateStr,
+        noticeDeadline: noticeStr,
+        riskScore: score,
+        riskFactors: factors,
+        status: 'open',
+        valueAmount: x.valueAmount == null ? null : String(x.valueAmount),
+        currency: x.currency ?? null,
+      }).onConflictDoNothing({
+        target: [renewalOpportunitiesTable.externalContractId, renewalOpportunitiesTable.dueDate],
+        where: sql`${renewalOpportunitiesTable.externalContractId} is not null`,
+      }).returning({ id: renewalOpportunitiesTable.id });
+      if (ins.length === 0) {
+        result.skipped++;
+        continue;
+      }
+      result.created++;
+      void emitEvent(tenantId, 'renewal.created', {
+        renewalId: id,
+        externalContractId: x.id,
+        accountId: x.accountId,
+        dueDate: dueDateStr,
+        noticeDeadline: noticeStr,
+        riskScore: score,
+      });
+      const daysToNotice = daysBetween(noticeDeadline, today);
+      if (daysToNotice <= RENEWAL_DUE_SOON_DAYS) {
+        result.dueSoon++;
+        void emitEvent(tenantId, 'renewal.due_soon', {
+          renewalId: id,
+          externalContractId: x.id,
+          accountId: x.accountId,
+          noticeDeadline: noticeStr,
+          daysToNotice,
+        });
+      }
+    } else {
+      const cur = existing[0]!;
+      if (cur.status === 'open' && cur.riskScore !== score) {
+        await db.update(renewalOpportunitiesTable)
+          .set({ riskScore: score, riskFactors: factors, updatedAt: new Date() })
+          .where(eq(renewalOpportunitiesTable.id, cur.id));
+        result.updated++;
+      } else {
+        result.skipped++;
+      }
+    }
+  }
   return result;
 }
 
@@ -12270,14 +12369,21 @@ async function mapRenewal(
      * Folgevertrags direkt verlinken kann ohne Extra-Roundtrip.
      */
     successors?: Map<string, string>;
+    externalContracts?: Map<string, typeof externalContractsTable.$inferSelect>;
   },
 ) {
   const accs = ctx?.accs ?? (await getAccountMap());
   const brands = ctx?.brands ?? (await getBrandMap());
   const contracts = ctx?.contracts ?? new Map<string, typeof contractsTable.$inferSelect>();
-  const c = contracts.get(row.contractId) ?? null;
-  let followupContractId: string | null = ctx?.successors?.get(row.contractId) ?? null;
-  if (!followupContractId && !ctx?.successors) {
+  const externalContracts = ctx?.externalContracts ?? new Map<string, typeof externalContractsTable.$inferSelect>();
+  const c = row.contractId ? contracts.get(row.contractId) ?? null : null;
+  const x = row.externalContractId ? externalContracts.get(row.externalContractId) ?? null : null;
+  // kind erlaubt der UI, externe Renewals anders zu verlinken (Account-Detail
+  // statt Vertrags-Detail) und mit „Extern"-Badge zu markieren.
+  const kind: 'internal' | 'external' = row.externalContractId ? 'external' : 'internal';
+  let followupContractId: string | null =
+    row.contractId ? (ctx?.successors?.get(row.contractId) ?? null) : null;
+  if (!followupContractId && !ctx?.successors && row.contractId) {
     // Single-Renewal-Lookup (kein vorgewärmter Cache vorhanden): einmaliger
     // Punkt-Query ist günstig; in_progress / won impliziert i.d.R. Successor.
     const [succ] = await db.select({ id: contractsTable.id })
@@ -12292,8 +12398,11 @@ async function mapRenewal(
   return {
     id: row.id,
     tenantId: row.tenantId,
-    contractId: row.contractId,
+    contractId: row.contractId ?? null,
     contractTitle: c?.title ?? null,
+    externalContractId: row.externalContractId ?? null,
+    externalContractTitle: x?.title ?? null,
+    kind,
     accountId: row.accountId,
     accountName: accs.get(row.accountId)?.name ?? null,
     brandId: row.brandId,
@@ -12398,27 +12507,39 @@ router.get('/renewals', async (req, res) => {
   }
   const visible = rows.filter(r => visAcc.has(r.accountId));
 
-  const [accs, brands, contractsRows, successorRows] = await Promise.all([
+  const internalContractIds = visible
+    .map(r => r.contractId)
+    .filter((id): id is string => Boolean(id));
+  const externalContractIds = visible
+    .map(r => r.externalContractId)
+    .filter((id): id is string => Boolean(id));
+  const [accs, brands, contractsRows, externalContractsRows, successorRows] = await Promise.all([
     getAccountMap(),
     getBrandMap(),
-    visible.length === 0 ? Promise.resolve([] as Array<typeof contractsTable.$inferSelect>)
-      : db.select().from(contractsTable).where(inArray(contractsTable.id, visible.map(r => r.contractId))),
-    visible.length === 0 ? Promise.resolve([] as Array<{ id: string; predecessorContractId: string | null }>)
+    internalContractIds.length === 0
+      ? Promise.resolve([] as Array<typeof contractsTable.$inferSelect>)
+      : db.select().from(contractsTable).where(inArray(contractsTable.id, internalContractIds)),
+    externalContractIds.length === 0
+      ? Promise.resolve([] as Array<typeof externalContractsTable.$inferSelect>)
+      : db.select().from(externalContractsTable).where(inArray(externalContractsTable.id, externalContractIds)),
+    internalContractIds.length === 0
+      ? Promise.resolve([] as Array<{ id: string; predecessorContractId: string | null }>)
       : db.select({
           id: contractsTable.id,
           predecessorContractId: contractsTable.predecessorContractId,
         }).from(contractsTable).where(and(
           eq(contractsTable.tenantId, scope.tenantId),
-          inArray(contractsTable.predecessorContractId, visible.map(r => r.contractId)),
+          inArray(contractsTable.predecessorContractId, internalContractIds),
         )),
   ]);
   const contracts = new Map(contractsRows.map(c => [c.id, c]));
+  const externalContracts = new Map(externalContractsRows.map(c => [c.id, c]));
   const successors = new Map<string, string>();
   for (const s of successorRows) {
     if (s.predecessorContractId) successors.set(s.predecessorContractId, s.id);
   }
 
-  const out = await Promise.all(visible.map(r => mapRenewal(r, { accs, brands, contracts, successors })));
+  const out = await Promise.all(visible.map(r => mapRenewal(r, { accs, brands, contracts, externalContracts, successors })));
   res.json(out);
 });
 
@@ -12632,6 +12753,12 @@ router.post('/renewals/:id/issue-followup', async (req, res) => {
   if (!renewal) { res.status(404).json({ error: 'not found' }); return; }
   if (renewal.status !== 'open') {
     res.status(409).json({ error: 'renewal not eligible', detail: `status is ${renewal.status}` });
+    return;
+  }
+  // Externe Renewals haben keinen contractsTable-Vorvertrag — Folgevertrag
+  // kann nur für interne Renewals erzeugt werden.
+  if (!renewal.contractId) {
+    res.status(409).json({ error: 'renewal not eligible', detail: 'external renewals have no predecessor contract' });
     return;
   }
   // Predecessor laden — gleicher Tenant + sichtbarer Deal (gateDeal-Logik).

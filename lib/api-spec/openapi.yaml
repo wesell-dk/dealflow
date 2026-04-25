@@ -8307,13 +8307,20 @@ components:
     RenewalOpportunity:
       type: object
       required:
-        [ id, tenantId, contractId, accountId, dueDate, noticeDeadline,
-          riskScore, riskFactors, status, createdAt, updatedAt ]
+        [ id, tenantId, accountId, dueDate, noticeDeadline,
+          riskScore, riskFactors, status, kind, createdAt, updatedAt ]
       properties:
         id: { type: string }
         tenantId: { type: string }
-        contractId: { type: string }
+        # Genau einer von contractId / externalContractId ist gesetzt.
+        # `kind` zeigt der UI direkt, welche Verlinkung sie wählen muss.
+        contractId: { type: ["string", "null"] }
         contractTitle: { type: ["string", "null"] }
+        externalContractId: { type: ["string", "null"] }
+        externalContractTitle: { type: ["string", "null"] }
+        kind:
+          type: string
+          enum: [internal, external]
         accountId: { type: string }
         accountName: { type: ["string", "null"] }
         brandId: { type: ["string", "null"] }

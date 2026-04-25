@@ -3896,6 +3896,14 @@ export interface RenewalRiskFactor {
   detail?: string;
 }
 
+export type RenewalOpportunityKind =
+  (typeof RenewalOpportunityKind)[keyof typeof RenewalOpportunityKind];
+
+export const RenewalOpportunityKind = {
+  internal: "internal",
+  external: "external",
+} as const;
+
 export type RenewalOpportunityStatus =
   (typeof RenewalOpportunityStatus)[keyof typeof RenewalOpportunityStatus];
 
@@ -3911,9 +3919,15 @@ export const RenewalOpportunityStatus = {
 export interface RenewalOpportunity {
   id: string;
   tenantId: string;
-  contractId: string;
+  /** @nullable */
+  contractId?: string | null;
   /** @nullable */
   contractTitle?: string | null;
+  /** @nullable */
+  externalContractId?: string | null;
+  /** @nullable */
+  externalContractTitle?: string | null;
+  kind: RenewalOpportunityKind;
   accountId: string;
   /** @nullable */
   accountName?: string | null;
