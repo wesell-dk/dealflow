@@ -30,6 +30,8 @@ import type {
   AiHealthOk,
   ApiError,
   ApprovalCase,
+  ApprovalChainTemplate,
+  ApprovalChainTemplateInput,
   ApprovalDecisionInput,
   ApprovalFromReactionInput,
   ApprovalReadinessEnvelope,
@@ -122,6 +124,7 @@ import type {
   ListCopilotInsightsResponse,
   ListDealsParams,
   ListGdprAccessLogParams,
+  ListMyDelegations200,
   ListNegotiationsParams,
   ListObligationsParams,
   ListOrderConfirmationsParams,
@@ -190,6 +193,9 @@ import type {
   UploadUrlRequest,
   UploadUrlResponse,
   User,
+  UserDelegation,
+  UserDelegationInput,
+  UserDelegationPatch,
 } from "./api.schemas";
 
 import { customFetch } from "../custom-fetch";
@@ -5195,6 +5201,622 @@ export const useDecideApproval = <
   TContext
 > => {
   return useMutation(getDecideApprovalMutationOptions(options));
+};
+
+export const getListApprovalChainsUrl = () => {
+  return `/api/v1/approval-chains`;
+};
+
+export const listApprovalChains = async (
+  options?: RequestInit,
+): Promise<ApprovalChainTemplate[]> => {
+  return customFetch<ApprovalChainTemplate[]>(getListApprovalChainsUrl(), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getListApprovalChainsQueryKey = () => {
+  return [`/api/v1/approval-chains`] as const;
+};
+
+export const getListApprovalChainsQueryOptions = <
+  TData = Awaited<ReturnType<typeof listApprovalChains>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof listApprovalChains>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getListApprovalChainsQueryKey();
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof listApprovalChains>>
+  > = ({ signal }) => listApprovalChains({ signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof listApprovalChains>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type ListApprovalChainsQueryResult = NonNullable<
+  Awaited<ReturnType<typeof listApprovalChains>>
+>;
+export type ListApprovalChainsQueryError = ErrorType<unknown>;
+
+export function useListApprovalChains<
+  TData = Awaited<ReturnType<typeof listApprovalChains>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof listApprovalChains>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getListApprovalChainsQueryOptions(options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+export const getCreateApprovalChainUrl = () => {
+  return `/api/v1/approval-chains`;
+};
+
+export const createApprovalChain = async (
+  approvalChainTemplateInput: ApprovalChainTemplateInput,
+  options?: RequestInit,
+): Promise<ApprovalChainTemplate> => {
+  return customFetch<ApprovalChainTemplate>(getCreateApprovalChainUrl(), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(approvalChainTemplateInput),
+  });
+};
+
+export const getCreateApprovalChainMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof createApprovalChain>>,
+    TError,
+    { data: BodyType<ApprovalChainTemplateInput> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof createApprovalChain>>,
+  TError,
+  { data: BodyType<ApprovalChainTemplateInput> },
+  TContext
+> => {
+  const mutationKey = ["createApprovalChain"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof createApprovalChain>>,
+    { data: BodyType<ApprovalChainTemplateInput> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return createApprovalChain(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type CreateApprovalChainMutationResult = NonNullable<
+  Awaited<ReturnType<typeof createApprovalChain>>
+>;
+export type CreateApprovalChainMutationBody =
+  BodyType<ApprovalChainTemplateInput>;
+export type CreateApprovalChainMutationError = ErrorType<unknown>;
+
+export const useCreateApprovalChain = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof createApprovalChain>>,
+    TError,
+    { data: BodyType<ApprovalChainTemplateInput> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof createApprovalChain>>,
+  TError,
+  { data: BodyType<ApprovalChainTemplateInput> },
+  TContext
+> => {
+  return useMutation(getCreateApprovalChainMutationOptions(options));
+};
+
+export const getUpdateApprovalChainUrl = (id: string) => {
+  return `/api/v1/approval-chains/${id}`;
+};
+
+export const updateApprovalChain = async (
+  id: string,
+  approvalChainTemplateInput: ApprovalChainTemplateInput,
+  options?: RequestInit,
+): Promise<ApprovalChainTemplate> => {
+  return customFetch<ApprovalChainTemplate>(getUpdateApprovalChainUrl(id), {
+    ...options,
+    method: "PATCH",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(approvalChainTemplateInput),
+  });
+};
+
+export const getUpdateApprovalChainMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof updateApprovalChain>>,
+    TError,
+    { id: string; data: BodyType<ApprovalChainTemplateInput> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof updateApprovalChain>>,
+  TError,
+  { id: string; data: BodyType<ApprovalChainTemplateInput> },
+  TContext
+> => {
+  const mutationKey = ["updateApprovalChain"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof updateApprovalChain>>,
+    { id: string; data: BodyType<ApprovalChainTemplateInput> }
+  > = (props) => {
+    const { id, data } = props ?? {};
+
+    return updateApprovalChain(id, data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type UpdateApprovalChainMutationResult = NonNullable<
+  Awaited<ReturnType<typeof updateApprovalChain>>
+>;
+export type UpdateApprovalChainMutationBody =
+  BodyType<ApprovalChainTemplateInput>;
+export type UpdateApprovalChainMutationError = ErrorType<unknown>;
+
+export const useUpdateApprovalChain = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof updateApprovalChain>>,
+    TError,
+    { id: string; data: BodyType<ApprovalChainTemplateInput> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof updateApprovalChain>>,
+  TError,
+  { id: string; data: BodyType<ApprovalChainTemplateInput> },
+  TContext
+> => {
+  return useMutation(getUpdateApprovalChainMutationOptions(options));
+};
+
+export const getDeleteApprovalChainUrl = (id: string) => {
+  return `/api/v1/approval-chains/${id}`;
+};
+
+export const deleteApprovalChain = async (
+  id: string,
+  options?: RequestInit,
+): Promise<void> => {
+  return customFetch<void>(getDeleteApprovalChainUrl(id), {
+    ...options,
+    method: "DELETE",
+  });
+};
+
+export const getDeleteApprovalChainMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof deleteApprovalChain>>,
+    TError,
+    { id: string },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof deleteApprovalChain>>,
+  TError,
+  { id: string },
+  TContext
+> => {
+  const mutationKey = ["deleteApprovalChain"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof deleteApprovalChain>>,
+    { id: string }
+  > = (props) => {
+    const { id } = props ?? {};
+
+    return deleteApprovalChain(id, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type DeleteApprovalChainMutationResult = NonNullable<
+  Awaited<ReturnType<typeof deleteApprovalChain>>
+>;
+
+export type DeleteApprovalChainMutationError = ErrorType<unknown>;
+
+export const useDeleteApprovalChain = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof deleteApprovalChain>>,
+    TError,
+    { id: string },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof deleteApprovalChain>>,
+  TError,
+  { id: string },
+  TContext
+> => {
+  return useMutation(getDeleteApprovalChainMutationOptions(options));
+};
+
+export const getListMyDelegationsUrl = () => {
+  return `/api/v1/me/delegations`;
+};
+
+export const listMyDelegations = async (
+  options?: RequestInit,
+): Promise<ListMyDelegations200> => {
+  return customFetch<ListMyDelegations200>(getListMyDelegationsUrl(), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getListMyDelegationsQueryKey = () => {
+  return [`/api/v1/me/delegations`] as const;
+};
+
+export const getListMyDelegationsQueryOptions = <
+  TData = Awaited<ReturnType<typeof listMyDelegations>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof listMyDelegations>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getListMyDelegationsQueryKey();
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof listMyDelegations>>
+  > = ({ signal }) => listMyDelegations({ signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof listMyDelegations>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type ListMyDelegationsQueryResult = NonNullable<
+  Awaited<ReturnType<typeof listMyDelegations>>
+>;
+export type ListMyDelegationsQueryError = ErrorType<unknown>;
+
+export function useListMyDelegations<
+  TData = Awaited<ReturnType<typeof listMyDelegations>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof listMyDelegations>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getListMyDelegationsQueryOptions(options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+export const getCreateMyDelegationUrl = () => {
+  return `/api/v1/me/delegations`;
+};
+
+export const createMyDelegation = async (
+  userDelegationInput: UserDelegationInput,
+  options?: RequestInit,
+): Promise<UserDelegation> => {
+  return customFetch<UserDelegation>(getCreateMyDelegationUrl(), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(userDelegationInput),
+  });
+};
+
+export const getCreateMyDelegationMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof createMyDelegation>>,
+    TError,
+    { data: BodyType<UserDelegationInput> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof createMyDelegation>>,
+  TError,
+  { data: BodyType<UserDelegationInput> },
+  TContext
+> => {
+  const mutationKey = ["createMyDelegation"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof createMyDelegation>>,
+    { data: BodyType<UserDelegationInput> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return createMyDelegation(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type CreateMyDelegationMutationResult = NonNullable<
+  Awaited<ReturnType<typeof createMyDelegation>>
+>;
+export type CreateMyDelegationMutationBody = BodyType<UserDelegationInput>;
+export type CreateMyDelegationMutationError = ErrorType<unknown>;
+
+export const useCreateMyDelegation = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof createMyDelegation>>,
+    TError,
+    { data: BodyType<UserDelegationInput> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof createMyDelegation>>,
+  TError,
+  { data: BodyType<UserDelegationInput> },
+  TContext
+> => {
+  return useMutation(getCreateMyDelegationMutationOptions(options));
+};
+
+export const getUpdateMyDelegationUrl = (id: string) => {
+  return `/api/v1/me/delegations/${id}`;
+};
+
+export const updateMyDelegation = async (
+  id: string,
+  userDelegationPatch: UserDelegationPatch,
+  options?: RequestInit,
+): Promise<UserDelegation> => {
+  return customFetch<UserDelegation>(getUpdateMyDelegationUrl(id), {
+    ...options,
+    method: "PATCH",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(userDelegationPatch),
+  });
+};
+
+export const getUpdateMyDelegationMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof updateMyDelegation>>,
+    TError,
+    { id: string; data: BodyType<UserDelegationPatch> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof updateMyDelegation>>,
+  TError,
+  { id: string; data: BodyType<UserDelegationPatch> },
+  TContext
+> => {
+  const mutationKey = ["updateMyDelegation"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof updateMyDelegation>>,
+    { id: string; data: BodyType<UserDelegationPatch> }
+  > = (props) => {
+    const { id, data } = props ?? {};
+
+    return updateMyDelegation(id, data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type UpdateMyDelegationMutationResult = NonNullable<
+  Awaited<ReturnType<typeof updateMyDelegation>>
+>;
+export type UpdateMyDelegationMutationBody = BodyType<UserDelegationPatch>;
+export type UpdateMyDelegationMutationError = ErrorType<unknown>;
+
+export const useUpdateMyDelegation = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof updateMyDelegation>>,
+    TError,
+    { id: string; data: BodyType<UserDelegationPatch> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof updateMyDelegation>>,
+  TError,
+  { id: string; data: BodyType<UserDelegationPatch> },
+  TContext
+> => {
+  return useMutation(getUpdateMyDelegationMutationOptions(options));
+};
+
+export const getDeleteMyDelegationUrl = (id: string) => {
+  return `/api/v1/me/delegations/${id}`;
+};
+
+export const deleteMyDelegation = async (
+  id: string,
+  options?: RequestInit,
+): Promise<void> => {
+  return customFetch<void>(getDeleteMyDelegationUrl(id), {
+    ...options,
+    method: "DELETE",
+  });
+};
+
+export const getDeleteMyDelegationMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof deleteMyDelegation>>,
+    TError,
+    { id: string },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof deleteMyDelegation>>,
+  TError,
+  { id: string },
+  TContext
+> => {
+  const mutationKey = ["deleteMyDelegation"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof deleteMyDelegation>>,
+    { id: string }
+  > = (props) => {
+    const { id } = props ?? {};
+
+    return deleteMyDelegation(id, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type DeleteMyDelegationMutationResult = NonNullable<
+  Awaited<ReturnType<typeof deleteMyDelegation>>
+>;
+
+export type DeleteMyDelegationMutationError = ErrorType<unknown>;
+
+export const useDeleteMyDelegation = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof deleteMyDelegation>>,
+    TError,
+    { id: string },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof deleteMyDelegation>>,
+  TError,
+  { id: string },
+  TContext
+> => {
+  return useMutation(getDeleteMyDelegationMutationOptions(options));
 };
 
 export const getListContractsUrl = (params?: ListContractsParams) => {

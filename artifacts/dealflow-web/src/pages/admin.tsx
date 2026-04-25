@@ -48,6 +48,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
 import { CompanyFormDialog } from "@/components/admin/company-form-dialog";
 import { BrandFormDialog } from "@/components/admin/brand-form-dialog";
+import { ApprovalChainsCard } from "@/components/admin/approval-chains-card";
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
@@ -398,6 +399,8 @@ export default function Admin() {
       <ContractTypesCard />
 
       <ContractPlaybooksCard />
+
+      <ApprovalChainsCard />
 
       {/* Erweiterte Einstellungen — Webhooks und DSGVO. Standardmäßig
           eingeklappt, weil die meisten Tenants hier mit den Defaults gut fahren

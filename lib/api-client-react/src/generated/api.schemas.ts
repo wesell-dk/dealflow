@@ -546,6 +546,41 @@ export interface Contract {
   validUntil?: string | null;
 }
 
+export type ApprovalStageStatus =
+  (typeof ApprovalStageStatus)[keyof typeof ApprovalStageStatus];
+
+export const ApprovalStageStatus = {
+  pending: "pending",
+  approved: "approved",
+  rejected: "rejected",
+  skipped: "skipped",
+} as const;
+
+export interface ApprovalStage {
+  order: number;
+  label: string;
+  /** @nullable */
+  approverRole?: string | null;
+  /** @nullable */
+  approverUserId?: string | null;
+  status: ApprovalStageStatus;
+  /** @nullable */
+  decidedBy?: string | null;
+  /** @nullable */
+  decidedByName?: string | null;
+  /** @nullable */
+  decidedAt?: string | null;
+  /**
+   * Wenn gesetzt, hat der entscheidende User per Vertretungsregel im Auftrag dieses Users entschieden.
+   * @nullable
+   */
+  delegatedFrom?: string | null;
+  /** @nullable */
+  delegatedFromName?: string | null;
+  /** @nullable */
+  comment?: string | null;
+}
+
 export interface ApprovalCase {
   id: string;
   dealId: string;
@@ -569,6 +604,17 @@ export interface ApprovalCase {
   decisionComment?: string | null;
   /** @nullable */
   amendmentId?: string | null;
+  /** @nullable */
+  chainTemplateId?: string | null;
+  stages: ApprovalStage[];
+  currentStageIdx: number;
+  /** True wenn der aufrufende User die aktuell offene Stage entscheiden darf (inkl. aktiver Vertretung). */
+  canDecide?: boolean;
+  /**
+   * Falls canDecide via Vertretung gilt: User-ID, in dessen Auftrag entschieden würde.
+   * @nullable
+   */
+  canDecideOnBehalfOf?: string | null;
 }
 
 export type SignaturePackageStatus =
@@ -910,6 +956,90 @@ export interface PricingSummary {
 export interface ApprovalDecisionInput {
   decision: string;
   comment?: string;
+}
+
+export type ApprovalChainConditionOp =
+  (typeof ApprovalChainConditionOp)[keyof typeof ApprovalChainConditionOp];
+
+export const ApprovalChainConditionOp = {
+  gt: "gt",
+  gte: "gte",
+  lt: "lt",
+  lte: "lte",
+  eq: "eq",
+} as const;
+
+export interface ApprovalChainCondition {
+  field: string;
+  op: ApprovalChainConditionOp;
+  value: number | string;
+}
+
+export interface ApprovalChainStageDef {
+  order: number;
+  label: string;
+  /** @nullable */
+  approverRole?: string | null;
+  /** @nullable */
+  approverUserId?: string | null;
+}
+
+export interface ApprovalChainTemplate {
+  id: string;
+  tenantId: string;
+  name: string;
+  /** @nullable */
+  description?: string | null;
+  triggerType: string;
+  conditions: ApprovalChainCondition[];
+  stages: ApprovalChainStageDef[];
+  priority: number;
+  active: boolean;
+  createdAt: string;
+}
+
+export interface ApprovalChainTemplateInput {
+  name: string;
+  /** @nullable */
+  description?: string | null;
+  triggerType: string;
+  conditions?: ApprovalChainCondition[];
+  stages: ApprovalChainStageDef[];
+  priority?: number;
+  active?: boolean;
+}
+
+export interface UserDelegation {
+  id: string;
+  fromUserId: string;
+  /** @nullable */
+  fromUserName?: string | null;
+  toUserId: string;
+  /** @nullable */
+  toUserName?: string | null;
+  /** @nullable */
+  reason?: string | null;
+  validFrom: string;
+  validUntil: string;
+  active: boolean;
+  createdAt: string;
+}
+
+export interface UserDelegationInput {
+  toUserId: string;
+  /** @nullable */
+  reason?: string | null;
+  validFrom: string;
+  validUntil: string;
+}
+
+export interface UserDelegationPatch {
+  toUserId?: string;
+  /** @nullable */
+  reason?: string | null;
+  validFrom?: string;
+  validUntil?: string;
+  active?: boolean;
 }
 
 export interface ContractInput {
@@ -2542,6 +2672,11 @@ export type ListAttachmentLibraryParams = {
 export type ListApprovalsParams = {
   status?: string;
   amendmentId?: string;
+};
+
+export type ListMyDelegations200 = {
+  outgoing: UserDelegation[];
+  incoming: UserDelegation[];
 };
 
 export type ListContractsParams = {

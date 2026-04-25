@@ -55,6 +55,11 @@ import {
   pricePositionBundleItemsTable,
   priceRulesTable,
   approvalsTable,
+  approvalChainTemplatesTable,
+  userDelegationsTable,
+  type ApprovalStage,
+  type ApprovalChainCondition,
+  type ApprovalChainStageDef,
   contractsTable,
   clauseFamiliesTable,
   clauseVariantsTable,
@@ -853,7 +858,9 @@ router.get('/deals/:id', async (req, res) => {
     ...base,
     quotes: quotes.map(q => mapQuote(q, base.name)),
     contracts: contracts.map(c => mapContract(c, base.name)),
-    approvals: approvals.map(a => mapApproval(a, base.name, ctx.users)),
+    approvals: await Promise.all(
+      approvals.map(a => mapApproval(a, base.name, ctx.users, getScope(req).user.id, getScope(req).tenantId)),
+    ),
     signatures: sigs.map(s => mapSignaturePackageSummary(s, base.name)),
     contacts,
     negotiations: negs.map(n => mapNegotiation(n, base.name)),
@@ -1909,10 +1916,44 @@ router.get('/pricing/summary', async (req, res) => {
 });
 
 // ── APPROVALS ──
-function mapApproval(
+import { canUserDecideStage, currentStage as getCurrentStage, buildApprovalStageFields } from '../lib/approvalChains';
+
+async function mapApproval(
   a: typeof approvalsTable.$inferSelect, dealName: string,
   users: Map<string, typeof usersTable.$inferSelect>,
+  callerUserId: string, tenantId: string,
 ) {
+  const stages = (a.stages ?? []) as ApprovalStage[];
+  const stagesOut = stages.map((s) => ({
+    order: s.order,
+    label: s.label,
+    approverRole: s.approverRole ?? null,
+    approverUserId: s.approverUserId ?? null,
+    status: s.status,
+    decidedBy: s.decidedBy ?? null,
+    decidedByName: s.decidedBy ? users.get(s.decidedBy)?.name ?? null : null,
+    decidedAt: s.decidedAt ?? null,
+    delegatedFrom: s.delegatedFrom ?? null,
+    delegatedFromName: s.delegatedFrom ? users.get(s.delegatedFrom)?.name ?? null : null,
+    comment: s.comment ?? null,
+  }));
+  // canDecide: nur wenn Approval noch offen ist
+  let canDecide = false;
+  let canDecideOnBehalfOf: string | null = null;
+  const isOpen = a.status !== 'approved' && a.status !== 'rejected';
+  if (isOpen) {
+    if (stages.length > 0) {
+      const stage = getCurrentStage(stages, a.currentStageIdx);
+      if (stage && stage.status === 'pending') {
+        const r = await canUserDecideStage(callerUserId, stage, tenantId);
+        canDecide = r.allowed;
+        canDecideOnBehalfOf = r.delegatedFrom;
+      }
+    } else {
+      // Legacy single-stage: jeder mit deal-scope darf entscheiden (bisheriges Verhalten)
+      canDecide = true;
+    }
+  }
   return {
     id: a.id, dealId: a.dealId, dealName, type: a.type, reason: a.reason,
     requestedBy: a.requestedBy, requestedByName: users.get(a.requestedBy)?.name ?? 'Unknown',
@@ -1920,6 +1961,11 @@ function mapApproval(
     deadline: iso(a.deadline), impactValue: num(a.impactValue), currency: a.currency,
     decidedAt: iso(a.decidedAt), decidedBy: a.decidedBy, decisionComment: a.decisionComment,
     amendmentId: a.amendmentId,
+    chainTemplateId: a.chainTemplateId ?? null,
+    stages: stagesOut,
+    currentStageIdx: a.currentStageIdx,
+    canDecide,
+    canDecideOnBehalfOf,
   };
 }
 
@@ -1933,8 +1979,12 @@ router.get('/approvals', async (req, res) => {
   filters.push(inArray(approvalsTable.dealId, dealIds));
   const rows = await db.select().from(approvalsTable).where(and(...filters)).orderBy(desc(approvalsTable.createdAt));
   const dealMap = await getDealMap();
-  const users = await getUserMap(getScope(req).tenantId);
-  res.json(rows.map(a => mapApproval(a, dealMap.get(a.dealId)?.name ?? 'Unknown', users)));
+  const scope = getScope(req);
+  const users = await getUserMap(scope.tenantId);
+  const out = await Promise.all(
+    rows.map(a => mapApproval(a, dealMap.get(a.dealId)?.name ?? 'Unknown', users, scope.user.id, scope.tenantId)),
+  );
+  res.json(out);
 });
 
 router.post('/approvals/:id/decide', async (req, res) => {
@@ -1943,16 +1993,302 @@ router.post('/approvals/:id/decide', async (req, res) => {
   const [pre] = await db.select().from(approvalsTable).where(eq(approvalsTable.id, req.params.id));
   if (!pre) { res.status(404).json({ error: 'not found' }); return; }
   if (!(await gateDeal(req, res, pre.dealId))) return;
-  await db.update(approvalsTable).set({
-    status: b.decision === 'approve' ? 'approved' : b.decision === 'reject' ? 'rejected' : b.decision,
-    decisionComment: b.comment ?? null, decidedAt: new Date(), decidedBy: getScope(req).user.id,
-  }).where(eq(approvalsTable.id, req.params.id));
+  if (pre.status === 'approved' || pre.status === 'rejected') {
+    res.status(409).json({ error: 'approval already decided' });
+    return;
+  }
+  const scope = getScope(req);
+  const decisionRaw = String(b.decision ?? '').toLowerCase();
+  const decision: 'approve' | 'reject' | null =
+    decisionRaw === 'approve' || decisionRaw === 'approved' ? 'approve' :
+    decisionRaw === 'reject' || decisionRaw === 'rejected' ? 'reject' : null;
+  if (!decision) {
+    // Legacy: erlaube freie status-Strings nur wenn keine Stages existieren.
+    if ((pre.stages ?? []).length > 0) {
+      res.status(400).json({ error: 'decision must be "approve" or "reject" for staged approvals' });
+      return;
+    }
+  }
+  const stages = (pre.stages ?? []) as ApprovalStage[];
+
+  if (stages.length > 0) {
+    const idx = pre.currentStageIdx;
+    const stage = stages[idx];
+    if (!stage || stage.status !== 'pending') {
+      res.status(409).json({ error: 'no pending stage to decide' });
+      return;
+    }
+    const perm = await canUserDecideStage(scope.user.id, stage, scope.tenantId);
+    if (!perm.allowed) {
+      res.status(403).json({ error: 'not allowed to decide this stage' });
+      return;
+    }
+    const nowIso = new Date().toISOString();
+    const newStages = stages.map((s, i) => {
+      if (i !== idx) return s;
+      return {
+        ...s,
+        status: decision === 'approve' ? 'approved' as const : 'rejected' as const,
+        decidedBy: scope.user.id,
+        decidedAt: nowIso,
+        delegatedFrom: perm.delegatedFrom,
+        comment: b.comment ?? null,
+      };
+    });
+    let newOverallStatus = pre.status;
+    let newIdx = idx;
+    let setDecidedAt: Date | null = null;
+    let setDecidedBy: string | null = null;
+    let setComment: string | null = null;
+    if (decision === 'reject') {
+      newOverallStatus = 'rejected';
+      setDecidedAt = new Date();
+      setDecidedBy = scope.user.id;
+      setComment = b.comment ?? null;
+    } else {
+      // approve
+      const isLast = idx >= stages.length - 1;
+      if (isLast) {
+        newOverallStatus = 'approved';
+        setDecidedAt = new Date();
+        setDecidedBy = scope.user.id;
+        setComment = b.comment ?? null;
+      } else {
+        newIdx = idx + 1;
+        // Status bleibt 'pending'/'in_review' — die nächste Stage ist jetzt offen.
+      }
+    }
+    await db.update(approvalsTable).set({
+      stages: newStages,
+      currentStageIdx: newIdx,
+      status: newOverallStatus,
+      decidedAt: setDecidedAt ?? pre.decidedAt,
+      decidedBy: setDecidedBy ?? pre.decidedBy,
+      decisionComment: setComment ?? pre.decisionComment,
+    }).where(eq(approvalsTable.id, req.params.id));
+    void emitEvent(scope.tenantId, 'approval.stage.decided', {
+      approvalId: pre.id, dealId: pre.dealId, stageOrder: stage.order,
+      decision: decision === 'approve' ? 'approved' : 'rejected',
+      decidedBy: scope.user.id,
+      delegatedFrom: perm.delegatedFrom,
+    });
+    if (newOverallStatus === 'approved' || newOverallStatus === 'rejected') {
+      void emitEvent(scope.tenantId, 'approval.decided', {
+        approvalId: pre.id, dealId: pre.dealId, decision: newOverallStatus,
+      });
+    }
+  } else {
+    // Legacy single-stage path (backwards-compatible)
+    await db.update(approvalsTable).set({
+      status: b.decision === 'approve' ? 'approved' : b.decision === 'reject' ? 'rejected' : b.decision,
+      decisionComment: b.comment ?? null, decidedAt: new Date(), decidedBy: scope.user.id,
+    }).where(eq(approvalsTable.id, req.params.id));
+    void emitEvent(scope.tenantId, 'approval.decided', {
+      approvalId: pre.id, dealId: pre.dealId,
+      decision: b.decision === 'approve' ? 'approved' : b.decision === 'reject' ? 'rejected' : b.decision,
+    });
+  }
+
   const [a] = await db.select().from(approvalsTable).where(eq(approvalsTable.id, req.params.id));
   if (!a) { res.status(404).json({ error: 'not found' }); return; }
   const dealMap = await getDealMap();
-  const users = await getUserMap(getScope(req).tenantId);
-  void emitEvent(getScope(req).tenantId, 'approval.decided', { approvalId: a.id, dealId: a.dealId, decision: a.status });
-  res.json(mapApproval(a, dealMap.get(a.dealId)?.name ?? 'Unknown', users));
+  const users = await getUserMap(scope.tenantId);
+  res.json(await mapApproval(a, dealMap.get(a.dealId)?.name ?? 'Unknown', users, scope.user.id, scope.tenantId));
+});
+
+// ── APPROVAL CHAIN TEMPLATES (Tenant-Admin) ──
+function isTenantAdmin(req: Request): boolean {
+  const u = getScope(req).user;
+  return u.tenantWide || u.isPlatformAdmin;
+}
+
+function mapChain(t: typeof approvalChainTemplatesTable.$inferSelect) {
+  return {
+    id: t.id, tenantId: t.tenantId, name: t.name,
+    description: t.description ?? null,
+    triggerType: t.triggerType,
+    conditions: (t.conditions ?? []) as ApprovalChainCondition[],
+    stages: (t.stages ?? []) as ApprovalChainStageDef[],
+    priority: t.priority,
+    active: t.active,
+    createdAt: iso(t.createdAt)!,
+  };
+}
+
+router.get('/approval-chains', async (req, res) => {
+  const scope = getScope(req);
+  const rows = await db.select().from(approvalChainTemplatesTable)
+    .where(eq(approvalChainTemplatesTable.tenantId, scope.tenantId))
+    .orderBy(asc(approvalChainTemplatesTable.priority), asc(approvalChainTemplatesTable.name));
+  res.json(rows.map(mapChain));
+});
+
+router.post('/approval-chains', async (req, res) => {
+  if (!isTenantAdmin(req)) { res.status(403).json({ error: 'tenant admin required' }); return; }
+  if (!validateInline(req, res, { body: Z.CreateApprovalChainBody })) return;
+  const b = req.body;
+  if (!b.stages || b.stages.length === 0) { res.status(400).json({ error: 'at least one stage required' }); return; }
+  for (const s of b.stages) {
+    if (!s.approverRole && !s.approverUserId) {
+      res.status(400).json({ error: `stage ${s.order} requires approverRole or approverUserId` });
+      return;
+    }
+  }
+  const id = `apc_${randomUUID().slice(0, 8)}`;
+  const scope = getScope(req);
+  await db.insert(approvalChainTemplatesTable).values({
+    id, tenantId: scope.tenantId, name: b.name,
+    description: b.description ?? null,
+    triggerType: b.triggerType,
+    conditions: (b.conditions ?? []) as ApprovalChainCondition[],
+    stages: b.stages as ApprovalChainStageDef[],
+    priority: typeof b.priority === 'number' ? b.priority : 100,
+    active: typeof b.active === 'boolean' ? b.active : true,
+  });
+  const [row] = await db.select().from(approvalChainTemplatesTable).where(eq(approvalChainTemplatesTable.id, id));
+  res.status(201).json(mapChain(row!));
+});
+
+router.patch('/approval-chains/:id', async (req, res) => {
+  if (!isTenantAdmin(req)) { res.status(403).json({ error: 'tenant admin required' }); return; }
+  if (!validateInline(req, res, { params: Z.UpdateApprovalChainParams, body: Z.UpdateApprovalChainBody })) return;
+  const scope = getScope(req);
+  const [existing] = await db.select().from(approvalChainTemplatesTable)
+    .where(and(
+      eq(approvalChainTemplatesTable.id, req.params.id),
+      eq(approvalChainTemplatesTable.tenantId, scope.tenantId),
+    ));
+  if (!existing) { res.status(404).json({ error: 'not found' }); return; }
+  const b = req.body;
+  if (b.stages && b.stages.length > 0) {
+    for (const s of b.stages) {
+      if (!s.approverRole && !s.approverUserId) {
+        res.status(400).json({ error: `stage ${s.order} requires approverRole or approverUserId` });
+        return;
+      }
+    }
+  }
+  await db.update(approvalChainTemplatesTable).set({
+    name: b.name,
+    description: b.description ?? null,
+    triggerType: b.triggerType,
+    conditions: (b.conditions ?? []) as ApprovalChainCondition[],
+    stages: b.stages as ApprovalChainStageDef[],
+    priority: typeof b.priority === 'number' ? b.priority : existing.priority,
+    active: typeof b.active === 'boolean' ? b.active : existing.active,
+  }).where(eq(approvalChainTemplatesTable.id, req.params.id));
+  const [row] = await db.select().from(approvalChainTemplatesTable).where(eq(approvalChainTemplatesTable.id, req.params.id));
+  res.json(mapChain(row!));
+});
+
+router.delete('/approval-chains/:id', async (req, res) => {
+  if (!isTenantAdmin(req)) { res.status(403).json({ error: 'tenant admin required' }); return; }
+  const scope = getScope(req);
+  const [existing] = await db.select().from(approvalChainTemplatesTable)
+    .where(and(
+      eq(approvalChainTemplatesTable.id, req.params.id),
+      eq(approvalChainTemplatesTable.tenantId, scope.tenantId),
+    ));
+  if (!existing) { res.status(404).json({ error: 'not found' }); return; }
+  await db.delete(approvalChainTemplatesTable).where(eq(approvalChainTemplatesTable.id, req.params.id));
+  res.status(204).end();
+});
+
+// ── USER DELEGATIONS ──
+function mapDelegation(
+  d: typeof userDelegationsTable.$inferSelect,
+  users: Map<string, typeof usersTable.$inferSelect>,
+) {
+  return {
+    id: d.id, fromUserId: d.fromUserId,
+    fromUserName: users.get(d.fromUserId)?.name ?? null,
+    toUserId: d.toUserId,
+    toUserName: users.get(d.toUserId)?.name ?? null,
+    reason: d.reason ?? null,
+    validFrom: iso(d.validFrom)!, validUntil: iso(d.validUntil)!,
+    active: d.active, createdAt: iso(d.createdAt)!,
+  };
+}
+
+router.get('/me/delegations', async (req, res) => {
+  const scope = getScope(req);
+  const all = await db.select().from(userDelegationsTable)
+    .where(eq(userDelegationsTable.tenantId, scope.tenantId));
+  const users = await getUserMap(scope.tenantId);
+  const outgoing = all.filter(d => d.fromUserId === scope.user.id).map(d => mapDelegation(d, users));
+  const incoming = all.filter(d => d.toUserId === scope.user.id).map(d => mapDelegation(d, users));
+  res.json({ outgoing, incoming });
+});
+
+router.post('/me/delegations', async (req, res) => {
+  if (!validateInline(req, res, { body: Z.CreateMyDelegationBody })) return;
+  const b = req.body;
+  const scope = getScope(req);
+  if (b.toUserId === scope.user.id) { res.status(400).json({ error: 'cannot delegate to self' }); return; }
+  const [target] = await db.select().from(usersTable).where(eq(usersTable.id, b.toUserId));
+  if (!target || target.tenantId !== scope.tenantId) {
+    res.status(400).json({ error: 'target user not in tenant' });
+    return;
+  }
+  const validFrom = new Date(b.validFrom);
+  const validUntil = new Date(b.validUntil);
+  if (!(validFrom < validUntil)) { res.status(400).json({ error: 'validFrom must be before validUntil' }); return; }
+  const id = `udl_${randomUUID().slice(0, 8)}`;
+  await db.insert(userDelegationsTable).values({
+    id, tenantId: scope.tenantId,
+    fromUserId: scope.user.id, toUserId: b.toUserId,
+    reason: b.reason ?? null,
+    validFrom, validUntil, active: true,
+  });
+  const [row] = await db.select().from(userDelegationsTable).where(eq(userDelegationsTable.id, id));
+  const users = await getUserMap(scope.tenantId);
+  res.status(201).json(mapDelegation(row!, users));
+});
+
+router.patch('/me/delegations/:id', async (req, res) => {
+  if (!validateInline(req, res, { params: Z.UpdateMyDelegationParams, body: Z.UpdateMyDelegationBody })) return;
+  const scope = getScope(req);
+  const [existing] = await db.select().from(userDelegationsTable)
+    .where(and(
+      eq(userDelegationsTable.id, req.params.id),
+      eq(userDelegationsTable.tenantId, scope.tenantId),
+      eq(userDelegationsTable.fromUserId, scope.user.id),
+    ));
+  if (!existing) { res.status(404).json({ error: 'not found' }); return; }
+  const b = req.body;
+  const patch: Partial<typeof userDelegationsTable.$inferInsert> = {};
+  if (typeof b.toUserId === 'string') {
+    if (b.toUserId === scope.user.id) { res.status(400).json({ error: 'cannot delegate to self' }); return; }
+    const [target] = await db.select().from(usersTable).where(eq(usersTable.id, b.toUserId));
+    if (!target || target.tenantId !== scope.tenantId) { res.status(400).json({ error: 'target user not in tenant' }); return; }
+    patch.toUserId = b.toUserId;
+  }
+  if ('reason' in b) patch.reason = b.reason ?? null;
+  if (typeof b.validFrom === 'string') patch.validFrom = new Date(b.validFrom);
+  if (typeof b.validUntil === 'string') patch.validUntil = new Date(b.validUntil);
+  if (typeof b.active === 'boolean') patch.active = b.active;
+  const newFrom = patch.validFrom ?? existing.validFrom;
+  const newUntil = patch.validUntil ?? existing.validUntil;
+  if (!(newFrom < newUntil)) { res.status(400).json({ error: 'validFrom must be before validUntil' }); return; }
+  if (Object.keys(patch).length > 0) {
+    await db.update(userDelegationsTable).set(patch).where(eq(userDelegationsTable.id, req.params.id));
+  }
+  const [row] = await db.select().from(userDelegationsTable).where(eq(userDelegationsTable.id, req.params.id));
+  const users = await getUserMap(scope.tenantId);
+  res.json(mapDelegation(row!, users));
+});
+
+router.delete('/me/delegations/:id', async (req, res) => {
+  const scope = getScope(req);
+  const [existing] = await db.select().from(userDelegationsTable)
+    .where(and(
+      eq(userDelegationsTable.id, req.params.id),
+      eq(userDelegationsTable.tenantId, scope.tenantId),
+      eq(userDelegationsTable.fromUserId, scope.user.id),
+    ));
+  if (!existing) { res.status(404).json({ error: 'not found' }); return; }
+  await db.delete(userDelegationsTable).where(eq(userDelegationsTable.id, req.params.id));
+  res.status(204).end();
 });
 
 // ── CONTRACTS ──
@@ -2424,6 +2760,9 @@ router.patch('/amendments/:id', async (req, res) => {
       if (existing.length === 0) {
         const scope = getScope(req);
         const approvalId = `ap_${randomUUID().slice(0, 8)}`;
+        const chainFields = await buildApprovalStageFields(scope.tenantId, 'amendment', {
+          amendmentType: a.type,
+        });
         await db.insert(approvalsTable).values({
           id: approvalId,
           dealId: c.dealId,
@@ -2435,10 +2774,13 @@ router.patch('/amendments/:id', async (req, res) => {
           priority: a.type === 'price-change' ? 'high' : 'medium',
           impactValue: '0',
           currency: 'EUR',
+          chainTemplateId: chainFields.chainTemplateId,
+          stages: chainFields.stages,
+          currentStageIdx: chainFields.currentStageIdx,
         });
         await writeAuditFromReq(req, {          entityType: 'contract_amendment', entityId: a.id, action: 'approval_created',
-          summary: `Approval angelegt für Nachtrag ${a.number}`,
-          after: { approvalId },
+          summary: `Approval angelegt für Nachtrag ${a.number}${chainFields.chainTemplateId ? ` — ${chainFields.stages.length}-Stage Chain` : ''}`,
+          after: { approvalId, chainTemplateId: chainFields.chainTemplateId },
         });
       }
     }
@@ -3349,16 +3691,25 @@ router.patch('/contract-clauses/:id', async (req, res) => {
   let approvalId: string | null = null;
   if (softenBy2 || (softer && nextScore <= 2)) {
     approvalId = `ap_${randomUUID().slice(0, 8)}`;
+    const tenantIdForChain = getScope(req).tenantId;
+    const chainFields = await buildApprovalStageFields(tenantIdForChain, 'clause_change', {
+      deltaScore,
+      newScore: nextScore,
+      familyId: cl.familyId ?? undefined,
+    });
     await db.insert(approvalsTable).values({
       id: approvalId, dealId: ctr.dealId, type: 'clause_change',
       reason: `Non-standard clause: ${cl.family} von ${prevVar?.name ?? '—'} auf ${nextVar.name} (severityScore ${prevScore}→${nextScore})`,
       requestedBy: actor.id, status: 'pending',
       priority: nextScore <= 1 ? 'high' : 'medium',
       impactValue: '0', currency: 'EUR',
+      chainTemplateId: chainFields.chainTemplateId,
+      stages: chainFields.stages,
+      currentStageIdx: chainFields.currentStageIdx,
     });
     await writeAuditFromReq(req, {      entityType: 'contract', entityId: ctr.id, action: 'approval_created',
-      summary: `Approval angelegt für ${cl.family} (weichere Variante, Δ ${deltaScore})`,
-      after: { approvalId, dealId: ctr.dealId },
+      summary: `Approval angelegt für ${cl.family} (weichere Variante, Δ ${deltaScore})${chainFields.chainTemplateId ? ` — ${chainFields.stages.length}-Stage Chain` : ''}`,
+      after: { approvalId, dealId: ctr.dealId, chainTemplateId: chainFields.chainTemplateId, stageCount: chainFields.stages.length },
     });
   }
   // Recompute risk

@@ -9,6 +9,7 @@ export type WebhookEvent =
   | "quote.accepted"
   | "contract.signed"
   | "approval.decided"
+  | "approval.stage.decided"
   | "price_increase.responded"
   | "order.completed";
 
@@ -310,6 +311,7 @@ export const WEBHOOK_EVENTS: WebhookEvent[] = [
   "quote.accepted",
   "contract.signed",
   "approval.decided",
+  "approval.stage.decided",
   "price_increase.responded",
   "order.completed",
 ];

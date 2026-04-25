@@ -364,7 +364,22 @@ export const priceRulesTable = pgTable("price_rules", {
   status: text("status").notNull(),
 });
 
-// Approvals
+// Approvals — single-stage hat decidedBy/decidedAt direkt am Datensatz; bei
+// mehrstufigen Approvals bildet `stages` einen Snapshot der Chain ab und
+// `currentStageIdx` zeigt auf die aktuell offene Stage. `chainTemplateId`
+// referenziert das Template, aus dem der Snapshot gezogen wurde.
+export type ApprovalStage = {
+  order: number;
+  label: string;
+  approverRole?: string | null;
+  approverUserId?: string | null;
+  status: "pending" | "approved" | "rejected" | "skipped";
+  decidedBy?: string | null;
+  decidedAt?: string | null;
+  delegatedFrom?: string | null;
+  comment?: string | null;
+};
+
 export const approvalsTable = pgTable("approvals", {
   id: id(),
   dealId: text("deal_id").notNull(),
@@ -381,7 +396,61 @@ export const approvalsTable = pgTable("approvals", {
   decidedBy: text("decided_by"),
   decisionComment: text("decision_comment"),
   createdAt: ts("created_at"),
+  // Multi-Step. Bei leerem stages-Array verhält sich das Approval wie früher
+  // (single-stage, decide entscheidet das Ganze).
+  chainTemplateId: text("chain_template_id"),
+  stages: jsonb("stages").$type<ApprovalStage[]>().notNull().default([]),
+  currentStageIdx: integer("current_stage_idx").notNull().default(0),
 });
+
+// Chain-Template: definiert, welche Stages für welchen Trigger durchlaufen
+// werden. Conditions matchen auf einen Trigger-Payload (z. B. {discountPct: 25}).
+export type ApprovalChainCondition = {
+  field: string;          // z. B. "discountPct" | "deltaScore" | "valueAmount"
+  op: "gt" | "gte" | "lt" | "lte" | "eq";
+  value: number | string;
+};
+
+export type ApprovalChainStageDef = {
+  order: number;
+  label: string;
+  approverRole?: string | null;
+  approverUserId?: string | null;
+};
+
+export const approvalChainTemplatesTable = pgTable("approval_chain_templates", {
+  id: id(),
+  tenantId: text("tenant_id").notNull(),
+  name: text("name").notNull(),
+  description: text("description"),
+  // Trigger korrespondiert mit approvalsTable.type (z. B. "clause_change",
+  // "discount", "amendment_review").
+  triggerType: text("trigger_type").notNull(),
+  conditions: jsonb("conditions").$type<ApprovalChainCondition[]>().notNull().default([]),
+  stages: jsonb("stages").$type<ApprovalChainStageDef[]>().notNull().default([]),
+  // Niedriger Wert = höhere Priorität bei Match-Auflösung.
+  priority: integer("priority").notNull().default(100),
+  active: boolean("active").notNull().default(true),
+  createdAt: ts("created_at"),
+});
+
+// User-Vertretung. Während [validFrom, validUntil] und active=true wird
+// `toUserId` zusätzlich als gültiger Approver akzeptiert, sobald `fromUserId`
+// die aktuelle Stage entscheiden soll. Der eigentliche Approver bleibt
+// weiterhin entscheidungsberechtigt — die Vertretung ergänzt nur.
+export const userDelegationsTable = pgTable("user_delegations", {
+  id: id(),
+  tenantId: text("tenant_id").notNull(),
+  fromUserId: text("from_user_id").notNull(),
+  toUserId: text("to_user_id").notNull(),
+  reason: text("reason"),
+  validFrom: timestamp("valid_from", { withTimezone: true }).notNull(),
+  validUntil: timestamp("valid_until", { withTimezone: true }).notNull(),
+  active: boolean("active").notNull().default(true),
+  createdAt: ts("created_at"),
+}, (t) => ({
+  byFromUser: index("user_delegations_from_user_idx").on(t.tenantId, t.fromUserId),
+}));
 
 // Contracts
 export const contractsTable = pgTable("contracts", {

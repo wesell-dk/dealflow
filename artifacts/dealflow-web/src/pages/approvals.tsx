@@ -5,14 +5,191 @@ import { Link } from "wouter";
 import {
   useListApprovals,
   useDecideApproval,
-  getListApprovalsQueryKey
+  getListApprovalsQueryKey,
+  useListMyDelegations,
+  useCreateMyDelegation,
+  useUpdateMyDelegation,
+  useDeleteMyDelegation,
+  useListUsers,
+  getListMyDelegationsQueryKey,
+  type ApprovalCase,
+  type ApprovalStage,
+  type UserDelegation,
 } from "@workspace/api-client-react";
-import { Card, CardContent, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle, CardFooter, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Textarea } from "@/components/ui/textarea";
-import { Clock, CheckCircle2, XCircle, AlertCircle } from "lucide-react";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import {
+  Clock, CheckCircle2, XCircle, AlertCircle, ChevronRight, UserCog, Trash2,
+} from "lucide-react";
+
+function StageStepper({ stages, currentIdx }: { stages: ApprovalStage[]; currentIdx: number }) {
+  return (
+    <div className="flex flex-wrap items-center gap-2 text-xs">
+      {stages.map((s, i) => {
+        const isActive = i === currentIdx;
+        const color =
+          s.status === "approved" ? "bg-green-500/15 text-green-700 border-green-300" :
+          s.status === "rejected" ? "bg-red-500/15 text-red-700 border-red-300" :
+          isActive ? "bg-primary/15 text-primary border-primary/40 font-medium" :
+          "bg-muted text-muted-foreground border-border";
+        return (
+          <div key={`${s.order}-${i}`} className="flex items-center gap-2">
+            <div className={`px-2 py-1 rounded border ${color}`} data-testid={`stage-${i}-${s.status}`}>
+              <span className="opacity-70 mr-1">{i + 1}.</span>{s.label}
+              {s.status === "approved" && <CheckCircle2 className="inline ml-1 h-3 w-3" />}
+              {s.status === "rejected" && <XCircle className="inline ml-1 h-3 w-3" />}
+              {s.delegatedFromName && (
+                <span className="ml-2 italic opacity-80">i.A. {s.delegatedFromName}</span>
+              )}
+            </div>
+            {i < stages.length - 1 && <ChevronRight className="h-3 w-3 text-muted-foreground" />}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function MyDelegationsCard() {
+  const qc = useQueryClient();
+  const { data: delegations } = useListMyDelegations();
+  const { data: users } = useListUsers();
+  const createDelegation = useCreateMyDelegation();
+  const updateDelegation = useUpdateMyDelegation();
+  const deleteDelegation = useDeleteMyDelegation();
+  const [open, setOpen] = useState(false);
+  const [toUserId, setToUserId] = useState("");
+  const [validFrom, setValidFrom] = useState("");
+  const [validUntil, setValidUntil] = useState("");
+  const [reason, setReason] = useState("");
+
+  const refresh = () => qc.invalidateQueries({ queryKey: getListMyDelegationsQueryKey() });
+
+  const handleCreate = () => {
+    if (!toUserId || !validFrom || !validUntil) return;
+    createDelegation.mutate(
+      { data: {
+        toUserId,
+        validFrom: new Date(validFrom).toISOString(),
+        validUntil: new Date(validUntil).toISOString(),
+        reason: reason || null,
+      } },
+      { onSuccess: () => { refresh(); setOpen(false); setToUserId(""); setValidFrom(""); setValidUntil(""); setReason(""); } },
+    );
+  };
+
+  const out = delegations?.outgoing ?? [];
+  const inc = delegations?.incoming ?? [];
+
+  return (
+    <Card>
+      <CardHeader className="pb-2 flex flex-row items-start justify-between">
+        <div>
+          <CardTitle className="text-base flex items-center gap-2">
+            <UserCog className="h-4 w-4" /> Meine Vertretung
+          </CardTitle>
+          <CardDescription>
+            Während Ihrer Abwesenheit darf ein Kollege Ihre Approvals entscheiden.
+          </CardDescription>
+        </div>
+        <Button variant="outline" size="sm" onClick={() => setOpen(o => !o)} data-testid="button-toggle-delegation-form">
+          {open ? "Abbrechen" : "Neue Vertretung"}
+        </Button>
+      </CardHeader>
+      <CardContent className="space-y-3 text-sm">
+        {open && (
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-2 border rounded p-3 bg-muted/20">
+            <div>
+              <Label className="text-xs">Vertreten durch</Label>
+              <select
+                className="w-full border rounded h-9 px-2 bg-background"
+                value={toUserId}
+                onChange={e => setToUserId(e.target.value)}
+                data-testid="select-delegation-to-user"
+              >
+                <option value="">— wählen —</option>
+                {(users ?? []).map(u => (
+                  <option key={u.id} value={u.id}>{u.name} ({u.role})</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <Label className="text-xs">Von</Label>
+              <Input type="datetime-local" value={validFrom} onChange={e => setValidFrom(e.target.value)} data-testid="input-delegation-from" />
+            </div>
+            <div>
+              <Label className="text-xs">Bis</Label>
+              <Input type="datetime-local" value={validUntil} onChange={e => setValidUntil(e.target.value)} data-testid="input-delegation-until" />
+            </div>
+            <div>
+              <Label className="text-xs">Grund (optional)</Label>
+              <Input value={reason} onChange={e => setReason(e.target.value)} placeholder="Urlaub, Reise..." data-testid="input-delegation-reason" />
+            </div>
+            <div className="md:col-span-4 flex justify-end">
+              <Button size="sm" onClick={handleCreate} disabled={!toUserId || !validFrom || !validUntil} data-testid="button-create-delegation">
+                Vertretung anlegen
+              </Button>
+            </div>
+          </div>
+        )}
+        {out.length === 0 ? (
+          <div className="text-muted-foreground text-xs">Sie haben keine aktive Vertretung eingerichtet.</div>
+        ) : (
+          <div className="space-y-2">
+            <div className="text-xs font-medium text-muted-foreground">Sie werden vertreten durch:</div>
+            {out.map((d: UserDelegation) => (
+              <div key={d.id} className="flex items-center justify-between border rounded px-3 py-2" data-testid={`delegation-out-${d.id}`}>
+                <div className="text-sm">
+                  <span className="font-medium">{d.toUserName ?? d.toUserId}</span>
+                  <span className="text-muted-foreground ml-2 text-xs">
+                    {new Date(d.validFrom).toLocaleString()} – {new Date(d.validUntil).toLocaleString()}
+                  </span>
+                  {d.reason && <span className="ml-2 italic text-xs text-muted-foreground">({d.reason})</span>}
+                  {!d.active && <Badge variant="outline" className="ml-2">inaktiv</Badge>}
+                </div>
+                <div className="flex gap-1">
+                  <Button
+                    variant="ghost" size="sm"
+                    onClick={() => updateDelegation.mutate({ id: d.id, data: { active: !d.active } }, { onSuccess: refresh })}
+                    data-testid={`button-toggle-delegation-${d.id}`}
+                  >
+                    {d.active ? "Deaktivieren" : "Aktivieren"}
+                  </Button>
+                  <Button
+                    variant="ghost" size="sm"
+                    onClick={() => deleteDelegation.mutate({ id: d.id }, { onSuccess: refresh })}
+                    data-testid={`button-delete-delegation-${d.id}`}
+                  >
+                    <Trash2 className="h-3 w-3" />
+                  </Button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+        {inc.length > 0 && (
+          <div className="space-y-2 pt-2 border-t">
+            <div className="text-xs font-medium text-muted-foreground">Sie vertreten:</div>
+            {inc.map((d: UserDelegation) => (
+              <div key={d.id} className="text-sm" data-testid={`delegation-in-${d.id}`}>
+                <span className="font-medium">{d.fromUserName ?? d.fromUserId}</span>
+                <span className="text-muted-foreground ml-2 text-xs">
+                  {new Date(d.validFrom).toLocaleString()} – {new Date(d.validUntil).toLocaleString()}
+                </span>
+                {!d.active && <Badge variant="outline" className="ml-2">inaktiv</Badge>}
+              </div>
+            ))}
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
 
 export default function Approvals() {
   const { t } = useTranslation();
@@ -20,7 +197,7 @@ export default function Approvals() {
   const { data: approvals, isLoading } = useListApprovals(
     statusFilter === "all" ? {} : { status: statusFilter }
   );
-  
+
   const [rejectingId, setRejectingId] = useState<string | null>(null);
   const [comment, setComment] = useState("");
 
@@ -29,7 +206,7 @@ export default function Approvals() {
 
   const handleApprove = (id: string) => {
     decideApproval.mutate(
-      { id, data: { decision: "approved" } },
+      { id, data: { decision: "approve" } },
       {
         onSuccess: () => {
           qc.invalidateQueries({ queryKey: getListApprovalsQueryKey() });
@@ -41,7 +218,7 @@ export default function Approvals() {
 
   const handleReject = (id: string) => {
     decideApproval.mutate(
-      { id, data: { decision: "rejected", comment } },
+      { id, data: { decision: "reject", comment } },
       {
         onSuccess: () => {
           setRejectingId(null);
@@ -63,6 +240,8 @@ export default function Approvals() {
         <h1 className="text-3xl font-bold tracking-tight">{t("pages.approvals.title")}</h1>
         <p className="text-muted-foreground mt-1">{t("pages.approvals.subtitle")}</p>
       </div>
+
+      <MyDelegationsCard />
 
       <div className="flex gap-2">
         {["all", "pending", "approved", "rejected"].map(s => (
@@ -86,79 +265,106 @@ export default function Approvals() {
             <p className="text-muted-foreground text-sm">No approvals found matching your criteria.</p>
           </div>
         ) : (
-          approvals?.map(approval => (
-            <Card key={approval.id}>
-              <CardHeader className="pb-3 flex flex-row items-start justify-between">
-                <div>
-                  <div className="flex items-center gap-2 mb-1">
-                    <CardTitle className="text-lg">
-                      <Link href={`/deals/${approval.dealId}`} className="hover:underline">
-                        {approval.dealName}
-                      </Link>
-                    </CardTitle>
-                    <Badge variant="outline">{approval.type}</Badge>
-                    <Badge variant={approval.priority === 'high' ? 'destructive' : 'secondary'}>
-                      {approval.priority}
+          approvals?.map((approval: ApprovalCase) => {
+            const isOpen = approval.status !== "approved" && approval.status !== "rejected";
+            const hasStages = approval.stages && approval.stages.length > 0;
+            const canDecide = !!approval.canDecide;
+            const onBehalfOf = approval.canDecideOnBehalfOf;
+            return (
+              <Card key={approval.id} data-testid={`approval-${approval.id}`}>
+                <CardHeader className="pb-3 flex flex-row items-start justify-between">
+                  <div className="flex-1">
+                    <div className="flex items-center gap-2 mb-1">
+                      <CardTitle className="text-lg">
+                        <Link href={`/deals/${approval.dealId}`} className="hover:underline">
+                          {approval.dealName}
+                        </Link>
+                      </CardTitle>
+                      <Badge variant="outline">{approval.type}</Badge>
+                      <Badge variant={approval.priority === "high" ? "destructive" : "secondary"}>
+                        {approval.priority}
+                      </Badge>
+                      {hasStages && (
+                        <Badge variant="outline" data-testid={`badge-stage-${approval.id}`}>
+                          Stage {Math.min(approval.currentStageIdx + 1, approval.stages.length)}/{approval.stages.length}
+                        </Badge>
+                      )}
+                    </div>
+                    <p className="text-sm text-muted-foreground">{approval.reason}</p>
+                  </div>
+                  <div className="text-right">
+                    <div className="font-bold text-lg">{approval.impactValue.toLocaleString()} {approval.currency}</div>
+                    <Badge variant={
+                      approval.status === "approved" ? "secondary" :
+                      approval.status === "rejected" ? "destructive" : "default"
+                    } className={approval.status === "approved" ? "bg-green-500/10 text-green-600 hover:bg-green-500/20" : ""}>
+                      {approval.status}
                     </Badge>
                   </div>
-                  <p className="text-sm text-muted-foreground">{approval.reason}</p>
-                </div>
-                <div className="text-right">
-                  <div className="font-bold text-lg">{approval.impactValue.toLocaleString()} {approval.currency}</div>
-                  <Badge variant={
-                    approval.status === 'approved' ? 'secondary' : 
-                    approval.status === 'rejected' ? 'destructive' : 'default'
-                  } className={approval.status === 'approved' ? 'bg-green-500/10 text-green-600 hover:bg-green-500/20' : ''}>
-                    {approval.status}
-                  </Badge>
-                </div>
-              </CardHeader>
-              <CardContent className="pb-3 flex gap-6 text-sm text-muted-foreground">
-                <div className="flex items-center gap-1">
-                  <AlertCircle className="h-4 w-4" />
-                  Requested by {approval.requestedByName} on {new Date(approval.createdAt).toLocaleDateString()}
-                </div>
-                {approval.deadline && (
-                  <div className="flex items-center gap-1">
-                    <Clock className="h-4 w-4" />
-                    Due by {new Date(approval.deadline).toLocaleDateString()}
-                  </div>
-                )}
-              </CardContent>
-              {approval.status === 'pending' && (
-                <CardFooter className="pt-3 border-t bg-muted/10 flex flex-col items-stretch gap-3">
-                  {rejectingId === approval.id ? (
-                    <div className="w-full space-y-2">
-                      <Textarea 
-                        placeholder="Reason for rejection..." 
-                        value={comment}
-                        onChange={e => setComment(e.target.value)}
-                        className="min-h-[80px]"
-                      />
-                      <div className="flex justify-end gap-2">
-                        <Button variant="ghost" size="sm" onClick={() => setRejectingId(null)}>Cancel</Button>
-                        <Button variant="destructive" size="sm" onClick={() => handleReject(approval.id)} disabled={!comment.trim()}>Confirm Rejection</Button>
+                </CardHeader>
+                <CardContent className="pb-3 space-y-3 text-sm text-muted-foreground">
+                  <div className="flex flex-wrap gap-6">
+                    <div className="flex items-center gap-1">
+                      <AlertCircle className="h-4 w-4" />
+                      Requested by {approval.requestedByName} on {new Date(approval.createdAt).toLocaleDateString()}
+                    </div>
+                    {approval.deadline && (
+                      <div className="flex items-center gap-1">
+                        <Clock className="h-4 w-4" />
+                        Due by {new Date(approval.deadline).toLocaleDateString()}
                       </div>
-                    </div>
-                  ) : (
-                    <div className="flex justify-end gap-2 w-full">
-                      <Button variant="outline" size="sm" onClick={() => setRejectingId(approval.id)}>
-                        <XCircle className="mr-2 h-4 w-4" /> Reject
-                      </Button>
-                      <Button size="sm" onClick={() => handleApprove(approval.id)}>
-                        <CheckCircle2 className="mr-2 h-4 w-4" /> Approve
-                      </Button>
-                    </div>
-                  )}
-                </CardFooter>
-              )}
-              {approval.status !== 'pending' && approval.decisionComment && (
-                <CardFooter className="pt-3 border-t bg-muted/10 text-sm">
-                  <div className="italic">"{approval.decisionComment}"</div>
-                </CardFooter>
-              )}
-            </Card>
-          ))
+                    )}
+                  </div>
+                  {hasStages && <StageStepper stages={approval.stages} currentIdx={approval.currentStageIdx} />}
+                </CardContent>
+                {isOpen && (
+                  <CardFooter className="pt-3 border-t bg-muted/10 flex flex-col items-stretch gap-3">
+                    {!canDecide && hasStages && (
+                      <div className="text-xs text-muted-foreground italic" data-testid={`hint-cannot-decide-${approval.id}`}>
+                        Sie sind für die aktuelle Stage nicht entscheidungsberechtigt.
+                      </div>
+                    )}
+                    {canDecide && onBehalfOf && (
+                      <div className="text-xs text-amber-700 italic" data-testid={`hint-on-behalf-${approval.id}`}>
+                        Sie entscheiden im Auftrag eines vertretenen Kollegen.
+                      </div>
+                    )}
+                    {canDecide && rejectingId === approval.id ? (
+                      <div className="w-full space-y-2">
+                        <Textarea
+                          placeholder="Reason for rejection..."
+                          value={comment}
+                          onChange={e => setComment(e.target.value)}
+                          className="min-h-[80px]"
+                          data-testid={`textarea-reject-comment-${approval.id}`}
+                        />
+                        <div className="flex justify-end gap-2">
+                          <Button variant="ghost" size="sm" onClick={() => setRejectingId(null)}>Cancel</Button>
+                          <Button variant="destructive" size="sm" onClick={() => handleReject(approval.id)} disabled={!comment.trim()} data-testid={`button-confirm-reject-${approval.id}`}>
+                            Confirm Rejection
+                          </Button>
+                        </div>
+                      </div>
+                    ) : canDecide ? (
+                      <div className="flex justify-end gap-2 w-full">
+                        <Button variant="outline" size="sm" onClick={() => setRejectingId(approval.id)} data-testid={`button-reject-${approval.id}`}>
+                          <XCircle className="mr-2 h-4 w-4" /> Reject
+                        </Button>
+                        <Button size="sm" onClick={() => handleApprove(approval.id)} data-testid={`button-approve-${approval.id}`}>
+                          <CheckCircle2 className="mr-2 h-4 w-4" /> Approve
+                        </Button>
+                      </div>
+                    ) : null}
+                  </CardFooter>
+                )}
+                {!isOpen && approval.decisionComment && (
+                  <CardFooter className="pt-3 border-t bg-muted/10 text-sm">
+                    <div className="italic">"{approval.decisionComment}"</div>
+                  </CardFooter>
+                )}
+              </Card>
+            );
+          })
         )}
       </div>
     </div>

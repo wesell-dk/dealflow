@@ -1133,6 +1133,131 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/ApprovalCase" }
 
+  # ───────────── APPROVAL CHAIN TEMPLATES ─────────────
+  /approval-chains:
+    get:
+      operationId: listApprovalChains
+      tags: [approvals]
+      responses:
+        "200":
+          description: ok
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/ApprovalChainTemplate" }
+    post:
+      operationId: createApprovalChain
+      tags: [approvals]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ApprovalChainTemplateInput" }
+      responses:
+        "201":
+          description: created
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ApprovalChainTemplate" }
+
+  /approval-chains/{id}:
+    patch:
+      operationId: updateApprovalChain
+      tags: [approvals]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ApprovalChainTemplateInput" }
+      responses:
+        "200":
+          description: ok
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ApprovalChainTemplate" }
+    delete:
+      operationId: deleteApprovalChain
+      tags: [approvals]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        "204": { description: deleted }
+
+  # ───────────── USER DELEGATIONS ─────────────
+  /me/delegations:
+    get:
+      operationId: listMyDelegations
+      tags: [approvals]
+      responses:
+        "200":
+          description: ok
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [outgoing, incoming]
+                properties:
+                  outgoing:
+                    type: array
+                    items: { $ref: "#/components/schemas/UserDelegation" }
+                  incoming:
+                    type: array
+                    items: { $ref: "#/components/schemas/UserDelegation" }
+    post:
+      operationId: createMyDelegation
+      tags: [approvals]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/UserDelegationInput" }
+      responses:
+        "201":
+          description: created
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/UserDelegation" }
+
+  /me/delegations/{id}:
+    patch:
+      operationId: updateMyDelegation
+      tags: [approvals]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/UserDelegationPatch" }
+      responses:
+        "200":
+          description: ok
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/UserDelegation" }
+    delete:
+      operationId: deleteMyDelegation
+      tags: [approvals]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        "204": { description: deleted }
+
   # ───────────── CONTRACTS ─────────────
 
   /contracts:
@@ -3851,12 +3976,40 @@ components:
               at: { type: string, format: date-time }
 
     # ── Approvals ──
+    ApprovalStage:
+      type: object
+      required: [order, label, status]
+      properties:
+        order: { type: integer }
+        label: { type: string }
+        approverRole:
+          type: ["string", "null"]
+        approverUserId:
+          type: ["string", "null"]
+        status:
+          type: string
+          enum: [pending, approved, rejected, skipped]
+        decidedBy:
+          type: ["string", "null"]
+        decidedByName:
+          type: ["string", "null"]
+        decidedAt:
+          type: ["string", "null"]
+          format: date-time
+        delegatedFrom:
+          type: ["string", "null"]
+          description: "Wenn gesetzt, hat der entscheidende User per Vertretungsregel im Auftrag dieses Users entschieden."
+        delegatedFromName:
+          type: ["string", "null"]
+        comment:
+          type: ["string", "null"]
+
     ApprovalCase:
       type: object
       required:
         [
           id, dealId, dealName, type, reason, requestedBy, requestedByName,
-          status, priority, createdAt, impactValue, currency
+          status, priority, createdAt, impactValue, currency, stages, currentStageIdx
         ]
       properties:
         id: { type: string }
@@ -3883,6 +4036,18 @@ components:
           type: ["string", "null"]
         amendmentId:
           type: ["string", "null"]
+        chainTemplateId:
+          type: ["string", "null"]
+        stages:
+          type: array
+          items: { $ref: "#/components/schemas/ApprovalStage" }
+        currentStageIdx: { type: integer }
+        canDecide:
+          type: boolean
+          description: "True wenn der aufrufende User die aktuell offene Stage entscheiden darf (inkl. aktiver Vertretung)."
+        canDecideOnBehalfOf:
+          type: ["string", "null"]
+          description: "Falls canDecide via Vertretung gilt: User-ID, in dessen Auftrag entschieden würde."
 
     ApprovalDecisionInput:
       type: object
@@ -3890,6 +4055,107 @@ components:
       properties:
         decision: { type: string }
         comment: { type: string }
+
+    # ── Approval Chain Templates ──
+    ApprovalChainCondition:
+      type: object
+      required: [field, op, value]
+      properties:
+        field: { type: string }
+        op:
+          type: string
+          enum: [gt, gte, lt, lte, eq]
+        value:
+          oneOf:
+            - { type: number }
+            - { type: string }
+
+    ApprovalChainStageDef:
+      type: object
+      required: [order, label]
+      properties:
+        order: { type: integer }
+        label: { type: string }
+        approverRole:
+          type: ["string", "null"]
+        approverUserId:
+          type: ["string", "null"]
+
+    ApprovalChainTemplate:
+      type: object
+      required: [id, tenantId, name, triggerType, conditions, stages, priority, active, createdAt]
+      properties:
+        id: { type: string }
+        tenantId: { type: string }
+        name: { type: string }
+        description:
+          type: ["string", "null"]
+        triggerType: { type: string }
+        conditions:
+          type: array
+          items: { $ref: "#/components/schemas/ApprovalChainCondition" }
+        stages:
+          type: array
+          items: { $ref: "#/components/schemas/ApprovalChainStageDef" }
+        priority: { type: integer }
+        active: { type: boolean }
+        createdAt: { type: string, format: date-time }
+
+    ApprovalChainTemplateInput:
+      type: object
+      required: [name, triggerType, stages]
+      properties:
+        name: { type: string }
+        description:
+          type: ["string", "null"]
+        triggerType: { type: string }
+        conditions:
+          type: array
+          items: { $ref: "#/components/schemas/ApprovalChainCondition" }
+        stages:
+          type: array
+          items: { $ref: "#/components/schemas/ApprovalChainStageDef" }
+        priority: { type: integer }
+        active: { type: boolean }
+
+    # ── User Delegations ──
+    UserDelegation:
+      type: object
+      required: [id, fromUserId, toUserId, validFrom, validUntil, active, createdAt]
+      properties:
+        id: { type: string }
+        fromUserId: { type: string }
+        fromUserName:
+          type: ["string", "null"]
+        toUserId: { type: string }
+        toUserName:
+          type: ["string", "null"]
+        reason:
+          type: ["string", "null"]
+        validFrom: { type: string, format: date-time }
+        validUntil: { type: string, format: date-time }
+        active: { type: boolean }
+        createdAt: { type: string, format: date-time }
+
+    UserDelegationInput:
+      type: object
+      required: [toUserId, validFrom, validUntil]
+      properties:
+        toUserId: { type: string }
+        reason:
+          type: ["string", "null"]
+        validFrom: { type: string, format: date-time }
+        validUntil: { type: string, format: date-time }
+
+    UserDelegationPatch:
+      type: object
+      properties:
+        toUserId: { type: string }
+        reason:
+          type: ["string", "null"]
+        validFrom: { type: string, format: date-time }
+        validUntil: { type: string, format: date-time }
+        active: { type: boolean }
 
     # ── Contracts ──
     Contract:

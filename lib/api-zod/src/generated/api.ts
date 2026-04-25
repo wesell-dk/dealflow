@@ -724,6 +724,40 @@ export const GetDealResponse = zod
           decidedBy: zod.string().nullish(),
           decisionComment: zod.string().nullish(),
           amendmentId: zod.string().nullish(),
+          chainTemplateId: zod.string().nullish(),
+          stages: zod.array(
+            zod.object({
+              order: zod.number(),
+              label: zod.string(),
+              approverRole: zod.string().nullish(),
+              approverUserId: zod.string().nullish(),
+              status: zod.enum(["pending", "approved", "rejected", "skipped"]),
+              decidedBy: zod.string().nullish(),
+              decidedByName: zod.string().nullish(),
+              decidedAt: zod.coerce.date().nullish(),
+              delegatedFrom: zod
+                .string()
+                .nullish()
+                .describe(
+                  "Wenn gesetzt, hat der entscheidende User per Vertretungsregel im Auftrag dieses Users entschieden.",
+                ),
+              delegatedFromName: zod.string().nullish(),
+              comment: zod.string().nullish(),
+            }),
+          ),
+          currentStageIdx: zod.number(),
+          canDecide: zod
+            .boolean()
+            .optional()
+            .describe(
+              "True wenn der aufrufende User die aktuell offene Stage entscheiden darf (inkl. aktiver Vertretung).",
+            ),
+          canDecideOnBehalfOf: zod
+            .string()
+            .nullish()
+            .describe(
+              "Falls canDecide via Vertretung gilt: User-ID, in dessen Auftrag entschieden würde.",
+            ),
         }),
       ),
       signatures: zod.array(
@@ -1378,6 +1412,40 @@ export const ListApprovalsResponseItem = zod.object({
   decidedBy: zod.string().nullish(),
   decisionComment: zod.string().nullish(),
   amendmentId: zod.string().nullish(),
+  chainTemplateId: zod.string().nullish(),
+  stages: zod.array(
+    zod.object({
+      order: zod.number(),
+      label: zod.string(),
+      approverRole: zod.string().nullish(),
+      approverUserId: zod.string().nullish(),
+      status: zod.enum(["pending", "approved", "rejected", "skipped"]),
+      decidedBy: zod.string().nullish(),
+      decidedByName: zod.string().nullish(),
+      decidedAt: zod.coerce.date().nullish(),
+      delegatedFrom: zod
+        .string()
+        .nullish()
+        .describe(
+          "Wenn gesetzt, hat der entscheidende User per Vertretungsregel im Auftrag dieses Users entschieden.",
+        ),
+      delegatedFromName: zod.string().nullish(),
+      comment: zod.string().nullish(),
+    }),
+  ),
+  currentStageIdx: zod.number(),
+  canDecide: zod
+    .boolean()
+    .optional()
+    .describe(
+      "True wenn der aufrufende User die aktuell offene Stage entscheiden darf (inkl. aktiver Vertretung).",
+    ),
+  canDecideOnBehalfOf: zod
+    .string()
+    .nullish()
+    .describe(
+      "Falls canDecide via Vertretung gilt: User-ID, in dessen Auftrag entschieden würde.",
+    ),
 });
 export const ListApprovalsResponse = zod.array(ListApprovalsResponseItem);
 
@@ -1408,6 +1476,220 @@ export const DecideApprovalResponse = zod.object({
   decidedBy: zod.string().nullish(),
   decisionComment: zod.string().nullish(),
   amendmentId: zod.string().nullish(),
+  chainTemplateId: zod.string().nullish(),
+  stages: zod.array(
+    zod.object({
+      order: zod.number(),
+      label: zod.string(),
+      approverRole: zod.string().nullish(),
+      approverUserId: zod.string().nullish(),
+      status: zod.enum(["pending", "approved", "rejected", "skipped"]),
+      decidedBy: zod.string().nullish(),
+      decidedByName: zod.string().nullish(),
+      decidedAt: zod.coerce.date().nullish(),
+      delegatedFrom: zod
+        .string()
+        .nullish()
+        .describe(
+          "Wenn gesetzt, hat der entscheidende User per Vertretungsregel im Auftrag dieses Users entschieden.",
+        ),
+      delegatedFromName: zod.string().nullish(),
+      comment: zod.string().nullish(),
+    }),
+  ),
+  currentStageIdx: zod.number(),
+  canDecide: zod
+    .boolean()
+    .optional()
+    .describe(
+      "True wenn der aufrufende User die aktuell offene Stage entscheiden darf (inkl. aktiver Vertretung).",
+    ),
+  canDecideOnBehalfOf: zod
+    .string()
+    .nullish()
+    .describe(
+      "Falls canDecide via Vertretung gilt: User-ID, in dessen Auftrag entschieden würde.",
+    ),
+});
+
+export const ListApprovalChainsResponseItem = zod.object({
+  id: zod.string(),
+  tenantId: zod.string(),
+  name: zod.string(),
+  description: zod.string().nullish(),
+  triggerType: zod.string(),
+  conditions: zod.array(
+    zod.object({
+      field: zod.string(),
+      op: zod.enum(["gt", "gte", "lt", "lte", "eq"]),
+      value: zod.union([zod.number(), zod.string()]),
+    }),
+  ),
+  stages: zod.array(
+    zod.object({
+      order: zod.number(),
+      label: zod.string(),
+      approverRole: zod.string().nullish(),
+      approverUserId: zod.string().nullish(),
+    }),
+  ),
+  priority: zod.number(),
+  active: zod.boolean(),
+  createdAt: zod.coerce.date(),
+});
+export const ListApprovalChainsResponse = zod.array(
+  ListApprovalChainsResponseItem,
+);
+
+export const CreateApprovalChainBody = zod.object({
+  name: zod.string(),
+  description: zod.string().nullish(),
+  triggerType: zod.string(),
+  conditions: zod
+    .array(
+      zod.object({
+        field: zod.string(),
+        op: zod.enum(["gt", "gte", "lt", "lte", "eq"]),
+        value: zod.union([zod.number(), zod.string()]),
+      }),
+    )
+    .optional(),
+  stages: zod.array(
+    zod.object({
+      order: zod.number(),
+      label: zod.string(),
+      approverRole: zod.string().nullish(),
+      approverUserId: zod.string().nullish(),
+    }),
+  ),
+  priority: zod.number().optional(),
+  active: zod.boolean().optional(),
+});
+
+export const UpdateApprovalChainParams = zod.object({
+  id: zod.coerce.string(),
+});
+
+export const UpdateApprovalChainBody = zod.object({
+  name: zod.string(),
+  description: zod.string().nullish(),
+  triggerType: zod.string(),
+  conditions: zod
+    .array(
+      zod.object({
+        field: zod.string(),
+        op: zod.enum(["gt", "gte", "lt", "lte", "eq"]),
+        value: zod.union([zod.number(), zod.string()]),
+      }),
+    )
+    .optional(),
+  stages: zod.array(
+    zod.object({
+      order: zod.number(),
+      label: zod.string(),
+      approverRole: zod.string().nullish(),
+      approverUserId: zod.string().nullish(),
+    }),
+  ),
+  priority: zod.number().optional(),
+  active: zod.boolean().optional(),
+});
+
+export const UpdateApprovalChainResponse = zod.object({
+  id: zod.string(),
+  tenantId: zod.string(),
+  name: zod.string(),
+  description: zod.string().nullish(),
+  triggerType: zod.string(),
+  conditions: zod.array(
+    zod.object({
+      field: zod.string(),
+      op: zod.enum(["gt", "gte", "lt", "lte", "eq"]),
+      value: zod.union([zod.number(), zod.string()]),
+    }),
+  ),
+  stages: zod.array(
+    zod.object({
+      order: zod.number(),
+      label: zod.string(),
+      approverRole: zod.string().nullish(),
+      approverUserId: zod.string().nullish(),
+    }),
+  ),
+  priority: zod.number(),
+  active: zod.boolean(),
+  createdAt: zod.coerce.date(),
+});
+
+export const DeleteApprovalChainParams = zod.object({
+  id: zod.coerce.string(),
+});
+
+export const ListMyDelegationsResponse = zod.object({
+  outgoing: zod.array(
+    zod.object({
+      id: zod.string(),
+      fromUserId: zod.string(),
+      fromUserName: zod.string().nullish(),
+      toUserId: zod.string(),
+      toUserName: zod.string().nullish(),
+      reason: zod.string().nullish(),
+      validFrom: zod.coerce.date(),
+      validUntil: zod.coerce.date(),
+      active: zod.boolean(),
+      createdAt: zod.coerce.date(),
+    }),
+  ),
+  incoming: zod.array(
+    zod.object({
+      id: zod.string(),
+      fromUserId: zod.string(),
+      fromUserName: zod.string().nullish(),
+      toUserId: zod.string(),
+      toUserName: zod.string().nullish(),
+      reason: zod.string().nullish(),
+      validFrom: zod.coerce.date(),
+      validUntil: zod.coerce.date(),
+      active: zod.boolean(),
+      createdAt: zod.coerce.date(),
+    }),
+  ),
+});
+
+export const CreateMyDelegationBody = zod.object({
+  toUserId: zod.string(),
+  reason: zod.string().nullish(),
+  validFrom: zod.coerce.date(),
+  validUntil: zod.coerce.date(),
+});
+
+export const UpdateMyDelegationParams = zod.object({
+  id: zod.coerce.string(),
+});
+
+export const UpdateMyDelegationBody = zod.object({
+  toUserId: zod.string().optional(),
+  reason: zod.string().nullish(),
+  validFrom: zod.coerce.date().optional(),
+  validUntil: zod.coerce.date().optional(),
+  active: zod.boolean().optional(),
+});
+
+export const UpdateMyDelegationResponse = zod.object({
+  id: zod.string(),
+  fromUserId: zod.string(),
+  fromUserName: zod.string().nullish(),
+  toUserId: zod.string(),
+  toUserName: zod.string().nullish(),
+  reason: zod.string().nullish(),
+  validFrom: zod.coerce.date(),
+  validUntil: zod.coerce.date(),
+  active: zod.boolean(),
+  createdAt: zod.coerce.date(),
+});
+
+export const DeleteMyDelegationParams = zod.object({
+  id: zod.coerce.string(),
 });
 
 export const ListContractsQueryParams = zod.object({

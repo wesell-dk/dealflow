@@ -7,6 +7,7 @@ Multi-tenant, multi-company, multi-brand. Deal-centric.
 
  * OpenAPI spec version: 0.1.0
  */
+import type { ApprovalStage } from "./approvalStage";
 
 export interface ApprovalCase {
   id: string;
@@ -31,4 +32,15 @@ export interface ApprovalCase {
   decisionComment?: string | null;
   /** @nullable */
   amendmentId?: string | null;
+  /** @nullable */
+  chainTemplateId?: string | null;
+  stages: ApprovalStage[];
+  currentStageIdx: number;
+  /** True wenn der aufrufende User die aktuell offene Stage entscheiden darf (inkl. aktiver Vertretung). */
+  canDecide?: boolean;
+  /**
+   * Falls canDecide via Vertretung gilt: User-ID, in dessen Auftrag entschieden würde.
+   * @nullable
+   */
+  canDecideOnBehalfOf?: string | null;
 }

@@ -33,6 +33,9 @@ export async function startTestServer(): Promise<TestServer> {
 export interface AuthedClient {
   cookie: string;
   get(path: string): Promise<{ status: number; body: unknown }>;
+  post(path: string, body?: unknown): Promise<{ status: number; body: unknown }>;
+  patch(path: string, body?: unknown): Promise<{ status: number; body: unknown }>;
+  delete(path: string): Promise<{ status: number; body: unknown }>;
 }
 
 /**
@@ -56,18 +59,35 @@ export async function loginClient(
   const setCookie = res.headers.get("set-cookie");
   if (!setCookie) throw new Error("login: no Set-Cookie returned");
   const cookie = setCookie.split(";")[0]!;
+  const parse = async (r: Response) => {
+    const text = await r.text();
+    let body: unknown = text;
+    try {
+      body = text ? JSON.parse(text) : null;
+    } catch {
+      // leave as text
+    }
+    return { status: r.status, body };
+  };
+  const send = (method: string) => async (path: string, body?: unknown) => {
+    const r = await fetch(`${baseUrl}${path}`, {
+      method,
+      headers: {
+        cookie,
+        ...(body !== undefined ? { "content-type": "application/json" } : {}),
+      },
+      body: body !== undefined ? JSON.stringify(body) : undefined,
+    });
+    return parse(r);
+  };
   return {
     cookie,
     async get(path: string) {
       const r = await fetch(`${baseUrl}${path}`, { headers: { cookie } });
-      const text = await r.text();
-      let body: unknown = text;
-      try {
-        body = text ? JSON.parse(text) : null;
-      } catch {
-        // leave as text
-      }
-      return { status: r.status, body };
+      return parse(r);
     },
+    post: send("POST"),
+    patch: send("PATCH"),
+    delete: (path: string) => send("DELETE")(path),
   };
 }
