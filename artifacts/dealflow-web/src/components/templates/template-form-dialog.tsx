@@ -274,27 +274,43 @@ export function TemplateFormDialog({ open, onOpenChange, onCreated }: Props) {
               </Button>
             </div>
             <div className="space-y-2">
+              {lineItems.length > 0 && (
+                <div className="grid grid-cols-12 gap-2 px-2 text-xs font-medium text-muted-foreground" aria-hidden="true">
+                  <div className="col-span-4">Bezeichnung</div>
+                  <div className="col-span-1">Menge</div>
+                  <div className="col-span-2">Einzelpreis €</div>
+                  <div className="col-span-2">Listenpreis €</div>
+                  <div className="col-span-2">Rabatt %</div>
+                  <div className="col-span-1" />
+                </div>
+              )}
               {lineItems.map((li, i) => (
                 <div key={i} className="rounded-md border p-2 grid grid-cols-12 gap-2 items-center bg-muted/20" data-testid={`template-form-line-item-${i}`}>
                   <Input className="col-span-4" placeholder="Bezeichnung"
+                    title="Produktname oder Leistung — wird genau so im Angebot angezeigt."
                     value={li.name}
                     onChange={(e) => updateLineItem(i, { name: e.target.value })} />
                   <Input className="col-span-1" type="number" min={1} placeholder="Menge"
+                    title="Stückzahl dieser Position."
                     value={li.quantity}
                     onChange={(e) => updateLineItem(i, { quantity: Number(e.target.value) })} />
                   <Input className="col-span-2" type="number" min={0} placeholder="Einzelpreis"
+                    title="Tatsächlicher Verkaufspreis pro Stück (Netto, in €). Das zahlt der Kunde."
                     value={li.unitPrice}
                     onChange={(e) => {
                       const v = Number(e.target.value);
                       updateLineItem(i, { unitPrice: v, listPrice: li.listPrice || v });
                     }} />
                   <Input className="col-span-2" type="number" min={0} placeholder="Listenpreis"
+                    title="Standard-/UVP-Preis pro Stück (Netto). Daraus ergibt sich der effektive Rabatt gegenüber dem Einzelpreis."
                     value={li.listPrice}
                     onChange={(e) => updateLineItem(i, { listPrice: Number(e.target.value) })} />
                   <Input className="col-span-2" type="number" min={0} max={100} placeholder="Rabatt %"
+                    title="Zusätzlicher prozentualer Nachlass auf den Einzelpreis (0–100)."
                     value={li.discountPct}
                     onChange={(e) => updateLineItem(i, { discountPct: Number(e.target.value) })} />
-                  <Button type="button" size="sm" variant="ghost"
+                  <Button type="button" size="sm" variant="ghost" className="col-span-1"
+                    title="Diese Position entfernen"
                     onClick={() => removeLineItem(i)} aria-label="Position entfernen">
                     <Trash2 className="h-3.5 w-3.5 text-destructive" />
                   </Button>
