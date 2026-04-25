@@ -30,6 +30,15 @@ export interface PromptDefinition<TInput, TOutput> {
   toolDescription: string;
   /** Tool-Name — wird Anthropic als forced tool_choice übergeben. */
   toolName: string;
+  /**
+   * Optionaler Sanitizer für die rohe Tool-Antwort, die der Provider liefert.
+   * Wird VOR der zod-Validierung aufgerufen und darf "kosmetisch" reparieren
+   * (z. B. zu lange Notes truncaten, leere Einträge entfernen). Der Hook darf
+   * KEINE inhaltlichen Felder erfinden — er hilft nur dabei, harmlose
+   * Schema-Verletzungen abzufangen, statt den ganzen Job mit
+   * `validation_error` abzubrechen.
+   */
+  coerceInput?: (raw: unknown) => unknown;
 }
 
 /**

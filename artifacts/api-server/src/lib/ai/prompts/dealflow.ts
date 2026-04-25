@@ -724,6 +724,49 @@ const ClauseImportSegmentOutput = z.object({
   notes: z.array(z.string().min(2).max(240)).max(8),
 });
 
+// Maximalwerte für notes — bewusst hier als Konstanten, damit der Sanitizer
+// und das Schema dieselben Limits verwenden.
+const CLAUSE_IMPORT_NOTE_MAX_LENGTH = 240;
+const CLAUSE_IMPORT_NOTE_MIN_LENGTH = 2;
+const CLAUSE_IMPORT_NOTES_MAX_ENTRIES = 8;
+
+/**
+ * Sanitisiert die rohe Tool-Antwort des `clause.import.segment`-Prompts,
+ * BEVOR zod sie strikt validiert. Hintergrund (Task #105):
+ * Sonnet liefert gelegentlich `notes`-Einträge, die länger als 240 Zeichen
+ * sind (z. B. eine ausführliche Fußnote). Vorher kippte das den ganzen Job
+ * mit `validation_error`, obwohl die Klausel-Vorschläge selbst valide waren.
+ *
+ * Der Sanitizer verändert nur das `notes`-Feld:
+ *   - kürzt zu lange Strings auf 240 Zeichen (mit "…")
+ *   - droppt zu kurze / leere / nicht-string-Einträge
+ *   - kappt das Array auf maximal 8 Einträge
+ *   - normalisiert ein fehlendes / falsch typisiertes `notes` auf []
+ * Alle anderen Felder (insb. `segments`) bleiben unverändert und müssen
+ * weiterhin strikt durch zod laufen.
+ */
+export function coerceClauseImportSegmentInput(raw: unknown): unknown {
+  if (!raw || typeof raw !== 'object') return raw;
+  const input = raw as Record<string, unknown>;
+  const rawNotes = input.notes;
+  const notes: string[] = [];
+  if (Array.isArray(rawNotes)) {
+    for (const entry of rawNotes) {
+      if (typeof entry !== 'string') continue;
+      const trimmed = entry.trim();
+      if (trimmed.length < CLAUSE_IMPORT_NOTE_MIN_LENGTH) continue;
+      if (trimmed.length <= CLAUSE_IMPORT_NOTE_MAX_LENGTH) {
+        notes.push(trimmed);
+      } else {
+        // Truncate auf 239 Zeichen + Ellipsis = 240 Zeichen Gesamtlänge.
+        notes.push(trimmed.slice(0, CLAUSE_IMPORT_NOTE_MAX_LENGTH - 1) + '…');
+      }
+      if (notes.length >= CLAUSE_IMPORT_NOTES_MAX_ENTRIES) break;
+    }
+  }
+  return { ...input, notes };
+}
+
 export interface ClauseImportSegmentInput {
   rawText: string;
   fileName: string;
@@ -755,7 +798,9 @@ export const clauseImportSegment: PromptDefinition<
     "Original — nur White-Space und Bullet-Marker normalisierst du. Niemals " +
     "umformulieren. Niemals zusammenfassen. Maximal 50 Segmente; wenn das " +
     "Dokument groesser ist, segmentiere die wichtigsten ersten 50 und " +
-    "vermerk das in notes. " +
+    "vermerk das in notes. notes: maximal 8 Eintraege, jeder Eintrag KURZ " +
+    "(maximal 240 Zeichen). Lange Beobachtungen kuerzt du; mehrere Punkte " +
+    "splittest du auf mehrere Eintraege. " +
     SAFE_GERMAN_HINT,
   buildUser: (input) => {
     const familyList = input.families
@@ -781,6 +826,9 @@ export const clauseImportSegment: PromptDefinition<
     "suggestedSeverity, suggestedFamilyId (aus Liste oder null), " +
     "alternativeMatches (max 3) und matchedVariantId (optional).",
   toolName: "report_clause_import_segments",
+  // Defensive Sanitisierung: zu lange notes-Einträge werden gekürzt statt
+  // den ganzen Job zu killen (Task #105).
+  coerceInput: coerceClauseImportSegmentInput,
 };
 
 // ───────────────────────── Bundle ─────────────────────────

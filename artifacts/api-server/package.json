@@ -20,7 +20,8 @@
     "test:contract-lang": "node --import tsx --test --test-reporter=spec tests/contract-language-switching.test.ts",
     "test:bindings": "node --import tsx --test --test-reporter=spec tests/contract-bindings.test.ts",
     "test:clause-import-extract": "node --import tsx --test --test-reporter=spec tests/clause-import-extract.test.ts",
-    "test": "pnpm run test:risk-score && pnpm run test:isolation && pnpm run test:renewals && pnpm run test:approvals && pnpm run test:external && pnpm run test:clauses && pnpm run test:external-collab && pnpm run test:airec && pnpm run test:cuad && pnpm run test:contract-lang && pnpm run test:bindings && pnpm run test:clause-import-extract"
+    "test:clause-import-notes": "node --import tsx --test --test-reporter=spec tests/clause-import-notes-sanitizer.test.ts",
+    "test": "pnpm run test:risk-score && pnpm run test:isolation && pnpm run test:renewals && pnpm run test:approvals && pnpm run test:external && pnpm run test:clauses && pnpm run test:external-collab && pnpm run test:airec && pnpm run test:cuad && pnpm run test:contract-lang && pnpm run test:bindings && pnpm run test:clause-import-extract && pnpm run test:clause-import-notes"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.90.0",

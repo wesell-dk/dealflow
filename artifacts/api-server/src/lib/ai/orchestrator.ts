@@ -173,7 +173,13 @@ export async function runStructured<I, O>(
 
     let validated: O;
     try {
-      validated = validateStructured(prompt.outputSchema, toolCall.input);
+      // Optional sanitizer-Hook: erlaubt Prompts, harmlose Verletzungen
+      // (z. B. zu lange notes-Einträge) zu reparieren, bevor zod streng
+      // validiert. Der Hook darf nicht halluzinieren — er fixt nur Format.
+      const rawInput = prompt.coerceInput
+        ? prompt.coerceInput(toolCall.input)
+        : toolCall.input;
+      validated = validateStructured(prompt.outputSchema, rawInput);
     } catch (e) {
       const invocationId = await auditOrFail(
         () =>
