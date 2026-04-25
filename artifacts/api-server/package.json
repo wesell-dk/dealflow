@@ -16,7 +16,8 @@
     "test:external-collab": "node --import tsx --test --test-reporter=spec tests/external-collaborators.test.ts",
     "test:airec": "node --import tsx --test --test-reporter=spec --test-timeout=60000 tests/ai-recommendations.test.ts",
     "test:cuad": "node --import tsx --test --test-reporter=spec tests/cuad-coverage.test.ts",
-    "test": "pnpm run test:isolation && pnpm run test:renewals && pnpm run test:approvals && pnpm run test:external && pnpm run test:clauses && pnpm run test:external-collab && pnpm run test:airec && pnpm run test:cuad"
+    "test:contract-lang": "node --import tsx --test --test-reporter=spec tests/contract-language-switching.test.ts",
+    "test": "pnpm run test:isolation && pnpm run test:renewals && pnpm run test:approvals && pnpm run test:external && pnpm run test:clauses && pnpm run test:external-collab && pnpm run test:airec && pnpm run test:cuad && pnpm run test:contract-lang"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.90.0",
