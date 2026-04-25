@@ -6723,12 +6723,20 @@ export const GetRenewalSummaryResponse = zod.object({
 export const getRenewalTrendQueryHorizonMonthsDefault = 12;
 export const getRenewalTrendQueryHorizonMonthsMax = 36;
 
+export const getRenewalTrendQueryGroupByDefault = `none`;
+
 export const GetRenewalTrendQueryParams = zod.object({
   horizonMonths: zod.coerce
     .number()
     .min(1)
     .max(getRenewalTrendQueryHorizonMonthsMax)
     .default(getRenewalTrendQueryHorizonMonthsDefault),
+  groupBy: zod
+    .enum(["none", "brand", "owner", "brand,owner", "owner,brand"])
+    .default(getRenewalTrendQueryGroupByDefault)
+    .describe(
+      "Optionale Aufschlüsselung pro Monats-Bucket. Mehrere Werte\nkommasepariert (z. B. `brand,owner`). `none` (Default) liefert\nnur die Gesamt-Aggregate, ohne `byBrand` \/ `byOwner`.\n",
+    ),
 });
 
 export const GetRenewalTrendResponseItem = zod.object({
@@ -6739,6 +6747,74 @@ export const GetRenewalTrendResponseItem = zod.object({
   value: zod.number().describe("Summe valueAmount in EUR"),
   atRiskCount: zod.number().describe("Anzahl mit riskScore >= 70"),
   atRiskValue: zod.number().describe("Summe valueAmount mit riskScore >= 70"),
+  byBrand: zod
+    .array(
+      zod.object({
+        brandId: zod
+          .string()
+          .nullish()
+          .describe("Nur in `byBrand`-Einträgen gesetzt."),
+        ownerId: zod
+          .string()
+          .nullish()
+          .describe("Nur in `byOwner`-Einträgen gesetzt."),
+        name: zod
+          .string()
+          .describe(
+            "Anzeige-Name (Brand- bzw. Owner-Name; '—' wenn unbekannt)",
+          ),
+        value: zod
+          .number()
+          .describe(
+            "Summe valueAmount in EUR für diesen Brand\/Owner im Bucket",
+          ),
+        count: zod
+          .number()
+          .describe("Anzahl Renewals für diesen Brand\/Owner im Bucket"),
+        atRiskCount: zod.number().describe("Anzahl davon mit riskScore >= 70"),
+        atRiskValue: zod
+          .number()
+          .describe("Summe valueAmount davon mit riskScore >= 70"),
+      }),
+    )
+    .optional()
+    .describe(
+      "Optional. Aufschlüsselung des Buckets nach Brand, sortiert nach\n`value` absteigend. Nur gesetzt, wenn `groupBy` `brand` enthält.\nRenewals ohne Brand erscheinen mit `brandId: null`.\n",
+    ),
+  byOwner: zod
+    .array(
+      zod.object({
+        brandId: zod
+          .string()
+          .nullish()
+          .describe("Nur in `byBrand`-Einträgen gesetzt."),
+        ownerId: zod
+          .string()
+          .nullish()
+          .describe("Nur in `byOwner`-Einträgen gesetzt."),
+        name: zod
+          .string()
+          .describe(
+            "Anzeige-Name (Brand- bzw. Owner-Name; '—' wenn unbekannt)",
+          ),
+        value: zod
+          .number()
+          .describe(
+            "Summe valueAmount in EUR für diesen Brand\/Owner im Bucket",
+          ),
+        count: zod
+          .number()
+          .describe("Anzahl Renewals für diesen Brand\/Owner im Bucket"),
+        atRiskCount: zod.number().describe("Anzahl davon mit riskScore >= 70"),
+        atRiskValue: zod
+          .number()
+          .describe("Summe valueAmount davon mit riskScore >= 70"),
+      }),
+    )
+    .optional()
+    .describe(
+      "Optional. Aufschlüsselung des Buckets nach Account-Owner (Owner\ndes zugrundeliegenden Vertrags-Deals), sortiert nach `value`\nabsteigend. Nur gesetzt, wenn `groupBy` `owner` enthält.\nRenewals ohne auflösbaren Owner erscheinen mit `ownerId: null`.\n",
+    ),
 });
 export const GetRenewalTrendResponse = zod.array(GetRenewalTrendResponseItem);
 

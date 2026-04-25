@@ -7,6 +7,7 @@ Multi-tenant, multi-company, multi-brand. Deal-centric.
 
  * OpenAPI spec version: 0.1.0
  */
+import type { GetRenewalTrendGroupBy } from "./getRenewalTrendGroupBy";
 
 export type GetRenewalTrendParams = {
   /**
@@ -14,4 +15,11 @@ export type GetRenewalTrendParams = {
    * @maximum 36
    */
   horizonMonths?: number;
+  /**
+ * Optionale Aufschlüsselung pro Monats-Bucket. Mehrere Werte
+kommasepariert (z. B. `brand,owner`). `none` (Default) liefert
+nur die Gesamt-Aggregate, ohne `byBrand` / `byOwner`.
+
+ */
+  groupBy?: GetRenewalTrendGroupBy;
 };

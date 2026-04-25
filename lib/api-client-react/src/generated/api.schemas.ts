@@ -4011,6 +4011,23 @@ export interface RenewalSummary {
   atRisk: RenewalBucketStat;
 }
 
+export interface RenewalTrendBreakdown {
+  /** Nur in `byBrand`-Einträgen gesetzt. */
+  brandId?: string | null;
+  /** Nur in `byOwner`-Einträgen gesetzt. */
+  ownerId?: string | null;
+  /** Anzeige-Name (Brand- bzw. Owner-Name; '—' wenn unbekannt) */
+  name: string;
+  /** Summe valueAmount in EUR für diesen Brand/Owner im Bucket */
+  value: number;
+  /** Anzahl Renewals für diesen Brand/Owner im Bucket */
+  count: number;
+  /** Anzahl davon mit riskScore >= 70 */
+  atRiskCount: number;
+  /** Summe valueAmount davon mit riskScore >= 70 */
+  atRiskValue: number;
+}
+
 export interface RenewalTrendBucket {
   /** Monat im Format YYYY-MM */
   ym: string;
@@ -4022,6 +4039,17 @@ export interface RenewalTrendBucket {
   atRiskCount: number;
   /** Summe valueAmount mit riskScore >= 70 */
   atRiskValue: number;
+  /** Optional. Aufschlüsselung des Buckets nach Brand, sortiert nach
+`value` absteigend. Nur gesetzt, wenn `groupBy` `brand` enthält.
+Renewals ohne Brand erscheinen mit `brandId: null`.
+ */
+  byBrand?: RenewalTrendBreakdown[];
+  /** Optional. Aufschlüsselung des Buckets nach Account-Owner (Owner
+des zugrundeliegenden Vertrags-Deals), sortiert nach `value`
+absteigend. Nur gesetzt, wenn `groupBy` `owner` enthält.
+Renewals ohne auflösbaren Owner erscheinen mit `ownerId: null`.
+ */
+  byOwner?: RenewalTrendBreakdown[];
 }
 
 export interface BrandClauseOverride {
@@ -4924,7 +4952,25 @@ export type GetRenewalTrendParams = {
    * @maximum 36
    */
   horizonMonths?: number;
+  /**
+ * Optionale Aufschlüsselung pro Monats-Bucket. Mehrere Werte
+kommasepariert (z. B. `brand,owner`). `none` (Default) liefert
+nur die Gesamt-Aggregate, ohne `byBrand` / `byOwner`.
+
+ */
+  groupBy?: GetRenewalTrendGroupBy;
 };
+
+export type GetRenewalTrendGroupBy =
+  (typeof GetRenewalTrendGroupBy)[keyof typeof GetRenewalTrendGroupBy];
+
+export const GetRenewalTrendGroupBy = {
+  none: "none",
+  brand: "brand",
+  owner: "owner",
+  "brand,owner": "brand,owner",
+  "owner,brand": "owner,brand",
+} as const;
 
 export type ListContractExternalEventsParams = {
   collaboratorId?: string;

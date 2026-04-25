@@ -12595,13 +12595,28 @@ router.get('/renewals/_summary', async (req, res) => {
   });
 });
 
-// GET /renewals/_trend — Pipeline pro Monat über horizonMonths Monate
+// GET /renewals/_trend — Pipeline pro Monat über horizonMonths Monate.
+//
+// Optional kann pro Bucket nach Brand und/oder Account-Owner aufgeschlüsselt
+// werden (`groupBy=brand,owner`). Tenant-übergreifende Manager:innen brauchen
+// diese Sicht, um zu erkennen, welche Marke / welche:r Owner:in die Last in
+// einem Monat treibt. Der Owner ergibt sich aus dem Deal des zugrunde
+// liegenden Vertrags (deal.ownerId) — Renewals ohne auflösbaren Owner
+// werden in einem `null`-Bucket gesammelt, damit Summen konsistent bleiben.
 router.get('/renewals/_trend', async (req, res) => {
   const scope = getScope(req);
   const horizonRaw = Number(req.query.horizonMonths);
   const horizon = Number.isFinite(horizonRaw) && horizonRaw >= 1 && horizonRaw <= 36
     ? Math.floor(horizonRaw)
     : 12;
+
+  // groupBy: kommasepariert; akzeptierte Werte: brand, owner, none.
+  // Unbekannte Werte werden ignoriert (kein 400, damit das Spec-Enum strikt
+  // bleibt aber Clients defensiv geparsed werden).
+  const groupRaw = typeof req.query.groupBy === 'string' ? req.query.groupBy : '';
+  const groupTokens = groupRaw.split(',').map(s => s.trim().toLowerCase());
+  const wantBrand = groupTokens.includes('brand');
+  const wantOwner = groupTokens.includes('owner');
 
   // Monatsraster: Start = erster Tag des aktuellen Monats (UTC), Ende = erster Tag (Start + horizon Monate)
   const now = new Date();
@@ -12634,12 +12649,86 @@ router.get('/renewals/_trend', async (req, res) => {
   }
   const visible = rows.filter(r => visAcc.has(r.accountId));
 
+  // Lookup-Tabellen: Brand-Namen & Owner-Namen.
+  // Brand-Namen werden immer aufgelöst, weil sie Teil der byBrand-Aufschlüsselung
+  // sind und ohnehin nur ein Map-Lookup kosten. Owner-Auflösung erfordert
+  // contracts→deals→users und wird daher nur ausgeführt, wenn angefragt.
+  const brandIds = Array.from(new Set(visible.map(r => r.brandId).filter((x): x is string => !!x)));
+  const brandNameMap = new Map<string, string>();
+  if (brandIds.length) {
+    const bs = await db
+      .select({ id: brandsTable.id, name: brandsTable.name })
+      .from(brandsTable)
+      .where(inArray(brandsTable.id, brandIds));
+    for (const b of bs) brandNameMap.set(b.id, b.name);
+  }
+
+  // contractId → ownerId (über deal). Renewals ohne erkennbaren Owner landen
+  // in einem `null`-Eimer, damit Spaltensummen identisch zur Gesamtsumme sind.
+  const ownerByContract = new Map<string, string | null>();
+  const ownerNameMap = new Map<string, string>();
+  if (wantOwner && visible.length) {
+    const contractIds = Array.from(new Set(
+      visible.map(r => r.contractId).filter((x): x is string => !!x),
+    ));
+    const contractRows = contractIds.length
+      ? await db
+          .select({ id: contractsTable.id, dealId: contractsTable.dealId })
+          .from(contractsTable)
+          .where(inArray(contractsTable.id, contractIds))
+      : [];
+    const dealIds = Array.from(new Set(
+      contractRows.map(c => c.dealId).filter((x): x is string => !!x),
+    ));
+    const dealOwnerMap = new Map<string, string>();
+    if (dealIds.length) {
+      const dealRows = await db
+        .select({ id: dealsTable.id, ownerId: dealsTable.ownerId })
+        .from(dealsTable)
+        .where(inArray(dealsTable.id, dealIds));
+      for (const d of dealRows) dealOwnerMap.set(d.id, d.ownerId);
+    }
+    for (const c of contractRows) {
+      ownerByContract.set(c.id, dealOwnerMap.get(c.dealId) ?? null);
+    }
+    const ownerIds = Array.from(new Set(Array.from(ownerByContract.values()).filter((x): x is string => !!x)));
+    if (ownerIds.length) {
+      const us = await db
+        .select({ id: usersTable.id, name: usersTable.name })
+        .from(usersTable)
+        .where(inArray(usersTable.id, ownerIds));
+      for (const u of us) ownerNameMap.set(u.id, u.name);
+    }
+  }
+
+  type Breakdown = {
+    brandId?: string | null;
+    ownerId?: string | null;
+    name: string;
+    value: number;
+    count: number;
+    atRiskCount: number;
+    atRiskValue: number;
+  };
+  type Bucket = {
+    ym: string;
+    count: number;
+    value: number;
+    atRiskCount: number;
+    atRiskValue: number;
+    byBrand?: Map<string, Breakdown>;
+    byOwner?: Map<string, Breakdown>;
+  };
+
   // Monatsraster initialisieren (auch leere Monate erscheinen)
-  const buckets = new Map<string, { ym: string; count: number; value: number; atRiskCount: number; atRiskValue: number }>();
+  const buckets = new Map<string, Bucket>();
   for (let i = 0; i < horizon; i++) {
     const d = new Date(Date.UTC(startMonth.getUTCFullYear(), startMonth.getUTCMonth() + i, 1));
     const ym = `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}`;
-    buckets.set(ym, { ym, count: 0, value: 0, atRiskCount: 0, atRiskValue: 0 });
+    const b: Bucket = { ym, count: 0, value: 0, atRiskCount: 0, atRiskValue: 0 };
+    if (wantBrand) b.byBrand = new Map();
+    if (wantOwner) b.byOwner = new Map();
+    buckets.set(ym, b);
   }
 
   for (const r of visible) {
@@ -12647,15 +12736,58 @@ router.get('/renewals/_trend', async (req, res) => {
     const b = buckets.get(ym);
     if (!b) continue;
     const v = r.valueAmount == null ? 0 : Number(r.valueAmount);
+    const isRisk = r.riskScore >= 70;
     b.count += 1;
     b.value += v;
-    if (r.riskScore >= 70) {
+    if (isRisk) {
       b.atRiskCount += 1;
       b.atRiskValue += v;
     }
+    if (b.byBrand) {
+      const key = r.brandId ?? '__none__';
+      const bd = b.byBrand.get(key) ?? {
+        brandId: r.brandId,
+        name: r.brandId ? (brandNameMap.get(r.brandId) ?? '—') : '—',
+        value: 0, count: 0, atRiskCount: 0, atRiskValue: 0,
+      };
+      bd.value += v;
+      bd.count += 1;
+      if (isRisk) { bd.atRiskCount += 1; bd.atRiskValue += v; }
+      b.byBrand.set(key, bd);
+    }
+    if (b.byOwner) {
+      const oid = r.contractId ? (ownerByContract.get(r.contractId) ?? null) : null;
+      const key = oid ?? '__none__';
+      const bd = b.byOwner.get(key) ?? {
+        ownerId: oid,
+        name: oid ? (ownerNameMap.get(oid) ?? '—') : '—',
+        value: 0, count: 0, atRiskCount: 0, atRiskValue: 0,
+      };
+      bd.value += v;
+      bd.count += 1;
+      if (isRisk) { bd.atRiskCount += 1; bd.atRiskValue += v; }
+      b.byOwner.set(key, bd);
+    }
   }
 
-  res.json(Array.from(buckets.values()));
+  // Map → sortiertes Array (value desc); konsistente Reihenfolge im Chart.
+  const sortBreakdown = (xs: Breakdown[]) =>
+    xs.slice().sort((a, b) => b.value - a.value || b.count - a.count || a.name.localeCompare(b.name));
+
+  const out = Array.from(buckets.values()).map(b => {
+    const json: Record<string, unknown> = {
+      ym: b.ym,
+      count: b.count,
+      value: b.value,
+      atRiskCount: b.atRiskCount,
+      atRiskValue: b.atRiskValue,
+    };
+    if (b.byBrand) json.byBrand = sortBreakdown(Array.from(b.byBrand.values()));
+    if (b.byOwner) json.byOwner = sortBreakdown(Array.from(b.byOwner.values()));
+    return json;
+  });
+
+  res.json(out);
 });
 
 // GET /renewals/:id

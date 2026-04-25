@@ -4016,6 +4016,17 @@ paths:
           name: horizonMonths
           required: false
           schema: { type: integer, minimum: 1, maximum: 36, default: 12 }
+        - in: query
+          name: groupBy
+          required: false
+          description: |
+            Optionale Aufschlüsselung pro Monats-Bucket. Mehrere Werte
+            kommasepariert (z. B. `brand,owner`). `none` (Default) liefert
+            nur die Gesamt-Aggregate, ohne `byBrand` / `byOwner`.
+          schema:
+            type: string
+            enum: [none, brand, owner, "brand,owner", "owner,brand"]
+            default: none
       responses:
         "200":
           description: ok
@@ -8398,6 +8409,39 @@ components:
         value: { type: number, description: "Summe valueAmount in EUR" }
         atRiskCount: { type: integer, description: "Anzahl mit riskScore >= 70" }
         atRiskValue: { type: number, description: "Summe valueAmount mit riskScore >= 70" }
+        byBrand:
+          type: array
+          description: |
+            Optional. Aufschlüsselung des Buckets nach Brand, sortiert nach
+            `value` absteigend. Nur gesetzt, wenn `groupBy` `brand` enthält.
+            Renewals ohne Brand erscheinen mit `brandId: null`.
+          items: { $ref: "#/components/schemas/RenewalTrendBreakdown" }
+        byOwner:
+          type: array
+          description: |
+            Optional. Aufschlüsselung des Buckets nach Account-Owner (Owner
+            des zugrundeliegenden Vertrags-Deals), sortiert nach `value`
+            absteigend. Nur gesetzt, wenn `groupBy` `owner` enthält.
+            Renewals ohne auflösbaren Owner erscheinen mit `ownerId: null`.
+          items: { $ref: "#/components/schemas/RenewalTrendBreakdown" }
+
+    RenewalTrendBreakdown:
+      type: object
+      required: [name, value, count, atRiskCount, atRiskValue]
+      properties:
+        brandId:
+          type: string
+          nullable: true
+          description: "Nur in `byBrand`-Einträgen gesetzt."
+        ownerId:
+          type: string
+          nullable: true
+          description: "Nur in `byOwner`-Einträgen gesetzt."
+        name: { type: string, description: "Anzeige-Name (Brand- bzw. Owner-Name; '—' wenn unbekannt)" }
+        value: { type: number, description: "Summe valueAmount in EUR für diesen Brand/Owner im Bucket" }
+        count: { type: integer, description: "Anzahl Renewals für diesen Brand/Owner im Bucket" }
+        atRiskCount: { type: integer, description: "Anzahl davon mit riskScore >= 70" }
+        atRiskValue: { type: number, description: "Summe valueAmount davon mit riskScore >= 70" }
 
     BrandClauseOverride:
       type: object

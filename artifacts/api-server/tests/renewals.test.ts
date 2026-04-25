@@ -222,6 +222,86 @@ describe("renewals — engine, scope, lifecycle", () => {
       assert.ok(b.atRiskValue <= b.value, `atRiskValue must be <= value for ${b.ym}`);
       assert.ok(b.atRiskCount <= b.count, `atRiskCount must be <= count for ${b.ym}`);
     }
+
+    // No groupBy → no per-brand/per-owner breakdowns.
+    for (const b of buckets) {
+      assert.equal((b as { byBrand?: unknown }).byBrand, undefined,
+        `byBrand must not be present without groupBy for ${b.ym}`);
+      assert.equal((b as { byOwner?: unknown }).byOwner, undefined,
+        `byOwner must not be present without groupBy for ${b.ym}`);
+    }
+  });
+
+  it("GET /renewals/_trend?groupBy=brand,owner aufsplitten — Summen identisch zur Gesamt-Aggregation", async () => {
+    const trendRes = await aliceAdmin.get("/api/renewals/_trend?horizonMonths=12&groupBy=brand,owner");
+    assert.equal(trendRes.status, 200);
+    type Breakdown = {
+      brandId?: string | null;
+      ownerId?: string | null;
+      name: string;
+      value: number;
+      count: number;
+      atRiskCount: number;
+      atRiskValue: number;
+    };
+    const buckets = trendRes.body as Array<{
+      ym: string;
+      count: number;
+      value: number;
+      atRiskCount: number;
+      atRiskValue: number;
+      byBrand: Breakdown[];
+      byOwner: Breakdown[];
+    }>;
+    assert.equal(buckets.length, 12);
+    let sawBrandSplit = false;
+    let sawOwnerSplit = false;
+    for (const b of buckets) {
+      assert.ok(Array.isArray(b.byBrand), `byBrand muss ein Array sein für ${b.ym}`);
+      assert.ok(Array.isArray(b.byOwner), `byOwner muss ein Array sein für ${b.ym}`);
+      // Spaltensummen müssen exakt der Bucket-Summe entsprechen
+      const brandSumValue = b.byBrand.reduce((s, x) => s + x.value, 0);
+      const brandSumCount = b.byBrand.reduce((s, x) => s + x.count, 0);
+      const ownerSumValue = b.byOwner.reduce((s, x) => s + x.value, 0);
+      const ownerSumCount = b.byOwner.reduce((s, x) => s + x.count, 0);
+      assert.equal(brandSumValue, b.value, `byBrand value-Summe muss Bucket value entsprechen (${b.ym})`);
+      assert.equal(brandSumCount, b.count, `byBrand count-Summe muss Bucket count entsprechen (${b.ym})`);
+      assert.equal(ownerSumValue, b.value, `byOwner value-Summe muss Bucket value entsprechen (${b.ym})`);
+      assert.equal(ownerSumCount, b.count, `byOwner count-Summe muss Bucket count entsprechen (${b.ym})`);
+      // value desc Sortierung
+      for (let i = 1; i < b.byBrand.length; i++) {
+        assert.ok(b.byBrand[i - 1]!.value >= b.byBrand[i]!.value,
+          `byBrand muss nach value desc sortiert sein (${b.ym})`);
+      }
+      for (let i = 1; i < b.byOwner.length; i++) {
+        assert.ok(b.byOwner[i - 1]!.value >= b.byOwner[i]!.value,
+          `byOwner muss nach value desc sortiert sein (${b.ym})`);
+      }
+      if (b.byBrand.length > 0) sawBrandSplit = true;
+      if (b.byOwner.length > 0) sawOwnerSplit = true;
+    }
+    assert.ok(sawBrandSplit, "Mindestens ein Bucket muss byBrand-Einträge liefern (Seed-Renewal mit Brand)");
+    assert.ok(sawOwnerSplit, "Mindestens ein Bucket muss byOwner-Einträge liefern (Seed-Renewal mit Owner)");
+  });
+
+  it("GET /renewals/_trend?groupBy=brand respektiert Tenant-Isolation in der Aufschlüsselung", async () => {
+    // Bob darf NICHT die Brands/Owner aus tenant A im byBrand/byOwner-Stream
+    // sehen. Wir prüfen das, indem wir alle Breakdown-Einträge in Bobs
+    // Antwort gegen die Brand-/User-IDs aus Tenant A abgleichen.
+    const trendRes = await bob.get("/api/renewals/_trend?horizonMonths=12&groupBy=brand,owner");
+    assert.equal(trendRes.status, 200);
+    type Breakdown = { brandId?: string | null; ownerId?: string | null };
+    const buckets = trendRes.body as Array<{ byBrand: Breakdown[]; byOwner: Breakdown[] }>;
+    for (const b of buckets) {
+      for (const x of b.byBrand) {
+        assert.notEqual(x.brandId, worldA.brandId,
+          "Tenant B darf Brand aus Tenant A nicht in byBrand sehen");
+      }
+      for (const x of b.byOwner) {
+        assert.notEqual(x.ownerId, worldA.userId,
+          "Tenant B darf Owner aus Tenant A nicht in byOwner sehen");
+      }
+    }
   });
 
   it("POST /renewals/:id/issue-followup creates successor + flips status to in_progress", async () => {

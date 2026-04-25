@@ -28,31 +28,105 @@ export default function Reports() {
   const { data: forecast, isLoading: isLoadingForecast } = useGetForecast();
   const { data: dashboard } = useGetDashboardSummary();
   const { data: renewalSummary } = useGetRenewalSummary();
-  const { data: renewalTrend } = useGetRenewalTrend({ horizonMonths: 12 });
   const [period, setPeriod] = useState<string>("12");
   const [ownerId, setOwnerId] = useState<string>("__all__");
-
-  const renewalTrendData = useMemo(() => {
-    if (!renewalTrend) return [];
-    return renewalTrend.map((b) => ({
-      ym: b.ym,
-      monthLabel: (() => {
-        const [y, m] = b.ym.split("-");
-        const d = new Date(Date.UTC(Number(y), Number(m) - 1, 1));
-        return d.toLocaleDateString(undefined, { month: "short", year: "2-digit" });
-      })(),
-      safeValue: Math.max(0, (b.value ?? 0) - (b.atRiskValue ?? 0)),
-      atRiskValue: b.atRiskValue ?? 0,
-      count: b.count,
-      atRiskCount: b.atRiskCount,
-      total: b.value ?? 0,
-    }));
-  }, [renewalTrend]);
+  // Trend-Modus: total = bisheriger gestapelter Risiko/Safe-Bar.
+  // brand/owner = ein gestapelter Bar pro Brand bzw. Owner.
+  // Brand-Aufschluesselung wird IMMER mitgezogen, weil der Tooltip in jedem
+  // Modus die Top-3-Brands pro Monat zeigen soll (Anforderung Task #121).
+  const [trendMode, setTrendMode] = useState<"total" | "brand" | "owner">("total");
+  const trendGroupBy = trendMode === "owner" ? "brand,owner" : "brand";
+  const { data: renewalTrend } = useGetRenewalTrend({
+    horizonMonths: 12,
+    groupBy: trendGroupBy,
+  });
 
   const renewalTrendCurrencyFmt = useMemo(
     () => new Intl.NumberFormat(undefined, { style: "currency", currency: "EUR", maximumFractionDigits: 0 }),
     [],
   );
+
+  const monthLabel = (ym: string): string => {
+    const [y, m] = ym.split("-");
+    const d = new Date(Date.UTC(Number(y), Number(m) - 1, 1));
+    return d.toLocaleDateString(undefined, { month: "short", year: "2-digit" });
+  };
+
+  // Default-Datenform für den "Gesamt"-Modus.
+  const renewalTrendData = useMemo(() => {
+    if (!renewalTrend) return [];
+    return renewalTrend.map((b) => ({
+      ym: b.ym,
+      monthLabel: monthLabel(b.ym),
+      safeValue: Math.max(0, (b.value ?? 0) - (b.atRiskValue ?? 0)),
+      atRiskValue: b.atRiskValue ?? 0,
+      count: b.count,
+      atRiskCount: b.atRiskCount,
+      total: b.value ?? 0,
+      // Top-3-Brand-Liste fuer den Tooltip — auch im "Gesamt"-Modus.
+      topBrands: (b.byBrand ?? []).slice(0, 3).map((x) => ({ name: x.name, value: x.value })),
+    }));
+  }, [renewalTrend]);
+
+  // Top-N Brands/Owner ueber alle Buckets ermitteln, damit der Stack
+  // in jedem Monat in derselben Reihenfolge gezeichnet wird. Alles, was
+  // unter Top-N faellt, wird in einer "Weitere"-Serie aggregiert.
+  const TOP_SERIES = 6;
+  const groupedSeries = useMemo(() => {
+    if (!renewalTrend || trendMode === "total") return null;
+    const totals = new Map<string, { id: string | null; name: string; total: number }>();
+    for (const b of renewalTrend) {
+      const breakdown = (trendMode === "brand" ? b.byBrand : b.byOwner) ?? [];
+      for (const e of breakdown) {
+        const id = (trendMode === "brand" ? e.brandId : e.ownerId) ?? null;
+        const key = id ?? "__none__";
+        const cur = totals.get(key) ?? { id: id ?? null, name: e.name, total: 0 };
+        cur.total += e.value;
+        cur.name = e.name;
+        totals.set(key, cur);
+      }
+    }
+    const ranked = Array.from(totals.entries())
+      .map(([key, v]) => ({ key, ...v }))
+      .sort((a, b) => b.total - a.total || a.name.localeCompare(b.name));
+    const top = ranked.slice(0, TOP_SERIES);
+    const otherKeys = new Set(ranked.slice(TOP_SERIES).map((r) => r.key));
+    const series = [
+      ...top.map((t, i) => ({ key: t.key, name: t.name, color: `hsl(var(--chart-${(i % 5) + 1}))` })),
+    ];
+    if (otherKeys.size) series.push({ key: "__other__", name: "Weitere", color: "hsl(var(--muted-foreground))" });
+    return { series, otherKeys };
+  }, [renewalTrend, trendMode]);
+
+  const groupedTrendData = useMemo(() => {
+    if (!renewalTrend || !groupedSeries || trendMode === "total") return [];
+    const { series, otherKeys } = groupedSeries;
+    return renewalTrend.map((b) => {
+      const breakdown = (trendMode === "brand" ? b.byBrand : b.byOwner) ?? [];
+      const row: Record<string, unknown> = {
+        ym: b.ym,
+        monthLabel: monthLabel(b.ym),
+        count: b.count,
+        atRiskCount: b.atRiskCount,
+        total: b.value ?? 0,
+        // Top-3-Brand-Liste fuer den Tooltip (immer Brands, auch wenn
+        // gerade Owner-Modus aktiv ist — die Frage "welche Marke treibt
+        // den Monat?" ist laut Anforderung Brand-fix).
+        topBrands: (b.byBrand ?? []).slice(0, 3).map((x) => ({ name: x.name, value: x.value })),
+      };
+      for (const s of series) row[s.key] = 0;
+      for (const e of breakdown) {
+        const id = (trendMode === "brand" ? e.brandId : e.ownerId) ?? null;
+        const key = id ?? "__none__";
+        if (otherKeys.has(key)) {
+          row.__other__ = (row.__other__ as number ?? 0) + e.value;
+        } else if (key in row) {
+          row[key] = (row[key] as number ?? 0) + e.value;
+        }
+      }
+      return row;
+    });
+  }, [renewalTrend, trendMode, groupedSeries]);
 
   const ownerOptions = useMemo(() => performance?.byOwner ?? [], [performance]);
   const monthly = useMemo(() => {
@@ -198,13 +272,27 @@ export default function Reports() {
         </Card>
       </div>
 
-      {/* Renewal-Pipeline Trend (#99) */}
+      {/* Renewal-Pipeline Trend (#99 / #121) */}
       <Card data-testid="card-renewal-trend">
         <CardHeader>
-          <CardTitle>Renewal-Pipeline (12 Monate)</CardTitle>
-          <p className="text-sm text-muted-foreground">
-            Volumen pro Monat über die nächsten 12 Monate. Der gestapelte rote Anteil zeigt Renewals mit Risiko ≥ 70. Klick auf einen Monat öffnet die Renewals-Liste mit passendem Filter.
-          </p>
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <CardTitle>Renewal-Pipeline (12 Monate)</CardTitle>
+              <p className="text-sm text-muted-foreground mt-1">
+                Volumen pro Monat über die nächsten 12 Monate. Im Modus „Gesamt" zeigt der gestapelte rote Anteil Renewals mit Risiko ≥ 70; in den Modi „nach Brand" / „nach Owner" wird das Volumen je Monat nach den Top-Brands bzw. ‑Ownern aufgeschlüsselt. Klick auf einen Monat öffnet die Renewals-Liste mit passendem Filter.
+              </p>
+            </div>
+            <Select value={trendMode} onValueChange={(v) => setTrendMode(v as "total" | "brand" | "owner")}>
+              <SelectTrigger className="w-[180px]" data-testid="select-trend-mode">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="total">Gesamt</SelectItem>
+                <SelectItem value="brand">Nach Brand</SelectItem>
+                <SelectItem value="owner">Nach Owner</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
         </CardHeader>
         <CardContent className="h-80">
           {renewalTrendData.length === 0 ? (
@@ -214,7 +302,7 @@ export default function Reports() {
           ) : (
             <ResponsiveContainer width="100%" height="100%">
               <BarChart
-                data={renewalTrendData}
+                data={trendMode === "total" ? renewalTrendData : groupedTrendData}
                 onClick={(state: unknown) => {
                   const s = state as { activePayload?: Array<{ payload?: { ym?: string } }> } | null;
                   const ym = s?.activePayload?.[0]?.payload?.ym;
@@ -236,26 +324,46 @@ export default function Reports() {
                 <Tooltip
                   formatter={(value: number, name: string) => [renewalTrendCurrencyFmt.format(value), name]}
                   labelFormatter={(label: string, items) => {
-                    const p = items?.[0]?.payload as { count?: number; atRiskCount?: number; total?: number } | undefined;
+                    const p = items?.[0]?.payload as
+                      | { count?: number; atRiskCount?: number; total?: number; topBrands?: Array<{ name: string; value: number }> }
+                      | undefined;
                     if (!p) return label;
-                    return `${label} · ${p.count ?? 0} Renewals · ${renewalTrendCurrencyFmt.format(p.total ?? 0)}`;
+                    const head = `${label} · ${p.count ?? 0} Renewals · ${renewalTrendCurrencyFmt.format(p.total ?? 0)}`;
+                    if (!p.topBrands || p.topBrands.length === 0) return head;
+                    const tops = p.topBrands.map((b) => `${b.name}: ${renewalTrendCurrencyFmt.format(b.value)}`).join(" · ");
+                    return `${head}\nTop-Brands: ${tops}`;
                   }}
                 />
                 <Legend />
-                <Bar
-                  dataKey="safeValue"
-                  stackId="value"
-                  name="Volumen (Risiko < 70)"
-                  fill="hsl(var(--chart-1))"
-                  cursor="pointer"
-                />
-                <Bar
-                  dataKey="atRiskValue"
-                  stackId="value"
-                  name="Volumen (Risiko ≥ 70)"
-                  fill="hsl(var(--chart-2))"
-                  cursor="pointer"
-                />
+                {trendMode === "total" ? (
+                  <>
+                    <Bar
+                      dataKey="safeValue"
+                      stackId="value"
+                      name="Volumen (Risiko < 70)"
+                      fill="hsl(var(--chart-1))"
+                      cursor="pointer"
+                    />
+                    <Bar
+                      dataKey="atRiskValue"
+                      stackId="value"
+                      name="Volumen (Risiko ≥ 70)"
+                      fill="hsl(var(--chart-2))"
+                      cursor="pointer"
+                    />
+                  </>
+                ) : (
+                  groupedSeries?.series.map((s) => (
+                    <Bar
+                      key={s.key}
+                      dataKey={s.key}
+                      stackId="value"
+                      name={s.name}
+                      fill={s.color}
+                      cursor="pointer"
+                    />
+                  ))
+                )}
               </BarChart>
             </ResponsiveContainer>
           )}

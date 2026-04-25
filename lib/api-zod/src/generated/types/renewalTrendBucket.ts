@@ -7,6 +7,7 @@ Multi-tenant, multi-company, multi-brand. Deal-centric.
 
  * OpenAPI spec version: 0.1.0
  */
+import type { RenewalTrendBreakdown } from "./renewalTrendBreakdown";
 
 export interface RenewalTrendBucket {
   /** Monat im Format YYYY-MM */
@@ -19,4 +20,15 @@ export interface RenewalTrendBucket {
   atRiskCount: number;
   /** Summe valueAmount mit riskScore >= 70 */
   atRiskValue: number;
+  /** Optional. Aufschlüsselung des Buckets nach Brand, sortiert nach
+`value` absteigend. Nur gesetzt, wenn `groupBy` `brand` enthält.
+Renewals ohne Brand erscheinen mit `brandId: null`.
+ */
+  byBrand?: RenewalTrendBreakdown[];
+  /** Optional. Aufschlüsselung des Buckets nach Account-Owner (Owner
+des zugrundeliegenden Vertrags-Deals), sortiert nach `value`
+absteigend. Nur gesetzt, wenn `groupBy` `owner` enthält.
+Renewals ohne auflösbaren Owner erscheinen mit `ownerId: null`.
+ */
+  byOwner?: RenewalTrendBreakdown[];
 }
