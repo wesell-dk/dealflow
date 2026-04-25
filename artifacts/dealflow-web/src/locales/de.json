@@ -424,6 +424,7 @@
       "uploadSuccess": "Import-Job angelegt",
       "uploadFailed": "Upload fehlgeschlagen",
       "filePickError": "Bitte eine PDF- oder DOCX-Datei wählen (max. 20 MB).",
+      "fileTooLarge": "Die Datei ist zu groß. Es sind maximal 20 MB pro Upload erlaubt.",
       "jobsCard": "Import-Jobs",
       "jobsEmpty": "Noch keine Import-Jobs.",
       "statusExtracting": "Text wird extrahiert",

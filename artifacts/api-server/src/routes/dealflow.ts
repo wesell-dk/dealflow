@@ -11576,7 +11576,10 @@ router.post('/clause-imports/upload-url', async (req, res) => {
     return;
   }
   if (size <= 0 || size > MAX_CLAUSE_IMPORT_BYTES) {
-    res.status(400).json({ error: `size must be 1..${MAX_CLAUSE_IMPORT_BYTES} bytes` });
+    res.status(400).json({
+      error: `file_too_large: size must be 1..${MAX_CLAUSE_IMPORT_BYTES} bytes`,
+      maxBytes: MAX_CLAUSE_IMPORT_BYTES,
+    });
     return;
   }
   try {

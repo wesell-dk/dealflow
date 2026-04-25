@@ -145,7 +145,11 @@ function ListView({ onOpenJob }: { onOpenJob: (id: string) => void }) {
       toast({ title: t("pages.clauseImport.filePickError"), variant: "destructive" });
       return;
     }
-    if (!ALLOWED_MIME.includes(file.type) || file.size > MAX_BYTES || file.size <= 0) {
+    if (file.size > MAX_BYTES) {
+      toast({ title: t("pages.clauseImport.fileTooLarge"), variant: "destructive" });
+      return;
+    }
+    if (!ALLOWED_MIME.includes(file.type) || file.size <= 0) {
       toast({ title: t("pages.clauseImport.filePickError"), variant: "destructive" });
       return;
     }
@@ -181,11 +185,19 @@ function ListView({ onOpenJob }: { onOpenJob: (id: string) => void }) {
       const isUnsupportedType =
         /contentType|mimeType/i.test(msg) &&
         /pdf|docx/i.test(msg);
+      const isTooLarge = /file_too_large/i.test(msg);
+      let title = t("pages.clauseImport.uploadFailed");
+      let description: string | undefined = msg;
+      if (isTooLarge) {
+        title = t("pages.clauseImport.fileTooLarge");
+        description = undefined;
+      } else if (isUnsupportedType) {
+        title = t("pages.clauseImport.filePickError");
+        description = undefined;
+      }
       toast({
-        title: isUnsupportedType
-          ? t("pages.clauseImport.filePickError")
-          : t("pages.clauseImport.uploadFailed"),
-        description: isUnsupportedType ? undefined : msg,
+        title,
+        description,
         variant: "destructive",
       });
     } finally {

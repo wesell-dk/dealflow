@@ -340,6 +340,7 @@
       "uploadSuccess": "Import job created",
       "uploadFailed": "Upload failed",
       "filePickError": "Please select a PDF or DOCX file (max. 20 MB).",
+      "fileTooLarge": "The file is too large. Maximum upload size is 20 MB.",
       "jobsCard": "Import jobs",
       "jobsEmpty": "No import jobs yet.",
       "statusExtracting": "Extracting text",

@@ -506,4 +506,3 @@ describe("renewals — engine, scope, lifecycle", () => {
     assert.ok(audit.length >= 1, "expected audit row for renewal patch");
   });
 });
-});
