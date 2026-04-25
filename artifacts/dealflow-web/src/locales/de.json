@@ -12,6 +12,7 @@
     "signatures": "Unterschriften",
     "priceIncreases": "Preiserhöhungen",
     "orderConfirmations": "Auftragsbestätigungen",
+    "renewals": "Renewals",
     "reports": "Berichte",
     "audit": "Audit-Log",
     "copilot": "Copilot",
@@ -324,6 +325,58 @@
         "acknowledged": "In Arbeit",
         "resolved": "Erledigt",
         "dismissed": "Verworfen"
+      }
+    },
+    "renewals": {
+      "title": "Renewals",
+      "subtitle": "Auto-Renewal-Verträge mit nahender Kündigungsfrist und Risiko-Score.",
+      "runNow": "Engine jetzt ausführen",
+      "runDone": "Renewal-Engine ausgeführt",
+      "runSummary": "{{created}} neu, {{updated}} aktualisiert, {{dueSoon}} fällig",
+      "saved": "Gespeichert",
+      "snoozeRequiresDate": "Bitte ein Datum für die Wiedervorlage wählen.",
+      "tableTitle": "Renewal-Pipeline",
+      "empty": "Keine Renewal-Opportunities im Filter.",
+      "summary": {
+        "totalOpen": "Offene Renewals",
+        "thisMonth": "Diesen Monat fällig",
+        "next90": "Nächste 90 Tage",
+        "atRisk": "Hohes Risiko (≥70)"
+      },
+      "filter": {
+        "bucket": "Bucket",
+        "allBuckets": "Alle Buckets",
+        "status": "Status",
+        "minRisk": "Min. Risiko"
+      },
+      "col": {
+        "account": "Kunde",
+        "contract": "Vertrag",
+        "notice": "Notice-Frist",
+        "due": "Vertragsende",
+        "value": "Wert",
+        "risk": "Risiko",
+        "status": "Status"
+      },
+      "status": {
+        "open": "Offen",
+        "snoozed": "Wiedervorlage",
+        "won": "Verlängert",
+        "lost": "Verloren",
+        "cancelled": "Storniert"
+      },
+      "detail": {
+        "riskTitle": "Risiko-Faktoren",
+        "contract": "Vertrag",
+        "notes": "Notizen",
+        "snoozeUntil": "Wiedervorlage bis"
+      },
+      "actions": {
+        "saveNotes": "Notizen speichern",
+        "snooze": "Wiedervorlage",
+        "won": "Verlängert markieren",
+        "lost": "Verloren markieren",
+        "cancel": "Stornieren"
       }
     },
     "reports": {

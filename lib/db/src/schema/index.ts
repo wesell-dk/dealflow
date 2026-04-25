@@ -1011,3 +1011,39 @@ export const externalContractsTable = pgTable("external_contracts", {
   byTenantBrand: index("external_contracts_tenant_brand_idx").on(t.tenantId, t.brandId),
   byEffectiveTo: index("external_contracts_effective_to_idx").on(t.effectiveTo),
 }));
+
+// Renewal-Engine: pro Vertrag, der in den Notice-Korridor wandert, wird
+// hier eine Opportunity materialisiert. Stabiler PK pro (contract, dueDate),
+// damit der Materialisierungs-Job idempotent bleibt.
+export const renewalOpportunitiesTable = pgTable("renewal_opportunities", {
+  id: id(),
+  tenantId: text("tenant_id").notNull(),
+  contractId: text("contract_id").notNull(),
+  externalContractId: text("external_contract_id"),
+  accountId: text("account_id").notNull(),
+  brandId: text("brand_id"),
+  // dueDate = Vertrags-effectiveTo (= geplanter Renewal-Stichtag).
+  dueDate: date("due_date").notNull(),
+  // noticeDeadline = dueDate - renewalNoticeDays (= letzte Frist zum Kündigen).
+  noticeDeadline: date("notice_deadline").notNull(),
+  riskScore: integer("risk_score").notNull().default(50),
+  riskFactors: jsonb("risk_factors")
+    .$type<Array<{ key: string; label: string; points: number; detail?: string }>>()
+    .notNull()
+    .default([]),
+  // open|snoozed|won|lost|cancelled
+  status: text("status").notNull().default("open"),
+  valueAmount: numeric("value_amount", { precision: 18, scale: 2 }),
+  currency: text("currency"),
+  snoozedUntil: date("snoozed_until"),
+  decidedAt: ts("decided_at"),
+  decidedBy: text("decided_by"),
+  notes: text("notes"),
+  createdAt: ts("created_at"),
+  updatedAt: ts("updated_at"),
+}, (t) => ({
+  byTenantStatus: index("renewals_tenant_status_idx").on(t.tenantId, t.status),
+  byContractDue: uniqueIndex("renewals_contract_due_uq").on(t.contractId, t.dueDate),
+  byNoticeDeadline: index("renewals_notice_deadline_idx").on(t.tenantId, t.noticeDeadline),
+  byTenantBrand: index("renewals_tenant_brand_idx").on(t.tenantId, t.brandId),
+}));

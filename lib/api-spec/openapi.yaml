@@ -3145,6 +3145,104 @@ paths:
         "204": { description: deleted }
         "404": { description: not found }
 
+  /renewals:
+    get:
+      operationId: listRenewals
+      tags: [renewals]
+      summary: Renewal-Opportunities auflisten (Brand-Scope-konform)
+      parameters:
+        - in: query
+          name: bucket
+          required: false
+          schema: { type: string, enum: [this_month, next_90, risk] }
+        - in: query
+          name: minRisk
+          required: false
+          schema: { type: integer, minimum: 0, maximum: 100 }
+        - in: query
+          name: status
+          required: false
+          schema: { type: string, enum: [open, snoozed, won, lost, cancelled] }
+        - in: query
+          name: accountId
+          required: false
+          schema: { type: string }
+        - in: query
+          name: brandId
+          required: false
+          schema: { type: string }
+      responses:
+        "200":
+          description: ok
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/RenewalOpportunity" }
+
+  /renewals/_summary:
+    get:
+      operationId: getRenewalSummary
+      tags: [renewals]
+      summary: KPI für Renewal-Pipeline (offene Opps, Pipeline-Wert, Buckets)
+      responses:
+        "200":
+          description: ok
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/RenewalSummary" }
+
+  /renewals/run:
+    post:
+      operationId: runRenewalEngine
+      tags: [renewals]
+      summary: Renewal-Engine sofort materialisieren (Tenant-Admin)
+      responses:
+        "200":
+          description: ok
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/RenewalRunResult" }
+        "403": { description: tenant admin required }
+
+  /renewals/{id}:
+    get:
+      operationId: getRenewal
+      tags: [renewals]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: ok
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/RenewalOpportunity" }
+        "404": { description: not found }
+    patch:
+      operationId: updateRenewal
+      tags: [renewals]
+      summary: Status ändern (snooze, won, lost, cancelled), Notizen
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/RenewalPatch" }
+      responses:
+        "200":
+          description: ok
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/RenewalOpportunity" }
+        "404": { description: not found }
+
 
 components:
   schemas:
@@ -6067,3 +6165,80 @@ components:
         total: { type: number }
         currency: { type: string }
         acceptedAt: { type: ["string", "null"], format: date-time }
+
+    RenewalRiskFactor:
+      type: object
+      required: [key, label, points]
+      properties:
+        key: { type: string }
+        label: { type: string }
+        points: { type: integer }
+        detail: { type: string }
+
+    RenewalOpportunity:
+      type: object
+      required:
+        [ id, tenantId, contractId, accountId, dueDate, noticeDeadline,
+          riskScore, riskFactors, status, createdAt, updatedAt ]
+      properties:
+        id: { type: string }
+        tenantId: { type: string }
+        contractId: { type: string }
+        contractTitle: { type: ["string", "null"] }
+        accountId: { type: string }
+        accountName: { type: ["string", "null"] }
+        brandId: { type: ["string", "null"] }
+        brandName: { type: ["string", "null"] }
+        dueDate: { type: string, format: date }
+        noticeDeadline: { type: string, format: date }
+        riskScore: { type: integer, minimum: 0, maximum: 100 }
+        riskFactors:
+          type: array
+          items: { $ref: "#/components/schemas/RenewalRiskFactor" }
+        status:
+          type: string
+          enum: [open, snoozed, won, lost, cancelled]
+        valueAmount: { type: ["number", "null"] }
+        currency: { type: ["string", "null"] }
+        snoozedUntil: { type: ["string", "null"], format: date }
+        decidedAt: { type: ["string", "null"], format: date-time }
+        decidedBy: { type: ["string", "null"] }
+        notes: { type: ["string", "null"] }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+
+    RenewalPatch:
+      type: object
+      properties:
+        status:
+          type: string
+          enum: [open, snoozed, won, lost, cancelled]
+        snoozedUntil: { type: ["string", "null"], format: date }
+        notes: { type: ["string", "null"] }
+
+    RenewalRunResult:
+      type: object
+      required: [scanned, created, updated, dueSoon, skipped]
+      properties:
+        scanned: { type: integer }
+        created: { type: integer }
+        updated: { type: integer }
+        dueSoon: { type: integer }
+        skipped: { type: integer }
+
+    RenewalBucketStat:
+      type: object
+      required: [count, value]
+      properties:
+        count: { type: integer }
+        value: { type: number }
+
+    RenewalSummary:
+      type: object
+      required: [totalOpen, pipelineValue, thisMonth, next90, atRisk]
+      properties:
+        totalOpen: { type: integer }
+        pipelineValue: { type: number }
+        thisMonth: { $ref: "#/components/schemas/RenewalBucketStat" }
+        next90: { $ref: "#/components/schemas/RenewalBucketStat" }
+        atRisk: { $ref: "#/components/schemas/RenewalBucketStat" }

@@ -2837,6 +2837,102 @@ export interface CurrentQuote {
   acceptedAt: string | null;
 }
 
+export interface RenewalRiskFactor {
+  key: string;
+  label: string;
+  points: number;
+  detail?: string;
+}
+
+export type RenewalOpportunityStatus =
+  (typeof RenewalOpportunityStatus)[keyof typeof RenewalOpportunityStatus];
+
+export const RenewalOpportunityStatus = {
+  open: "open",
+  snoozed: "snoozed",
+  won: "won",
+  lost: "lost",
+  cancelled: "cancelled",
+} as const;
+
+export interface RenewalOpportunity {
+  id: string;
+  tenantId: string;
+  contractId: string;
+  /** @nullable */
+  contractTitle?: string | null;
+  accountId: string;
+  /** @nullable */
+  accountName?: string | null;
+  /** @nullable */
+  brandId?: string | null;
+  /** @nullable */
+  brandName?: string | null;
+  dueDate: string;
+  noticeDeadline: string;
+  /**
+   * @minimum 0
+   * @maximum 100
+   */
+  riskScore: number;
+  riskFactors: RenewalRiskFactor[];
+  status: RenewalOpportunityStatus;
+  /** @nullable */
+  valueAmount?: number | null;
+  /** @nullable */
+  currency?: string | null;
+  /** @nullable */
+  snoozedUntil?: string | null;
+  /** @nullable */
+  decidedAt?: string | null;
+  /** @nullable */
+  decidedBy?: string | null;
+  /** @nullable */
+  notes?: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export type RenewalPatchStatus =
+  (typeof RenewalPatchStatus)[keyof typeof RenewalPatchStatus];
+
+export const RenewalPatchStatus = {
+  open: "open",
+  snoozed: "snoozed",
+  won: "won",
+  lost: "lost",
+  cancelled: "cancelled",
+} as const;
+
+export interface RenewalPatch {
+  status?: RenewalPatchStatus;
+  /** @nullable */
+  snoozedUntil?: string | null;
+  /** @nullable */
+  notes?: string | null;
+}
+
+export interface RenewalRunResult {
+  scanned: number;
+  created: number;
+  updated: number;
+  dueSoon: number;
+  skipped: number;
+}
+
+export interface RenewalBucketStat {
+  count: number;
+  value: number;
+}
+
+export interface RenewalSummary {
+  totalOpen: number;
+  pipelineValue: number;
+  thisMonth: RenewalBucketStat;
+  next90: RenewalBucketStat;
+  atRisk: RenewalBucketStat;
+}
+
 export type ListCompaniesParams = {
   /**
  * If true, returns the FULL permitted set (ignoring active scope filter).
@@ -3024,3 +3120,35 @@ export type ListExternalContractsParams = {
   accountId?: string;
   brandId?: string;
 };
+
+export type ListRenewalsParams = {
+  bucket?: ListRenewalsBucket;
+  /**
+   * @minimum 0
+   * @maximum 100
+   */
+  minRisk?: number;
+  status?: ListRenewalsStatus;
+  accountId?: string;
+  brandId?: string;
+};
+
+export type ListRenewalsBucket =
+  (typeof ListRenewalsBucket)[keyof typeof ListRenewalsBucket];
+
+export const ListRenewalsBucket = {
+  this_month: "this_month",
+  next_90: "next_90",
+  risk: "risk",
+} as const;
+
+export type ListRenewalsStatus =
+  (typeof ListRenewalsStatus)[keyof typeof ListRenewalsStatus];
+
+export const ListRenewalsStatus = {
+  open: "open",
+  snoozed: "snoozed",
+  won: "won",
+  lost: "lost",
+  cancelled: "cancelled",
+} as const;

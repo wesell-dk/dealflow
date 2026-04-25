@@ -28,6 +28,7 @@ import PriceIncreases from "@/pages/price-increases";
 import PriceIncreaseDetail from "@/pages/price-increase";
 import Accounts from "@/pages/accounts";
 import AccountDetail from "@/pages/account";
+import Renewals from "@/pages/renewals";
 import Reports from "@/pages/reports";
 import Copilot from "@/pages/copilot";
 import Admin from "@/pages/admin";
@@ -78,6 +79,7 @@ function ProtectedRoutes() {
         <Route path="/price-increases/:id" component={PriceIncreaseDetail} />
         <Route path="/accounts" component={Accounts} />
         <Route path="/accounts/:id" component={AccountDetail} />
+        <Route path="/renewals" component={Renewals} />
         <Route path="/reports" component={Reports} />
         <Route path="/copilot" component={Copilot} />
         <Route path="/admin" component={Admin} />

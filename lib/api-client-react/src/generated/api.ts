@@ -139,6 +139,7 @@ import type {
   ListOrderConfirmationsParams,
   ListQuoteTemplatesParams,
   ListQuotesParams,
+  ListRenewalsParams,
   ListSavedViewsParams,
   ListSignaturePackagesParams,
   MeUser,
@@ -181,6 +182,10 @@ import type {
   QuoteVersion,
   QuoteVersionInput,
   ReactionInput,
+  RenewalOpportunity,
+  RenewalPatch,
+  RenewalRunResult,
+  RenewalSummary,
   ReplaceQuoteLineItems200,
   ReplaceQuoteLineItemsBody,
   RequestApprovalFromReaction201,
@@ -14361,4 +14366,421 @@ export const useDeleteExternalContract = <
   TContext
 > => {
   return useMutation(getDeleteExternalContractMutationOptions(options));
+};
+
+/**
+ * @summary Renewal-Opportunities auflisten (Brand-Scope-konform)
+ */
+export const getListRenewalsUrl = (params?: ListRenewalsParams) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? "null" : value.toString());
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0
+    ? `/api/v1/renewals?${stringifiedParams}`
+    : `/api/v1/renewals`;
+};
+
+export const listRenewals = async (
+  params?: ListRenewalsParams,
+  options?: RequestInit,
+): Promise<RenewalOpportunity[]> => {
+  return customFetch<RenewalOpportunity[]>(getListRenewalsUrl(params), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getListRenewalsQueryKey = (params?: ListRenewalsParams) => {
+  return [`/api/v1/renewals`, ...(params ? [params] : [])] as const;
+};
+
+export const getListRenewalsQueryOptions = <
+  TData = Awaited<ReturnType<typeof listRenewals>>,
+  TError = ErrorType<unknown>,
+>(
+  params?: ListRenewalsParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof listRenewals>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getListRenewalsQueryKey(params);
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof listRenewals>>> = ({
+    signal,
+  }) => listRenewals(params, { signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof listRenewals>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type ListRenewalsQueryResult = NonNullable<
+  Awaited<ReturnType<typeof listRenewals>>
+>;
+export type ListRenewalsQueryError = ErrorType<unknown>;
+
+/**
+ * @summary Renewal-Opportunities auflisten (Brand-Scope-konform)
+ */
+
+export function useListRenewals<
+  TData = Awaited<ReturnType<typeof listRenewals>>,
+  TError = ErrorType<unknown>,
+>(
+  params?: ListRenewalsParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof listRenewals>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getListRenewalsQueryOptions(params, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary KPI für Renewal-Pipeline (offene Opps, Pipeline-Wert, Buckets)
+ */
+export const getGetRenewalSummaryUrl = () => {
+  return `/api/v1/renewals/_summary`;
+};
+
+export const getRenewalSummary = async (
+  options?: RequestInit,
+): Promise<RenewalSummary> => {
+  return customFetch<RenewalSummary>(getGetRenewalSummaryUrl(), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getGetRenewalSummaryQueryKey = () => {
+  return [`/api/v1/renewals/_summary`] as const;
+};
+
+export const getGetRenewalSummaryQueryOptions = <
+  TData = Awaited<ReturnType<typeof getRenewalSummary>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getRenewalSummary>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getGetRenewalSummaryQueryKey();
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof getRenewalSummary>>
+  > = ({ signal }) => getRenewalSummary({ signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getRenewalSummary>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetRenewalSummaryQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getRenewalSummary>>
+>;
+export type GetRenewalSummaryQueryError = ErrorType<unknown>;
+
+/**
+ * @summary KPI für Renewal-Pipeline (offene Opps, Pipeline-Wert, Buckets)
+ */
+
+export function useGetRenewalSummary<
+  TData = Awaited<ReturnType<typeof getRenewalSummary>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getRenewalSummary>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetRenewalSummaryQueryOptions(options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Renewal-Engine sofort materialisieren (Tenant-Admin)
+ */
+export const getRunRenewalEngineUrl = () => {
+  return `/api/v1/renewals/run`;
+};
+
+export const runRenewalEngine = async (
+  options?: RequestInit,
+): Promise<RenewalRunResult> => {
+  return customFetch<RenewalRunResult>(getRunRenewalEngineUrl(), {
+    ...options,
+    method: "POST",
+  });
+};
+
+export const getRunRenewalEngineMutationOptions = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof runRenewalEngine>>,
+    TError,
+    void,
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof runRenewalEngine>>,
+  TError,
+  void,
+  TContext
+> => {
+  const mutationKey = ["runRenewalEngine"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof runRenewalEngine>>,
+    void
+  > = () => {
+    return runRenewalEngine(requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type RunRenewalEngineMutationResult = NonNullable<
+  Awaited<ReturnType<typeof runRenewalEngine>>
+>;
+
+export type RunRenewalEngineMutationError = ErrorType<void>;
+
+/**
+ * @summary Renewal-Engine sofort materialisieren (Tenant-Admin)
+ */
+export const useRunRenewalEngine = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof runRenewalEngine>>,
+    TError,
+    void,
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof runRenewalEngine>>,
+  TError,
+  void,
+  TContext
+> => {
+  return useMutation(getRunRenewalEngineMutationOptions(options));
+};
+
+export const getGetRenewalUrl = (id: string) => {
+  return `/api/v1/renewals/${id}`;
+};
+
+export const getRenewal = async (
+  id: string,
+  options?: RequestInit,
+): Promise<RenewalOpportunity> => {
+  return customFetch<RenewalOpportunity>(getGetRenewalUrl(id), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getGetRenewalQueryKey = (id: string) => {
+  return [`/api/v1/renewals/${id}`] as const;
+};
+
+export const getGetRenewalQueryOptions = <
+  TData = Awaited<ReturnType<typeof getRenewal>>,
+  TError = ErrorType<void>,
+>(
+  id: string,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getRenewal>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getGetRenewalQueryKey(id);
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof getRenewal>>> = ({
+    signal,
+  }) => getRenewal(id, { signal, ...requestOptions });
+
+  return {
+    queryKey,
+    queryFn,
+    enabled: !!id,
+    ...queryOptions,
+  } as UseQueryOptions<
+    Awaited<ReturnType<typeof getRenewal>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetRenewalQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getRenewal>>
+>;
+export type GetRenewalQueryError = ErrorType<void>;
+
+export function useGetRenewal<
+  TData = Awaited<ReturnType<typeof getRenewal>>,
+  TError = ErrorType<void>,
+>(
+  id: string,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getRenewal>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetRenewalQueryOptions(id, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Status ändern (snooze, won, lost, cancelled), Notizen
+ */
+export const getUpdateRenewalUrl = (id: string) => {
+  return `/api/v1/renewals/${id}`;
+};
+
+export const updateRenewal = async (
+  id: string,
+  renewalPatch: RenewalPatch,
+  options?: RequestInit,
+): Promise<RenewalOpportunity> => {
+  return customFetch<RenewalOpportunity>(getUpdateRenewalUrl(id), {
+    ...options,
+    method: "PATCH",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(renewalPatch),
+  });
+};
+
+export const getUpdateRenewalMutationOptions = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof updateRenewal>>,
+    TError,
+    { id: string; data: BodyType<RenewalPatch> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof updateRenewal>>,
+  TError,
+  { id: string; data: BodyType<RenewalPatch> },
+  TContext
+> => {
+  const mutationKey = ["updateRenewal"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof updateRenewal>>,
+    { id: string; data: BodyType<RenewalPatch> }
+  > = (props) => {
+    const { id, data } = props ?? {};
+
+    return updateRenewal(id, data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type UpdateRenewalMutationResult = NonNullable<
+  Awaited<ReturnType<typeof updateRenewal>>
+>;
+export type UpdateRenewalMutationBody = BodyType<RenewalPatch>;
+export type UpdateRenewalMutationError = ErrorType<void>;
+
+/**
+ * @summary Status ändern (snooze, won, lost, cancelled), Notizen
+ */
+export const useUpdateRenewal = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof updateRenewal>>,
+    TError,
+    { id: string; data: BodyType<RenewalPatch> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof updateRenewal>>,
+  TError,
+  { id: string; data: BodyType<RenewalPatch> },
+  TContext
+> => {
+  return useMutation(getUpdateRenewalMutationOptions(options));
 };

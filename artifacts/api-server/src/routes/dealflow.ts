@@ -94,6 +94,7 @@ import {
   uploadedObjectsTable,
   savedViewsTable,
   externalContractsTable,
+  renewalOpportunitiesTable,
 } from '@workspace/db';
 import {
   generatePriceRejectionForReaction,
@@ -8201,6 +8202,517 @@ router.delete('/external-contracts/:id', async (req, res) => {
 });
 
 
+// ────────────────────────────────────────────────────────────────────────────
+// Renewal-Engine — Task #66
+// Verträge mit autoRenewal=true werden zyklisch gescannt. Sobald die
+// Notice-Frist in den nächsten 180 Tagen liegt, wird eine Opportunity
+// materialisiert. Stabiler PK pro (contract, dueDate) macht den Job idempotent.
+// ────────────────────────────────────────────────────────────────────────────
+
+const RENEWAL_LOOKAHEAD_DAYS = 180;
+const RENEWAL_DUE_SOON_DAYS = 30;
+
+type RenewalRiskFactor = {
+  key: string;
+  label: string;
+  points: number;
+  detail?: string;
+};
+
+type RenewalRiskInput = {
+  openObligationsCount: number;
+  accountHealthScore: number | null;
+  avgDiscountPct: number | null;
+  daysSinceLastTouch: number | null;
+};
+
+function computeRenewalRiskScore(input: RenewalRiskInput): {
+  score: number;
+  factors: RenewalRiskFactor[];
+} {
+  const factors: RenewalRiskFactor[] = [];
+  let score = 0;
+
+  // Offene Pflichten: 5 Punkte je offener derived-obligation, max 25
+  const obPts = Math.min(25, input.openObligationsCount * 5);
+  if (obPts > 0) {
+    score += obPts;
+    factors.push({
+      key: 'openObligations',
+      label: `Offene Pflichten (${input.openObligationsCount})`,
+      points: obPts,
+    });
+  }
+
+  // Account-Health: niedriger Health → Risiko. (100-health)/2, max 25
+  if (input.accountHealthScore != null) {
+    const hpPts = Math.max(0, Math.min(25, Math.round((100 - input.accountHealthScore) / 2)));
+    if (hpPts > 0) {
+      score += hpPts;
+      factors.push({
+        key: 'accountHealth',
+        label: `Niedrige Account-Health (${input.accountHealthScore})`,
+        points: hpPts,
+      });
+    }
+  }
+
+  // Discount-Drift: hoher durchschn. Discount → Pricing fragil, max 25
+  if (input.avgDiscountPct != null) {
+    const dPts = Math.max(0, Math.min(25, Math.round(input.avgDiscountPct - 10)));
+    if (dPts > 0) {
+      score += dPts;
+      factors.push({
+        key: 'discountDrift',
+        label: `Hoher Discount (Ø ${input.avgDiscountPct.toFixed(1)} %)`,
+        points: dPts,
+      });
+    }
+  }
+
+  // Inaktivität: keine Aktivität ≥ 60 Tage → +25
+  if (input.daysSinceLastTouch != null && input.daysSinceLastTouch >= 60) {
+    score += 25;
+    factors.push({
+      key: 'inactivity',
+      label: `Lange keine Aktivität (${input.daysSinceLastTouch} Tage)`,
+      points: 25,
+    });
+  }
+
+  // Cap 0..100
+  if (score > 100) score = 100;
+  if (score < 0) score = 0;
+  return { score, factors };
+}
+
+function addDays(d: Date, n: number): Date {
+  const x = new Date(d);
+  x.setUTCDate(x.getUTCDate() + n);
+  return x;
+}
+
+function daysBetween(a: Date, b: Date): number {
+  const ms = a.getTime() - b.getTime();
+  return Math.floor(ms / (24 * 60 * 60 * 1000));
+}
+
+function toDateOnly(d: Date | string | null): string | null {
+  if (!d) return null;
+  if (typeof d === 'string') return d.length >= 10 ? d.slice(0, 10) : d;
+  return d.toISOString().slice(0, 10);
+}
+
+async function gatherRenewalRiskInput(
+  contractId: string,
+  accountId: string,
+): Promise<RenewalRiskInput> {
+  const [openOb, acc, contractRow] = await Promise.all([
+    db.select({ c: sql<number>`count(*)::int` })
+      .from(obligationsTable)
+      .where(and(
+        eq(obligationsTable.contractId, contractId),
+        sql`${obligationsTable.status} not in ('done','waived')`,
+      )),
+    db.select().from(accountsTable).where(eq(accountsTable.id, accountId)),
+    db.select().from(contractsTable).where(eq(contractsTable.id, contractId)),
+  ]);
+  const openObligationsCount = openOb[0]?.c ?? 0;
+  const accountHealthScore = acc[0]?.healthScore ?? null;
+
+  // Discount: aus akzeptierter Quote-Version
+  let avgDiscountPct: number | null = null;
+  const c = contractRow[0];
+  if (c?.acceptedQuoteVersionId) {
+    const lines = await db.select({ d: lineItemsTable.discountPct })
+      .from(lineItemsTable)
+      .where(eq(lineItemsTable.quoteVersionId, c.acceptedQuoteVersionId));
+    if (lines.length > 0) {
+      const nums = lines.map(l => Number(l.d ?? 0)).filter(n => !Number.isNaN(n));
+      if (nums.length > 0) {
+        avgDiscountPct = nums.reduce((s, n) => s + n, 0) / nums.length;
+      }
+    }
+  }
+
+  // Inaktivität: jüngste Audit-Aktivität auf Vertrag
+  let daysSinceLastTouch: number | null = null;
+  const lastAudit = await db.select({ at: auditLogTable.at })
+    .from(auditLogTable)
+    .where(and(
+      eq(auditLogTable.entityType, 'contract'),
+      eq(auditLogTable.entityId, contractId),
+    ))
+    .orderBy(desc(auditLogTable.at))
+    .limit(1);
+  if (lastAudit[0]?.at) {
+    daysSinceLastTouch = daysBetween(new Date(), new Date(lastAudit[0].at));
+  }
+  return { openObligationsCount, accountHealthScore, avgDiscountPct, daysSinceLastTouch };
+}
+
+interface RenewalRunResult {
+  scanned: number;
+  created: number;
+  updated: number;
+  dueSoon: number;
+  skipped: number;
+}
+
+async function materializeRenewalsForTenant(tenantId: string): Promise<RenewalRunResult> {
+  const today = new Date();
+  const horizon = addDays(today, RENEWAL_LOOKAHEAD_DAYS);
+  // Nur signierte/aktive Verträge mit autoRenewal=true und gesetztem effectiveTo
+  const candidates = await db.select().from(contractsTable).where(and(
+    eq(contractsTable.tenantId, tenantId),
+    eq(contractsTable.autoRenewal, true),
+    sql`${contractsTable.effectiveTo} is not null`,
+    sql`${contractsTable.status} in ('signed','active','executed')`,
+  ));
+  const result: RenewalRunResult = { scanned: candidates.length, created: 0, updated: 0, dueSoon: 0, skipped: 0 };
+
+  for (const c of candidates) {
+    if (!c.effectiveTo || !c.accountId) { result.skipped++; continue; }
+    const dueDate = new Date(`${c.effectiveTo}T00:00:00.000Z`);
+    const noticeDays = c.renewalNoticeDays ?? 90;
+    const noticeDeadline = addDays(dueDate, -noticeDays);
+
+    // In den nächsten RENEWAL_LOOKAHEAD_DAYS? (entweder Notice ODER dueDate fällt rein)
+    const inWindow =
+      (noticeDeadline >= today && noticeDeadline <= horizon) ||
+      (dueDate >= today && dueDate <= horizon);
+    if (!inWindow) { result.skipped++; continue; }
+
+    const dueDateStr = toDateOnly(dueDate)!;
+    const noticeStr = toDateOnly(noticeDeadline)!;
+    const riskIn = await gatherRenewalRiskInput(c.id, c.accountId);
+    const { score, factors } = computeRenewalRiskScore(riskIn);
+
+    // Existiert bereits eine Opportunity für (contract, dueDate)?
+    const existing = await db.select().from(renewalOpportunitiesTable).where(and(
+      eq(renewalOpportunitiesTable.contractId, c.id),
+      eq(renewalOpportunitiesTable.dueDate, dueDateStr),
+    ));
+    if (existing.length === 0) {
+      const id = `rn_${randomUUID().slice(0, 12)}`;
+      const ins = await db.insert(renewalOpportunitiesTable).values({
+        id,
+        tenantId,
+        contractId: c.id,
+        accountId: c.accountId,
+        brandId: c.brandId ?? null,
+        dueDate: dueDateStr,
+        noticeDeadline: noticeStr,
+        riskScore: score,
+        riskFactors: factors,
+        status: 'open',
+        valueAmount: c.valueAmount == null ? null : String(c.valueAmount),
+        currency: c.valueCurrency ?? c.currency ?? null,
+      }).onConflictDoNothing({
+        target: [renewalOpportunitiesTable.contractId, renewalOpportunitiesTable.dueDate],
+      }).returning({ id: renewalOpportunitiesTable.id });
+      if (ins.length === 0) {
+        result.skipped++;
+        continue;
+      }
+      result.created++;
+      void emitEvent(tenantId, 'renewal.created', {
+        renewalId: id,
+        contractId: c.id,
+        accountId: c.accountId,
+        dueDate: dueDateStr,
+        noticeDeadline: noticeStr,
+        riskScore: score,
+      });
+      const daysToNotice = daysBetween(noticeDeadline, today);
+      if (daysToNotice <= RENEWAL_DUE_SOON_DAYS) {
+        result.dueSoon++;
+        void emitEvent(tenantId, 'renewal.due_soon', {
+          renewalId: id,
+          contractId: c.id,
+          accountId: c.accountId,
+          noticeDeadline: noticeStr,
+          daysToNotice,
+        });
+      }
+    } else {
+      // Existing Opportunity → Risk-Score aktualisieren wenn offen.
+      const cur = existing[0]!;
+      if (cur.status === 'open' && cur.riskScore !== score) {
+        await db.update(renewalOpportunitiesTable)
+          .set({ riskScore: score, riskFactors: factors, updatedAt: new Date() })
+          .where(eq(renewalOpportunitiesTable.id, cur.id));
+        result.updated++;
+      } else {
+        result.skipped++;
+      }
+    }
+  }
+  return result;
+}
+
+async function mapRenewal(
+  row: typeof renewalOpportunitiesTable.$inferSelect,
+  ctx?: {
+    accs?: Map<string, typeof accountsTable.$inferSelect>;
+    brands?: Map<string, typeof brandsTable.$inferSelect>;
+    contracts?: Map<string, typeof contractsTable.$inferSelect>;
+  },
+) {
+  const accs = ctx?.accs ?? (await getAccountMap());
+  const brands = ctx?.brands ?? (await getBrandMap());
+  const contracts = ctx?.contracts ?? new Map<string, typeof contractsTable.$inferSelect>();
+  const c = contracts.get(row.contractId) ?? null;
+  return {
+    id: row.id,
+    tenantId: row.tenantId,
+    contractId: row.contractId,
+    contractTitle: c?.title ?? null,
+    accountId: row.accountId,
+    accountName: accs.get(row.accountId)?.name ?? null,
+    brandId: row.brandId,
+    brandName: row.brandId ? (brands.get(row.brandId)?.name ?? null) : null,
+    dueDate: row.dueDate,
+    noticeDeadline: row.noticeDeadline,
+    riskScore: row.riskScore,
+    riskFactors: row.riskFactors ?? [],
+    status: row.status,
+    valueAmount: row.valueAmount == null ? null : Number(row.valueAmount),
+    currency: row.currency,
+    snoozedUntil: row.snoozedUntil ?? null,
+    decidedAt: iso(row.decidedAt),
+    decidedBy: row.decidedBy,
+    notes: row.notes,
+    createdAt: iso(row.createdAt)!,
+    updatedAt: iso(row.updatedAt)!,
+  };
+}
+
+async function loadVisibleRenewal(
+  req: Request,
+  id: string,
+): Promise<typeof renewalOpportunitiesTable.$inferSelect | null> {
+  const scope = getScope(req);
+  const [row] = await db.select().from(renewalOpportunitiesTable).where(and(
+    eq(renewalOpportunitiesTable.id, id),
+    eq(renewalOpportunitiesTable.tenantId, scope.tenantId),
+  ));
+  if (!row) return null;
+  const accStatus = await entityScopeStatus(req, 'account', row.accountId);
+  if (accStatus !== 'ok') return null;
+  if (row.brandId) {
+    const allowB = await allowedBrandIds(req);
+    if (!scope.tenantWide || hasActiveScopeFilter(scope)) {
+      if (!allowB.includes(row.brandId)) return null;
+    }
+  }
+  return row;
+}
+
+// GET /renewals — gefiltert nach bucket / minRisk / status / brand / account
+router.get('/renewals', async (req, res) => {
+  const scope = getScope(req);
+  const filters: any[] = [eq(renewalOpportunitiesTable.tenantId, scope.tenantId)];
+
+  const status = typeof req.query.status === 'string' ? req.query.status : null;
+  if (status && ['open','snoozed','won','lost','cancelled'].includes(status)) {
+    filters.push(eq(renewalOpportunitiesTable.status, status));
+  } else if (!status || status === 'open') {
+    // Default-Listing zeigt offene Opportunities
+    if (!status) filters.push(eq(renewalOpportunitiesTable.status, 'open'));
+  }
+
+  const minRisk = req.query.minRisk == null ? null : Number(req.query.minRisk);
+  if (minRisk != null && !Number.isNaN(minRisk)) {
+    filters.push(sql`${renewalOpportunitiesTable.riskScore} >= ${minRisk}`);
+  }
+  if (typeof req.query.accountId === 'string') {
+    filters.push(eq(renewalOpportunitiesTable.accountId, req.query.accountId));
+  }
+  if (typeof req.query.brandId === 'string') {
+    filters.push(eq(renewalOpportunitiesTable.brandId, req.query.brandId));
+  }
+
+  const today = toDateOnly(new Date())!;
+  const bucket = typeof req.query.bucket === 'string' ? req.query.bucket : null;
+  if (bucket === 'this_month') {
+    const eom = new Date();
+    eom.setUTCMonth(eom.getUTCMonth() + 1, 0);
+    filters.push(sql`${renewalOpportunitiesTable.noticeDeadline} <= ${toDateOnly(eom)}`);
+    filters.push(sql`${renewalOpportunitiesTable.noticeDeadline} >= ${today}`);
+  } else if (bucket === 'next_90') {
+    const horizon = addDays(new Date(), 90);
+    filters.push(sql`${renewalOpportunitiesTable.noticeDeadline} <= ${toDateOnly(horizon)}`);
+    filters.push(sql`${renewalOpportunitiesTable.noticeDeadline} >= ${today}`);
+  } else if (bucket === 'risk') {
+    filters.push(sql`${renewalOpportunitiesTable.riskScore} >= 70`);
+  }
+
+  // Brand-Scope
+  if (!scope.tenantWide || hasActiveScopeFilter(scope)) {
+    const allowB = await allowedBrandIds(req);
+    if (allowB.length > 0) {
+      filters.push(sql`(${renewalOpportunitiesTable.brandId} is null or ${renewalOpportunitiesTable.brandId} = any(${allowB}))`);
+    } else {
+      filters.push(sql`${renewalOpportunitiesTable.brandId} is null`);
+    }
+  }
+
+  const rows = await db.select().from(renewalOpportunitiesTable)
+    .where(and(...filters))
+    .orderBy(asc(renewalOpportunitiesTable.noticeDeadline));
+
+  // Account-Scope filtern (verträge ohne sichtbaren Account ausblenden)
+  const allAccIds = Array.from(new Set(rows.map(r => r.accountId)));
+  const visAcc = new Set<string>();
+  for (const aid of allAccIds) {
+    const s = await entityScopeStatus(req, 'account', aid);
+    if (s === 'ok') visAcc.add(aid);
+  }
+  const visible = rows.filter(r => visAcc.has(r.accountId));
+
+  const [accs, brands, contractsRows] = await Promise.all([
+    getAccountMap(),
+    getBrandMap(),
+    visible.length === 0 ? Promise.resolve([] as Array<typeof contractsTable.$inferSelect>)
+      : db.select().from(contractsTable).where(inArray(contractsTable.id, visible.map(r => r.contractId))),
+  ]);
+  const contracts = new Map(contractsRows.map(c => [c.id, c]));
+
+  const out = await Promise.all(visible.map(r => mapRenewal(r, { accs, brands, contracts })));
+  res.json(out);
+});
+
+// GET /renewals/summary — KPI für Reports-Cockpit
+router.get('/renewals/_summary', async (req, res) => {
+  const scope = getScope(req);
+  const filters: any[] = [
+    eq(renewalOpportunitiesTable.tenantId, scope.tenantId),
+    eq(renewalOpportunitiesTable.status, 'open'),
+  ];
+  if (!scope.tenantWide || hasActiveScopeFilter(scope)) {
+    const allowB = await allowedBrandIds(req);
+    if (allowB.length > 0) {
+      filters.push(sql`(${renewalOpportunitiesTable.brandId} is null or ${renewalOpportunitiesTable.brandId} = any(${allowB}))`);
+    } else {
+      filters.push(sql`${renewalOpportunitiesTable.brandId} is null`);
+    }
+  }
+  const rows = await db.select().from(renewalOpportunitiesTable).where(and(...filters));
+
+  // Account-Scope filtern
+  const allAccIds = Array.from(new Set(rows.map(r => r.accountId)));
+  const visAcc = new Set<string>();
+  for (const aid of allAccIds) {
+    const s = await entityScopeStatus(req, 'account', aid);
+    if (s === 'ok') visAcc.add(aid);
+  }
+  const visible = rows.filter(r => visAcc.has(r.accountId));
+
+  const today = new Date();
+  const eom = new Date();
+  eom.setUTCMonth(eom.getUTCMonth() + 1, 0);
+  const next90 = addDays(today, 90);
+
+  const sumValue = (xs: typeof visible) =>
+    xs.reduce((s, r) => s + (r.valueAmount == null ? 0 : Number(r.valueAmount)), 0);
+
+  const inThisMonth = visible.filter(r => r.noticeDeadline <= toDateOnly(eom)! && r.noticeDeadline >= toDateOnly(today)!);
+  const inNext90 = visible.filter(r => r.noticeDeadline <= toDateOnly(next90)! && r.noticeDeadline >= toDateOnly(today)!);
+  const atRisk = visible.filter(r => r.riskScore >= 70);
+
+  res.json({
+    totalOpen: visible.length,
+    pipelineValue: sumValue(visible),
+    thisMonth: { count: inThisMonth.length, value: sumValue(inThisMonth) },
+    next90: { count: inNext90.length, value: sumValue(inNext90) },
+    atRisk: { count: atRisk.length, value: sumValue(atRisk) },
+  });
+});
+
+// GET /renewals/:id
+router.get('/renewals/:id', async (req, res) => {
+  const row = await loadVisibleRenewal(req, req.params.id);
+  if (!row) {
+    res.status(404).json({ error: 'not found' });
+    return;
+  }
+  res.json(await mapRenewal(row));
+});
+
+// POST /renewals/run — Tenant-Admin Trigger
+router.post('/renewals/run', async (req, res) => {
+  if (!isTenantAdmin(req)) {
+    res.status(403).json({ error: 'tenant admin required' });
+    return;
+  }
+  const scope = getScope(req);
+  try {
+    const result = await materializeRenewalsForTenant(scope.tenantId);
+    await writeAuditFromReq(req, {
+      entityType: 'tenant',
+      entityId: scope.tenantId,
+      action: 'renewal_run',
+      summary: `Renewal-Engine ausgeführt: ${result.created} neu, ${result.updated} aktualisiert, ${result.dueSoon} fällig`,
+      actor: scope.user?.name,
+      after: result,
+    });
+    res.json(result);
+  } catch (err) {
+    req.log.error({ err }, 'renewal materialization failed');
+    res.status(500).json({ error: 'renewal run failed' });
+  }
+});
+
+// PATCH /renewals/:id — snooze / status ändern
+const RenewalPatchBody = z.object({
+  status: z.enum(['open','snoozed','won','lost','cancelled']).optional(),
+  snoozedUntil: z.string().nullable().optional(),
+  notes: z.string().max(2000).nullable().optional(),
+});
+
+router.patch('/renewals/:id', async (req, res) => {
+  const scope = getScope(req);
+  const existing = await loadVisibleRenewal(req, req.params.id);
+  if (!existing) {
+    res.status(404).json({ error: 'not found' });
+    return;
+  }
+  const parsed = RenewalPatchBody.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: 'invalid request', details: parsed.error.issues });
+    return;
+  }
+  const b = parsed.data;
+  const patch: Partial<typeof renewalOpportunitiesTable.$inferInsert> = {
+    updatedAt: new Date(),
+  };
+  if (b.status !== undefined) {
+    patch.status = b.status;
+    if (b.status !== 'open' && b.status !== 'snoozed') {
+      patch.decidedAt = new Date();
+      patch.decidedBy = scope.user?.id ?? null;
+    }
+  }
+  if (b.snoozedUntil !== undefined) patch.snoozedUntil = b.snoozedUntil;
+  if (b.notes !== undefined) patch.notes = b.notes;
+
+  await db.update(renewalOpportunitiesTable)
+    .set(patch)
+    .where(eq(renewalOpportunitiesTable.id, existing.id));
+  const [after] = await db.select().from(renewalOpportunitiesTable)
+    .where(eq(renewalOpportunitiesTable.id, existing.id));
+  await writeAuditFromReq(req, {
+    entityType: 'renewal_opportunity',
+    entityId: existing.id,
+    action: 'update',
+    summary: `Renewal-Status: ${existing.status} → ${after.status}`,
+    actor: scope.user?.name,
+    before: existing,
+    after,
+  });
+  res.json(await mapRenewal(after));
+});
 
 export default router;
 

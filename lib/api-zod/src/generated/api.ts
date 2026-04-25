@@ -4742,3 +4742,181 @@ export const UpdateExternalContractResponse = zod.object({
 export const DeleteExternalContractParams = zod.object({
   id: zod.coerce.string(),
 });
+
+/**
+ * @summary Renewal-Opportunities auflisten (Brand-Scope-konform)
+ */
+export const listRenewalsQueryMinRiskMin = 0;
+export const listRenewalsQueryMinRiskMax = 100;
+
+export const ListRenewalsQueryParams = zod.object({
+  bucket: zod.enum(["this_month", "next_90", "risk"]).optional(),
+  minRisk: zod.coerce
+    .number()
+    .min(listRenewalsQueryMinRiskMin)
+    .max(listRenewalsQueryMinRiskMax)
+    .optional(),
+  status: zod.enum(["open", "snoozed", "won", "lost", "cancelled"]).optional(),
+  accountId: zod.coerce.string().optional(),
+  brandId: zod.coerce.string().optional(),
+});
+
+export const listRenewalsResponseRiskScoreMin = 0;
+export const listRenewalsResponseRiskScoreMax = 100;
+
+export const ListRenewalsResponseItem = zod.object({
+  id: zod.string(),
+  tenantId: zod.string(),
+  contractId: zod.string(),
+  contractTitle: zod.string().nullish(),
+  accountId: zod.string(),
+  accountName: zod.string().nullish(),
+  brandId: zod.string().nullish(),
+  brandName: zod.string().nullish(),
+  dueDate: zod.coerce.date(),
+  noticeDeadline: zod.coerce.date(),
+  riskScore: zod
+    .number()
+    .min(listRenewalsResponseRiskScoreMin)
+    .max(listRenewalsResponseRiskScoreMax),
+  riskFactors: zod.array(
+    zod.object({
+      key: zod.string(),
+      label: zod.string(),
+      points: zod.number(),
+      detail: zod.string().optional(),
+    }),
+  ),
+  status: zod.enum(["open", "snoozed", "won", "lost", "cancelled"]),
+  valueAmount: zod.number().nullish(),
+  currency: zod.string().nullish(),
+  snoozedUntil: zod.coerce.date().nullish(),
+  decidedAt: zod.coerce.date().nullish(),
+  decidedBy: zod.string().nullish(),
+  notes: zod.string().nullish(),
+  createdAt: zod.coerce.date(),
+  updatedAt: zod.coerce.date(),
+});
+export const ListRenewalsResponse = zod.array(ListRenewalsResponseItem);
+
+/**
+ * @summary KPI für Renewal-Pipeline (offene Opps, Pipeline-Wert, Buckets)
+ */
+export const GetRenewalSummaryResponse = zod.object({
+  totalOpen: zod.number(),
+  pipelineValue: zod.number(),
+  thisMonth: zod.object({
+    count: zod.number(),
+    value: zod.number(),
+  }),
+  next90: zod.object({
+    count: zod.number(),
+    value: zod.number(),
+  }),
+  atRisk: zod.object({
+    count: zod.number(),
+    value: zod.number(),
+  }),
+});
+
+/**
+ * @summary Renewal-Engine sofort materialisieren (Tenant-Admin)
+ */
+export const RunRenewalEngineResponse = zod.object({
+  scanned: zod.number(),
+  created: zod.number(),
+  updated: zod.number(),
+  dueSoon: zod.number(),
+  skipped: zod.number(),
+});
+
+export const GetRenewalParams = zod.object({
+  id: zod.coerce.string(),
+});
+
+export const getRenewalResponseRiskScoreMin = 0;
+export const getRenewalResponseRiskScoreMax = 100;
+
+export const GetRenewalResponse = zod.object({
+  id: zod.string(),
+  tenantId: zod.string(),
+  contractId: zod.string(),
+  contractTitle: zod.string().nullish(),
+  accountId: zod.string(),
+  accountName: zod.string().nullish(),
+  brandId: zod.string().nullish(),
+  brandName: zod.string().nullish(),
+  dueDate: zod.coerce.date(),
+  noticeDeadline: zod.coerce.date(),
+  riskScore: zod
+    .number()
+    .min(getRenewalResponseRiskScoreMin)
+    .max(getRenewalResponseRiskScoreMax),
+  riskFactors: zod.array(
+    zod.object({
+      key: zod.string(),
+      label: zod.string(),
+      points: zod.number(),
+      detail: zod.string().optional(),
+    }),
+  ),
+  status: zod.enum(["open", "snoozed", "won", "lost", "cancelled"]),
+  valueAmount: zod.number().nullish(),
+  currency: zod.string().nullish(),
+  snoozedUntil: zod.coerce.date().nullish(),
+  decidedAt: zod.coerce.date().nullish(),
+  decidedBy: zod.string().nullish(),
+  notes: zod.string().nullish(),
+  createdAt: zod.coerce.date(),
+  updatedAt: zod.coerce.date(),
+});
+
+/**
+ * @summary Status ändern (snooze, won, lost, cancelled), Notizen
+ */
+export const UpdateRenewalParams = zod.object({
+  id: zod.coerce.string(),
+});
+
+export const UpdateRenewalBody = zod.object({
+  status: zod.enum(["open", "snoozed", "won", "lost", "cancelled"]).optional(),
+  snoozedUntil: zod.coerce.date().nullish(),
+  notes: zod.string().nullish(),
+});
+
+export const updateRenewalResponseRiskScoreMin = 0;
+export const updateRenewalResponseRiskScoreMax = 100;
+
+export const UpdateRenewalResponse = zod.object({
+  id: zod.string(),
+  tenantId: zod.string(),
+  contractId: zod.string(),
+  contractTitle: zod.string().nullish(),
+  accountId: zod.string(),
+  accountName: zod.string().nullish(),
+  brandId: zod.string().nullish(),
+  brandName: zod.string().nullish(),
+  dueDate: zod.coerce.date(),
+  noticeDeadline: zod.coerce.date(),
+  riskScore: zod
+    .number()
+    .min(updateRenewalResponseRiskScoreMin)
+    .max(updateRenewalResponseRiskScoreMax),
+  riskFactors: zod.array(
+    zod.object({
+      key: zod.string(),
+      label: zod.string(),
+      points: zod.number(),
+      detail: zod.string().optional(),
+    }),
+  ),
+  status: zod.enum(["open", "snoozed", "won", "lost", "cancelled"]),
+  valueAmount: zod.number().nullish(),
+  currency: zod.string().nullish(),
+  snoozedUntil: zod.coerce.date().nullish(),
+  decidedAt: zod.coerce.date().nullish(),
+  decidedBy: zod.string().nullish(),
+  notes: zod.string().nullish(),
+  createdAt: zod.coerce.date(),
+  updatedAt: zod.coerce.date(),
+});

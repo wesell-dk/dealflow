@@ -12,7 +12,9 @@ export type WebhookEvent =
   | "approval.stage.decided"
   | "price_increase.responded"
   | "order.completed"
-  | "external_contract.confirmed";
+  | "external_contract.confirmed"
+  | "renewal.created"
+  | "renewal.due_soon";
 
 /**
  * Hosts an admin may explicitly allowlist via env, e.g. for staging callbacks
@@ -316,6 +318,11 @@ export const WEBHOOK_EVENTS: WebhookEvent[] = [
   "price_increase.responded",
   "order.completed",
   "external_contract.confirmed",
+  // Renewal-Engine (#66): "renewal.created" feuert beim Materialisieren einer
+  // Opportunity, "renewal.due_soon" zusätzlich, wenn die Notice-Frist binnen
+  // 30 Tagen liegt — typisches Trigger-Event für CRM-Folge-Workflows.
+  "renewal.created",
+  "renewal.due_soon",
 ];
 
 /**

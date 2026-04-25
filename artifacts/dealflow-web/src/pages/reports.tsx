@@ -1,6 +1,6 @@
 import { useState, useMemo } from "react";
 import { useTranslation } from "react-i18next";
-import { useGetPerformanceReport, useGetForecast, useGetDashboardSummary } from "@workspace/api-client-react";
+import { useGetPerformanceReport, useGetForecast, useGetDashboardSummary, useGetRenewalSummary } from "@workspace/api-client-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -18,6 +18,7 @@ export default function Reports() {
   const { data: performance, isLoading: isLoadingPerf } = useGetPerformanceReport();
   const { data: forecast, isLoading: isLoadingForecast } = useGetForecast();
   const { data: dashboard } = useGetDashboardSummary();
+  const { data: renewalSummary } = useGetRenewalSummary();
   const [period, setPeriod] = useState<string>("12");
   const [ownerId, setOwnerId] = useState<string>("__all__");
 
@@ -109,6 +110,58 @@ export default function Reports() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">{performance.marginDisciplinePct}%</div>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Renewal-Pipeline (#66) */}
+      <div className="grid gap-4 md:grid-cols-4" data-testid="kpi-row-renewals">
+        <Card data-testid="kpi-renewal-pipeline">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium">Renewal-Pipeline (€)</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">
+              {renewalSummary
+                ? new Intl.NumberFormat(undefined, {
+                    style: "currency",
+                    currency: "EUR",
+                    maximumFractionDigits: 0,
+                  }).format(renewalSummary.pipelineValue ?? 0)
+                : "—"}
+            </div>
+            <div className="text-xs text-muted-foreground mt-1">
+              {renewalSummary?.totalOpen ?? 0} offene Renewals
+            </div>
+          </CardContent>
+        </Card>
+        <Card data-testid="kpi-renewal-this-month">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium">Renewals diesen Monat</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{renewalSummary?.thisMonth.count ?? 0}</div>
+            <div className="text-xs text-muted-foreground mt-1">Notice-Frist im aktuellen Monat</div>
+          </CardContent>
+        </Card>
+        <Card data-testid="kpi-renewal-next90">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium">Renewals nächste 90 Tage</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{renewalSummary?.next90.count ?? 0}</div>
+            <div className="text-xs text-muted-foreground mt-1">Aktion erforderlich</div>
+          </CardContent>
+        </Card>
+        <Card data-testid="kpi-renewal-at-risk">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium">Renewals mit Risiko</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className={`text-2xl font-bold ${(renewalSummary?.atRisk.count ?? 0) > 0 ? "text-amber-600" : ""}`}>
+              {renewalSummary?.atRisk.count ?? 0}
+            </div>
+            <div className="text-xs text-muted-foreground mt-1">Score ≥ 70</div>
           </CardContent>
         </Card>
       </div>

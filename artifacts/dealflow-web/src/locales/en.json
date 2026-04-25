@@ -12,6 +12,7 @@
     "signatures": "Signatures",
     "priceIncreases": "Price Increases",
     "orderConfirmations": "Order Confirmations",
+    "renewals": "Renewals",
     "reports": "Reports",
     "audit": "Audit Log",
     "copilot": "Copilot",
@@ -324,6 +325,58 @@
         "acknowledged": "In progress",
         "resolved": "Resolved",
         "dismissed": "Dismissed"
+      }
+    },
+    "renewals": {
+      "title": "Renewals",
+      "subtitle": "Auto-renewal contracts approaching their notice deadline, with risk score.",
+      "runNow": "Run engine now",
+      "runDone": "Renewal engine executed",
+      "runSummary": "{{created}} new, {{updated}} updated, {{dueSoon}} due soon",
+      "saved": "Saved",
+      "snoozeRequiresDate": "Pick a date to snooze.",
+      "tableTitle": "Renewal pipeline",
+      "empty": "No renewal opportunities match the filter.",
+      "summary": {
+        "totalOpen": "Open renewals",
+        "thisMonth": "Due this month",
+        "next90": "Next 90 days",
+        "atRisk": "High risk (≥70)"
+      },
+      "filter": {
+        "bucket": "Bucket",
+        "allBuckets": "All buckets",
+        "status": "Status",
+        "minRisk": "Min risk"
+      },
+      "col": {
+        "account": "Account",
+        "contract": "Contract",
+        "notice": "Notice deadline",
+        "due": "End date",
+        "value": "Value",
+        "risk": "Risk",
+        "status": "Status"
+      },
+      "status": {
+        "open": "Open",
+        "snoozed": "Snoozed",
+        "won": "Renewed",
+        "lost": "Lost",
+        "cancelled": "Cancelled"
+      },
+      "detail": {
+        "riskTitle": "Risk factors",
+        "contract": "Contract",
+        "notes": "Notes",
+        "snoozeUntil": "Snooze until"
+      },
+      "actions": {
+        "saveNotes": "Save notes",
+        "snooze": "Snooze",
+        "won": "Mark renewed",
+        "lost": "Mark lost",
+        "cancel": "Cancel"
       }
     },
     "reports": {

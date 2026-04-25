@@ -9,7 +9,8 @@
     "start": "node --enable-source-maps ./dist/index.mjs",
     "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tests/tsconfig.json --noEmit",
     "test:isolation": "node --import tsx --test --test-reporter=spec tests/tenant-isolation.test.ts tests/validation-negative.test.ts",
-    "test": "pnpm run test:isolation"
+    "test:renewals": "node --import tsx --test --test-reporter=spec tests/renewals.test.ts",
+    "test": "pnpm run test:isolation && pnpm run test:renewals"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.90.0",
