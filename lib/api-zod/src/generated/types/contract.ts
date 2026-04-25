@@ -25,4 +25,14 @@ export interface Contract {
   validUntil?: Date | null;
   /** Sprachfassung des Vertrags. Default ergibt sich aus Brand- bzw. Tenant-Default. */
   language: ContractLanguage;
+  /**
+   * Mandanten-Bindung (wird beim Anlegen aus dem Scope gesetzt; bei Altdaten optional).
+   * @nullable
+   */
+  tenantId?: string | null;
+  /**
+   * Vertragstyp-Bindung — Voraussetzung für CUAD-Coverage und Tenant-Mappings. Bei neu angelegten Verträgen immer gesetzt (Auswahl oder Heuristik aus Template).
+   * @nullable
+   */
+  contractTypeId?: string | null;
 }

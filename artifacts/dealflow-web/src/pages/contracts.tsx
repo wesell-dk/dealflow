@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
   useListContracts,
@@ -6,9 +6,10 @@ import {
   type Contract,
   type ExternalContract,
 } from "@workspace/api-client-react";
-import { Link } from "wouter";
+import { Link, useLocation } from "wouter";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   Select,
@@ -18,7 +19,8 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
-import { FileText, RefreshCw } from "lucide-react";
+import { FileText, Plus, RefreshCw } from "lucide-react";
+import { ContractFormDialog } from "@/components/contracts/contract-form-dialog";
 
 type Source = "all" | "internal" | "external";
 
@@ -51,6 +53,23 @@ type Row =
 export default function Contracts() {
   const { t } = useTranslation();
   const [source, setSource] = useState<Source>("all");
+  const [createOpen, setCreateOpen] = useState(false);
+  const [location, setLocation] = useLocation();
+
+  // Open the create dialog when the URL contains ?new=1 (e.g. command palette
+  // entry or deep link from the global "Neuer Vertrag" shortcut). We strip the
+  // flag from the URL so refreshing the page doesn't keep popping the dialog.
+  useEffect(() => {
+    const search = typeof window !== "undefined" ? window.location.search : "";
+    const params = new URLSearchParams(search);
+    if (params.get("new") === "1") {
+      setCreateOpen(true);
+      params.delete("new");
+      const next = params.toString();
+      setLocation(next ? `${location}?${next}` : location, { replace: true });
+    }
+    // We intentionally only run this on mount / location change.
+  }, [location, setLocation]);
 
   const { data: contracts, isLoading: l1 } = useListContracts();
   const { data: externals, isLoading: l2 } = useListExternalContracts();
@@ -98,18 +117,25 @@ export default function Contracts() {
           <h1 className="text-3xl font-bold tracking-tight">{t("pages.contracts.title")}</h1>
           <p className="text-muted-foreground mt-1">{t("pages.contracts.subtitle")}</p>
         </div>
-        <div className="w-48">
-          <Label className="text-xs text-muted-foreground">Quelle</Label>
-          <Select value={source} onValueChange={(v) => setSource(v as Source)}>
-            <SelectTrigger data-testid="contracts-source-filter"><SelectValue /></SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">Alle</SelectItem>
-              <SelectItem value="internal">Intern</SelectItem>
-              <SelectItem value="external">Extern</SelectItem>
-            </SelectContent>
-          </Select>
+        <div className="flex items-end gap-2">
+          <div className="w-48">
+            <Label className="text-xs text-muted-foreground">Quelle</Label>
+            <Select value={source} onValueChange={(v) => setSource(v as Source)}>
+              <SelectTrigger data-testid="contracts-source-filter"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Alle</SelectItem>
+                <SelectItem value="internal">Intern</SelectItem>
+                <SelectItem value="external">Extern</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <Button onClick={() => setCreateOpen(true)} data-testid="button-new-contract">
+            <Plus className="mr-2 h-4 w-4" /> Neuer Vertrag
+          </Button>
         </div>
       </div>
+
+      <ContractFormDialog open={createOpen} onOpenChange={setCreateOpen} />
 
       <div className="border rounded-md">
         <Table>

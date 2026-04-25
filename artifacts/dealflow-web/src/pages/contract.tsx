@@ -23,6 +23,7 @@ import {
   useGetContractCuadCoverage,
   useAddContractClause,
   getGetContractCuadCoverageQueryKey,
+  useListContractTypes,
   useListExternalCollaborators,
   useCreateExternalCollaborator,
   useRevokeExternalCollaborator,
@@ -1016,16 +1017,36 @@ function fmtDateShort(s: string | null | undefined): string {
 function CuadCoverageSection({ contractId }: { contractId: string }) {
   const { data, isLoading } = useGetContractCuadCoverage(contractId);
   const { data: families } = useListClauseFamilies();
-  const [showAll, setShowAll] = useState(false);
-  const [pendingFamilyId, setPendingFamilyId] = useState<string | null>(null);
+  const { data: contractTypes } = useListContractTypes();
+  const patchContract = usePatchContract();
   const qc = useQueryClient();
   const { toast } = useToast();
+  const [showAll, setShowAll] = useState(false);
+  const [pendingFamilyId, setPendingFamilyId] = useState<string | null>(null);
+  const [pendingContractTypeId, setPendingContractTypeId] = useState("");
   const addClause = useAddContractClause();
 
   const familyNameById = new Map<string, string>();
   for (const f of families ?? []) familyNameById.set(f.id, f.name);
 
   const cov = (data ?? null) as CuadCoverage | null;
+
+  async function handleBindContractType() {
+    if (!pendingContractTypeId) return;
+    try {
+      await patchContract.mutateAsync({
+        id: contractId,
+        data: { contractTypeId: pendingContractTypeId },
+      });
+      toast({ title: "Vertragstyp zugeordnet", description: "CUAD-Coverage wird neu berechnet." });
+      await qc.invalidateQueries({ queryKey: getGetContractQueryKey(contractId) });
+      await qc.invalidateQueries();
+      setPendingContractTypeId("");
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Bitte versuche es erneut.";
+      toast({ title: "Zuordnung fehlgeschlagen", description: msg, variant: "destructive" });
+    }
+  }
 
   const totalRequired = (cov?.totalExpected ?? 0);
   const coveredRequired = (cov?.coveredExpected ?? 0);
@@ -1117,8 +1138,46 @@ function CuadCoverageSection({ contractId }: { contractId: string }) {
       {isLoading ? (
         <Skeleton className="h-24 w-full" />
       ) : !cov || !cov.contractTypeId ? (
-        <div className="p-6 text-center border rounded-md text-sm text-muted-foreground bg-muted/10">
-          Kein Vertragstyp zugeordnet — CUAD-Coverage nicht berechenbar.
+        <div
+          className="p-4 border rounded-md text-sm bg-muted/10 space-y-3"
+          data-testid="cuad-bind-contract-type"
+        >
+          <p className="text-muted-foreground">
+            Kein Vertragstyp zugeordnet — ohne Bindung kann die CUAD-Coverage nicht berechnet werden.
+            Wähle einen Vertragstyp, um die typischen Bausteine sofort zu prüfen.
+          </p>
+          <div className="flex flex-wrap items-center gap-2">
+            <Select
+              value={pendingContractTypeId}
+              onValueChange={setPendingContractTypeId}
+            >
+              <SelectTrigger
+                className="w-72"
+                data-testid="select-bind-contract-type"
+              >
+                <SelectValue placeholder="Vertragstyp wählen…" />
+              </SelectTrigger>
+              <SelectContent>
+                {(contractTypes ?? [])
+                  .filter(t => t.active)
+                  .slice()
+                  .sort((a, b) => a.name.localeCompare(b.name, "de"))
+                  .map(t => (
+                    <SelectItem key={t.id} value={t.id}>
+                      {t.name} ({t.code})
+                    </SelectItem>
+                  ))}
+              </SelectContent>
+            </Select>
+            <Button
+              size="sm"
+              onClick={handleBindContractType}
+              disabled={!pendingContractTypeId || patchContract.isPending}
+              data-testid="button-bind-contract-type"
+            >
+              Vertragstyp zuordnen
+            </Button>
+          </div>
         </div>
       ) : (
         <div className="space-y-3">

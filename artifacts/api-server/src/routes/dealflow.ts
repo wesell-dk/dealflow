@@ -3007,7 +3007,56 @@ function mapContract(c: typeof contractsTable.$inferSelect, dealName: string, cl
     template: c.template,
     validUntil: c.validUntil ? (typeof c.validUntil === 'string' ? c.validUntil : iso(c.validUntil)!.slice(0, 10)) : null,
     language: normalizeLocale(c.language),
+    tenantId: c.tenantId ?? null,
+    contractTypeId: c.contractTypeId ?? null,
   };
+}
+
+// Heuristic: pick a contract type from a free-text template name. Returns null
+// if nothing matches confidently — the caller may then ask the user to pick
+// one explicitly. Works on the tenant's own contract types AND falls back to
+// system-seeded ones (tn_root) so that a fresh tenant without overrides still
+// benefits from the seeded NDA/MSA/OF taxonomy.
+async function resolveDefaultContractType(opts: {
+  template: string;
+  tenantId: string;
+}): Promise<typeof contractTypesTable.$inferSelect | null> {
+  const tpl = opts.template.toLowerCase().trim();
+  if (!tpl) return null;
+  // Keyword → contract type code mapping. First-match wins.
+  const keywordCodes: Array<{ rx: RegExp; codes: string[] }> = [
+    { rx: /\b(nda|geheimhaltung|vertrauliche?keit|non[- ]?disclosure)\b/, codes: ['NDA'] },
+    { rx: /\b(master\s+services?\s+agreement|msa|rahmenvertrag)\b/, codes: ['MSA'] },
+    { rx: /\b(order\s+form|bestellschein|of)\b/, codes: ['OF', 'ORDER_FORM'] },
+    { rx: /\b(dpa|auftragsverarbeitung|data\s+processing)\b/, codes: ['DPA'] },
+    { rx: /\b(sow|statement\s+of\s+work|leistungsbeschreibung)\b/, codes: ['SOW'] },
+  ];
+  const wantedCodes = new Set<string>();
+  for (const { rx, codes } of keywordCodes) {
+    if (rx.test(tpl)) {
+      for (const c of codes) wantedCodes.add(c);
+    }
+  }
+  if (wantedCodes.size === 0) return null;
+  // Tenant-owned types first, then system tn_root types.
+  const candidateTenants = opts.tenantId === 'tn_root' ? ['tn_root'] : [opts.tenantId, 'tn_root'];
+  for (const tid of candidateTenants) {
+    const rows = await db.select().from(contractTypesTable).where(and(
+      eq(contractTypesTable.tenantId, tid),
+      inArray(contractTypesTable.code, [...wantedCodes]),
+      eq(contractTypesTable.active, true),
+    ));
+    if (rows.length === 0) continue;
+    // Pick the first match in keyword priority order so MSA outranks OF when
+    // both keywords match (rare).
+    for (const { codes } of keywordCodes) {
+      for (const code of codes) {
+        const hit = rows.find(r => r.code === code);
+        if (hit) return hit;
+      }
+    }
+  }
+  return null;
 }
 
 const SUPPORTED_LOCALES = ['de', 'en'] as const;
@@ -3083,15 +3132,20 @@ router.get('/contracts', async (req, res) => {
 
 router.post('/contracts', async (req, res) => {
   if (!validateInline(req, res, { body: Z.CreateContractBody })) return;
-  const b = req.body as { dealId: string; title: string; template: string; brandId?: string; language?: 'de' | 'en' };
+  const b = req.body as {
+    dealId: string; title: string; template: string;
+    brandId?: string; language?: 'de' | 'en';
+    contractTypeId?: string;
+  };
   if (!(await gateDeal(req, res, b.dealId))) return;
+  // Resolve the deal up-front so we can derive company/brand/account bindings
+  // and produce a fully bound contract row (tenantId is required for the CUAD
+  // coverage check and for tenant-scoped clause-family overrides to apply).
+  const [deal] = await db.select().from(dealsTable).where(eq(dealsTable.id, b.dealId));
+  if (!deal) { res.status(404).json({ error: 'deal not found' }); return; }
   // Pre-validate brand (existence + visibility) BEFORE any writes.
   let brandForSeed: typeof brandsTable.$inferSelect | undefined;
-  let effectiveBrandId: string | null = b.brandId ?? null;
-  if (!effectiveBrandId) {
-    const [deal] = await db.select().from(dealsTable).where(eq(dealsTable.id, b.dealId));
-    effectiveBrandId = deal?.brandId ?? null;
-  }
+  let effectiveBrandId: string | null = b.brandId ?? deal.brandId ?? null;
   if (effectiveBrandId) {
     const [brand] = await db.select().from(brandsTable).where(eq(brandsTable.id, effectiveBrandId));
     if (!brand) { res.status(404).json({ error: 'brand not found' }); return; }
@@ -3099,15 +3153,65 @@ router.post('/contracts', async (req, res) => {
     brandForSeed = brand;
   }
   const tenantIdForSeed = getScope(req).tenantId;
+
+  // ── Vertragstyp-Bindung — Pflicht für deterministische CUAD-Coverage. ──
+  // Erst explizite Auswahl prüfen; sonst Heuristik aus dem Template-Namen
+  // ableiten. Schlägt beides fehl → 422 mit Hinweis, dass eine explizite
+  // Wahl nötig ist (z. B. wenn der Template-String kein bekanntes Schlagwort
+  // enthält).
+  let contractType: typeof contractTypesTable.$inferSelect | null = null;
+  if (typeof b.contractTypeId === 'string' && b.contractTypeId.trim()) {
+    const [ct] = await db.select().from(contractTypesTable)
+      .where(eq(contractTypesTable.id, b.contractTypeId.trim()));
+    if (!ct) { res.status(422).json({ error: 'contractTypeId not found' }); return; }
+    // Allow tenant-owned types or seeded system types (tn_root) so a fresh
+    // tenant can still bind to NDA/MSA/OF without copying the taxonomy first.
+    if (ct.tenantId !== tenantIdForSeed && ct.tenantId !== 'tn_root') {
+      res.status(403).json({ error: 'contractTypeId belongs to a different tenant' }); return;
+    }
+    if (!ct.active) { res.status(422).json({ error: 'contractTypeId is inactive' }); return; }
+    contractType = ct;
+  } else {
+    contractType = await resolveDefaultContractType({ template: b.template, tenantId: tenantIdForSeed });
+    if (!contractType) {
+      res.status(422).json({
+        error: 'contractTypeId required',
+        details:
+          'Could not derive a contract type from template. Provide contractTypeId explicitly ' +
+          '(e.g. via GET /api/contract-types) so CUAD coverage and clause-family overrides apply.',
+      });
+      return;
+    }
+  }
+
   const language: SupportedLocale = b.language && SUPPORTED_LOCALES.includes(b.language)
     ? b.language
     : await resolveDefaultLanguage({ brandId: effectiveBrandId, tenantId: tenantIdForSeed });
   const id = `ctr_${randomUUID().slice(0, 8)}`;
+  // Resolve the company tenant (companies own the tenant boundary). When
+  // available we honour it; otherwise fall back to the caller's scope so
+  // tenant-scoped queries still pick the new contract up.
+  let companyTenantId: string | null = null;
+  if (deal.companyId) {
+    const [co] = await db.select().from(companiesTable).where(eq(companiesTable.id, deal.companyId));
+    if (co) companyTenantId = co.tenantId;
+  }
+  const playbookId = contractType?.defaultPlaybookId ?? null;
   await db.insert(contractsTable).values({
     id, dealId: b.dealId, title: b.title, status: 'drafting',
     version: 1, riskLevel: 'low', template: b.template,
     language,
     validUntil: new Date(Date.now() + 365 * 86400000).toISOString().slice(0, 10),
+    tenantId: companyTenantId ?? tenantIdForSeed,
+    companyId: deal.companyId ?? null,
+    brandId: effectiveBrandId,
+    accountId: deal.accountId ?? null,
+    contractTypeId: contractType.id,
+    playbookId,
+    currency: deal.currency ?? null,
+    valueCurrency: deal.currency ?? null,
+    valueAmount: deal.value != null ? String(deal.value) : null,
+    currentVersion: 1,
   });
   // Seed clauses from brand defaults if provided
   if (brandForSeed) {
@@ -3160,30 +3264,81 @@ router.post('/contracts', async (req, res) => {
   res.status(201).json(mapContract(c!, dealMap.get(c!.dealId)?.name ?? 'Unknown'));
 });
 
-// PATCH contract — currently only supports updating the language.
+// PATCH contract — supports updating language and the contract-type binding
+// (the latter is needed to retro-fit existing contracts so the CUAD coverage
+// check works on them without re-creating the row).
 router.patch('/contracts/:id', async (req, res) => {
   const [c] = await db.select().from(contractsTable).where(eq(contractsTable.id, req.params.id));
   if (!c) { res.status(404).json({ error: 'not found' }); return; }
   if (!(await gateDeal(req, res, c.dealId))) return;
-  const body = (req.body ?? {}) as { language?: unknown };
+  const body = (req.body ?? {}) as { language?: unknown; contractTypeId?: unknown };
   const patch: Partial<typeof contractsTable.$inferInsert> = {};
+  const auditEntries: Array<{ action: string; summary: string; before: unknown; after: unknown }> = [];
+
   if (body.language !== undefined) {
     if (typeof body.language !== 'string' || !SUPPORTED_LOCALES.includes(body.language as SupportedLocale)) {
       res.status(400).json({ error: 'language must be one of de|en' }); return;
     }
-    if (body.language === c.language) {
-      // no-op
-    } else {
+    if (body.language !== c.language) {
       patch.language = body.language as SupportedLocale;
+      auditEntries.push({
+        action: 'language_changed',
+        summary: `Vertragssprache: ${c.language ?? 'de'} → ${patch.language}`,
+        before: { language: c.language }, after: { language: patch.language },
+      });
     }
   }
+
+  if (body.contractTypeId !== undefined) {
+    const scope = getScope(req);
+    let nextContractTypeId: string | null = null;
+    let nextPlaybookId: string | null | undefined = undefined; // undefined = leave as-is
+    if (body.contractTypeId === null || body.contractTypeId === '') {
+      nextContractTypeId = null;
+    } else if (typeof body.contractTypeId !== 'string') {
+      res.status(400).json({ error: 'contractTypeId must be string or null' }); return;
+    } else {
+      const [ct] = await db.select().from(contractTypesTable)
+        .where(eq(contractTypesTable.id, body.contractTypeId.trim()));
+      if (!ct) { res.status(422).json({ error: 'contractTypeId not found' }); return; }
+      if (ct.tenantId !== scope.tenantId && ct.tenantId !== 'tn_root') {
+        res.status(403).json({ error: 'contractTypeId belongs to a different tenant' }); return;
+      }
+      if (!ct.active) { res.status(422).json({ error: 'contractTypeId is inactive' }); return; }
+      nextContractTypeId = ct.id;
+      // Only auto-fill the playbook when the contract has no playbook yet —
+      // never overwrite a hand-picked playbook that the user already chose.
+      if (!c.playbookId && ct.defaultPlaybookId) nextPlaybookId = ct.defaultPlaybookId;
+    }
+    if (nextContractTypeId !== (c.contractTypeId ?? null)) {
+      patch.contractTypeId = nextContractTypeId;
+      // Backfill tenantId on legacy rows so tenant-scoped CUAD overrides apply
+      // immediately after the binding is set.
+      if (!c.tenantId) patch.tenantId = scope.tenantId;
+      if (nextPlaybookId !== undefined) patch.playbookId = nextPlaybookId;
+      auditEntries.push({
+        action: 'contract_type_bound',
+        summary: nextContractTypeId
+          ? `Vertragstyp gesetzt: ${c.contractTypeId ?? '∅'} → ${nextContractTypeId}`
+          : `Vertragstyp entfernt: ${c.contractTypeId ?? '∅'} → ∅`,
+        before: { contractTypeId: c.contractTypeId ?? null, tenantId: c.tenantId ?? null, playbookId: c.playbookId ?? null },
+        after: {
+          contractTypeId: nextContractTypeId,
+          tenantId: patch.tenantId ?? c.tenantId ?? null,
+          playbookId: patch.playbookId !== undefined ? patch.playbookId : (c.playbookId ?? null),
+        },
+      });
+    }
+  }
+
   if (Object.keys(patch).length > 0) {
     await db.update(contractsTable).set(patch).where(eq(contractsTable.id, c.id));
-    await writeAuditFromReq(req, {
-      entityType: 'contract', entityId: c.id, action: 'language_changed',
-      summary: `Vertragssprache: ${c.language ?? 'de'} → ${patch.language}`,
-      before: { language: c.language }, after: { language: patch.language },
-    });
+    for (const a of auditEntries) {
+      await writeAuditFromReq(req, {
+        entityType: 'contract', entityId: c.id, action: a.action,
+        summary: a.summary, before: a.before, after: a.after,
+      });
+    }
   }
   const [updated] = await db.select().from(contractsTable).where(eq(contractsTable.id, c.id));
   const dealMap = await getDealMap();

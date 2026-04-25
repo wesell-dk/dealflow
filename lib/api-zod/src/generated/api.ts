@@ -940,6 +940,18 @@ export const GetDealResponse = zod
             .describe(
               "Sprachfassung des Vertrags. Default ergibt sich aus Brand- bzw. Tenant-Default.",
             ),
+          tenantId: zod
+            .string()
+            .nullish()
+            .describe(
+              "Mandanten-Bindung (wird beim Anlegen aus dem Scope gesetzt; bei Altdaten optional).",
+            ),
+          contractTypeId: zod
+            .string()
+            .nullish()
+            .describe(
+              "Vertragstyp-Bindung — Voraussetzung für CUAD-Coverage und Tenant-Mappings. Bei neu angelegten Verträgen immer gesetzt (Auswahl oder Heuristik aus Template).",
+            ),
         }),
       ),
       approvals: zod.array(
@@ -2063,6 +2075,18 @@ export const ListContractsResponseItem = zod.object({
     .describe(
       "Sprachfassung des Vertrags. Default ergibt sich aus Brand- bzw. Tenant-Default.",
     ),
+  tenantId: zod
+    .string()
+    .nullish()
+    .describe(
+      "Mandanten-Bindung (wird beim Anlegen aus dem Scope gesetzt; bei Altdaten optional).",
+    ),
+  contractTypeId: zod
+    .string()
+    .nullish()
+    .describe(
+      "Vertragstyp-Bindung — Voraussetzung für CUAD-Coverage und Tenant-Mappings. Bei neu angelegten Verträgen immer gesetzt (Auswahl oder Heuristik aus Template).",
+    ),
 });
 export const ListContractsResponse = zod.array(ListContractsResponseItem);
 
@@ -2080,6 +2104,12 @@ export const CreateContractBody = zod.object({
     .enum(["de", "en"])
     .optional()
     .describe("Optionale Sprachfassung. NULL\/leer → Brand-\/Tenant-Default."),
+  contractTypeId: zod
+    .string()
+    .optional()
+    .describe(
+      'Vertragstyp-Bindung. Wenn nicht gesetzt, leitet der Server eine Default-Heuristik aus\n`template` ab (z. B. \"Master Services Agreement\" → MSA). Schlägt die Heuristik fehl,\nantwortet die API mit 422 — der Aufrufer muss dann explizit einen Vertragstyp wählen.\n',
+    ),
 });
 
 export const GetContractPdfParams = zod.object({
@@ -2110,6 +2140,18 @@ export const GetContractResponse = zod
       .enum(["de", "en"])
       .describe(
         "Sprachfassung des Vertrags. Default ergibt sich aus Brand- bzw. Tenant-Default.",
+      ),
+    tenantId: zod
+      .string()
+      .nullish()
+      .describe(
+        "Mandanten-Bindung (wird beim Anlegen aus dem Scope gesetzt; bei Altdaten optional).",
+      ),
+    contractTypeId: zod
+      .string()
+      .nullish()
+      .describe(
+        "Vertragstyp-Bindung — Voraussetzung für CUAD-Coverage und Tenant-Mappings. Bei neu angelegten Verträgen immer gesetzt (Auswahl oder Heuristik aus Template).",
       ),
   })
   .and(
@@ -2165,6 +2207,12 @@ export const PatchContractBody = zod.object({
     .enum(["de", "en"])
     .optional()
     .describe("Aktualisiert die aktive Sprachfassung des Vertrags."),
+  contractTypeId: zod
+    .string()
+    .nullish()
+    .describe(
+      "Setzt oder ersetzt die Vertragstyp-Bindung (z. B. um Altverträge nachträglich an einen\nVertragstyp zu hängen, damit der CUAD-Check greift). `null` löst die Bindung wieder.\n",
+    ),
 });
 
 export const PatchContractResponse = zod.object({
@@ -2186,6 +2234,18 @@ export const PatchContractResponse = zod.object({
     .enum(["de", "en"])
     .describe(
       "Sprachfassung des Vertrags. Default ergibt sich aus Brand- bzw. Tenant-Default.",
+    ),
+  tenantId: zod
+    .string()
+    .nullish()
+    .describe(
+      "Mandanten-Bindung (wird beim Anlegen aus dem Scope gesetzt; bei Altdaten optional).",
+    ),
+  contractTypeId: zod
+    .string()
+    .nullish()
+    .describe(
+      "Vertragstyp-Bindung — Voraussetzung für CUAD-Coverage und Tenant-Mappings. Bei neu angelegten Verträgen immer gesetzt (Auswahl oder Heuristik aus Template).",
     ),
 });
 

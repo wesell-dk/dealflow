@@ -6073,6 +6073,12 @@ components:
           type: string
           enum: [de, en]
           description: "Sprachfassung des Vertrags. Default ergibt sich aus Brand- bzw. Tenant-Default."
+        tenantId:
+          type: ["string", "null"]
+          description: "Mandanten-Bindung (wird beim Anlegen aus dem Scope gesetzt; bei Altdaten optional)."
+        contractTypeId:
+          type: ["string", "null"]
+          description: "Vertragstyp-Bindung — Voraussetzung für CUAD-Coverage und Tenant-Mappings. Bei neu angelegten Verträgen immer gesetzt (Auswahl oder Heuristik aus Template)."
 
     ContractInput:
       type: object
@@ -6088,6 +6094,12 @@ components:
           type: string
           enum: [de, en]
           description: "Optionale Sprachfassung. NULL/leer → Brand-/Tenant-Default."
+        contractTypeId:
+          type: string
+          description: |
+            Vertragstyp-Bindung. Wenn nicht gesetzt, leitet der Server eine Default-Heuristik aus
+            `template` ab (z. B. "Master Services Agreement" → MSA). Schlägt die Heuristik fehl,
+            antwortet die API mit 422 — der Aufrufer muss dann explizit einen Vertragstyp wählen.
 
     ContractPatchInput:
       type: object
@@ -6096,6 +6108,11 @@ components:
           type: string
           enum: [de, en]
           description: "Aktualisiert die aktive Sprachfassung des Vertrags."
+        contractTypeId:
+          type: ["string", "null"]
+          description: |
+            Setzt oder ersetzt die Vertragstyp-Bindung (z. B. um Altverträge nachträglich an einen
+            Vertragstyp zu hängen, damit der CUAD-Check greift). `null` löst die Bindung wieder.
 
     ContractDetail:
       allOf:

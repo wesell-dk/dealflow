@@ -1187,6 +1187,16 @@ export interface Contract {
   validUntil?: string | null;
   /** Sprachfassung des Vertrags. Default ergibt sich aus Brand- bzw. Tenant-Default. */
   language: ContractLanguage;
+  /**
+   * Mandanten-Bindung (wird beim Anlegen aus dem Scope gesetzt; bei Altdaten optional).
+   * @nullable
+   */
+  tenantId?: string | null;
+  /**
+   * Vertragstyp-Bindung — Voraussetzung für CUAD-Coverage und Tenant-Mappings. Bei neu angelegten Verträgen immer gesetzt (Auswahl oder Heuristik aus Template).
+   * @nullable
+   */
+  contractTypeId?: string | null;
 }
 
 export type ApprovalStageStatus =
@@ -1788,6 +1798,11 @@ export interface ContractInput {
   brandId?: string;
   /** Optionale Sprachfassung. NULL/leer → Brand-/Tenant-Default. */
   language?: ContractInputLanguage;
+  /** Vertragstyp-Bindung. Wenn nicht gesetzt, leitet der Server eine Default-Heuristik aus
+`template` ab (z. B. "Master Services Agreement" → MSA). Schlägt die Heuristik fehl,
+antwortet die API mit 422 — der Aufrufer muss dann explizit einen Vertragstyp wählen.
+ */
+  contractTypeId?: string;
 }
 
 /**
@@ -1804,6 +1819,13 @@ export const ContractPatchInputLanguage = {
 export interface ContractPatchInput {
   /** Aktualisiert die aktive Sprachfassung des Vertrags. */
   language?: ContractPatchInputLanguage;
+  /**
+   * Setzt oder ersetzt die Vertragstyp-Bindung (z. B. um Altverträge nachträglich an einen
+Vertragstyp zu hängen, damit der CUAD-Check greift). `null` löst die Bindung wieder.
+
+   * @nullable
+   */
+  contractTypeId?: string | null;
 }
 
 /**

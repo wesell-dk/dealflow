@@ -17,4 +17,9 @@ export interface ContractInput {
   brandId?: string;
   /** Optionale Sprachfassung. NULL/leer → Brand-/Tenant-Default. */
   language?: ContractInputLanguage;
+  /** Vertragstyp-Bindung. Wenn nicht gesetzt, leitet der Server eine Default-Heuristik aus
+`template` ab (z. B. "Master Services Agreement" → MSA). Schlägt die Heuristik fehl,
+antwortet die API mit 422 — der Aufrufer muss dann explizit einen Vertragstyp wählen.
+ */
+  contractTypeId?: string;
 }

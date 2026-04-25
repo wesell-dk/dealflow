@@ -12,4 +12,11 @@ import type { ContractPatchInputLanguage } from "./contractPatchInputLanguage";
 export interface ContractPatchInput {
   /** Aktualisiert die aktive Sprachfassung des Vertrags. */
   language?: ContractPatchInputLanguage;
+  /**
+   * Setzt oder ersetzt die Vertragstyp-Bindung (z. B. um Altverträge nachträglich an einen
+Vertragstyp zu hängen, damit der CUAD-Check greift). `null` löst die Bindung wieder.
+
+   * @nullable
+   */
+  contractTypeId?: string | null;
 }
