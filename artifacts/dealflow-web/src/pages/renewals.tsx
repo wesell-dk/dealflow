@@ -34,8 +34,8 @@ import {
 } from "@/components/ui/sheet";
 import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
-import { CalendarClock, AlertTriangle, RefreshCcw, Calendar, FileSignature } from "lucide-react";
-import { Link } from "wouter";
+import { CalendarClock, AlertTriangle, RefreshCcw, Calendar, FileSignature, X } from "lucide-react";
+import { Link, useSearch, useLocation } from "wouter";
 
 type Bucket = "" | "this_month" | "next_90" | "risk";
 
@@ -85,6 +85,20 @@ export default function RenewalsPage() {
   const qc = useQueryClient();
   const isTenantAdmin = user?.isPlatformAdmin || user?.role === "Tenant Admin";
 
+  const search = useSearch();
+  const [, setLocation] = useLocation();
+  const ymFilter = useMemo(() => {
+    const sp = new URLSearchParams(search);
+    const v = sp.get("ym");
+    return v && /^\d{4}-\d{2}$/.test(v) ? v : "";
+  }, [search]);
+  function clearYmFilter() {
+    const sp = new URLSearchParams(search);
+    sp.delete("ym");
+    const qs = sp.toString();
+    setLocation(qs ? `/renewals?${qs}` : "/renewals");
+  }
+
   const [bucket, setBucket] = useState<Bucket>("");
   const [minRisk, setMinRisk] = useState<string>("");
   const [status, setStatus] = useState<string>("open");
@@ -107,10 +121,20 @@ export default function RenewalsPage() {
     qc.invalidateQueries({ queryKey: getGetRenewalSummaryQueryKey() });
   }
 
-  const sortedRows = useMemo(
-    () => (rows ?? []).slice().sort((a, b) => b.riskScore - a.riskScore),
-    [rows],
-  );
+  const sortedRows = useMemo(() => {
+    let list = (rows ?? []).slice();
+    if (ymFilter) {
+      list = list.filter((r) => typeof r.dueDate === "string" && r.dueDate.slice(0, 7) === ymFilter);
+    }
+    return list.sort((a, b) => b.riskScore - a.riskScore);
+  }, [rows, ymFilter]);
+
+  const ymFilterLabel = useMemo(() => {
+    if (!ymFilter) return "";
+    const [y, m] = ymFilter.split("-");
+    const d = new Date(Date.UTC(Number(y), Number(m) - 1, 1));
+    return d.toLocaleDateString(undefined, { month: "long", year: "numeric" });
+  }, [ymFilter]);
 
   function openDetail(r: RenewalOpportunity) {
     setSelected(r);
@@ -277,6 +301,25 @@ export default function RenewalsPage() {
               className="w-36"
               data-testid="input-min-risk"
             />
+            {ymFilter && (
+              <Badge
+                variant="secondary"
+                className="flex items-center gap-1"
+                data-testid="badge-ym-filter"
+              >
+                <Calendar className="h-3 w-3" />
+                <span>Monat: {ymFilterLabel}</span>
+                <button
+                  type="button"
+                  onClick={clearYmFilter}
+                  className="ml-1 rounded-sm hover:bg-background/40"
+                  aria-label="Monatsfilter entfernen"
+                  data-testid="button-clear-ym-filter"
+                >
+                  <X className="h-3 w-3" />
+                </button>
+              </Badge>
+            )}
           </div>
 
           {isLoadingRows ? (

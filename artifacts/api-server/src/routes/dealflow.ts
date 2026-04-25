@@ -12185,6 +12185,69 @@ router.get('/renewals/_summary', async (req, res) => {
   });
 });
 
+// GET /renewals/_trend — Pipeline pro Monat über horizonMonths Monate
+router.get('/renewals/_trend', async (req, res) => {
+  const scope = getScope(req);
+  const horizonRaw = Number(req.query.horizonMonths);
+  const horizon = Number.isFinite(horizonRaw) && horizonRaw >= 1 && horizonRaw <= 36
+    ? Math.floor(horizonRaw)
+    : 12;
+
+  // Monatsraster: Start = erster Tag des aktuellen Monats (UTC), Ende = erster Tag (Start + horizon Monate)
+  const now = new Date();
+  const startMonth = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
+  const endMonthExcl = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + horizon, 1));
+
+  const filters: SQL[] = [
+    eq(renewalOpportunitiesTable.tenantId, scope.tenantId),
+    eq(renewalOpportunitiesTable.status, 'open'),
+    sql`${renewalOpportunitiesTable.dueDate} >= ${toDateOnly(startMonth)}`,
+    sql`${renewalOpportunitiesTable.dueDate} < ${toDateOnly(endMonthExcl)}`,
+  ];
+  if (!scope.tenantWide || hasActiveScopeFilter(scope)) {
+    const allowB = await allowedBrandIds(req);
+    if (allowB.length > 0) {
+      filters.push(sql`(${renewalOpportunitiesTable.brandId} is null or ${renewalOpportunitiesTable.brandId} = any(${allowB}))`);
+    } else {
+      filters.push(sql`${renewalOpportunitiesTable.brandId} is null`);
+    }
+  }
+
+  const rows = await db.select().from(renewalOpportunitiesTable).where(and(...filters));
+
+  // Account-Scope filtern
+  const allAccIds = Array.from(new Set(rows.map(r => r.accountId)));
+  const visAcc = new Set<string>();
+  for (const aid of allAccIds) {
+    const s = await entityScopeStatus(req, 'account', aid);
+    if (s === 'ok') visAcc.add(aid);
+  }
+  const visible = rows.filter(r => visAcc.has(r.accountId));
+
+  // Monatsraster initialisieren (auch leere Monate erscheinen)
+  const buckets = new Map<string, { ym: string; count: number; value: number; atRiskCount: number; atRiskValue: number }>();
+  for (let i = 0; i < horizon; i++) {
+    const d = new Date(Date.UTC(startMonth.getUTCFullYear(), startMonth.getUTCMonth() + i, 1));
+    const ym = `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}`;
+    buckets.set(ym, { ym, count: 0, value: 0, atRiskCount: 0, atRiskValue: 0 });
+  }
+
+  for (const r of visible) {
+    const ym = String(r.dueDate).slice(0, 7);
+    const b = buckets.get(ym);
+    if (!b) continue;
+    const v = r.valueAmount == null ? 0 : Number(r.valueAmount);
+    b.count += 1;
+    b.value += v;
+    if (r.riskScore >= 70) {
+      b.atRiskCount += 1;
+      b.atRiskValue += v;
+    }
+  }
+
+  res.json(Array.from(buckets.values()));
+});
+
 // GET /renewals/:id
 router.get('/renewals/:id', async (req, res) => {
   const row = await loadVisibleRenewal(req, req.params.id);

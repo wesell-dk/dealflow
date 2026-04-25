@@ -6561,6 +6561,31 @@ export const GetRenewalSummaryResponse = zod.object({
 });
 
 /**
+ * @summary Renewal-Pipeline pro Monat (Volumen & Anzahl) für Reports-Trendchart
+ */
+export const getRenewalTrendQueryHorizonMonthsDefault = 12;
+export const getRenewalTrendQueryHorizonMonthsMax = 36;
+
+export const GetRenewalTrendQueryParams = zod.object({
+  horizonMonths: zod.coerce
+    .number()
+    .min(1)
+    .max(getRenewalTrendQueryHorizonMonthsMax)
+    .default(getRenewalTrendQueryHorizonMonthsDefault),
+});
+
+export const GetRenewalTrendResponseItem = zod.object({
+  ym: zod.string().describe("Monat im Format YYYY-MM"),
+  count: zod
+    .number()
+    .describe("Anzahl offener Renewals mit dueDate in diesem Monat"),
+  value: zod.number().describe("Summe valueAmount in EUR"),
+  atRiskCount: zod.number().describe("Anzahl mit riskScore >= 70"),
+  atRiskValue: zod.number().describe("Summe valueAmount mit riskScore >= 70"),
+});
+export const GetRenewalTrendResponse = zod.array(GetRenewalTrendResponseItem);
+
+/**
  * @summary Renewal-Engine sofort materialisieren (Tenant-Admin)
  */
 export const RunRenewalEngineResponse = zod.object({

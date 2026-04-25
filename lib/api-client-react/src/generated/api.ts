@@ -158,6 +158,7 @@ import type {
   GetAiRecommendationMetricsParams,
   GetClauseSuggestionStatsParams,
   GetCurrentQuoteParams,
+  GetRenewalTrendParams,
   HealthStatus,
   HelpBotInput,
   HelpBotReply,
@@ -238,6 +239,7 @@ import type {
   RenewalPatch,
   RenewalRunResult,
   RenewalSummary,
+  RenewalTrendBucket,
   ReplaceQuoteLineItems200,
   ReplaceQuoteLineItemsBody,
   RequestApprovalFromReaction201,
@@ -17863,6 +17865,100 @@ export function useGetRenewalSummary<
   request?: SecondParameter<typeof customFetch>;
 }): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
   const queryOptions = getGetRenewalSummaryQueryOptions(options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Renewal-Pipeline pro Monat (Volumen & Anzahl) für Reports-Trendchart
+ */
+export const getGetRenewalTrendUrl = (params?: GetRenewalTrendParams) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? "null" : value.toString());
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0
+    ? `/api/v1/renewals/_trend?${stringifiedParams}`
+    : `/api/v1/renewals/_trend`;
+};
+
+export const getRenewalTrend = async (
+  params?: GetRenewalTrendParams,
+  options?: RequestInit,
+): Promise<RenewalTrendBucket[]> => {
+  return customFetch<RenewalTrendBucket[]>(getGetRenewalTrendUrl(params), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getGetRenewalTrendQueryKey = (params?: GetRenewalTrendParams) => {
+  return [`/api/v1/renewals/_trend`, ...(params ? [params] : [])] as const;
+};
+
+export const getGetRenewalTrendQueryOptions = <
+  TData = Awaited<ReturnType<typeof getRenewalTrend>>,
+  TError = ErrorType<unknown>,
+>(
+  params?: GetRenewalTrendParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getRenewalTrend>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getGetRenewalTrendQueryKey(params);
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof getRenewalTrend>>> = ({
+    signal,
+  }) => getRenewalTrend(params, { signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getRenewalTrend>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetRenewalTrendQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getRenewalTrend>>
+>;
+export type GetRenewalTrendQueryError = ErrorType<unknown>;
+
+/**
+ * @summary Renewal-Pipeline pro Monat (Volumen & Anzahl) für Reports-Trendchart
+ */
+
+export function useGetRenewalTrend<
+  TData = Awaited<ReturnType<typeof getRenewalTrend>>,
+  TError = ErrorType<unknown>,
+>(
+  params?: GetRenewalTrendParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getRenewalTrend>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetRenewalTrendQueryOptions(params, options);
 
   const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
     queryKey: QueryKey;

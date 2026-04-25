@@ -3870,6 +3870,19 @@ export interface RenewalSummary {
   atRisk: RenewalBucketStat;
 }
 
+export interface RenewalTrendBucket {
+  /** Monat im Format YYYY-MM */
+  ym: string;
+  /** Anzahl offener Renewals mit dueDate in diesem Monat */
+  count: number;
+  /** Summe valueAmount in EUR */
+  value: number;
+  /** Anzahl mit riskScore >= 70 */
+  atRiskCount: number;
+  /** Summe valueAmount mit riskScore >= 70 */
+  atRiskValue: number;
+}
+
 export interface BrandClauseOverride {
   id: string;
   tenantId: string;
@@ -4551,6 +4564,14 @@ export const ListRenewalsStatus = {
   lost: "lost",
   cancelled: "cancelled",
 } as const;
+
+export type GetRenewalTrendParams = {
+  /**
+   * @minimum 1
+   * @maximum 36
+   */
+  horizonMonths?: number;
+};
 
 export type ListAiRecommendationsParams = {
   entityType?: string;

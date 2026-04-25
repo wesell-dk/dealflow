@@ -1,6 +1,13 @@
 import { useState, useMemo } from "react";
 import { useTranslation } from "react-i18next";
-import { useGetPerformanceReport, useGetForecast, useGetDashboardSummary, useGetRenewalSummary } from "@workspace/api-client-react";
+import { useLocation } from "wouter";
+import {
+  useGetPerformanceReport,
+  useGetForecast,
+  useGetDashboardSummary,
+  useGetRenewalSummary,
+  useGetRenewalTrend,
+} from "@workspace/api-client-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -11,16 +18,40 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { ResponsiveContainer, ComposedChart, AreaChart, Area, Bar, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend } from "recharts";
+import { ResponsiveContainer, ComposedChart, AreaChart, Area, BarChart, Bar, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend } from "recharts";
 
 export default function Reports() {
   const { t } = useTranslation();
+  const [, navigate] = useLocation();
   const { data: performance, isLoading: isLoadingPerf } = useGetPerformanceReport();
   const { data: forecast, isLoading: isLoadingForecast } = useGetForecast();
   const { data: dashboard } = useGetDashboardSummary();
   const { data: renewalSummary } = useGetRenewalSummary();
+  const { data: renewalTrend } = useGetRenewalTrend({ horizonMonths: 12 });
   const [period, setPeriod] = useState<string>("12");
   const [ownerId, setOwnerId] = useState<string>("__all__");
+
+  const renewalTrendData = useMemo(() => {
+    if (!renewalTrend) return [];
+    return renewalTrend.map((b) => ({
+      ym: b.ym,
+      monthLabel: (() => {
+        const [y, m] = b.ym.split("-");
+        const d = new Date(Date.UTC(Number(y), Number(m) - 1, 1));
+        return d.toLocaleDateString(undefined, { month: "short", year: "2-digit" });
+      })(),
+      safeValue: Math.max(0, (b.value ?? 0) - (b.atRiskValue ?? 0)),
+      atRiskValue: b.atRiskValue ?? 0,
+      count: b.count,
+      atRiskCount: b.atRiskCount,
+      total: b.value ?? 0,
+    }));
+  }, [renewalTrend]);
+
+  const renewalTrendCurrencyFmt = useMemo(
+    () => new Intl.NumberFormat(undefined, { style: "currency", currency: "EUR", maximumFractionDigits: 0 }),
+    [],
+  );
 
   const ownerOptions = useMemo(() => performance?.byOwner ?? [], [performance]);
   const monthly = useMemo(() => {
@@ -165,6 +196,70 @@ export default function Reports() {
           </CardContent>
         </Card>
       </div>
+
+      {/* Renewal-Pipeline Trend (#99) */}
+      <Card data-testid="card-renewal-trend">
+        <CardHeader>
+          <CardTitle>Renewal-Pipeline (12 Monate)</CardTitle>
+          <p className="text-sm text-muted-foreground">
+            Volumen pro Monat über die nächsten 12 Monate. Der gestapelte rote Anteil zeigt Renewals mit Risiko ≥ 70. Klick auf einen Monat öffnet die Renewals-Liste mit passendem Filter.
+          </p>
+        </CardHeader>
+        <CardContent className="h-80">
+          {renewalTrendData.length === 0 ? (
+            <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
+              {t("common.noData")}
+            </div>
+          ) : (
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart
+                data={renewalTrendData}
+                onClick={(state: unknown) => {
+                  const s = state as { activePayload?: Array<{ payload?: { ym?: string } }> } | null;
+                  const ym = s?.activePayload?.[0]?.payload?.ym;
+                  if (ym) navigate(`/renewals?ym=${ym}`);
+                }}
+              >
+                <CartesianGrid strokeDasharray="3 3" vertical={false} opacity={0.3} />
+                <XAxis dataKey="monthLabel" axisLine={false} tickLine={false} fontSize={12} />
+                <YAxis
+                  axisLine={false}
+                  tickLine={false}
+                  fontSize={12}
+                  tickFormatter={(v: number) =>
+                    v >= 1000
+                      ? `${(v / 1000).toLocaleString(undefined, { maximumFractionDigits: 0 })}k`
+                      : String(v)
+                  }
+                />
+                <Tooltip
+                  formatter={(value: number, name: string) => [renewalTrendCurrencyFmt.format(value), name]}
+                  labelFormatter={(label: string, items) => {
+                    const p = items?.[0]?.payload as { count?: number; atRiskCount?: number; total?: number } | undefined;
+                    if (!p) return label;
+                    return `${label} · ${p.count ?? 0} Renewals · ${renewalTrendCurrencyFmt.format(p.total ?? 0)}`;
+                  }}
+                />
+                <Legend />
+                <Bar
+                  dataKey="safeValue"
+                  stackId="value"
+                  name="Volumen (Risiko < 70)"
+                  fill="hsl(var(--chart-1))"
+                  cursor="pointer"
+                />
+                <Bar
+                  dataKey="atRiskValue"
+                  stackId="value"
+                  name="Volumen (Risiko ≥ 70)"
+                  fill="hsl(var(--chart-2))"
+                  cursor="pointer"
+                />
+              </BarChart>
+            </ResponsiveContainer>
+          )}
+        </CardContent>
+      </Card>
 
       {/* Vertragswesen MVP — KPI-Kacheln */}
       <div className="grid gap-4 md:grid-cols-4" data-testid="kpi-row-contracts">

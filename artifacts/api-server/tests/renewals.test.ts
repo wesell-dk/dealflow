@@ -171,6 +171,45 @@ describe("renewals — engine, scope, lifecycle", () => {
     assert.ok(bIds.every(t => t === worldB.tenantId), "must only see tenant B renewals");
   });
 
+  it("GET /renewals/_trend returns 12 month buckets, sums per dueDate month, splits at-risk", async () => {
+    const trendRes = await aliceAdmin.get("/api/renewals/_trend?horizonMonths=12");
+    assert.equal(trendRes.status, 200);
+    const buckets = trendRes.body as Array<{
+      ym: string;
+      count: number;
+      value: number;
+      atRiskCount: number;
+      atRiskValue: number;
+    }>;
+    assert.equal(buckets.length, 12, "must return one bucket per month for 12 months");
+
+    // Buckets are contiguous, sorted, and start at the current month
+    const now = new Date();
+    const expectedFirst = `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, "0")}`;
+    assert.equal(buckets[0]!.ym, expectedFirst);
+
+    // Tenant A's renewal opportunity has dueDate ≈ today + 120 days, valueAmount=120000.
+    // It must appear in exactly one bucket within the 12-month horizon and the
+    // sum across buckets must equal that opportunity's value.
+    const opps = await db.select().from(renewalOpportunitiesTable)
+      .where(eq(renewalOpportunitiesTable.tenantId, worldA.tenantId));
+    const expectedTotal = opps.reduce(
+      (s, o) => s + (o.valueAmount == null ? 0 : Number(o.valueAmount)),
+      0,
+    );
+    const expectedCount = opps.length;
+    const sumValue = buckets.reduce((s, b) => s + b.value, 0);
+    const sumCount = buckets.reduce((s, b) => s + b.count, 0);
+    assert.equal(sumCount, expectedCount, "count across buckets must match seeded opps");
+    assert.equal(sumValue, expectedTotal, "value across buckets must match seeded opps");
+
+    // atRiskValue must never exceed value in any bucket
+    for (const b of buckets) {
+      assert.ok(b.atRiskValue <= b.value, `atRiskValue must be <= value for ${b.ym}`);
+      assert.ok(b.atRiskCount <= b.count, `atRiskCount must be <= count for ${b.ym}`);
+    }
+  });
+
   it("PATCH /renewals/:id snooze sets status + snoozedUntil and writes audit", async () => {
     const list = await aliceAdmin.get("/api/renewals");
     assert.equal(list.status, 200);
