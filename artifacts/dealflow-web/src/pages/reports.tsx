@@ -19,6 +19,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { ResponsiveContainer, ComposedChart, AreaChart, Area, BarChart, Bar, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend } from "recharts";
+import { AiAcceptanceTile } from "@/components/reports/ai-acceptance-tile";
 
 export default function Reports() {
   const { t } = useTranslation();
@@ -307,6 +308,11 @@ export default function Reports() {
             <div className="text-xs text-muted-foreground mt-1">vom Antrag bis Entscheidung</div>
           </CardContent>
         </Card>
+      </div>
+
+      {/* Task #69: KI-Annahmequote pro Prompt */}
+      <div className="grid gap-4">
+        <AiAcceptanceTile />
       </div>
 
       <div className="grid gap-6 md:grid-cols-2">

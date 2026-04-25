@@ -9,6 +9,7 @@ Multi-tenant, multi-company, multi-brand. Deal-centric.
  */
 import type { ExternalContractClauseFamily } from "./externalContractClauseFamily";
 import type { ExternalContractDraftFieldsConfidence } from "./externalContractDraftFieldsConfidence";
+import type { ExternalContractDraftFieldsOverallConfidence } from "./externalContractDraftFieldsOverallConfidence";
 import type { ExternalContractParty } from "./externalContractParty";
 
 export interface ExternalContractDraftFields {
@@ -36,5 +37,7 @@ export interface ExternalContractDraftFields {
   jurisdiction?: string | null;
   identifiedClauseFamilies: ExternalContractClauseFamily[];
   confidence: ExternalContractDraftFieldsConfidence;
+  overallConfidence: ExternalContractDraftFieldsOverallConfidence;
+  overallConfidenceReason: string;
   notes: string[];
 }

@@ -31,14 +31,14 @@ DealFlow One is a Commercial Execution Platform for B2B companies, providing a u
 - **API Codegen**: Orval, generating React Query hooks and Zod schemas from `openapi.yaml`.
 
 **AI Layer:**
-- **Architecture**: A flexible, interchangeable AI layer with an Anthropic adapter.
-- **Prompt Registry**: Typed registry supporting stable keys, model specification, typed input builders, and Zod output schemas.
-- **Orchestrator**: A central `runStructured()` function for provider calls, output validation, and error classification.
-- **Audit Log**: Comprehensive logging of all AI invocations.
-- **Domain Context Builder**: Ensures scope-validated, typed contexts for entities while maintaining cross-tenant isolation.
-- **Copilot Modes**: Ten distinct modes for commercial tasks (e.g., deal summary, negotiation support, contract drafting).
-- **AI Help-Bot**: A tool-using agent with a defined tool registry for system interaction (e.g., `search_accounts`, `create_deal`).
-- **AI Recommendations**: Supports persistence of recommendations with confidence scores, status updates (accepted/rejected/modified), and feedback, enabling metric tracking for acceptance rates and calibration.
+- **Architecture**: A thin, interchangeable AI layer with an Anthropic adapter.
+- **Prompt Registry**: Typed registry with stable keys, model specification, typed input builders, and Zod output schemas for structured output.
+- **Orchestrator**: Central `runStructured()` function handles provider calls, output validation, and error classification.
+- **Audit Log**: All AI invocations are logged.
+- **Domain Context Builder**: Ensures scope-validated, typed contexts for entities, maintaining cross-tenant isolation.
+- **Copilot Modes**: Ten defined modes for various commercial tasks (e.g., deal summary, negotiation support, contract drafting).
+- **AI Help-Bot**: A tool-using agent with a defined tool registry for interacting with the system (e.g., `search_accounts`, `create_deal`).
+- **AI Recommendations**: Features persistence of recommendations with confidence scores, allowing for status updates (accepted/rejected/modified) and feedback, along with metrics for acceptance rate and calibration. Each Copilot prompt (deal.summary, pricing.review, approval.readiness, contract.risk, external.contract.extract) emits a structured `confidence` (low/medium/high) plus a one-sentence `confidenceReason`, mapped to a numeric score (0.4/0.65/0.85) for persistence and calibration. Reusable React components: `AIConfidenceBadge` (color-coded pill with optional reason), `AIFeedbackButtons` (one-click accept/modify/reject with collapsible "Begründung hinzufügen" disclosure), and `AiPromptPanel<Mode>` (generic touchpoint card wired into Deal, Quote, Contract and Approval pages). The external-contract intake wizard renders the badge + feedback inline next to the extracted fields. The Reports cockpit "KI-Annahmequote pro Prompt" tile shows per-prompt acceptance rate, weighted quality score (acceptance × Ø-confidence of decided items) and a 7-day trend sparkline alongside the existing admin "AI confidence accuracy" card.
 
 **GDPR & Governance:** Features include per-tenant data isolation, API-level role and scope enforcement, full audit trails, soft-delete functionality, retention policy hooks, exportable user data, and redacted secrets in logs.
 

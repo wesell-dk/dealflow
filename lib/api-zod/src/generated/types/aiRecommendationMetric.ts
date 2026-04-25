@@ -8,6 +8,7 @@ Multi-tenant, multi-company, multi-brand. Deal-centric.
  * OpenAPI spec version: 0.1.0
  */
 import type { AiRecommendationCalibrationBucket } from "./aiRecommendationCalibrationBucket";
+import type { AiRecommendationTrendPoint } from "./aiRecommendationTrendPoint";
 
 export interface AiRecommendationMetric {
   promptKey: string;
@@ -32,5 +33,17 @@ export interface AiRecommendationMetric {
    * @maximum 1
    */
   averageConfidence: number;
+  /**
+   * @minimum 0
+   * @maximum 1
+   */
+  averageConfidenceDecided: number;
+  /**
+   * @minimum 0
+   * @maximum 1
+   * @nullable
+   */
+  weightedQualityScore: number | null;
   calibration: AiRecommendationCalibrationBucket[];
+  trend: AiRecommendationTrendPoint[];
 }

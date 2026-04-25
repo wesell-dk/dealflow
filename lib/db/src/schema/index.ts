@@ -1480,3 +1480,33 @@ export const aiRecommendationsTable = pgTable("ai_recommendations", {
   // Status-Filter im Admin-Dashboard / Metrics.
   index("ai_recommendations_tenant_status_idx").on(t.tenantId, t.status),
 ]);
+
+// Anonymisierter Lerneffekt-Datensatz pro KI-Entscheidung (Task #69).
+// Im Gegensatz zu `ai_recommendations` enthaelt diese Tabelle KEINE
+// Verbindung zum entscheidenden User und KEINEN modifiziert/Roh-Vorschlag,
+// sondern nur die Telemetrie, die wir fuer das Trainings-/Tuning-Backlog
+// brauchen: prompt_key, model, outcome, Konfidenz, ob Begruendung erfasst
+// wurde. Tenant-Scope bleibt fuer das Reporting erhalten — wir vermeiden
+// Cross-Tenant-Lecks, koennen aber nicht "User X mochte Vorschlag Y" zurueck
+// rekonstruieren.
+export const aiFeedbackTable = pgTable("ai_feedback", {
+  id: id(),
+  tenantId: text("tenant_id").notNull(),
+  promptKey: text("prompt_key").notNull(),
+  // Kanonischer Modellname (z. B. "gpt-4o-2024-08-06"), aus ai_invocations
+  // gespiegelt — null wenn keine Inferenz-Zeile verknuepft war.
+  modelName: text("model_name"),
+  // accepted | rejected | modified
+  outcome: text("outcome").notNull(),
+  // 0..1 Konfidenz, mit der die KI den Vorschlag ausgegeben hat.
+  confidence: numeric("confidence", { precision: 4, scale: 3 }),
+  // Hat der User Freitext-Begruendung gegeben? (Kein Inhalt — nur Flag.)
+  hasFeedbackText: boolean("has_feedback_text").notNull().default(false),
+  // Soft-Link auf ai_recommendations.id (kein FK, weil ai_recommendations
+  // nach Aufbewahrungsfrist geloescht werden darf, ai_feedback bleibt).
+  recommendationId: text("recommendation_id"),
+  createdAt: ts("created_at"),
+}, (t) => [
+  index("ai_feedback_tenant_prompt_idx").on(t.tenantId, t.promptKey, t.createdAt),
+  index("ai_feedback_tenant_outcome_idx").on(t.tenantId, t.outcome),
+]);

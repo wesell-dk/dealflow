@@ -21,6 +21,7 @@ import {
 import { FileText, Download, Paperclip, Languages } from "lucide-react";
 import { QuoteDuplicateButton } from "@/components/quotes/quote-duplicate-button";
 import { useToast } from "@/hooks/use-toast";
+import { AiPromptPanel } from "@/components/copilot/ai-prompt-panel";
 
 export default function Quote() {
   const params = useParams();
@@ -79,6 +80,7 @@ export default function Quote() {
 
       <div className="grid md:grid-cols-3 gap-6">
         <div className="md:col-span-2 space-y-6">
+          <AiPromptPanel mode="pricing.review" entityId={id} />
           <Card>
             <CardHeader><CardTitle>{t("pages.quote.lineItems")}</CardTitle></CardHeader>
             <CardContent>

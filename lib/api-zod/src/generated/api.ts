@@ -4053,6 +4053,9 @@ export const RunDealSummaryParams = zod.object({
   dealId: zod.coerce.string(),
 });
 
+export const runDealSummaryResponseTwoConfidenceMin = 0;
+export const runDealSummaryResponseTwoConfidenceMax = 1;
+
 export const RunDealSummaryResponse = zod
   .object({
     insightId: zod.string(),
@@ -4061,6 +4064,17 @@ export const RunDealSummaryResponse = zod
     latencyMs: zod.number(),
     status: zod.enum(["open"]),
   })
+  .and(
+    zod.object({
+      recommendationId: zod.string(),
+      confidence: zod
+        .number()
+        .min(runDealSummaryResponseTwoConfidenceMin)
+        .max(runDealSummaryResponseTwoConfidenceMax),
+      confidenceLevel: zod.enum(["low", "medium", "high"]),
+      confidenceReason: zod.string(),
+    }),
+  )
   .and(
     zod.object({
       ok: zod.literal(true),
@@ -4079,6 +4093,8 @@ export const RunDealSummaryResponse = zod
           "open_negotiation",
           "open_price_increase",
         ]),
+        confidence: zod.enum(["low", "medium", "high"]),
+        confidenceReason: zod.string(),
       }),
     }),
   );
@@ -4092,6 +4108,9 @@ export const RunPricingReviewParams = zod.object({
   quoteId: zod.coerce.string(),
 });
 
+export const runPricingReviewResponseTwoConfidenceMin = 0;
+export const runPricingReviewResponseTwoConfidenceMax = 1;
+
 export const RunPricingReviewResponse = zod
   .object({
     insightId: zod.string(),
@@ -4100,6 +4119,17 @@ export const RunPricingReviewResponse = zod
     latencyMs: zod.number(),
     status: zod.enum(["open"]),
   })
+  .and(
+    zod.object({
+      recommendationId: zod.string(),
+      confidence: zod
+        .number()
+        .min(runPricingReviewResponseTwoConfidenceMin)
+        .max(runPricingReviewResponseTwoConfidenceMax),
+      confidenceLevel: zod.enum(["low", "medium", "high"]),
+      confidenceReason: zod.string(),
+    }),
+  )
   .and(
     zod.object({
       ok: zod.literal(true),
@@ -4127,6 +4157,8 @@ export const RunPricingReviewResponse = zod
           "open_negotiation",
           "open_price_increase",
         ]),
+        confidence: zod.enum(["low", "medium", "high"]),
+        confidenceReason: zod.string(),
       }),
     }),
   );
@@ -4140,6 +4172,9 @@ export const RunApprovalReadinessParams = zod.object({
   approvalId: zod.coerce.string(),
 });
 
+export const runApprovalReadinessResponseTwoConfidenceMin = 0;
+export const runApprovalReadinessResponseTwoConfidenceMax = 1;
+
 export const RunApprovalReadinessResponse = zod
   .object({
     insightId: zod.string(),
@@ -4148,6 +4183,17 @@ export const RunApprovalReadinessResponse = zod
     latencyMs: zod.number(),
     status: zod.enum(["open"]),
   })
+  .and(
+    zod.object({
+      recommendationId: zod.string(),
+      confidence: zod
+        .number()
+        .min(runApprovalReadinessResponseTwoConfidenceMin)
+        .max(runApprovalReadinessResponseTwoConfidenceMax),
+      confidenceLevel: zod.enum(["low", "medium", "high"]),
+      confidenceReason: zod.string(),
+    }),
+  )
   .and(
     zod.object({
       ok: zod.literal(true),
@@ -4176,6 +4222,8 @@ export const RunApprovalReadinessResponse = zod
           "open_negotiation",
           "open_price_increase",
         ]),
+        confidence: zod.enum(["low", "medium", "high"]),
+        confidenceReason: zod.string(),
         cuadCoverage: zod
           .union([
             zod.object({
@@ -4228,6 +4276,9 @@ export const RunContractRiskParams = zod.object({
   contractId: zod.coerce.string(),
 });
 
+export const runContractRiskResponseTwoConfidenceMin = 0;
+export const runContractRiskResponseTwoConfidenceMax = 1;
+
 export const RunContractRiskResponse = zod
   .object({
     insightId: zod.string(),
@@ -4236,6 +4287,17 @@ export const RunContractRiskResponse = zod
     latencyMs: zod.number(),
     status: zod.enum(["open"]),
   })
+  .and(
+    zod.object({
+      recommendationId: zod.string(),
+      confidence: zod
+        .number()
+        .min(runContractRiskResponseTwoConfidenceMin)
+        .max(runContractRiskResponseTwoConfidenceMax),
+      confidenceLevel: zod.enum(["low", "medium", "high"]),
+      confidenceReason: zod.string(),
+    }),
+  )
   .and(
     zod.object({
       ok: zod.literal(true),
@@ -4260,6 +4322,8 @@ export const RunContractRiskResponse = zod
           "open_negotiation",
           "open_price_increase",
         ]),
+        confidence: zod.enum(["low", "medium", "high"]),
+        confidenceReason: zod.string(),
       }),
     }),
   );
@@ -5815,12 +5879,29 @@ export const ExtractExternalContractFieldsBody = zod.object({
   accountId: zod.string(),
 });
 
+export const extractExternalContractFieldsResponseConfidenceOneMin = 0;
+export const extractExternalContractFieldsResponseConfidenceOneMax = 1;
+
 export const extractExternalContractFieldsResponseSuggestionIdentifiedClauseFamiliesItemConfidenceMin = 0;
 export const extractExternalContractFieldsResponseSuggestionIdentifiedClauseFamiliesItemConfidenceMax = 1;
 
 export const ExtractExternalContractFieldsResponse = zod.object({
   aiAvailable: zod.boolean(),
   invocationId: zod.string().nullish(),
+  recommendationId: zod.string().nullish(),
+  confidence: zod
+    .union([
+      zod
+        .number()
+        .min(extractExternalContractFieldsResponseConfidenceOneMin)
+        .max(extractExternalContractFieldsResponseConfidenceOneMax),
+      zod.null(),
+    ])
+    .optional(),
+  confidenceLevel: zod
+    .union([zod.enum(["low", "medium", "high"]), zod.null()])
+    .optional(),
+  confidenceReason: zod.string().nullish(),
   truncated: zod.boolean().optional(),
   charCount: zod.number().optional(),
   errorCode: zod.string().nullish(),
@@ -5863,6 +5944,8 @@ export const ExtractExternalContractFieldsResponse = zod.object({
       }),
     ),
     confidence: zod.record(zod.string(), zod.number()),
+    overallConfidence: zod.enum(["low", "medium", "high"]),
+    overallConfidenceReason: zod.string(),
     notes: zod.array(zod.string()),
   }),
 });
@@ -7309,10 +7392,25 @@ export const getAiRecommendationMetricsResponseAcceptanceRateMax = 1;
 export const getAiRecommendationMetricsResponseAverageConfidenceMin = 0;
 export const getAiRecommendationMetricsResponseAverageConfidenceMax = 1;
 
+export const getAiRecommendationMetricsResponseAverageConfidenceDecidedMin = 0;
+export const getAiRecommendationMetricsResponseAverageConfidenceDecidedMax = 1;
+
+export const getAiRecommendationMetricsResponseWeightedQualityScoreMin = 0;
+export const getAiRecommendationMetricsResponseWeightedQualityScoreMax = 1;
+
 export const getAiRecommendationMetricsResponseCalibrationItemTotalMin = 0;
 
 export const getAiRecommendationMetricsResponseCalibrationItemAcceptanceRateMin = 0;
 export const getAiRecommendationMetricsResponseCalibrationItemAcceptanceRateMax = 1;
+
+export const getAiRecommendationMetricsResponseTrendItemTotalMin = 0;
+
+export const getAiRecommendationMetricsResponseTrendItemDecidedMin = 0;
+
+export const getAiRecommendationMetricsResponseTrendItemAcceptedMin = 0;
+
+export const getAiRecommendationMetricsResponseTrendItemAcceptanceRateMin = 0;
+export const getAiRecommendationMetricsResponseTrendItemAcceptanceRateMax = 1;
 
 export const GetAiRecommendationMetricsResponseItem = zod.object({
   promptKey: zod.string(),
@@ -7330,6 +7428,15 @@ export const GetAiRecommendationMetricsResponseItem = zod.object({
     .number()
     .min(getAiRecommendationMetricsResponseAverageConfidenceMin)
     .max(getAiRecommendationMetricsResponseAverageConfidenceMax),
+  averageConfidenceDecided: zod
+    .number()
+    .min(getAiRecommendationMetricsResponseAverageConfidenceDecidedMin)
+    .max(getAiRecommendationMetricsResponseAverageConfidenceDecidedMax),
+  weightedQualityScore: zod
+    .number()
+    .min(getAiRecommendationMetricsResponseWeightedQualityScoreMin)
+    .max(getAiRecommendationMetricsResponseWeightedQualityScoreMax)
+    .nullable(),
   calibration: zod.array(
     zod.object({
       range: zod.enum(["0-25", "25-50", "50-75", "75-100"]),
@@ -7340,6 +7447,25 @@ export const GetAiRecommendationMetricsResponseItem = zod.object({
         .number()
         .min(getAiRecommendationMetricsResponseCalibrationItemAcceptanceRateMin)
         .max(getAiRecommendationMetricsResponseCalibrationItemAcceptanceRateMax)
+        .nullable(),
+    }),
+  ),
+  trend: zod.array(
+    zod.object({
+      date: zod.coerce.date(),
+      total: zod
+        .number()
+        .min(getAiRecommendationMetricsResponseTrendItemTotalMin),
+      decided: zod
+        .number()
+        .min(getAiRecommendationMetricsResponseTrendItemDecidedMin),
+      accepted: zod
+        .number()
+        .min(getAiRecommendationMetricsResponseTrendItemAcceptedMin),
+      acceptanceRate: zod
+        .number()
+        .min(getAiRecommendationMetricsResponseTrendItemAcceptanceRateMin)
+        .max(getAiRecommendationMetricsResponseTrendItemAcceptanceRateMax)
         .nullable(),
     }),
   ),

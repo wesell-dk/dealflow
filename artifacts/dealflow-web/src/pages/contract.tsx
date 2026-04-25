@@ -72,6 +72,7 @@ import { FileText, ShieldAlert, ShieldCheck, Library, Activity, GitCompare, Aler
 import { EntityVersions } from "@/components/ui/entity-versions";
 import { useToast } from "@/hooks/use-toast";
 import { ApiError } from "@workspace/api-client-react";
+import { AiPromptPanel } from "@/components/copilot/ai-prompt-panel";
 
 function toneClass(tone: string) {
   switch (tone) {
@@ -265,6 +266,8 @@ export default function Contract() {
           </p>
         </CardContent>
       </Card>
+
+      <AiPromptPanel mode="contract.risk" entityId={id} />
 
       <EntityVersions entityType="contract" entityId={id} />
 

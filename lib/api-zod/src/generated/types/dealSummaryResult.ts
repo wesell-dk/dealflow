@@ -7,6 +7,7 @@ Multi-tenant, multi-company, multi-brand. Deal-centric.
 
  * OpenAPI spec version: 0.1.0
  */
+import type { DealSummaryResultConfidence } from "./dealSummaryResultConfidence";
 import type { DealSummaryResultHealth } from "./dealSummaryResultHealth";
 import type { DealSummaryResultRecommendedAction } from "./dealSummaryResultRecommendedAction";
 
@@ -18,4 +19,6 @@ export interface DealSummaryResult {
   blockers: string[];
   nextSteps: string[];
   recommendedAction: DealSummaryResultRecommendedAction;
+  confidence: DealSummaryResultConfidence;
+  confidenceReason: string;
 }

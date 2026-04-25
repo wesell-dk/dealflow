@@ -42,6 +42,23 @@ const PRIORITY = z.union([
   z.literal("critical"),
 ]);
 
+// Strukturierte Konfidenz-Stufe + Kurzbegründung (Task #69).
+// Wird vom Modell pro Empfehlung ausgegeben und in der UI als Badge mit
+// Tooltip gerendert. Numerische Konfidenz für `recordRecommendation` wird
+// deterministisch aus der Stufe abgeleitet (siehe `confidenceLevelToScore`).
+const CONFIDENCE_LEVEL = z.union([
+  z.literal("low"),
+  z.literal("medium"),
+  z.literal("high"),
+]);
+const CONFIDENCE_REASON = z
+  .string()
+  .min(2)
+  .max(280)
+  .describe(
+    "Ein knapper Satz, warum die Konfidenz so eingestuft ist (z.B. 'Vollständige Daten, klare Signale' oder 'Wenig Verhandlungs-Historie, Schätzung').",
+  );
+
 // Gemeinsame Action-Empfehlung. Die strings entsprechen UI-Buttons im
 // existierenden Copilot-Insight-Card.
 const ACTION_TYPE = z.union([
@@ -68,6 +85,8 @@ const DealSummaryOutput = z.object({
   blockers: z.array(z.string().min(2).max(200)).max(6),
   nextSteps: z.array(z.string().min(2).max(200)).min(1).max(5),
   recommendedAction: ACTION_TYPE,
+  confidence: CONFIDENCE_LEVEL,
+  confidenceReason: CONFIDENCE_REASON,
 });
 
 export const dealSummary: PromptDefinition<
@@ -87,7 +106,8 @@ export const dealSummary: PromptDefinition<
   outputSchema: DealSummaryOutput,
   toolDescription:
     "Liefert headline (1 Satz), status, health-Einschätzung, 3-8 keyFacts, " +
-    "blockers, 1-5 nextSteps und eine recommendedAction.",
+    "blockers, 1-5 nextSteps, recommendedAction und confidence (low/medium/" +
+    "high) plus einen Satz confidenceReason.",
   toolName: "report_deal_summary",
 };
 
@@ -158,6 +178,8 @@ const PricingReviewOutput = z.object({
     z.literal("required"),
   ]),
   recommendedAction: ACTION_TYPE,
+  confidence: CONFIDENCE_LEVEL,
+  confidenceReason: CONFIDENCE_REASON,
 });
 
 export const pricingReview: PromptDefinition<
@@ -176,7 +198,8 @@ export const pricingReview: PromptDefinition<
   outputSchema: PricingReviewOutput,
   toolDescription:
     "Liefert summary, marginAssessment, discountAssessment, policyFlags " +
-    "(severity-eingestuft), approvalRelevance und recommendedAction.",
+    "(severity-eingestuft), approvalRelevance, recommendedAction sowie " +
+    "confidence (low/medium/high) plus einen Satz confidenceReason.",
   toolName: "report_pricing",
 };
 
@@ -202,6 +225,8 @@ const ApprovalReadinessOutput = z.object({
     )
     .max(8),
   recommendedAction: ACTION_TYPE,
+  confidence: CONFIDENCE_LEVEL,
+  confidenceReason: CONFIDENCE_REASON,
 });
 
 export const approvalReadiness: PromptDefinition<
@@ -232,7 +257,8 @@ export const approvalReadiness: PromptDefinition<
   outputSchema: ApprovalReadinessOutput,
   toolDescription:
     "Liefert decisionReady, recommendation, rationale, missingInformation, " +
-    "keyDeviations und eine recommendedAction.",
+    "keyDeviations, eine recommendedAction sowie confidence (low/medium/high) " +
+    "plus einen Satz confidenceReason.",
   toolName: "report_approval_readiness",
 };
 
@@ -306,6 +332,8 @@ const ContractRiskOutput = z.object({
     .max(15),
   approvalRelevant: z.boolean(),
   recommendedAction: ACTION_TYPE,
+  confidence: CONFIDENCE_LEVEL,
+  confidenceReason: CONFIDENCE_REASON,
 });
 
 export const contractRisk: PromptDefinition<
@@ -325,7 +353,9 @@ export const contractRisk: PromptDefinition<
   outputSchema: ContractRiskOutput,
   toolDescription:
     "Liefert overallRisk, overallScore (0-100), summary, riskSignals mit " +
-    "Klausel/Severity/Finding/Recommendation, approvalRelevant, recommendedAction.",
+    "Klausel/Severity/Finding/Recommendation, approvalRelevant, " +
+    "recommendedAction sowie confidence (low/medium/high) plus einen Satz " +
+    "confidenceReason.",
   toolName: "report_contract_risk",
 };
 
@@ -629,6 +659,11 @@ const ExternalContractExtractOutput = z.object({
   // Pro Feldname (siehe oben) eine 0..1-Konfidenz. Felder ohne Konfidenz
   // werden im Frontend mit einem Warn-Indikator gerendert.
   confidence: z.record(z.string(), z.number().min(0).max(1)),
+  // Aggregierte Konfidenz-Stufe ueber die gesamte Extraktion (Task #69):
+  // Treibt das AIConfidenceBadge im Intake-Wizard. low = der User sollte
+  // praktisch alles pruefen; high = nur Plausibilitaetscheck noetig.
+  overallConfidence: CONFIDENCE_LEVEL,
+  overallConfidenceReason: CONFIDENCE_REASON,
   // Hinweise fuer den User: was ist unklar, was sollte er pruefen.
   notes: z.array(z.string().min(2).max(240)).max(8),
 });
@@ -663,6 +698,7 @@ export const externalContractExtract: PromptDefinition<
     'valueAmount, effectiveFrom/To (ISO), autoRenewal, renewalNoticeDays, ' +
     'terminationNoticeDays, governingLaw, jurisdiction, ' +
     'identifiedClauseFamilies (name+confidence), confidence pro Feld, ' +
+    'overallConfidence (low/medium/high) plus overallConfidenceReason, ' +
     'notes (Hinweise fuer manuelle Pruefung).',
   toolName: 'report_external_contract_extract',
 };

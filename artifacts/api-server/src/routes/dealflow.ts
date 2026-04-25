@@ -112,6 +112,8 @@ import {
   clauseSuggestionsTable,
   externalCollaboratorsTable,
   aiRecommendationsTable,
+  aiFeedbackTable,
+  aiInvocationsTable,
   externalCollaboratorEventsTable,
   contractCommentsTable,
 } from '@workspace/db';
@@ -139,7 +141,7 @@ import {
 import { emitEvent, WEBHOOK_EVENTS, assertSafeWebhookUrl, assertSafeResolvedUrl } from '../lib/webhooks';
 import { parseAsOf, resolveSnapshot, isInvalidAsOf } from '../lib/asOf';
 import { runStructured, isAIConfigured, AIOrchestrationError } from '../lib/ai';
-import { recordRecommendation, clampConfidence } from '../lib/ai/recommendations.js';
+import { recordRecommendation, clampConfidence, confidenceLevelToScore } from '../lib/ai/recommendations.js';
 import type { HelpAssistantInput } from '../lib/ai/prompts/dealflow';
 import { runAgent, type AgentTrace } from '../lib/ai/agent.js';
 import { HELP_BOT_TOOLS_AS_AGENT_TOOLS } from '../lib/ai/tools/dealflowAgent.js';
@@ -8236,6 +8238,8 @@ router.post('/copilot/deal-summary/:dealId', async (req, res) => {
       headline: string; status: string; health: string;
       keyFacts: string[]; blockers: string[]; nextSteps: string[];
       recommendedAction: string;
+      confidence: 'low' | 'medium' | 'high';
+      confidenceReason: string;
     }>({
       promptKey: 'deal.summary',
       input: ctx,
@@ -8253,15 +8257,14 @@ router.post('/copilot/deal-summary/:dealId', async (req, res) => {
       actionType: result.output.recommendedAction === 'none' ? null : result.output.recommendedAction,
       actionPayload: { dealId },
     });
-    // Konfidenz-Heuristik: gruene Health -> 0.85, gelb -> 0.6, rot -> 0.4.
-    // Echte Modell-Logprobs sind in der aktuellen AI-Layer noch nicht verfuegbar.
-    const conf = result.output.health === 'green' ? 0.85
-      : result.output.health === 'yellow' ? 0.6 : 0.4;
+    // Numerische Konfidenz fuer die Persistenz aus der strukturierten Stufe
+    // ableiten — siehe Task #69 (low/medium/high + Begruendung).
+    const confScore = confidenceLevelToScore(result.output.confidence);
     const recommendationId = await recordRecommendation({
       tenantId: scope.tenantId,
       promptKey: 'deal.summary',
       suggestion: result.output,
-      confidence: conf,
+      confidence: confScore,
       entityType: 'deal',
       entityId: dealId,
       aiInvocationId: result.invocationId,
@@ -8272,7 +8275,9 @@ router.post('/copilot/deal-summary/:dealId', async (req, res) => {
       invocationId: result.invocationId,
       insightId,
       recommendationId,
-      confidence: conf,
+      confidence: confScore,
+      confidenceLevel: result.output.confidence,
+      confidenceReason: result.output.confidenceReason,
       model: result.model,
       latencyMs: result.latencyMs,
       status: 'open',
@@ -8306,6 +8311,8 @@ router.post('/copilot/pricing-review/:quoteId', async (req, res) => {
       summary: string; marginAssessment: string; discountAssessment: string;
       policyFlags: Array<{ topic: string; severity: string; explanation: string }>;
       approvalRelevance: string; recommendedAction: string;
+      confidence: 'low' | 'medium' | 'high';
+      confidenceReason: string;
     }>({
       promptKey: 'pricing.review',
       input: ctx,
@@ -8333,11 +8340,27 @@ router.post('/copilot/pricing-review/:quoteId', async (req, res) => {
       actionType: result.output.recommendedAction === 'none' ? null : result.output.recommendedAction,
       actionPayload: { quoteId, approvalRelevance: result.output.approvalRelevance },
     });
+    // Konfidenz + recordRecommendation (Task #69) — User kann den Vorschlag
+    // im Copilot-Panel akzeptieren / ablehnen / anpassen.
+    const confScore = confidenceLevelToScore(result.output.confidence);
+    const recommendationId = await recordRecommendation({
+      tenantId: scope.tenantId,
+      promptKey: 'pricing.review',
+      suggestion: result.output,
+      confidence: confScore,
+      entityType: 'quote',
+      entityId: quoteId,
+      aiInvocationId: result.invocationId,
+    });
     res.json({
       ok: true,
       result: result.output,
       invocationId: result.invocationId,
       insightId,
+      recommendationId,
+      confidence: confScore,
+      confidenceLevel: result.output.confidence,
+      confidenceReason: result.output.confidenceReason,
       model: result.model,
       latencyMs: result.latencyMs,
       status: 'open',
@@ -8372,6 +8395,8 @@ router.post('/copilot/approval-readiness/:approvalId', async (req, res) => {
       missingInformation: string[];
       keyDeviations: Array<{ topic: string; severity: string; note: string }>;
       recommendedAction: string;
+      confidence: 'low' | 'medium' | 'high';
+      confidenceReason: string;
     }>({
       promptKey: 'approval.readiness',
       input: ctx,
@@ -8410,11 +8435,26 @@ router.post('/copilot/approval-readiness/:approvalId', async (req, res) => {
     // as a separate section ("Typische Bausteine fehlen") — distinct from the
     // AI-generated keyDeviations.
     const cuadCoverage = ctx.contract?.id ? await computeCuadCoverage(ctx.contract.id) : null;
+    // Konfidenz + recordRecommendation (Task #69).
+    const confScore = confidenceLevelToScore(result.output.confidence);
+    const recommendationId = await recordRecommendation({
+      tenantId: scope.tenantId,
+      promptKey: 'approval.readiness',
+      suggestion: result.output,
+      confidence: confScore,
+      entityType: 'approval',
+      entityId: approvalId,
+      aiInvocationId: result.invocationId,
+    });
     res.json({
       ok: true,
       result: { ...result.output, cuadCoverage },
       invocationId: result.invocationId,
       insightId,
+      recommendationId,
+      confidence: confScore,
+      confidenceLevel: result.output.confidence,
+      confidenceReason: result.output.confidenceReason,
       model: result.model,
       latencyMs: result.latencyMs,
       status: 'open',
@@ -8448,6 +8488,8 @@ router.post('/copilot/contract-risk/:contractId', async (req, res) => {
       overallRisk: string; overallScore: number; summary: string;
       riskSignals: Array<{ clause: string; severity: string; finding: string; recommendation: string }>;
       approvalRelevant: boolean; recommendedAction: string;
+      confidence: 'low' | 'medium' | 'high';
+      confidenceReason: string;
     }>({
       promptKey: 'contract.risk',
       input: ctx,
@@ -8469,11 +8511,26 @@ router.post('/copilot/contract-risk/:contractId', async (req, res) => {
         approvalRelevant: result.output.approvalRelevant,
       },
     });
+    // Konfidenz + recordRecommendation (Task #69).
+    const confScore = confidenceLevelToScore(result.output.confidence);
+    const recommendationId = await recordRecommendation({
+      tenantId: scope.tenantId,
+      promptKey: 'contract.risk',
+      suggestion: result.output,
+      confidence: confScore,
+      entityType: 'contract',
+      entityId: contractId,
+      aiInvocationId: result.invocationId,
+    });
     res.json({
       ok: true,
       result: result.output,
       invocationId: result.invocationId,
       insightId,
+      recommendationId,
+      confidence: confScore,
+      confidenceLevel: result.output.confidence,
+      confidenceReason: result.output.confidenceReason,
       model: result.model,
       latencyMs: result.latencyMs,
       status: 'open',
@@ -10907,6 +10964,8 @@ router.post('/external-contracts/extract', async (req, res) => {
     jurisdiction: null,
     identifiedClauseFamilies: [] as Array<{ name: string; confidence: number }>,
     confidence: {} as Record<string, number>,
+    overallConfidence: 'low' as 'low' | 'medium' | 'high',
+    overallConfidenceReason: 'Keine KI-Extraktion verfügbar — Felder bitte manuell prüfen.',
     notes: [] as string[],
   };
 
@@ -10973,6 +11032,8 @@ router.post('/external-contracts/extract', async (req, res) => {
         jurisdiction: string | null;
         identifiedClauseFamilies: Array<{ name: string; confidence: number }>;
         confidence: Record<string, number>;
+        overallConfidence: 'low' | 'medium' | 'high';
+        overallConfidenceReason: string;
         notes: string[];
       }
     >({
@@ -10981,9 +11042,26 @@ router.post('/external-contracts/extract', async (req, res) => {
       scope,
       entityRef: { entityType: 'external_contract', entityId: objectPath },
     });
+    // Konfidenz + recordRecommendation (Task #69). Beim Intake gibt es noch
+    // keine entityId — der Object-Storage-Pfad ist die einzige stabile
+    // Referenz; reicht fuer "war diese Extraktion brauchbar?"-Feedback.
+    const confScore = confidenceLevelToScore(result.output.overallConfidence);
+    const recommendationId = await recordRecommendation({
+      tenantId: scope.tenantId,
+      promptKey: 'external.contract.extract',
+      suggestion: result.output,
+      confidence: confScore,
+      entityType: 'external_contract',
+      entityId: objectPath,
+      aiInvocationId: result.invocationId,
+    });
     res.json({
       aiAvailable: true,
       invocationId: result.invocationId,
+      recommendationId,
+      confidence: confScore,
+      confidenceLevel: result.output.overallConfidence,
+      confidenceReason: result.output.overallConfidenceReason,
       truncated,
       charCount,
       errorCode: null,
@@ -13811,10 +13889,9 @@ router.patch('/ai-recommendations/:id', async (req, res) => {
     return;
   }
   const newStatus = body.status as 'pending' | 'accepted' | 'rejected' | 'modified';
-  if (newStatus === 'modified' && body.modifiedSuggestion === undefined) {
-    res.status(400).json({ error: 'status=modified requires modifiedSuggestion' });
-    return;
-  }
+  // `modifiedSuggestion` ist optional: Task #69 verlangt einen Ein-Klick-
+  // Modified-Pfad. Der konkrete Gegenvorschlag kann spaeter per PATCH
+  // nachgereicht werden.
   const feedback = typeof body.feedback === 'string' ? body.feedback.trim() : null;
   if (feedback && feedback.length > 2000) {
     res.status(400).json({ error: 'feedback must be at most 2000 chars' });
@@ -13823,14 +13900,54 @@ router.patch('/ai-recommendations/:id', async (req, res) => {
   await db.update(aiRecommendationsTable)
     .set({
       status: newStatus,
-      modifiedSuggestion: newStatus === 'modified' ? (body.modifiedSuggestion as unknown) : null,
-      feedbackText: feedback || null,
+      modifiedSuggestion: newStatus === 'modified'
+        ? (body.modifiedSuggestion === undefined ? rec.modifiedSuggestion : (body.modifiedSuggestion as unknown))
+        : null,
+      feedbackText: feedback || rec.feedbackText,
       decidedBy: scope.user.id,
       decidedAt: new Date(),
     })
     .where(eq(aiRecommendationsTable.id, rec.id));
   const [updated] = await db.select().from(aiRecommendationsTable)
     .where(eq(aiRecommendationsTable.id, rec.id));
+  // Anonymisierter Lerneffekt-Datensatz (Task #69). Nur fuer Entscheidungen
+  // (accepted/rejected/modified), nicht fuer "pending"-Reset und nur, wenn
+  // der Status sich tatsaechlich von "pending" zu einer Entscheidung
+  // bewegt — Doppel-Klicks oder spaetere Begruendungs-PATCHes fuegen keine
+  // weitere Feedback-Zeile ein, aktualisieren aber das hasFeedbackText-Flag.
+  if (newStatus !== 'pending') {
+    let modelName: string | null = null;
+    if (rec.aiInvocationId) {
+      const [inv] = await db.select({ model: aiInvocationsTable.model })
+        .from(aiInvocationsTable)
+        .where(and(
+          eq(aiInvocationsTable.id, rec.aiInvocationId),
+          eq(aiInvocationsTable.tenantId, scope.tenantId),
+        ));
+      modelName = inv?.model ?? null;
+    }
+    if (rec.status === 'pending') {
+      await db.insert(aiFeedbackTable).values({
+        id: `aifb_${randomUUID().slice(0, 12)}`,
+        tenantId: scope.tenantId,
+        promptKey: rec.promptKey,
+        modelName,
+        outcome: newStatus,
+        confidence: rec.confidence !== null && rec.confidence !== undefined
+          ? String(rec.confidence)
+          : null,
+        hasFeedbackText: Boolean(feedback),
+        recommendationId: rec.id,
+      });
+    } else if (feedback) {
+      await db.update(aiFeedbackTable)
+        .set({ hasFeedbackText: true })
+        .where(and(
+          eq(aiFeedbackTable.tenantId, scope.tenantId),
+          eq(aiFeedbackTable.recommendationId, rec.id),
+        ));
+    }
+  }
   await writeAuditFromReq(req, {
     entityType: 'ai_recommendation', entityId: rec.id,
     action: `ai_recommendation_${newStatus}`,
@@ -13856,6 +13973,7 @@ router.get('/ai-recommendations/_metrics', async (req, res) => {
   // Aggregation in JS — Datenmenge pro Tenant ist begrenzt (Index limitiert
   // typische Listen auf <10k). Bei Skalierung -> SQL-Aggregation umstellen.
   type Bucket = { range: string; total: number; accepted: number };
+  type DayBucket = { date: string; total: number; accepted: number; decided: number };
   const groups = new Map<string, {
     count: number;
     accepted: number;
@@ -13863,35 +13981,94 @@ router.get('/ai-recommendations/_metrics', async (req, res) => {
     modified: number;
     pending: number;
     confSum: number;
+    confSumDecided: number;
+    decidedCount: number;
     buckets: Bucket[];
+    days: Map<string, DayBucket>;
   }>();
   const newGroup = () => ({
-    count: 0, accepted: 0, rejected: 0, modified: 0, pending: 0, confSum: 0,
+    count: 0, accepted: 0, rejected: 0, modified: 0, pending: 0,
+    confSum: 0, confSumDecided: 0, decidedCount: 0,
     buckets: [
       { range: '0-25', total: 0, accepted: 0 },
       { range: '25-50', total: 0, accepted: 0 },
       { range: '50-75', total: 0, accepted: 0 },
       { range: '75-100', total: 0, accepted: 0 },
     ] as Bucket[],
+    days: new Map<string, DayBucket>(),
   });
+  // Trend-Fenster: letzte 7 Tage (heute inklusive). Auch Tage ohne Daten
+  // werden im Ergebnis mit total=0 zurueckgegeben, damit das Frontend eine
+  // luckenfreie Sparkline rendern kann (Task #69, Reports-Tile).
+  const TREND_DAYS = 7;
+  const today = new Date();
+  today.setUTCHours(0, 0, 0, 0);
+  const trendDates: string[] = [];
+  for (let i = TREND_DAYS - 1; i >= 0; i--) {
+    const d = new Date(today);
+    d.setUTCDate(d.getUTCDate() - i);
+    trendDates.push(d.toISOString().slice(0, 10));
+  }
+  const trendCutoffMs = today.getTime() - (TREND_DAYS - 1) * 24 * 60 * 60 * 1000;
   for (const r of rows) {
     const g = groups.get(r.promptKey) ?? newGroup();
     const conf = clampConfidence(Number(r.confidence));
     g.count += 1;
     g.confSum += conf;
     const isAccepted = r.status === 'accepted' || r.status === 'modified';
+    const isDecided = r.status === 'accepted' || r.status === 'modified' || r.status === 'rejected';
     if (r.status === 'accepted') g.accepted += 1;
     else if (r.status === 'rejected') g.rejected += 1;
     else if (r.status === 'modified') g.modified += 1;
     else g.pending += 1;
+    if (isDecided) {
+      g.decidedCount += 1;
+      g.confSumDecided += conf;
+    }
     const bIdx = conf >= 0.75 ? 3 : conf >= 0.5 ? 2 : conf >= 0.25 ? 1 : 0;
     const bucket = g.buckets[bIdx]!;
     bucket.total += 1;
     if (isAccepted) bucket.accepted += 1;
+    // Trend nach Entscheidungs-Datum (decidedAt) wenn vorhanden,
+    // sonst createdAt — fuer pending-Eintraege zaehlen wir das
+    // Ausstellungsdatum als „aktiver Vorschlag".
+    const ts = r.decidedAt ?? r.createdAt;
+    if (ts) {
+      const tsMs = new Date(ts).getTime();
+      if (tsMs >= trendCutoffMs) {
+        const day = new Date(tsMs).toISOString().slice(0, 10);
+        const db = g.days.get(day) ?? { date: day, total: 0, accepted: 0, decided: 0 };
+        db.total += 1;
+        if (isDecided) db.decided += 1;
+        if (isAccepted) db.accepted += 1;
+        g.days.set(day, db);
+      }
+    }
     groups.set(r.promptKey, g);
   }
   const result = [...groups.entries()].map(([key, g]) => {
     const decided = g.accepted + g.rejected + g.modified;
+    const acceptanceRate = decided > 0 ? (g.accepted + g.modified) / decided : null;
+    const avgConfidence = g.count > 0 ? g.confSum / g.count : 0;
+    const avgConfidenceDecided = g.decidedCount > 0 ? g.confSumDecided / g.decidedCount : avgConfidence;
+    // Weighted Quality Score = Annahmequote × Durchschnitts-Konfidenz der
+    // entschiedenen Empfehlungen. Hoch nur, wenn die KI sowohl haeufig
+    // angenommen wird, als auch bei der Entscheidung mit hoher Konfidenz
+    // markiert war. Null wenn noch nichts entschieden wurde.
+    const weightedQualityScore = acceptanceRate !== null
+      ? Math.max(0, Math.min(1, acceptanceRate * avgConfidenceDecided))
+      : null;
+    const trend = trendDates.map((date) => {
+      const db = g.days.get(date);
+      const dDecided = db?.decided ?? 0;
+      return {
+        date,
+        total: db?.total ?? 0,
+        decided: dDecided,
+        accepted: db?.accepted ?? 0,
+        acceptanceRate: dDecided > 0 ? (db!.accepted / dDecided) : null,
+      };
+    });
     return {
       promptKey: key,
       count: g.count,
@@ -13899,13 +14076,16 @@ router.get('/ai-recommendations/_metrics', async (req, res) => {
       accepted: g.accepted,
       rejected: g.rejected,
       modified: g.modified,
-      acceptanceRate: decided > 0 ? (g.accepted + g.modified) / decided : null,
-      averageConfidence: g.count > 0 ? g.confSum / g.count : 0,
+      acceptanceRate,
+      averageConfidence: avgConfidence,
+      averageConfidenceDecided: avgConfidenceDecided,
+      weightedQualityScore,
       calibration: g.buckets.map((b) => ({
         range: b.range,
         total: b.total,
         acceptanceRate: b.total > 0 ? b.accepted / b.total : null,
       })),
+      trend,
     };
   }).sort((a, b) => b.count - a.count);
   res.json(result);

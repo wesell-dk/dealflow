@@ -38,6 +38,30 @@ export function clampConfidence(raw: unknown): number {
 }
 
 /**
+ * Strukturierte Konfidenz-Stufen (Task #69) auf den fuer die Persistenz und
+ * Kalibrierung benoetigten 0..1-Score abbilden.
+ *
+ *  - low    -> 0.40 (untere Haelfte)
+ *  - medium -> 0.65 (zwischen 50-75 %)
+ *  - high   -> 0.85 (in den 75-100 %-Bucket des Metrics-Endpoints)
+ *
+ * Die Werte sind so gewaehlt, dass jede Stufe in ihrem eigenen Calibration-
+ * Bucket landet (siehe `/ai-recommendations/_metrics`). Das Modell liefert
+ * heute keine kalibrierten Logprobs; die Stufe ist daher die einzige fuer
+ * uns verifizierbare Konfidenz-Aussage.
+ */
+export type ConfidenceLevel = 'low' | 'medium' | 'high';
+
+export function confidenceLevelToScore(level: ConfidenceLevel | string | null | undefined): number {
+  switch (level) {
+    case 'high': return 0.85;
+    case 'medium': return 0.65;
+    case 'low': return 0.4;
+    default: return 0.5; // unbekannt -> neutral mittig, niemals "implizit hoch"
+  }
+}
+
+/**
  * Persistiert eine Empfehlung. Liefert die generierte ID zurueck, damit
  * Aufrufer sie in die HTTP-Antwort einbetten koennen (Frontend referenziert
  * sie spaeter im PATCH).

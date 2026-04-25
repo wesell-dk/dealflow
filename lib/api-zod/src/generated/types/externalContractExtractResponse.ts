@@ -13,6 +13,12 @@ export interface ExternalContractExtractResponse {
   aiAvailable: boolean;
   /** @nullable */
   invocationId?: string | null;
+  /** @nullable */
+  recommendationId?: string | null;
+  confidence?: number | null;
+  confidenceLevel?: "low" | "medium" | "high" | null;
+  /** @nullable */
+  confidenceReason?: string | null;
   truncated?: boolean;
   charCount?: number;
   /** @nullable */

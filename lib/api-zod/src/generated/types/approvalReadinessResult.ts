@@ -7,6 +7,7 @@ Multi-tenant, multi-company, multi-brand. Deal-centric.
 
  * OpenAPI spec version: 0.1.0
  */
+import type { ApprovalReadinessResultConfidence } from "./approvalReadinessResultConfidence";
 import type { ApprovalReadinessResultKeyDeviationsItem } from "./approvalReadinessResultKeyDeviationsItem";
 import type { ApprovalReadinessResultRecommendation } from "./approvalReadinessResultRecommendation";
 import type { ApprovalReadinessResultRecommendedAction } from "./approvalReadinessResultRecommendedAction";
@@ -19,6 +20,8 @@ export interface ApprovalReadinessResult {
   missingInformation: string[];
   keyDeviations: ApprovalReadinessResultKeyDeviationsItem[];
   recommendedAction: ApprovalReadinessResultRecommendedAction;
+  confidence: ApprovalReadinessResultConfidence;
+  confidenceReason: string;
   /** Deterministic CUAD-Vollständigkeits-Check. Wird serverseitig nach
 der KI-Analyse berechnet. Lücken erscheinen als separate Sektion
 "Typische Bausteine fehlen" — getrennt von keyDeviations.

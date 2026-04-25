@@ -20,6 +20,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardFooter, CardDescription }
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
+import { AiPromptPanel } from "@/components/copilot/ai-prompt-panel";
 import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -316,6 +317,9 @@ export default function Approvals() {
                     )}
                   </div>
                   {hasStages && <StageStepper stages={approval.stages} currentIdx={approval.currentStageIdx} />}
+                  {isOpen && (
+                    <AiPromptPanel mode="approval.readiness" entityId={approval.id} />
+                  )}
                 </CardContent>
                 {isOpen && (
                   <CardFooter className="pt-3 border-t bg-muted/10 flex flex-col items-stretch gap-3">

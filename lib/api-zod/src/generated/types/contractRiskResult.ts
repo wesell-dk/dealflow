@@ -7,6 +7,7 @@ Multi-tenant, multi-company, multi-brand. Deal-centric.
 
  * OpenAPI spec version: 0.1.0
  */
+import type { ContractRiskResultConfidence } from "./contractRiskResultConfidence";
 import type { ContractRiskResultOverallRisk } from "./contractRiskResultOverallRisk";
 import type { ContractRiskResultRecommendedAction } from "./contractRiskResultRecommendedAction";
 import type { ContractRiskResultRiskSignalsItem } from "./contractRiskResultRiskSignalsItem";
@@ -18,4 +19,6 @@ export interface ContractRiskResult {
   riskSignals: ContractRiskResultRiskSignalsItem[];
   approvalRelevant: boolean;
   recommendedAction: ContractRiskResultRecommendedAction;
+  confidence: ContractRiskResultConfidence;
+  confidenceReason: string;
 }

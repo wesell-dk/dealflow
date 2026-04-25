@@ -21,6 +21,7 @@ import { InlineEditField } from "@/components/patterns/inline-edit-field";
 import { ActivityTimeline } from "@/components/patterns/activity-timeline";
 import { useTrackRecent } from "@/hooks/use-recents";
 import { useToast } from "@/hooks/use-toast";
+import { AiPromptPanel } from "@/components/copilot/ai-prompt-panel";
 
 export default function Deal() {
   const params = useParams();
@@ -111,7 +112,8 @@ export default function Deal() {
       </div>
 
       <div className="grid lg:grid-cols-3 gap-6">
-        <div className="lg:col-span-2">
+        <div className="lg:col-span-2 space-y-6">
+          <AiPromptPanel mode="deal.summary" entityId={id} />
           <Tabs defaultValue="overview">
             <TabsList>
               <TabsTrigger value="overview">Übersicht</TabsTrigger>

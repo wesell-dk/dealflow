@@ -121,6 +121,15 @@ export interface ExternalContractExtractRequest {
 
 export type ExternalContractDraftFieldsConfidence = { [key: string]: number };
 
+export type ExternalContractDraftFieldsOverallConfidence =
+  (typeof ExternalContractDraftFieldsOverallConfidence)[keyof typeof ExternalContractDraftFieldsOverallConfidence];
+
+export const ExternalContractDraftFieldsOverallConfidence = {
+  low: "low",
+  medium: "medium",
+  high: "high",
+} as const;
+
 export interface ExternalContractDraftFields {
   /** @nullable */
   title?: string | null;
@@ -146,6 +155,8 @@ export interface ExternalContractDraftFields {
   jurisdiction?: string | null;
   identifiedClauseFamilies: ExternalContractClauseFamily[];
   confidence: ExternalContractDraftFieldsConfidence;
+  overallConfidence: ExternalContractDraftFieldsOverallConfidence;
+  overallConfidenceReason: string;
   notes: string[];
 }
 
@@ -153,6 +164,12 @@ export interface ExternalContractExtractResponse {
   aiAvailable: boolean;
   /** @nullable */
   invocationId?: string | null;
+  /** @nullable */
+  recommendationId?: string | null;
+  confidence?: number | null;
+  confidenceLevel?: "low" | "medium" | "high" | null;
+  /** @nullable */
+  confidenceReason?: string | null;
   truncated?: boolean;
   charCount?: number;
   /** @nullable */
@@ -2720,6 +2737,26 @@ export interface CopilotAiInsightRef {
   status: CopilotAiInsightRefStatus;
 }
 
+export type CopilotAiRecommendationRefConfidenceLevel =
+  (typeof CopilotAiRecommendationRefConfidenceLevel)[keyof typeof CopilotAiRecommendationRefConfidenceLevel];
+
+export const CopilotAiRecommendationRefConfidenceLevel = {
+  low: "low",
+  medium: "medium",
+  high: "high",
+} as const;
+
+export interface CopilotAiRecommendationRef {
+  recommendationId: string;
+  /**
+   * @minimum 0
+   * @maximum 1
+   */
+  confidence: number;
+  confidenceLevel: CopilotAiRecommendationRefConfidenceLevel;
+  confidenceReason: string;
+}
+
 export type DealSummaryResultHealth =
   (typeof DealSummaryResultHealth)[keyof typeof DealSummaryResultHealth];
 
@@ -2741,6 +2778,15 @@ export const DealSummaryResultRecommendedAction = {
   open_price_increase: "open_price_increase",
 } as const;
 
+export type DealSummaryResultConfidence =
+  (typeof DealSummaryResultConfidence)[keyof typeof DealSummaryResultConfidence];
+
+export const DealSummaryResultConfidence = {
+  low: "low",
+  medium: "medium",
+  high: "high",
+} as const;
+
 export interface DealSummaryResult {
   headline: string;
   status: string;
@@ -2749,12 +2795,15 @@ export interface DealSummaryResult {
   blockers: string[];
   nextSteps: string[];
   recommendedAction: DealSummaryResultRecommendedAction;
+  confidence: DealSummaryResultConfidence;
+  confidenceReason: string;
 }
 
-export type DealSummaryEnvelope = CopilotAiInsightRef & {
-  ok: boolean;
-  result: DealSummaryResult;
-};
+export type DealSummaryEnvelope = CopilotAiInsightRef &
+  CopilotAiRecommendationRef & {
+    ok: boolean;
+    result: DealSummaryResult;
+  };
 
 export type PricingReviewResultMarginAssessment =
   (typeof PricingReviewResultMarginAssessment)[keyof typeof PricingReviewResultMarginAssessment];
@@ -2812,6 +2861,15 @@ export const PricingReviewResultRecommendedAction = {
   open_price_increase: "open_price_increase",
 } as const;
 
+export type PricingReviewResultConfidence =
+  (typeof PricingReviewResultConfidence)[keyof typeof PricingReviewResultConfidence];
+
+export const PricingReviewResultConfidence = {
+  low: "low",
+  medium: "medium",
+  high: "high",
+} as const;
+
 export interface PricingReviewResult {
   summary: string;
   marginAssessment: PricingReviewResultMarginAssessment;
@@ -2819,12 +2877,15 @@ export interface PricingReviewResult {
   policyFlags: PricingReviewResultPolicyFlagsItem[];
   approvalRelevance: PricingReviewResultApprovalRelevance;
   recommendedAction: PricingReviewResultRecommendedAction;
+  confidence: PricingReviewResultConfidence;
+  confidenceReason: string;
 }
 
-export type PricingReviewEnvelope = CopilotAiInsightRef & {
-  ok: boolean;
-  result: PricingReviewResult;
-};
+export type PricingReviewEnvelope = CopilotAiInsightRef &
+  CopilotAiRecommendationRef & {
+    ok: boolean;
+    result: PricingReviewResult;
+  };
 
 export type ApprovalReadinessResultRecommendation =
   (typeof ApprovalReadinessResultRecommendation)[keyof typeof ApprovalReadinessResultRecommendation];
@@ -2863,6 +2924,15 @@ export const ApprovalReadinessResultRecommendedAction = {
   open_approval: "open_approval",
   open_negotiation: "open_negotiation",
   open_price_increase: "open_price_increase",
+} as const;
+
+export type ApprovalReadinessResultConfidence =
+  (typeof ApprovalReadinessResultConfidence)[keyof typeof ApprovalReadinessResultConfidence];
+
+export const ApprovalReadinessResultConfidence = {
+  low: "low",
+  medium: "medium",
+  high: "high",
 } as const;
 
 export type CuadCoverageItemRequirement =
@@ -2918,6 +2988,8 @@ export interface ApprovalReadinessResult {
   missingInformation: string[];
   keyDeviations: ApprovalReadinessResultKeyDeviationsItem[];
   recommendedAction: ApprovalReadinessResultRecommendedAction;
+  confidence: ApprovalReadinessResultConfidence;
+  confidenceReason: string;
   /** Deterministic CUAD-Vollständigkeits-Check. Wird serverseitig nach
 der KI-Analyse berechnet. Lücken erscheinen als separate Sektion
 "Typische Bausteine fehlen" — getrennt von keyDeviations.
@@ -2952,10 +3024,11 @@ export interface ClauseFamilyCuadMapping {
   cuadCategoryIds: string[];
 }
 
-export type ApprovalReadinessEnvelope = CopilotAiInsightRef & {
-  ok: boolean;
-  result: ApprovalReadinessResult;
-};
+export type ApprovalReadinessEnvelope = CopilotAiInsightRef &
+  CopilotAiRecommendationRef & {
+    ok: boolean;
+    result: ApprovalReadinessResult;
+  };
 
 export type ContractRiskResultOverallRisk =
   (typeof ContractRiskResultOverallRisk)[keyof typeof ContractRiskResultOverallRisk];
@@ -2996,6 +3069,15 @@ export const ContractRiskResultRecommendedAction = {
   open_price_increase: "open_price_increase",
 } as const;
 
+export type ContractRiskResultConfidence =
+  (typeof ContractRiskResultConfidence)[keyof typeof ContractRiskResultConfidence];
+
+export const ContractRiskResultConfidence = {
+  low: "low",
+  medium: "medium",
+  high: "high",
+} as const;
+
 export interface ContractRiskResult {
   overallRisk: ContractRiskResultOverallRisk;
   overallScore: number;
@@ -3003,12 +3085,15 @@ export interface ContractRiskResult {
   riskSignals: ContractRiskResultRiskSignalsItem[];
   approvalRelevant: boolean;
   recommendedAction: ContractRiskResultRecommendedAction;
+  confidence: ContractRiskResultConfidence;
+  confidenceReason: string;
 }
 
-export type ContractRiskEnvelope = CopilotAiInsightRef & {
-  ok: boolean;
-  result: ContractRiskResult;
-};
+export type ContractRiskEnvelope = CopilotAiInsightRef &
+  CopilotAiRecommendationRef & {
+    ok: boolean;
+    result: ContractRiskResult;
+  };
 
 export type HelpBotInputHistoryItem = {
   role: string;
@@ -4361,6 +4446,22 @@ export interface AiRecommendationCalibrationBucket {
   acceptanceRate: number | null;
 }
 
+export interface AiRecommendationTrendPoint {
+  date: string;
+  /** @minimum 0 */
+  total: number;
+  /** @minimum 0 */
+  decided: number;
+  /** @minimum 0 */
+  accepted: number;
+  /**
+   * @minimum 0
+   * @maximum 1
+   * @nullable
+   */
+  acceptanceRate: number | null;
+}
+
 export interface AiRecommendationMetric {
   promptKey: string;
   /** @minimum 0 */
@@ -4384,7 +4485,19 @@ export interface AiRecommendationMetric {
    * @maximum 1
    */
   averageConfidence: number;
+  /**
+   * @minimum 0
+   * @maximum 1
+   */
+  averageConfidenceDecided: number;
+  /**
+   * @minimum 0
+   * @maximum 1
+   * @nullable
+   */
+  weightedQualityScore: number | null;
   calibration: AiRecommendationCalibrationBucket[];
+  trend: AiRecommendationTrendPoint[];
 }
 
 export type ListCompaniesParams = {

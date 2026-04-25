@@ -4615,10 +4615,21 @@ components:
         confidence:
           type: object
           additionalProperties: { type: number }
+        # Task #69: aggregierte Konfidenz fuer das gesamte Extraktions-Resultat.
+        # Treibt das AIConfidenceBadge im Intake-Wizard.
+        overallConfidence: { type: string, enum: [low, medium, high] }
+        overallConfidenceReason: { type: string }
         notes:
           type: array
           items: { type: string }
-      required: [parties, autoRenewal, identifiedClauseFamilies, confidence, notes]
+      required:
+        - parties
+        - autoRenewal
+        - identifiedClauseFamilies
+        - confidence
+        - overallConfidence
+        - overallConfidenceReason
+        - notes
 
     ExternalContractExtractResponse:
       type: object
@@ -4626,6 +4637,19 @@ components:
       properties:
         aiAvailable: { type: boolean }
         invocationId: { type: ["string", "null"] }
+        # Task #69: vorhanden, sobald die KI-Extraktion erfolgreich war.
+        # Fehlschlag-Pfade (kein Text, KI nicht konfiguriert, AI error) lassen
+        # diese Felder weg.
+        recommendationId: { type: ["string", "null"] }
+        confidence:
+          oneOf:
+            - { type: number, minimum: 0, maximum: 1 }
+            - { type: "null" }
+        confidenceLevel:
+          oneOf:
+            - { type: string, enum: [low, medium, high] }
+            - { type: "null" }
+        confidenceReason: { type: ["string", "null"] }
         truncated: { type: boolean }
         charCount: { type: integer }
         errorCode: { type: ["string", "null"] }
@@ -7158,9 +7182,24 @@ components:
         latencyMs: { type: integer }
         status: { type: string, enum: [open] }
 
+    # Task #69: Strukturierte Konfidenz, die jedes Copilot-Envelope ergänzt.
+    # `recommendationId` referenziert die Zeile in `ai_recommendations`, die
+    # die Frontend-Feedback-Buttons (accepted/rejected/edited) per PATCH
+    # ansprechen. `confidence` ist der numerische Score (0..1) nach Mapping
+    # über `confidenceLevelToScore`; `confidenceLevel` und `confidenceReason`
+    # speisen das AIConfidenceBadge.
+    CopilotAiRecommendationRef:
+      type: object
+      required: [recommendationId, confidence, confidenceLevel, confidenceReason]
+      properties:
+        recommendationId: { type: string }
+        confidence: { type: number, minimum: 0, maximum: 1 }
+        confidenceLevel: { type: string, enum: [low, medium, high] }
+        confidenceReason: { type: string }
+
     DealSummaryResult:
       type: object
-      required: [headline, status, health, keyFacts, blockers, nextSteps, recommendedAction]
+      required: [headline, status, health, keyFacts, blockers, nextSteps, recommendedAction, confidence, confidenceReason]
       properties:
         headline: { type: string }
         status: { type: string }
@@ -7171,12 +7210,26 @@ components:
         recommendedAction:
           type: string
           enum: [none, open_quote, open_contract, open_approval, open_negotiation, open_price_increase]
+        confidence: { type: string, enum: [low, medium, high] }
+        confidenceReason: { type: string }
 
     DealSummaryEnvelope:
       type: object
-      required: [ok, result, insightId, invocationId, model, latencyMs, status]
+      required:
+        - ok
+        - result
+        - insightId
+        - invocationId
+        - model
+        - latencyMs
+        - status
+        - recommendationId
+        - confidence
+        - confidenceLevel
+        - confidenceReason
       allOf:
         - $ref: "#/components/schemas/CopilotAiInsightRef"
+        - $ref: "#/components/schemas/CopilotAiRecommendationRef"
         - type: object
           required: [ok, result]
           properties:
@@ -7185,7 +7238,7 @@ components:
 
     PricingReviewResult:
       type: object
-      required: [summary, marginAssessment, discountAssessment, policyFlags, approvalRelevance, recommendedAction]
+      required: [summary, marginAssessment, discountAssessment, policyFlags, approvalRelevance, recommendedAction, confidence, confidenceReason]
       properties:
         summary: { type: string }
         marginAssessment: { type: string, enum: [low, medium, high] }
@@ -7205,12 +7258,26 @@ components:
         recommendedAction:
           type: string
           enum: [none, open_quote, open_contract, open_approval, open_negotiation, open_price_increase]
+        confidence: { type: string, enum: [low, medium, high] }
+        confidenceReason: { type: string }
 
     PricingReviewEnvelope:
       type: object
-      required: [ok, result, insightId, invocationId, model, latencyMs, status]
+      required:
+        - ok
+        - result
+        - insightId
+        - invocationId
+        - model
+        - latencyMs
+        - status
+        - recommendationId
+        - confidence
+        - confidenceLevel
+        - confidenceReason
       allOf:
         - $ref: "#/components/schemas/CopilotAiInsightRef"
+        - $ref: "#/components/schemas/CopilotAiRecommendationRef"
         - type: object
           required: [ok, result]
           properties:
@@ -7219,7 +7286,7 @@ components:
 
     ApprovalReadinessResult:
       type: object
-      required: [decisionReady, recommendation, rationale, missingInformation, keyDeviations, recommendedAction]
+      required: [decisionReady, recommendation, rationale, missingInformation, keyDeviations, recommendedAction, confidence, confidenceReason]
       properties:
         decisionReady: { type: boolean }
         recommendation:
@@ -7239,6 +7306,8 @@ components:
         recommendedAction:
           type: string
           enum: [none, open_quote, open_contract, open_approval, open_negotiation, open_price_increase]
+        confidence: { type: string, enum: [low, medium, high] }
+        confidenceReason: { type: string }
         cuadCoverage:
           description: |
             Deterministic CUAD-Vollständigkeits-Check. Wird serverseitig nach
@@ -7339,9 +7408,21 @@ components:
 
     ApprovalReadinessEnvelope:
       type: object
-      required: [ok, result, insightId, invocationId, model, latencyMs, status]
+      required:
+        - ok
+        - result
+        - insightId
+        - invocationId
+        - model
+        - latencyMs
+        - status
+        - recommendationId
+        - confidence
+        - confidenceLevel
+        - confidenceReason
       allOf:
         - $ref: "#/components/schemas/CopilotAiInsightRef"
+        - $ref: "#/components/schemas/CopilotAiRecommendationRef"
         - type: object
           required: [ok, result]
           properties:
@@ -7350,7 +7431,7 @@ components:
 
     ContractRiskResult:
       type: object
-      required: [overallRisk, overallScore, summary, riskSignals, approvalRelevant, recommendedAction]
+      required: [overallRisk, overallScore, summary, riskSignals, approvalRelevant, recommendedAction, confidence, confidenceReason]
       properties:
         overallRisk: { type: string, enum: [low, medium, high] }
         overallScore: { type: number }
@@ -7369,12 +7450,26 @@ components:
         recommendedAction:
           type: string
           enum: [none, open_quote, open_contract, open_approval, open_negotiation, open_price_increase]
+        confidence: { type: string, enum: [low, medium, high] }
+        confidenceReason: { type: string }
 
     ContractRiskEnvelope:
       type: object
-      required: [ok, result, insightId, invocationId, model, latencyMs, status]
+      required:
+        - ok
+        - result
+        - insightId
+        - invocationId
+        - model
+        - latencyMs
+        - status
+        - recommendationId
+        - confidence
+        - confidenceLevel
+        - confidenceReason
       allOf:
         - $ref: "#/components/schemas/CopilotAiInsightRef"
+        - $ref: "#/components/schemas/CopilotAiRecommendationRef"
         - type: object
           required: [ok, result]
           properties:
@@ -8557,7 +8652,8 @@ components:
       type: object
       required:
         [ promptKey, count, pending, accepted, rejected, modified,
-          acceptanceRate, averageConfidence, calibration ]
+          acceptanceRate, averageConfidence, averageConfidenceDecided,
+          weightedQualityScore, calibration, trend ]
       properties:
         promptKey: { type: string }
         count: { type: integer, minimum: 0 }
@@ -8573,6 +8669,40 @@ components:
           type: number
           minimum: 0
           maximum: 1
+        # Durchschnittliche Konfidenz aller bereits entschiedenen Empfehlungen
+        # (accepted + modified + rejected). Basis fuer den
+        # `weightedQualityScore`. Faellt auf `averageConfidence` zurueck,
+        # solange noch nichts entschieden wurde.
+        averageConfidenceDecided:
+          type: number
+          minimum: 0
+          maximum: 1
+        # Qualitaetsindex pro Prompt (Task #69):
+        # `acceptanceRate * averageConfidenceDecided`. `null` solange noch
+        # keine Entscheidung getroffen wurde. Wertebereich [0..1].
+        weightedQualityScore:
+          type: ["number", "null"]
+          minimum: 0
+          maximum: 1
         calibration:
           type: array
           items: { $ref: "#/components/schemas/AiRecommendationCalibrationBucket" }
+        # 7-Tage-Zeittrend pro Prompt fuer die Reports-Tile-Sparkline.
+        # Jeder Eintrag ist ein Tag im Format YYYY-MM-DD; Tage ohne Daten
+        # erscheinen mit total=0/decided=0/accepted=0/acceptanceRate=null.
+        trend:
+          type: array
+          items: { $ref: "#/components/schemas/AiRecommendationTrendPoint" }
+
+    AiRecommendationTrendPoint:
+      type: object
+      required: [date, total, decided, accepted, acceptanceRate]
+      properties:
+        date: { type: string, format: date }
+        total: { type: integer, minimum: 0 }
+        decided: { type: integer, minimum: 0 }
+        accepted: { type: integer, minimum: 0 }
+        acceptanceRate:
+          type: ["number", "null"]
+          minimum: 0
+          maximum: 1

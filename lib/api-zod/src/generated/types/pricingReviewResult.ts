@@ -8,6 +8,7 @@ Multi-tenant, multi-company, multi-brand. Deal-centric.
  * OpenAPI spec version: 0.1.0
  */
 import type { PricingReviewResultApprovalRelevance } from "./pricingReviewResultApprovalRelevance";
+import type { PricingReviewResultConfidence } from "./pricingReviewResultConfidence";
 import type { PricingReviewResultDiscountAssessment } from "./pricingReviewResultDiscountAssessment";
 import type { PricingReviewResultMarginAssessment } from "./pricingReviewResultMarginAssessment";
 import type { PricingReviewResultPolicyFlagsItem } from "./pricingReviewResultPolicyFlagsItem";
@@ -20,4 +21,6 @@ export interface PricingReviewResult {
   policyFlags: PricingReviewResultPolicyFlagsItem[];
   approvalRelevance: PricingReviewResultApprovalRelevance;
   recommendedAction: PricingReviewResultRecommendedAction;
+  confidence: PricingReviewResultConfidence;
+  confidenceReason: string;
 }

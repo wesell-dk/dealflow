@@ -11,7 +11,10 @@ import {
   type ExternalContractParty,
   type ExternalContractPartyRole,
   type ExternalContractClauseFamily,
+  type ExternalContractExtractResponse,
 } from "@workspace/api-client-react";
+import { AIConfidenceBadge } from "@/components/copilot/ai-confidence-badge";
+import { AIFeedbackButtons } from "@/components/copilot/ai-feedback-buttons";
 import {
   Dialog,
   DialogContent,
@@ -73,6 +76,10 @@ const EMPTY_DRAFT: ExternalContractDraftFields = {
   jurisdiction: null,
   identifiedClauseFamilies: [],
   confidence: {},
+  // Task #69: aggregierte Konfidenz fuer den Wizard. Bevor die KI laeuft,
+  // ist der Default "low" plus Hinweis, dass der User selber pruefen muss.
+  overallConfidence: "low",
+  overallConfidenceReason: "Noch keine KI-Auswertung verfügbar.",
   notes: [],
 };
 
@@ -112,6 +119,7 @@ export function ExternalContractWizard({ open, onOpenChange, accountId, defaultB
   const [busy, setBusy] = useState(false);
   const [aiAvailable, setAiAvailable] = useState(true);
   const [aiInvocationId, setAiInvocationId] = useState<string | null>(null);
+  const [aiExtraction, setAiExtraction] = useState<ExternalContractExtractResponse | null>(null);
   const [objectPath, setObjectPath] = useState<string>("");
   const [draft, setDraft] = useState<ExternalContractDraftFields>(EMPTY_DRAFT);
   const fileRef = useRef<HTMLInputElement>(null);
@@ -130,6 +138,7 @@ export function ExternalContractWizard({ open, onOpenChange, accountId, defaultB
     setBusy(false);
     setAiAvailable(true);
     setAiInvocationId(null);
+    setAiExtraction(null);
     setObjectPath("");
     setDraft(EMPTY_DRAFT);
     if (fileRef.current) fileRef.current.value = "";
@@ -176,6 +185,7 @@ export function ExternalContractWizard({ open, onOpenChange, accountId, defaultB
       });
       setAiAvailable(extraction.aiAvailable);
       setAiInvocationId(extraction.invocationId ?? null);
+      setAiExtraction(extraction);
       const sug = extraction.suggestion;
       setDraft({
         ...sug,
@@ -379,6 +389,28 @@ export function ExternalContractWizard({ open, onOpenChange, accountId, defaultB
                     Bitte Felder manuell ausfüllen. Datei ist bereits hochgeladen.
                   </div>
                 </div>
+              </div>
+            )}
+            {aiAvailable && aiExtraction && (
+              <div
+                className="flex flex-wrap items-center gap-3 rounded border bg-muted/20 p-3 text-sm"
+                data-testid="external-contract-ai-confidence-row"
+              >
+                <Sparkles className="h-4 w-4 text-primary" />
+                <span className="font-medium">KI-Auswertung</span>
+                <AIConfidenceBadge
+                  level={aiExtraction.confidenceLevel ?? draft.overallConfidence ?? undefined}
+                  numeric={aiExtraction.confidence ?? undefined}
+                  reason={aiExtraction.confidenceReason ?? draft.overallConfidenceReason ?? undefined}
+                  showReason
+                  testId="external-contract-confidence"
+                />
+                {aiExtraction.recommendationId && (
+                  <AIFeedbackButtons
+                    recommendationId={aiExtraction.recommendationId}
+                    testIdPrefix="external-contract-feedback"
+                  />
+                )}
               </div>
             )}
             <div className="grid grid-cols-2 gap-3">

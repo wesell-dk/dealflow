@@ -8,9 +8,11 @@ Multi-tenant, multi-company, multi-brand. Deal-centric.
  * OpenAPI spec version: 0.1.0
  */
 import type { CopilotAiInsightRef } from "./copilotAiInsightRef";
+import type { CopilotAiRecommendationRef } from "./copilotAiRecommendationRef";
 import type { DealSummaryResult } from "./dealSummaryResult";
 
-export type DealSummaryEnvelope = CopilotAiInsightRef & {
-  ok: boolean;
-  result: DealSummaryResult;
-};
+export type DealSummaryEnvelope = CopilotAiInsightRef &
+  CopilotAiRecommendationRef & {
+    ok: boolean;
+    result: DealSummaryResult;
+  };
