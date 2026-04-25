@@ -2725,6 +2725,38 @@ export const SetContractTypeCuadExpectationsResponse = zod.object({
   ),
 });
 
+/**
+ * Erstellt eine pending Approval für den Vertrag. Wenn der Vertragstyp Pflicht-CUAD-Kategorien definiert, die im Vertrag fehlen (`missingExpectedCount > 0`), antwortet der Endpoint mit 409 und verweigert das Erzeugen einer Approval. Tenant-Admins können den Block via `override: true` mit `overrideReason` (Pflichttext, ≥10 Zeichen) umgehen — der Override wird strukturiert ins Audit-Log geschrieben.
+
+ * @summary Freigabe für einen Vertrag anfordern (mit Pflicht-Bausteine-Vorprüfung)
+ */
+export const RequestContractApprovalParams = zod.object({
+  id: zod.coerce.string(),
+});
+
+export const requestContractApprovalBodyOverrideDefault = false;
+export const requestContractApprovalBodyOverrideReasonMin = 10;
+
+export const RequestContractApprovalBody = zod
+  .object({
+    override: zod.boolean().default(requestContractApprovalBodyOverrideDefault),
+    overrideReason: zod
+      .string()
+      .min(requestContractApprovalBodyOverrideReasonMin)
+      .optional()
+      .describe("Pflichttext, wenn override=true."),
+    priority: zod.enum(["low", "medium", "high"]).optional(),
+    reason: zod
+      .string()
+      .optional()
+      .describe(
+        "Optionaler Begründungstext für die Approval (sonst auto-generiert).",
+      ),
+  })
+  .describe(
+    "Optionaler Body. Ohne `override` läuft die normale Vorprüfung — fehlende Pflicht-CUAD-Kategorien sperren die Anfrage. Mit `override: true` plus `overrideReason` (≥10 Zeichen) kann ein Tenant-Admin den Block bewusst umgehen; der Override wird im Audit-Log strukturiert protokolliert.\n",
+  );
+
 export const GetClauseFamilyCuadCategoriesParams = zod.object({
   id: zod.coerce.string(),
 });

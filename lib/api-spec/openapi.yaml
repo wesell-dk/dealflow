@@ -1854,6 +1854,76 @@ paths:
                     type: array
                     items: { $ref: "#/components/schemas/ContractTypeCuadExpectation" }
 
+  /contracts/{id}/request-approval:
+    post:
+      operationId: requestContractApproval
+      tags: [contracts]
+      summary: Freigabe für einen Vertrag anfordern (mit Pflicht-Bausteine-Vorprüfung)
+      description: >
+        Erstellt eine pending Approval für den Vertrag. Wenn der Vertragstyp
+        Pflicht-CUAD-Kategorien definiert, die im Vertrag fehlen
+        (`missingExpectedCount > 0`), antwortet der Endpoint mit 409 und
+        verweigert das Erzeugen einer Approval. Tenant-Admins können den
+        Block via `override: true` mit `overrideReason` (Pflichttext, ≥10
+        Zeichen) umgehen — der Override wird strukturiert ins Audit-Log
+        geschrieben.
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/RequestContractApprovalInput" }
+      responses:
+        "201":
+          description: Approval angelegt (ggf. via Override).
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [approvalId, override, missingExpectedCount]
+                properties:
+                  approvalId: { type: string }
+                  override: { type: boolean }
+                  overrideReason:
+                    type: ["string", "null"]
+                  missingExpectedCount: { type: integer }
+                  contractTypeName:
+                    type: ["string", "null"]
+        "409":
+          description: >
+            Pflicht-CUAD-Kategorien fehlen — Standardweg ist gesperrt. Die
+            UI zeigt die fehlenden Bausteine und bietet Tenant-Admins den
+            Override an.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [error, code, missingExpectedCount, missing]
+                properties:
+                  error: { type: string }
+                  code:
+                    type: string
+                    enum: [cuad_required_missing]
+                  missingExpectedCount: { type: integer }
+                  contractTypeId: { type: ["string", "null"] }
+                  contractTypeName: { type: ["string", "null"] }
+                  missing:
+                    type: array
+                    items:
+                      type: object
+                      required: [cuadCategoryId, code, name]
+                      properties:
+                        cuadCategoryId: { type: string }
+                        code: { type: string }
+                        name: { type: string }
+        "403": { description: Override-Versuch ohne Tenant-Admin-Rechte. }
+        "404": { description: Vertrag existiert nicht oder Zugriff verweigert. }
+        "422": { description: override=true ohne ausreichend langen overrideReason. }
+
   /clause-families/{id}/cuad-categories:
     get:
       operationId: getClauseFamilyCuadCategories
@@ -6648,6 +6718,29 @@ components:
         type: { type: string }
         reason: { type: string }
         priority: { type: string }
+
+    RequestContractApprovalInput:
+      type: object
+      description: >
+        Optionaler Body. Ohne `override` läuft die normale Vorprüfung —
+        fehlende Pflicht-CUAD-Kategorien sperren die Anfrage. Mit
+        `override: true` plus `overrideReason` (≥10 Zeichen) kann ein
+        Tenant-Admin den Block bewusst umgehen; der Override wird im
+        Audit-Log strukturiert protokolliert.
+      properties:
+        override:
+          type: boolean
+          default: false
+        overrideReason:
+          type: string
+          minLength: 10
+          description: Pflichttext, wenn override=true.
+        priority:
+          type: string
+          enum: [low, medium, high]
+        reason:
+          type: string
+          description: Optionaler Begründungstext für die Approval (sonst auto-generiert).
 
     CounterproposalInput:
       type: object

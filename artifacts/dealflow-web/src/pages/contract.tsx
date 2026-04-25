@@ -1,4 +1,4 @@
-import { useRoute, Link } from "wouter";
+import { useRoute, useLocation, Link } from "wouter";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
@@ -24,6 +24,7 @@ import {
   useAddContractClause,
   getGetContractCuadCoverageQueryKey,
   useListContractTypes,
+  useRequestContractApproval,
   useListExternalCollaborators,
   useCreateExternalCollaborator,
   useRevokeExternalCollaborator,
@@ -42,6 +43,7 @@ import {
   type ExternalCollaboratorCreate,
   type CuadCoverage,
 } from "@workspace/api-client-react";
+import { useAuth } from "@/contexts/auth-context";
 import { useQueryClient } from "@tanstack/react-query";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
@@ -58,17 +60,18 @@ import {
 import {
   Dialog,
   DialogContent,
+  DialogFooter,
   DialogHeader,
   DialogTitle,
   DialogDescription,
-  DialogFooter,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { FileText, ShieldAlert, Library, Activity, GitCompare, AlertTriangle, FileStack, Plus, Languages, Pencil, Sparkles, Inbox, RotateCcw } from "lucide-react";
+import { FileText, ShieldAlert, ShieldCheck, Library, Activity, GitCompare, AlertTriangle, FileStack, Plus, Languages, Pencil, Sparkles, Inbox, RotateCcw } from "lucide-react";
 import { EntityVersions } from "@/components/ui/entity-versions";
 import { useToast } from "@/hooks/use-toast";
+import { ApiError } from "@workspace/api-client-react";
 
 function toneClass(tone: string) {
   switch (tone) {
@@ -1026,6 +1029,12 @@ function CuadCoverageSection({ contractId }: { contractId: string }) {
   const [pendingFamilyId, setPendingFamilyId] = useState<string | null>(null);
   const [pendingContractTypeId, setPendingContractTypeId] = useState("");
   const addClause = useAddContractClause();
+  const { user } = useAuth();
+  const isTenantAdmin = !!(user?.isPlatformAdmin || user?.role === "Tenant Admin");
+  const [, setLocation] = useLocation();
+  const requestApproval = useRequestContractApproval();
+  const [overrideOpen, setOverrideOpen] = useState(false);
+  const [overrideReason, setOverrideReason] = useState("");
 
   const familyNameById = new Map<string, string>();
   for (const f of families ?? []) familyNameById.set(f.id, f.name);
@@ -1052,6 +1061,9 @@ function CuadCoverageSection({ contractId }: { contractId: string }) {
   const totalRequired = (cov?.totalExpected ?? 0);
   const coveredRequired = (cov?.coveredExpected ?? 0);
   const pct = totalRequired > 0 ? Math.round((coveredRequired / totalRequired) * 100) : null;
+  const missingExpected = (cov?.missing ?? []).filter(m => m.requirement === "expected");
+  const missingExpectedCount = cov?.missingExpectedCount ?? 0;
+  const blocked = missingExpectedCount > 0;
 
   const onAddFamily = async (familyId: string) => {
     setPendingFamilyId(familyId);
@@ -1117,9 +1129,65 @@ function CuadCoverageSection({ contractId }: { contractId: string }) {
     ) : null
   );
 
+  async function submitApproval(opts: { override: boolean; overrideReason?: string }) {
+    try {
+      const result = await requestApproval.mutateAsync({
+        id: contractId,
+        data: {
+          override: opts.override,
+          ...(opts.overrideReason ? { overrideReason: opts.overrideReason } : {}),
+        },
+      });
+      toast({
+        title: opts.override ? "Freigabe via Override angefordert" : "Freigabe angefordert",
+        description: opts.override
+          ? `Override im Audit-Log protokolliert · ${missingExpectedCount} Pflicht-Baustein${missingExpectedCount === 1 ? "" : "e"} fehlt(en)`
+          : "Approval-Hub geöffnet…",
+        variant: opts.override ? "destructive" : "default",
+      });
+      setOverrideOpen(false);
+      setOverrideReason("");
+      await qc.invalidateQueries({ queryKey: ["/api/v1/approvals"] });
+      setLocation(`/approvals?highlight=${encodeURIComponent(result.approvalId)}`);
+    } catch (err) {
+      if (err instanceof ApiError && err.status === 409) {
+        const data = err.data as { code?: string; missingExpectedCount?: number; approvalId?: string } | null;
+        if (data?.code === "cuad_required_missing") {
+          toast({
+            title: "Freigabe blockiert",
+            description: `Pflicht-CUAD-Bausteine fehlen (${data.missingExpectedCount ?? 0}). Bitte ergänzen oder Override anfordern.`,
+            variant: "destructive",
+          });
+          return;
+        }
+        if (data?.approvalId) {
+          toast({
+            title: "Bereits angefordert",
+            description: "Es existiert bereits eine offene Freigabe für diesen Vertrag.",
+          });
+          setLocation(`/approvals?highlight=${encodeURIComponent(data.approvalId)}`);
+          return;
+        }
+      }
+      if (err instanceof ApiError && err.status === 403) {
+        toast({
+          title: "Override nicht erlaubt",
+          description: "Nur Tenant-Admins dürfen die CUAD-Vorprüfung umgehen.",
+          variant: "destructive",
+        });
+        return;
+      }
+      toast({
+        title: "Freigabe konnte nicht angefordert werden",
+        description: err instanceof Error ? err.message : String(err),
+        variant: "destructive",
+      });
+    }
+  }
+
   return (
     <div className="space-y-3" data-testid="section-cuad-coverage">
-      <div className="flex items-center justify-between gap-2 pb-2 border-b">
+      <div className="flex items-center justify-between gap-2 pb-2 border-b flex-wrap">
         <div className="flex items-center gap-2">
           <Library className="h-5 w-5 text-muted-foreground" />
           <h2 className="text-xl font-semibold">Typische Bausteine (CUAD)</h2>
@@ -1134,7 +1202,113 @@ function CuadCoverageSection({ contractId }: { contractId: string }) {
             </Badge>
           )}
         </div>
+        <div className="flex items-center gap-2">
+          {blocked ? (
+            isTenantAdmin ? (
+              <Button
+                size="sm"
+                variant="outline"
+                className="border-red-300 text-red-700 hover:bg-red-50"
+                onClick={() => { setOverrideReason(""); setOverrideOpen(true); }}
+                data-testid="button-request-approval-override"
+              >
+                <ShieldAlert className="h-4 w-4 mr-2" /> Trotzdem anfordern
+              </Button>
+            ) : (
+              <Button
+                size="sm"
+                variant="outline"
+                disabled
+                title="Pflicht-Bausteine fehlen — Override nur für Tenant-Admins"
+                data-testid="button-request-approval-blocked"
+              >
+                <ShieldAlert className="h-4 w-4 mr-2" /> Freigabe blockiert
+              </Button>
+            )
+          ) : (
+            <Button
+              size="sm"
+              onClick={() => submitApproval({ override: false })}
+              disabled={requestApproval.isPending || !cov}
+              data-testid="button-request-approval"
+            >
+              <ShieldCheck className="h-4 w-4 mr-2" />
+              {requestApproval.isPending ? "Sende…" : "Freigabe anfordern"}
+            </Button>
+          )}
+        </div>
       </div>
+
+      {blocked && (
+        <div
+          className="border border-red-300 bg-red-50/60 rounded-md p-4 space-y-2"
+          data-testid="cuad-block-banner"
+        >
+          <div className="flex items-center gap-2 text-red-800 font-medium text-sm">
+            <ShieldAlert className="h-4 w-4" />
+            Freigabe blockiert: Pflicht-Bausteine fehlen ({missingExpectedCount})
+          </div>
+          <div className="text-xs text-red-900/80">
+            Für den Vertragstyp <strong>{cov?.contractTypeName ?? cov?.contractTypeId}</strong> sind folgende
+            CUAD-Pflichtkategorien noch nicht abgedeckt:
+          </div>
+          <ul className="text-xs text-red-900 list-disc pl-5 space-y-0.5" data-testid="cuad-block-missing-list">
+            {missingExpected.map(m => (
+              <li key={m.cuadCategoryId} data-testid={`cuad-block-missing-${m.cuadCategoryId}`}>
+                <span className="font-medium">{m.name}</span>{" "}
+                <span className="font-mono text-[10px] opacity-70">({m.code})</span>
+              </li>
+            ))}
+          </ul>
+          {!isTenantAdmin && (
+            <div className="text-xs text-red-900/80 pt-1">
+              Bitte ergänze die fehlenden Klauselfamilien unten oder bitte einen Tenant-Admin um Override.
+            </div>
+          )}
+        </div>
+      )}
+
+      <Dialog open={overrideOpen} onOpenChange={(o) => { if (!o) setOverrideOpen(false); }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Freigabe trotz fehlender Pflicht-Bausteine?</DialogTitle>
+            <DialogDescription>
+              {missingExpectedCount} Pflicht-CUAD-Kategorie{missingExpectedCount === 1 ? "" : "n"}{" "}
+              ({missingExpected.map(m => m.code).join(", ")}) fehlen für{" "}
+              <strong>{cov?.contractTypeName ?? cov?.contractTypeId}</strong>. Der Override
+              landet im Audit-Log und ist Compliance-relevant — bitte gib eine nachvollziehbare
+              Begründung an.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-2">
+            <Label htmlFor="override-reason">Begründung (Pflicht, ≥10 Zeichen)</Label>
+            <Textarea
+              id="override-reason"
+              value={overrideReason}
+              onChange={(e) => setOverrideReason(e.target.value)}
+              placeholder="z. B. Parties+Governing Law werden im beigefügten Side Letter geregelt — Freigabe-Eskalation an Legal-Lead per Mail."
+              rows={4}
+              data-testid="textarea-override-reason"
+            />
+            <div className="text-xs text-muted-foreground">
+              {overrideReason.trim().length}/10 Zeichen
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setOverrideOpen(false)} data-testid="button-override-cancel">
+              Abbrechen
+            </Button>
+            <Button
+              variant="destructive"
+              disabled={overrideReason.trim().length < 10 || requestApproval.isPending}
+              onClick={() => submitApproval({ override: true, overrideReason: overrideReason.trim() })}
+              data-testid="button-override-confirm"
+            >
+              {requestApproval.isPending ? "Sende…" : "Override anwenden & Freigabe anfordern"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {isLoading ? (
         <Skeleton className="h-24 w-full" />

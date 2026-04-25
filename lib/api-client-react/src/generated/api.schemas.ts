@@ -2376,6 +2376,31 @@ export interface ApprovalFromReactionInput {
   priority?: string;
 }
 
+export type RequestContractApprovalInputPriority =
+  (typeof RequestContractApprovalInputPriority)[keyof typeof RequestContractApprovalInputPriority];
+
+export const RequestContractApprovalInputPriority = {
+  low: "low",
+  medium: "medium",
+  high: "high",
+} as const;
+
+/**
+ * Optionaler Body. Ohne `override` läuft die normale Vorprüfung — fehlende Pflicht-CUAD-Kategorien sperren die Anfrage. Mit `override: true` plus `overrideReason` (≥10 Zeichen) kann ein Tenant-Admin den Block bewusst umgehen; der Override wird im Audit-Log strukturiert protokolliert.
+
+ */
+export interface RequestContractApprovalInput {
+  override?: boolean;
+  /**
+   * Pflichttext, wenn override=true.
+   * @minLength 10
+   */
+  overrideReason?: string;
+  priority?: RequestContractApprovalInputPriority;
+  /** Optionaler Begründungstext für die Approval (sonst auto-generiert). */
+  reason?: string;
+}
+
 export interface CounterproposalInput {
   topic: string;
   summary: string;
@@ -4459,6 +4484,40 @@ export type SetContractTypeCuadExpectationsBody = {
 export type SetContractTypeCuadExpectations200 = {
   contractTypeId: string;
   items: ContractTypeCuadExpectation[];
+};
+
+export type RequestContractApproval201 = {
+  approvalId: string;
+  override: boolean;
+  /** @nullable */
+  overrideReason?: string | null;
+  missingExpectedCount: number;
+  /** @nullable */
+  contractTypeName?: string | null;
+};
+
+export type RequestContractApproval409Code =
+  (typeof RequestContractApproval409Code)[keyof typeof RequestContractApproval409Code];
+
+export const RequestContractApproval409Code = {
+  cuad_required_missing: "cuad_required_missing",
+} as const;
+
+export type RequestContractApproval409MissingItem = {
+  cuadCategoryId: string;
+  code: string;
+  name: string;
+};
+
+export type RequestContractApproval409 = {
+  error: string;
+  code: RequestContractApproval409Code;
+  missingExpectedCount: number;
+  /** @nullable */
+  contractTypeId?: string | null;
+  /** @nullable */
+  contractTypeName?: string | null;
+  missing: RequestContractApproval409MissingItem[];
 };
 
 export type SetClauseFamilyCuadCategoriesBody = {

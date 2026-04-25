@@ -246,6 +246,9 @@ import type {
   ReplaceQuoteLineItems200,
   ReplaceQuoteLineItemsBody,
   RequestApprovalFromReaction201,
+  RequestContractApproval201,
+  RequestContractApproval409,
+  RequestContractApprovalInput,
   ResolvePriceParams,
   ResolvedPrice,
   Role,
@@ -8571,6 +8574,100 @@ export const useSetContractTypeCuadExpectations = <
   return useMutation(
     getSetContractTypeCuadExpectationsMutationOptions(options),
   );
+};
+
+/**
+ * Erstellt eine pending Approval für den Vertrag. Wenn der Vertragstyp Pflicht-CUAD-Kategorien definiert, die im Vertrag fehlen (`missingExpectedCount > 0`), antwortet der Endpoint mit 409 und verweigert das Erzeugen einer Approval. Tenant-Admins können den Block via `override: true` mit `overrideReason` (Pflichttext, ≥10 Zeichen) umgehen — der Override wird strukturiert ins Audit-Log geschrieben.
+
+ * @summary Freigabe für einen Vertrag anfordern (mit Pflicht-Bausteine-Vorprüfung)
+ */
+export const getRequestContractApprovalUrl = (id: string) => {
+  return `/api/v1/contracts/${id}/request-approval`;
+};
+
+export const requestContractApproval = async (
+  id: string,
+  requestContractApprovalInput?: RequestContractApprovalInput,
+  options?: RequestInit,
+): Promise<RequestContractApproval201> => {
+  return customFetch<RequestContractApproval201>(
+    getRequestContractApprovalUrl(id),
+    {
+      ...options,
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...options?.headers },
+      body: JSON.stringify(requestContractApprovalInput),
+    },
+  );
+};
+
+export const getRequestContractApprovalMutationOptions = <
+  TError = ErrorType<void | RequestContractApproval409>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof requestContractApproval>>,
+    TError,
+    { id: string; data: BodyType<RequestContractApprovalInput> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof requestContractApproval>>,
+  TError,
+  { id: string; data: BodyType<RequestContractApprovalInput> },
+  TContext
+> => {
+  const mutationKey = ["requestContractApproval"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof requestContractApproval>>,
+    { id: string; data: BodyType<RequestContractApprovalInput> }
+  > = (props) => {
+    const { id, data } = props ?? {};
+
+    return requestContractApproval(id, data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type RequestContractApprovalMutationResult = NonNullable<
+  Awaited<ReturnType<typeof requestContractApproval>>
+>;
+export type RequestContractApprovalMutationBody =
+  BodyType<RequestContractApprovalInput>;
+export type RequestContractApprovalMutationError =
+  ErrorType<void | RequestContractApproval409>;
+
+/**
+ * @summary Freigabe für einen Vertrag anfordern (mit Pflicht-Bausteine-Vorprüfung)
+ */
+export const useRequestContractApproval = <
+  TError = ErrorType<void | RequestContractApproval409>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof requestContractApproval>>,
+    TError,
+    { id: string; data: BodyType<RequestContractApprovalInput> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof requestContractApproval>>,
+  TError,
+  { id: string; data: BodyType<RequestContractApprovalInput> },
+  TContext
+> => {
+  return useMutation(getRequestContractApprovalMutationOptions(options));
 };
 
 export const getGetClauseFamilyCuadCategoriesUrl = (id: string) => {

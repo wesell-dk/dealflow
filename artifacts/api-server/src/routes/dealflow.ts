@@ -4807,6 +4807,145 @@ router.get('/contracts/:id/cuad-coverage', async (req, res) => {
   res.json(result);
 });
 
+// ── Contract approval request with CUAD-coverage gate ──
+//
+// "Freigabe anfordern" prüft VOR dem Anlegen einer Approval die deterministische
+// CUAD-Coverage des Vertragstyps. Fehlen Pflicht-Bausteine (z. B. PARTIES,
+// GOVERNING_LAW), wird die Anfrage standardmäßig blockiert (HTTP 409). Tenant-
+// Admins dürfen den Block per `override: true` + `overrideReason` umgehen — der
+// Override landet strukturiert im Audit-Log, sodass Compliance nachvollziehen
+// kann, wer das Sicherheitsnetz wann mit welcher Begründung deaktiviert hat.
+router.post('/contracts/:id/request-approval', async (req, res) => {
+  if (!validateInline(req, res, {
+    params: Z.RequestContractApprovalParams,
+    body: Z.RequestContractApprovalBody,
+  })) return;
+  const [c] = await db.select().from(contractsTable).where(eq(contractsTable.id, req.params.id));
+  if (!c) { res.status(404).json({ error: 'not found' }); return; }
+  if (!(await gateDeal(req, res, c.dealId))) return;
+
+  const scope = getScope(req);
+  const body = (req.body ?? {}) as {
+    override?: boolean;
+    overrideReason?: string;
+    priority?: 'low' | 'medium' | 'high';
+    reason?: string;
+  };
+  const wantOverride = body.override === true;
+
+  // Vorprüfung: deterministisches CUAD-Coverage. Nur Pflicht-Kategorien
+  // (`requirement === 'expected'`) blockieren — empfohlene Kategorien sind
+  // bewusst kein harter Gate, sondern bleiben sichtbare Hinweise in der UI.
+  const coverage = await computeCuadCoverage(c.id);
+  const missingExpectedCount = coverage?.missingExpectedCount ?? 0;
+  const missingExpected = (coverage?.missing ?? [])
+    .filter(m => m.requirement === 'expected')
+    .map(m => ({ cuadCategoryId: m.cuadCategoryId, code: m.code, name: m.name }));
+
+  if (missingExpectedCount > 0 && !wantOverride) {
+    res.status(409).json({
+      error: 'Pflicht-CUAD-Kategorien fehlen — Freigabe blockiert',
+      code: 'cuad_required_missing',
+      missingExpectedCount,
+      contractTypeId: coverage?.contractTypeId ?? null,
+      contractTypeName: coverage?.contractTypeName ?? null,
+      missing: missingExpected,
+    });
+    return;
+  }
+
+  // Override-Pfad: nur Tenant-Admins (tenantWide) dürfen den Gate umgehen, und
+  // nur mit einer ausreichend langen Begründung (Mindestlänge wird bereits via
+  // Z.RequestContractApprovalBody erzwungen — hier nochmal als Defence-in-depth,
+  // falls ein zukünftiger Patch das Schema lockert).
+  if (wantOverride && missingExpectedCount > 0) {
+    if (!requireAdmin(req, res)) return;
+    const reasonText = (body.overrideReason ?? '').trim();
+    if (reasonText.length < 10) {
+      res.status(422).json({ error: 'overrideReason ist Pflicht (≥10 Zeichen) für Override' });
+      return;
+    }
+  }
+
+  // Dedupe: keine zweite offene Approval für denselben Vertrag (deal+amendmentId
+  // ist die Eindeutigkeit für Nachträge — für Verträge nutzen wir reason-Prefix).
+  const existing = await db.select().from(approvalsTable)
+    .where(and(
+      eq(approvalsTable.dealId, c.dealId),
+      eq(approvalsTable.type, 'contract_review'),
+      eq(approvalsTable.status, 'pending'),
+    ));
+  const dupe = existing.find(a => a.reason.startsWith(`Vertrag ${c.id}:`));
+  if (dupe) {
+    res.status(409).json({
+      error: 'already pending',
+      code: 'already_pending',
+      approvalId: dupe.id,
+    });
+    return;
+  }
+
+  const approvalId = `ap_${randomUUID().slice(0, 8)}`;
+  const chainFields = await buildApprovalStageFields(scope.tenantId, 'contract_review', {
+    contractTypeId: c.contractTypeId ?? undefined,
+    riskLevel: c.riskLevel ?? undefined,
+  });
+  const reasonBase = body.reason?.trim()
+    ? body.reason.trim()
+    : `Vertrag ${c.id}: ${c.title} — Freigabe angefordert`;
+  const reason = wantOverride && missingExpectedCount > 0
+    ? `Vertrag ${c.id}: ${c.title} — Freigabe via Override (${missingExpectedCount} Pflicht-Baustein${missingExpectedCount === 1 ? '' : 'e'} fehlt)`
+    : reasonBase.startsWith(`Vertrag ${c.id}:`) ? reasonBase : `Vertrag ${c.id}: ${reasonBase}`;
+  const priority = body.priority ?? (c.riskLevel === 'high' ? 'high' : 'medium');
+
+  await db.insert(approvalsTable).values({
+    id: approvalId,
+    dealId: c.dealId,
+    type: 'contract_review',
+    reason,
+    requestedBy: scope.user.id,
+    status: 'pending',
+    priority,
+    impactValue: '0',
+    currency: 'EUR',
+    chainTemplateId: chainFields.chainTemplateId,
+    stages: chainFields.stages,
+    currentStageIdx: chainFields.currentStageIdx,
+  });
+
+  await writeAuditFromReq(req, {
+    entityType: 'contract',
+    entityId: c.id,
+    action: 'approval_requested',
+    summary: wantOverride && missingExpectedCount > 0
+      ? `Freigabe angefordert mit OVERRIDE — ${missingExpectedCount} Pflicht-Baustein(e) fehlen`
+      : `Freigabe angefordert für Vertrag ${c.title}`,
+    after: {
+      approvalId,
+      override: wantOverride && missingExpectedCount > 0,
+      overrideReason: wantOverride && missingExpectedCount > 0 ? body.overrideReason ?? null : null,
+      missingExpectedCount,
+      missingExpected: wantOverride && missingExpectedCount > 0
+        ? missingExpected.map(m => m.code)
+        : [],
+      contractTypeId: coverage?.contractTypeId ?? null,
+      contractTypeName: coverage?.contractTypeName ?? null,
+      chainTemplateId: chainFields.chainTemplateId,
+      stageCount: chainFields.stages.length,
+    },
+    actor: scope.user.name,
+  });
+
+  res.status(201).json({
+    approvalId,
+    override: wantOverride && missingExpectedCount > 0,
+    overrideReason: wantOverride && missingExpectedCount > 0
+      ? body.overrideReason ?? null : null,
+    missingExpectedCount,
+    contractTypeName: coverage?.contractTypeName ?? null,
+  });
+});
+
 router.get('/contract-types/:id/cuad-expectations', async (req, res) => {
   const scope = getScope(req);
   const [ct] = await db.select().from(contractTypesTable).where(eq(contractTypesTable.id, req.params.id));
