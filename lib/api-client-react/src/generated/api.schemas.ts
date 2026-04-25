@@ -3046,6 +3046,271 @@ export interface ContractCompatibilityReport {
   items: ContractClauseCompatibility[];
 }
 
+export type ExternalCollaboratorCapabilitiesItem =
+  (typeof ExternalCollaboratorCapabilitiesItem)[keyof typeof ExternalCollaboratorCapabilitiesItem];
+
+export const ExternalCollaboratorCapabilitiesItem = {
+  view: "view",
+  comment: "comment",
+  sign_party: "sign_party",
+} as const;
+
+export type ExternalCollaboratorStatus =
+  (typeof ExternalCollaboratorStatus)[keyof typeof ExternalCollaboratorStatus];
+
+export const ExternalCollaboratorStatus = {
+  active: "active",
+  expired: "expired",
+  revoked: "revoked",
+} as const;
+
+export interface ExternalCollaborator {
+  id: string;
+  contractId: string;
+  email: string;
+  /** @nullable */
+  name?: string | null;
+  /** @nullable */
+  organization?: string | null;
+  capabilities: ExternalCollaboratorCapabilitiesItem[];
+  status: ExternalCollaboratorStatus;
+  expiresAt: string;
+  /** @nullable */
+  revokedAt?: string | null;
+  /** @nullable */
+  revokedBy?: string | null;
+  createdBy: string;
+  createdAt: string;
+  /** @nullable */
+  lastUsedAt?: string | null;
+  /**
+   * Wird ausschliesslich beim POST-Create gesetzt — danach IMMER null.
+   * @nullable
+   */
+  tokenPlaintext?: string | null;
+}
+
+export type ExternalCollaboratorCreateCapabilitiesItem =
+  (typeof ExternalCollaboratorCreateCapabilitiesItem)[keyof typeof ExternalCollaboratorCreateCapabilitiesItem];
+
+export const ExternalCollaboratorCreateCapabilitiesItem = {
+  view: "view",
+  comment: "comment",
+  sign_party: "sign_party",
+} as const;
+
+export interface ExternalCollaboratorCreate {
+  email: string;
+  /** @nullable */
+  name?: string | null;
+  /** @nullable */
+  organization?: string | null;
+  /** @minItems 1 */
+  capabilities: ExternalCollaboratorCreateCapabilitiesItem[];
+  /**
+   * @minimum 1
+   * @maximum 90
+   */
+  expiresInDays?: number;
+}
+
+export type ContractCommentAuthorType =
+  (typeof ContractCommentAuthorType)[keyof typeof ContractCommentAuthorType];
+
+export const ContractCommentAuthorType = {
+  user: "user",
+  external: "external",
+} as const;
+
+export interface ContractComment {
+  id: string;
+  contractId: string;
+  /** @nullable */
+  contractClauseId?: string | null;
+  authorType: ContractCommentAuthorType;
+  authorName: string;
+  body: string;
+  createdAt: string;
+}
+
+export interface ContractCommentCreate {
+  /**
+   * @minLength 1
+   * @maxLength 4000
+   */
+  body: string;
+  /** @nullable */
+  contractClauseId?: string | null;
+}
+
+export type ExternalContractViewCollaboratorCapabilitiesItem =
+  (typeof ExternalContractViewCollaboratorCapabilitiesItem)[keyof typeof ExternalContractViewCollaboratorCapabilitiesItem];
+
+export const ExternalContractViewCollaboratorCapabilitiesItem = {
+  view: "view",
+  comment: "comment",
+  sign_party: "sign_party",
+} as const;
+
+export type ExternalContractViewCollaborator = {
+  id: string;
+  email: string;
+  /** @nullable */
+  name?: string | null;
+  /** @nullable */
+  organization?: string | null;
+  capabilities: ExternalContractViewCollaboratorCapabilitiesItem[];
+  expiresAt: string;
+};
+
+export type ExternalContractViewContract = {
+  id: string;
+  title: string;
+  status: string;
+  /** @nullable */
+  template?: string | null;
+  /** @nullable */
+  currency?: string | null;
+  /** @nullable */
+  effectiveFrom?: string | null;
+  /** @nullable */
+  effectiveTo?: string | null;
+  /** @nullable */
+  governingLaw?: string | null;
+  /** @nullable */
+  jurisdiction?: string | null;
+};
+
+export type ExternalContractViewBrand = null | {
+  id: string;
+  name: string;
+  /** @nullable */
+  primaryColor?: string | null;
+  /** @nullable */
+  logoUrl?: string | null;
+};
+
+export type ExternalContractViewClausesItem = {
+  id: string;
+  family: string;
+  variant: string;
+  severity: string;
+  summary: string;
+};
+
+export interface ExternalContractView {
+  collaborator: ExternalContractViewCollaborator;
+  contract: ExternalContractViewContract;
+  brand: ExternalContractViewBrand;
+  clauses: ExternalContractViewClausesItem[];
+  comments: ContractComment[];
+}
+
+export type AiRecommendationStatus =
+  (typeof AiRecommendationStatus)[keyof typeof AiRecommendationStatus];
+
+export const AiRecommendationStatus = {
+  pending: "pending",
+  accepted: "accepted",
+  rejected: "rejected",
+  modified: "modified",
+} as const;
+
+export interface AiRecommendation {
+  id: string;
+  promptKey: string;
+  /** @nullable */
+  entityType?: string | null;
+  /** @nullable */
+  entityId?: string | null;
+  suggestion: unknown;
+  /**
+   * @minimum 0
+   * @maximum 1
+   */
+  confidence: number;
+  status: AiRecommendationStatus;
+  modifiedSuggestion?: unknown;
+  /** @nullable */
+  feedbackText?: string | null;
+  /** @nullable */
+  decidedBy?: string | null;
+  /** @nullable */
+  decidedAt?: string | null;
+  /** @nullable */
+  aiInvocationId?: string | null;
+  createdAt: string;
+}
+
+export type AiRecommendationPatchStatus =
+  (typeof AiRecommendationPatchStatus)[keyof typeof AiRecommendationPatchStatus];
+
+export const AiRecommendationPatchStatus = {
+  pending: "pending",
+  accepted: "accepted",
+  rejected: "rejected",
+  modified: "modified",
+} as const;
+
+export interface AiRecommendationPatch {
+  status: AiRecommendationPatchStatus;
+  /** Pflicht bei status=modified — der vom User editierte Vorschlag. */
+  modifiedSuggestion?: unknown;
+  /**
+   * @maxLength 2000
+   * @nullable
+   */
+  feedback?: string | null;
+}
+
+export type AiRecommendationCalibrationBucketRange =
+  (typeof AiRecommendationCalibrationBucketRange)[keyof typeof AiRecommendationCalibrationBucketRange];
+
+export const AiRecommendationCalibrationBucketRange = {
+  "0-25": "0-25",
+  "25-50": "25-50",
+  "50-75": "50-75",
+  "75-100": "75-100",
+} as const;
+
+export interface AiRecommendationCalibrationBucket {
+  range: AiRecommendationCalibrationBucketRange;
+  /** @minimum 0 */
+  total: number;
+  /**
+   * @minimum 0
+   * @maximum 1
+   * @nullable
+   */
+  acceptanceRate: number | null;
+}
+
+export interface AiRecommendationMetric {
+  promptKey: string;
+  /** @minimum 0 */
+  count: number;
+  /** @minimum 0 */
+  pending: number;
+  /** @minimum 0 */
+  accepted: number;
+  /** @minimum 0 */
+  rejected: number;
+  /** @minimum 0 */
+  modified: number;
+  /**
+   * @minimum 0
+   * @maximum 1
+   * @nullable
+   */
+  acceptanceRate: number | null;
+  /**
+   * @minimum 0
+   * @maximum 1
+   */
+  averageConfidence: number;
+  calibration: AiRecommendationCalibrationBucket[];
+}
+
 export type ListCompaniesParams = {
   /**
  * If true, returns the FULL permitted set (ignoring active scope filter).
@@ -3265,3 +3530,23 @@ export const ListRenewalsStatus = {
   lost: "lost",
   cancelled: "cancelled",
 } as const;
+
+export type ListAiRecommendationsParams = {
+  entityType?: string;
+  entityId?: string;
+  status?: ListAiRecommendationsStatus;
+};
+
+export type ListAiRecommendationsStatus =
+  (typeof ListAiRecommendationsStatus)[keyof typeof ListAiRecommendationsStatus];
+
+export const ListAiRecommendationsStatus = {
+  pending: "pending",
+  accepted: "accepted",
+  rejected: "rejected",
+  modified: "modified",
+} as const;
+
+export type GetAiRecommendationMetricsParams = {
+  promptKey?: string;
+};

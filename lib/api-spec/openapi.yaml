@@ -3377,6 +3377,230 @@ paths:
         "403": { description: forbidden }
         "404": { description: not found }
 
+  /contracts/{id}/external-collaborators:
+    get:
+      operationId: listExternalCollaborators
+      tags: [external-collaborators]
+      summary: Externe Mitwirkende eines Vertrags auflisten
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: ok
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/ExternalCollaborator" }
+        "403": { description: forbidden }
+        "404": { description: contract not found }
+    post:
+      operationId: createExternalCollaborator
+      tags: [external-collaborators]
+      summary: Magic-Link für externen Mitwirkenden erstellen (Plaintext-Token nur einmalig zurückgegeben)
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ExternalCollaboratorCreate" }
+      responses:
+        "201":
+          description: created
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ExternalCollaborator" }
+        "400": { description: invalid }
+        "403": { description: forbidden }
+        "404": { description: contract not found }
+        "409": { description: already exists }
+
+  /external-collaborators/{id}:
+    delete:
+      operationId: revokeExternalCollaborator
+      tags: [external-collaborators]
+      summary: Magic-Link widerrufen
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: ok
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ExternalCollaborator" }
+        "403": { description: forbidden }
+        "404": { description: not found }
+
+  /contracts/{id}/comments:
+    get:
+      operationId: listContractComments
+      tags: [external-collaborators]
+      summary: Kommentare zu einem Vertrag (intern + extern) auflisten
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: ok
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/ContractComment" }
+        "403": { description: forbidden }
+        "404": { description: contract not found }
+    post:
+      operationId: createContractComment
+      tags: [external-collaborators]
+      summary: Kommentar als interner User anfügen
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ContractCommentCreate" }
+      responses:
+        "201":
+          description: created
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ContractComment" }
+        "400": { description: invalid }
+        "403": { description: forbidden }
+        "404": { description: contract not found }
+
+  /external/{token}:
+    get:
+      operationId: resolveExternalToken
+      tags: [external-collaborators]
+      summary: "Public: Magic-Link auflösen und Vertrags-Snapshot zurückgeben"
+      security: []
+      parameters:
+        - in: path
+          name: token
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: ok
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ExternalContractView" }
+        "401": { description: token revoked or expired }
+        "404": { description: invalid token }
+
+  /external/{token}/comments:
+    post:
+      operationId: createExternalComment
+      tags: [external-collaborators]
+      summary: "Public: Kommentar als externer Mitwirkender posten (Capability comment erforderlich)"
+      security: []
+      parameters:
+        - in: path
+          name: token
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ContractCommentCreate" }
+      responses:
+        "201":
+          description: created
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ContractComment" }
+        "400": { description: invalid }
+        "401": { description: token revoked or expired }
+        "403": { description: comment capability missing }
+        "404": { description: invalid token }
+
+  /ai-recommendations:
+    get:
+      operationId: listAiRecommendations
+      tags: [ai-recommendations]
+      summary: AI-Empfehlungen filtern (entityType, entityId, status)
+      parameters:
+        - in: query
+          name: entityType
+          schema: { type: string }
+        - in: query
+          name: entityId
+          schema: { type: string }
+        - in: query
+          name: status
+          schema:
+            type: string
+            enum: [pending, accepted, rejected, modified]
+      responses:
+        "200":
+          description: ok
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/AiRecommendation" }
+        "400": { description: invalid }
+
+  /ai-recommendations/_metrics:
+    get:
+      operationId: getAiRecommendationMetrics
+      tags: [ai-recommendations]
+      summary: Acceptance-Rate und Konfidenz-Kalibrierung pro Prompt
+      parameters:
+        - in: query
+          name: promptKey
+          schema: { type: string }
+      responses:
+        "200":
+          description: ok
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/AiRecommendationMetric" }
+
+  /ai-recommendations/{id}:
+    patch:
+      operationId: patchAiRecommendation
+      tags: [ai-recommendations]
+      summary: User-Entscheidung (accepted/rejected/modified) zu einer Empfehlung
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/AiRecommendationPatch" }
+      responses:
+        "200":
+          description: ok
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AiRecommendation" }
+        "400": { description: invalid }
+        "404": { description: not found }
+
 components:
   schemas:
 
@@ -6474,3 +6698,195 @@ components:
         items:
           type: array
           items: { $ref: "#/components/schemas/ContractClauseCompatibility" }
+
+    # ── Magic-Link / External Collaborators (Task #70) ──
+    ExternalCollaborator:
+      type: object
+      required: [id, contractId, email, capabilities, status, expiresAt, createdBy, createdAt]
+      properties:
+        id: { type: string }
+        contractId: { type: string }
+        email: { type: string, format: email }
+        name: { type: ["string", "null"] }
+        organization: { type: ["string", "null"] }
+        capabilities:
+          type: array
+          items:
+            type: string
+            enum: [view, comment, sign_party]
+        status:
+          type: string
+          enum: [active, expired, revoked]
+        expiresAt: { type: string, format: date-time }
+        revokedAt: { type: ["string", "null"], format: date-time }
+        revokedBy: { type: ["string", "null"] }
+        createdBy: { type: string }
+        createdAt: { type: string, format: date-time }
+        lastUsedAt: { type: ["string", "null"], format: date-time }
+        tokenPlaintext:
+          description: Wird ausschliesslich beim POST-Create gesetzt — danach IMMER null.
+          type: ["string", "null"]
+
+    ExternalCollaboratorCreate:
+      type: object
+      required: [email, capabilities]
+      properties:
+        email: { type: string, format: email }
+        name: { type: ["string", "null"] }
+        organization: { type: ["string", "null"] }
+        capabilities:
+          type: array
+          minItems: 1
+          items:
+            type: string
+            enum: [view, comment, sign_party]
+        expiresInDays:
+          type: integer
+          minimum: 1
+          maximum: 90
+          default: 14
+
+    ContractComment:
+      type: object
+      required: [id, contractId, authorType, authorName, body, createdAt]
+      properties:
+        id: { type: string }
+        contractId: { type: string }
+        contractClauseId: { type: ["string", "null"] }
+        authorType:
+          type: string
+          enum: [user, external]
+        authorName: { type: string }
+        body: { type: string }
+        createdAt: { type: string, format: date-time }
+
+    ContractCommentCreate:
+      type: object
+      required: [body]
+      properties:
+        body: { type: string, minLength: 1, maxLength: 4000 }
+        contractClauseId: { type: ["string", "null"] }
+
+    ExternalContractView:
+      type: object
+      required: [collaborator, contract, brand, clauses, comments]
+      properties:
+        collaborator:
+          type: object
+          required: [id, email, capabilities, expiresAt]
+          properties:
+            id: { type: string }
+            email: { type: string, format: email }
+            name: { type: ["string", "null"] }
+            organization: { type: ["string", "null"] }
+            capabilities:
+              type: array
+              items: { type: string, enum: [view, comment, sign_party] }
+            expiresAt: { type: string, format: date-time }
+        contract:
+          type: object
+          required: [id, title, status]
+          properties:
+            id: { type: string }
+            title: { type: string }
+            status: { type: string }
+            template: { type: ["string", "null"] }
+            currency: { type: ["string", "null"] }
+            effectiveFrom: { type: ["string", "null"], format: date }
+            effectiveTo: { type: ["string", "null"], format: date }
+            governingLaw: { type: ["string", "null"] }
+            jurisdiction: { type: ["string", "null"] }
+        brand:
+          oneOf:
+            - type: "null"
+            - type: object
+              required: [id, name]
+              properties:
+                id: { type: string }
+                name: { type: string }
+                primaryColor: { type: ["string", "null"] }
+                logoUrl: { type: ["string", "null"] }
+        clauses:
+          type: array
+          items:
+            type: object
+            required: [id, family, variant, severity, summary]
+            properties:
+              id: { type: string }
+              family: { type: string }
+              variant: { type: string }
+              severity: { type: string }
+              summary: { type: string }
+        comments:
+          type: array
+          items: { $ref: "#/components/schemas/ContractComment" }
+
+    AiRecommendation:
+      type: object
+      required: [id, promptKey, suggestion, confidence, status, createdAt]
+      properties:
+        id: { type: string }
+        promptKey: { type: string }
+        entityType: { type: ["string", "null"] }
+        entityId: { type: ["string", "null"] }
+        suggestion: {}
+        confidence: { type: number, minimum: 0, maximum: 1 }
+        status:
+          type: string
+          enum: [pending, accepted, rejected, modified]
+        modifiedSuggestion: {}
+        feedbackText: { type: ["string", "null"] }
+        decidedBy: { type: ["string", "null"] }
+        decidedAt: { type: ["string", "null"], format: date-time }
+        aiInvocationId: { type: ["string", "null"] }
+        createdAt: { type: string, format: date-time }
+
+    AiRecommendationPatch:
+      type: object
+      required: [status]
+      properties:
+        status:
+          type: string
+          enum: [pending, accepted, rejected, modified]
+        modifiedSuggestion:
+          description: Pflicht bei status=modified — der vom User editierte Vorschlag.
+        feedback:
+          type: ["string", "null"]
+          maxLength: 2000
+
+    AiRecommendationCalibrationBucket:
+      type: object
+      required: [range, total, acceptanceRate]
+      properties:
+        range:
+          type: string
+          enum: ["0-25", "25-50", "50-75", "75-100"]
+        total: { type: integer, minimum: 0 }
+        acceptanceRate:
+          type: ["number", "null"]
+          minimum: 0
+          maximum: 1
+
+    AiRecommendationMetric:
+      type: object
+      required:
+        [ promptKey, count, pending, accepted, rejected, modified,
+          acceptanceRate, averageConfidence, calibration ]
+      properties:
+        promptKey: { type: string }
+        count: { type: integer, minimum: 0 }
+        pending: { type: integer, minimum: 0 }
+        accepted: { type: integer, minimum: 0 }
+        rejected: { type: integer, minimum: 0 }
+        modified: { type: integer, minimum: 0 }
+        acceptanceRate:
+          type: ["number", "null"]
+          minimum: 0
+          maximum: 1
+        averageConfidence:
+          type: number
+          minimum: 0
+          maximum: 1
+        calibration:
+          type: array
+          items: { $ref: "#/components/schemas/AiRecommendationCalibrationBucket" }

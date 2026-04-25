@@ -6,6 +6,7 @@ import { AppShell } from "@/components/layout/AppShell";
 import { AuthProvider, useAuth } from "@/contexts/auth-context";
 import { OnboardingProvider } from "@/contexts/onboarding-context";
 import LoginPage from "@/pages/login";
+import ExternalContractPage from "@/pages/external";
 import { Loader2 } from "lucide-react";
 import NotFound from "@/pages/not-found";
 
@@ -101,6 +102,7 @@ function Router() {
   return (
     <Switch>
       <Route path="/login" component={LoginPage} />
+      <Route path="/external/:token" component={ExternalContractPage} />
       <Route>
         <ProtectedRoutes />
       </Route>

@@ -28,6 +28,9 @@ import type {
   AdminUserCreate,
   AdminUserUpdate,
   AiHealthOk,
+  AiRecommendation,
+  AiRecommendationMetric,
+  AiRecommendationPatch,
   ApiError,
   ApprovalCase,
   ApprovalChainTemplate,
@@ -63,6 +66,8 @@ import type {
   ContractAmendmentDetail,
   ContractClause,
   ContractClausePatchInput,
+  ContractComment,
+  ContractCommentCreate,
   ContractCompatibilityReport,
   ContractDetail,
   ContractInput,
@@ -102,6 +107,8 @@ import type {
   EscalateSignatureInput,
   ExecuteCopilotInsight200,
   ExportGdprSubjectParams,
+  ExternalCollaborator,
+  ExternalCollaboratorCreate,
   ExternalContract,
   ExternalContractCreate,
   ExternalContractDetail,
@@ -110,6 +117,7 @@ import type {
   ExternalContractPatch,
   ExternalContractUploadUrlRequest,
   ExternalContractUploadUrlResponse,
+  ExternalContractView,
   ForecastReport,
   GdprAccessLogEntry,
   GdprDeletionLogEntry,
@@ -119,12 +127,14 @@ import type {
   GdprRetentionPolicyResponse,
   GdprRetentionResult,
   GdprSubjectSearch,
+  GetAiRecommendationMetricsParams,
   GetCurrentQuoteParams,
   HealthStatus,
   HelpBotInput,
   HelpBotReply,
   IndustryProfile,
   IndustryProfileInput,
+  ListAiRecommendationsParams,
   ListApprovalsParams,
   ListAttachmentLibraryParams,
   ListAuditEntriesParams,
@@ -15443,3 +15453,920 @@ export function useGetContractClauseCompatibility<
 
   return { ...query, queryKey: queryOptions.queryKey };
 }
+
+/**
+ * @summary Externe Mitwirkende eines Vertrags auflisten
+ */
+export const getListExternalCollaboratorsUrl = (id: string) => {
+  return `/api/v1/contracts/${id}/external-collaborators`;
+};
+
+export const listExternalCollaborators = async (
+  id: string,
+  options?: RequestInit,
+): Promise<ExternalCollaborator[]> => {
+  return customFetch<ExternalCollaborator[]>(
+    getListExternalCollaboratorsUrl(id),
+    {
+      ...options,
+      method: "GET",
+    },
+  );
+};
+
+export const getListExternalCollaboratorsQueryKey = (id: string) => {
+  return [`/api/v1/contracts/${id}/external-collaborators`] as const;
+};
+
+export const getListExternalCollaboratorsQueryOptions = <
+  TData = Awaited<ReturnType<typeof listExternalCollaborators>>,
+  TError = ErrorType<void>,
+>(
+  id: string,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof listExternalCollaborators>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey =
+    queryOptions?.queryKey ?? getListExternalCollaboratorsQueryKey(id);
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof listExternalCollaborators>>
+  > = ({ signal }) =>
+    listExternalCollaborators(id, { signal, ...requestOptions });
+
+  return {
+    queryKey,
+    queryFn,
+    enabled: !!id,
+    ...queryOptions,
+  } as UseQueryOptions<
+    Awaited<ReturnType<typeof listExternalCollaborators>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type ListExternalCollaboratorsQueryResult = NonNullable<
+  Awaited<ReturnType<typeof listExternalCollaborators>>
+>;
+export type ListExternalCollaboratorsQueryError = ErrorType<void>;
+
+/**
+ * @summary Externe Mitwirkende eines Vertrags auflisten
+ */
+
+export function useListExternalCollaborators<
+  TData = Awaited<ReturnType<typeof listExternalCollaborators>>,
+  TError = ErrorType<void>,
+>(
+  id: string,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof listExternalCollaborators>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getListExternalCollaboratorsQueryOptions(id, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Magic-Link für externen Mitwirkenden erstellen (Plaintext-Token nur einmalig zurückgegeben)
+ */
+export const getCreateExternalCollaboratorUrl = (id: string) => {
+  return `/api/v1/contracts/${id}/external-collaborators`;
+};
+
+export const createExternalCollaborator = async (
+  id: string,
+  externalCollaboratorCreate: ExternalCollaboratorCreate,
+  options?: RequestInit,
+): Promise<ExternalCollaborator> => {
+  return customFetch<ExternalCollaborator>(
+    getCreateExternalCollaboratorUrl(id),
+    {
+      ...options,
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...options?.headers },
+      body: JSON.stringify(externalCollaboratorCreate),
+    },
+  );
+};
+
+export const getCreateExternalCollaboratorMutationOptions = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof createExternalCollaborator>>,
+    TError,
+    { id: string; data: BodyType<ExternalCollaboratorCreate> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof createExternalCollaborator>>,
+  TError,
+  { id: string; data: BodyType<ExternalCollaboratorCreate> },
+  TContext
+> => {
+  const mutationKey = ["createExternalCollaborator"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof createExternalCollaborator>>,
+    { id: string; data: BodyType<ExternalCollaboratorCreate> }
+  > = (props) => {
+    const { id, data } = props ?? {};
+
+    return createExternalCollaborator(id, data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type CreateExternalCollaboratorMutationResult = NonNullable<
+  Awaited<ReturnType<typeof createExternalCollaborator>>
+>;
+export type CreateExternalCollaboratorMutationBody =
+  BodyType<ExternalCollaboratorCreate>;
+export type CreateExternalCollaboratorMutationError = ErrorType<void>;
+
+/**
+ * @summary Magic-Link für externen Mitwirkenden erstellen (Plaintext-Token nur einmalig zurückgegeben)
+ */
+export const useCreateExternalCollaborator = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof createExternalCollaborator>>,
+    TError,
+    { id: string; data: BodyType<ExternalCollaboratorCreate> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof createExternalCollaborator>>,
+  TError,
+  { id: string; data: BodyType<ExternalCollaboratorCreate> },
+  TContext
+> => {
+  return useMutation(getCreateExternalCollaboratorMutationOptions(options));
+};
+
+/**
+ * @summary Magic-Link widerrufen
+ */
+export const getRevokeExternalCollaboratorUrl = (id: string) => {
+  return `/api/v1/external-collaborators/${id}`;
+};
+
+export const revokeExternalCollaborator = async (
+  id: string,
+  options?: RequestInit,
+): Promise<ExternalCollaborator> => {
+  return customFetch<ExternalCollaborator>(
+    getRevokeExternalCollaboratorUrl(id),
+    {
+      ...options,
+      method: "DELETE",
+    },
+  );
+};
+
+export const getRevokeExternalCollaboratorMutationOptions = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof revokeExternalCollaborator>>,
+    TError,
+    { id: string },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof revokeExternalCollaborator>>,
+  TError,
+  { id: string },
+  TContext
+> => {
+  const mutationKey = ["revokeExternalCollaborator"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof revokeExternalCollaborator>>,
+    { id: string }
+  > = (props) => {
+    const { id } = props ?? {};
+
+    return revokeExternalCollaborator(id, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type RevokeExternalCollaboratorMutationResult = NonNullable<
+  Awaited<ReturnType<typeof revokeExternalCollaborator>>
+>;
+
+export type RevokeExternalCollaboratorMutationError = ErrorType<void>;
+
+/**
+ * @summary Magic-Link widerrufen
+ */
+export const useRevokeExternalCollaborator = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof revokeExternalCollaborator>>,
+    TError,
+    { id: string },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof revokeExternalCollaborator>>,
+  TError,
+  { id: string },
+  TContext
+> => {
+  return useMutation(getRevokeExternalCollaboratorMutationOptions(options));
+};
+
+/**
+ * @summary Kommentare zu einem Vertrag (intern + extern) auflisten
+ */
+export const getListContractCommentsUrl = (id: string) => {
+  return `/api/v1/contracts/${id}/comments`;
+};
+
+export const listContractComments = async (
+  id: string,
+  options?: RequestInit,
+): Promise<ContractComment[]> => {
+  return customFetch<ContractComment[]>(getListContractCommentsUrl(id), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getListContractCommentsQueryKey = (id: string) => {
+  return [`/api/v1/contracts/${id}/comments`] as const;
+};
+
+export const getListContractCommentsQueryOptions = <
+  TData = Awaited<ReturnType<typeof listContractComments>>,
+  TError = ErrorType<void>,
+>(
+  id: string,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof listContractComments>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey =
+    queryOptions?.queryKey ?? getListContractCommentsQueryKey(id);
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof listContractComments>>
+  > = ({ signal }) => listContractComments(id, { signal, ...requestOptions });
+
+  return {
+    queryKey,
+    queryFn,
+    enabled: !!id,
+    ...queryOptions,
+  } as UseQueryOptions<
+    Awaited<ReturnType<typeof listContractComments>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type ListContractCommentsQueryResult = NonNullable<
+  Awaited<ReturnType<typeof listContractComments>>
+>;
+export type ListContractCommentsQueryError = ErrorType<void>;
+
+/**
+ * @summary Kommentare zu einem Vertrag (intern + extern) auflisten
+ */
+
+export function useListContractComments<
+  TData = Awaited<ReturnType<typeof listContractComments>>,
+  TError = ErrorType<void>,
+>(
+  id: string,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof listContractComments>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getListContractCommentsQueryOptions(id, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Kommentar als interner User anfügen
+ */
+export const getCreateContractCommentUrl = (id: string) => {
+  return `/api/v1/contracts/${id}/comments`;
+};
+
+export const createContractComment = async (
+  id: string,
+  contractCommentCreate: ContractCommentCreate,
+  options?: RequestInit,
+): Promise<ContractComment> => {
+  return customFetch<ContractComment>(getCreateContractCommentUrl(id), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(contractCommentCreate),
+  });
+};
+
+export const getCreateContractCommentMutationOptions = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof createContractComment>>,
+    TError,
+    { id: string; data: BodyType<ContractCommentCreate> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof createContractComment>>,
+  TError,
+  { id: string; data: BodyType<ContractCommentCreate> },
+  TContext
+> => {
+  const mutationKey = ["createContractComment"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof createContractComment>>,
+    { id: string; data: BodyType<ContractCommentCreate> }
+  > = (props) => {
+    const { id, data } = props ?? {};
+
+    return createContractComment(id, data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type CreateContractCommentMutationResult = NonNullable<
+  Awaited<ReturnType<typeof createContractComment>>
+>;
+export type CreateContractCommentMutationBody = BodyType<ContractCommentCreate>;
+export type CreateContractCommentMutationError = ErrorType<void>;
+
+/**
+ * @summary Kommentar als interner User anfügen
+ */
+export const useCreateContractComment = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof createContractComment>>,
+    TError,
+    { id: string; data: BodyType<ContractCommentCreate> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof createContractComment>>,
+  TError,
+  { id: string; data: BodyType<ContractCommentCreate> },
+  TContext
+> => {
+  return useMutation(getCreateContractCommentMutationOptions(options));
+};
+
+/**
+ * @summary Public: Magic-Link auflösen und Vertrags-Snapshot zurückgeben
+ */
+export const getResolveExternalTokenUrl = (token: string) => {
+  return `/api/v1/external/${token}`;
+};
+
+export const resolveExternalToken = async (
+  token: string,
+  options?: RequestInit,
+): Promise<ExternalContractView> => {
+  return customFetch<ExternalContractView>(getResolveExternalTokenUrl(token), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getResolveExternalTokenQueryKey = (token: string) => {
+  return [`/api/v1/external/${token}`] as const;
+};
+
+export const getResolveExternalTokenQueryOptions = <
+  TData = Awaited<ReturnType<typeof resolveExternalToken>>,
+  TError = ErrorType<void>,
+>(
+  token: string,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof resolveExternalToken>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey =
+    queryOptions?.queryKey ?? getResolveExternalTokenQueryKey(token);
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof resolveExternalToken>>
+  > = ({ signal }) =>
+    resolveExternalToken(token, { signal, ...requestOptions });
+
+  return {
+    queryKey,
+    queryFn,
+    enabled: !!token,
+    ...queryOptions,
+  } as UseQueryOptions<
+    Awaited<ReturnType<typeof resolveExternalToken>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type ResolveExternalTokenQueryResult = NonNullable<
+  Awaited<ReturnType<typeof resolveExternalToken>>
+>;
+export type ResolveExternalTokenQueryError = ErrorType<void>;
+
+/**
+ * @summary Public: Magic-Link auflösen und Vertrags-Snapshot zurückgeben
+ */
+
+export function useResolveExternalToken<
+  TData = Awaited<ReturnType<typeof resolveExternalToken>>,
+  TError = ErrorType<void>,
+>(
+  token: string,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof resolveExternalToken>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getResolveExternalTokenQueryOptions(token, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Public: Kommentar als externer Mitwirkender posten (Capability comment erforderlich)
+ */
+export const getCreateExternalCommentUrl = (token: string) => {
+  return `/api/v1/external/${token}/comments`;
+};
+
+export const createExternalComment = async (
+  token: string,
+  contractCommentCreate: ContractCommentCreate,
+  options?: RequestInit,
+): Promise<ContractComment> => {
+  return customFetch<ContractComment>(getCreateExternalCommentUrl(token), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(contractCommentCreate),
+  });
+};
+
+export const getCreateExternalCommentMutationOptions = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof createExternalComment>>,
+    TError,
+    { token: string; data: BodyType<ContractCommentCreate> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof createExternalComment>>,
+  TError,
+  { token: string; data: BodyType<ContractCommentCreate> },
+  TContext
+> => {
+  const mutationKey = ["createExternalComment"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof createExternalComment>>,
+    { token: string; data: BodyType<ContractCommentCreate> }
+  > = (props) => {
+    const { token, data } = props ?? {};
+
+    return createExternalComment(token, data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type CreateExternalCommentMutationResult = NonNullable<
+  Awaited<ReturnType<typeof createExternalComment>>
+>;
+export type CreateExternalCommentMutationBody = BodyType<ContractCommentCreate>;
+export type CreateExternalCommentMutationError = ErrorType<void>;
+
+/**
+ * @summary Public: Kommentar als externer Mitwirkender posten (Capability comment erforderlich)
+ */
+export const useCreateExternalComment = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof createExternalComment>>,
+    TError,
+    { token: string; data: BodyType<ContractCommentCreate> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof createExternalComment>>,
+  TError,
+  { token: string; data: BodyType<ContractCommentCreate> },
+  TContext
+> => {
+  return useMutation(getCreateExternalCommentMutationOptions(options));
+};
+
+/**
+ * @summary AI-Empfehlungen filtern (entityType, entityId, status)
+ */
+export const getListAiRecommendationsUrl = (
+  params?: ListAiRecommendationsParams,
+) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? "null" : value.toString());
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0
+    ? `/api/v1/ai-recommendations?${stringifiedParams}`
+    : `/api/v1/ai-recommendations`;
+};
+
+export const listAiRecommendations = async (
+  params?: ListAiRecommendationsParams,
+  options?: RequestInit,
+): Promise<AiRecommendation[]> => {
+  return customFetch<AiRecommendation[]>(getListAiRecommendationsUrl(params), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getListAiRecommendationsQueryKey = (
+  params?: ListAiRecommendationsParams,
+) => {
+  return [`/api/v1/ai-recommendations`, ...(params ? [params] : [])] as const;
+};
+
+export const getListAiRecommendationsQueryOptions = <
+  TData = Awaited<ReturnType<typeof listAiRecommendations>>,
+  TError = ErrorType<void>,
+>(
+  params?: ListAiRecommendationsParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof listAiRecommendations>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey =
+    queryOptions?.queryKey ?? getListAiRecommendationsQueryKey(params);
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof listAiRecommendations>>
+  > = ({ signal }) =>
+    listAiRecommendations(params, { signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof listAiRecommendations>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type ListAiRecommendationsQueryResult = NonNullable<
+  Awaited<ReturnType<typeof listAiRecommendations>>
+>;
+export type ListAiRecommendationsQueryError = ErrorType<void>;
+
+/**
+ * @summary AI-Empfehlungen filtern (entityType, entityId, status)
+ */
+
+export function useListAiRecommendations<
+  TData = Awaited<ReturnType<typeof listAiRecommendations>>,
+  TError = ErrorType<void>,
+>(
+  params?: ListAiRecommendationsParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof listAiRecommendations>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getListAiRecommendationsQueryOptions(params, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Acceptance-Rate und Konfidenz-Kalibrierung pro Prompt
+ */
+export const getGetAiRecommendationMetricsUrl = (
+  params?: GetAiRecommendationMetricsParams,
+) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? "null" : value.toString());
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0
+    ? `/api/v1/ai-recommendations/_metrics?${stringifiedParams}`
+    : `/api/v1/ai-recommendations/_metrics`;
+};
+
+export const getAiRecommendationMetrics = async (
+  params?: GetAiRecommendationMetricsParams,
+  options?: RequestInit,
+): Promise<AiRecommendationMetric[]> => {
+  return customFetch<AiRecommendationMetric[]>(
+    getGetAiRecommendationMetricsUrl(params),
+    {
+      ...options,
+      method: "GET",
+    },
+  );
+};
+
+export const getGetAiRecommendationMetricsQueryKey = (
+  params?: GetAiRecommendationMetricsParams,
+) => {
+  return [
+    `/api/v1/ai-recommendations/_metrics`,
+    ...(params ? [params] : []),
+  ] as const;
+};
+
+export const getGetAiRecommendationMetricsQueryOptions = <
+  TData = Awaited<ReturnType<typeof getAiRecommendationMetrics>>,
+  TError = ErrorType<unknown>,
+>(
+  params?: GetAiRecommendationMetricsParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getAiRecommendationMetrics>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey =
+    queryOptions?.queryKey ?? getGetAiRecommendationMetricsQueryKey(params);
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof getAiRecommendationMetrics>>
+  > = ({ signal }) =>
+    getAiRecommendationMetrics(params, { signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getAiRecommendationMetrics>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetAiRecommendationMetricsQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getAiRecommendationMetrics>>
+>;
+export type GetAiRecommendationMetricsQueryError = ErrorType<unknown>;
+
+/**
+ * @summary Acceptance-Rate und Konfidenz-Kalibrierung pro Prompt
+ */
+
+export function useGetAiRecommendationMetrics<
+  TData = Awaited<ReturnType<typeof getAiRecommendationMetrics>>,
+  TError = ErrorType<unknown>,
+>(
+  params?: GetAiRecommendationMetricsParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getAiRecommendationMetrics>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetAiRecommendationMetricsQueryOptions(
+    params,
+    options,
+  );
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary User-Entscheidung (accepted/rejected/modified) zu einer Empfehlung
+ */
+export const getPatchAiRecommendationUrl = (id: string) => {
+  return `/api/v1/ai-recommendations/${id}`;
+};
+
+export const patchAiRecommendation = async (
+  id: string,
+  aiRecommendationPatch: AiRecommendationPatch,
+  options?: RequestInit,
+): Promise<AiRecommendation> => {
+  return customFetch<AiRecommendation>(getPatchAiRecommendationUrl(id), {
+    ...options,
+    method: "PATCH",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(aiRecommendationPatch),
+  });
+};
+
+export const getPatchAiRecommendationMutationOptions = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof patchAiRecommendation>>,
+    TError,
+    { id: string; data: BodyType<AiRecommendationPatch> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof patchAiRecommendation>>,
+  TError,
+  { id: string; data: BodyType<AiRecommendationPatch> },
+  TContext
+> => {
+  const mutationKey = ["patchAiRecommendation"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof patchAiRecommendation>>,
+    { id: string; data: BodyType<AiRecommendationPatch> }
+  > = (props) => {
+    const { id, data } = props ?? {};
+
+    return patchAiRecommendation(id, data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type PatchAiRecommendationMutationResult = NonNullable<
+  Awaited<ReturnType<typeof patchAiRecommendation>>
+>;
+export type PatchAiRecommendationMutationBody = BodyType<AiRecommendationPatch>;
+export type PatchAiRecommendationMutationError = ErrorType<void>;
+
+/**
+ * @summary User-Entscheidung (accepted/rejected/modified) zu einer Empfehlung
+ */
+export const usePatchAiRecommendation = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof patchAiRecommendation>>,
+    TError,
+    { id: string; data: BodyType<AiRecommendationPatch> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof patchAiRecommendation>>,
+  TError,
+  { id: string; data: BodyType<AiRecommendationPatch> },
+  TContext
+> => {
+  return useMutation(getPatchAiRecommendationMutationOptions(options));
+};

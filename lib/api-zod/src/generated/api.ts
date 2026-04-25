@@ -5082,3 +5082,330 @@ export const GetContractClauseCompatibilityResponse = zod.object({
     }),
   ),
 });
+
+/**
+ * @summary Externe Mitwirkende eines Vertrags auflisten
+ */
+export const ListExternalCollaboratorsParams = zod.object({
+  id: zod.coerce.string(),
+});
+
+export const ListExternalCollaboratorsResponseItem = zod.object({
+  id: zod.string(),
+  contractId: zod.string(),
+  email: zod.string().email(),
+  name: zod.string().nullish(),
+  organization: zod.string().nullish(),
+  capabilities: zod.array(zod.enum(["view", "comment", "sign_party"])),
+  status: zod.enum(["active", "expired", "revoked"]),
+  expiresAt: zod.coerce.date(),
+  revokedAt: zod.coerce.date().nullish(),
+  revokedBy: zod.string().nullish(),
+  createdBy: zod.string(),
+  createdAt: zod.coerce.date(),
+  lastUsedAt: zod.coerce.date().nullish(),
+  tokenPlaintext: zod
+    .string()
+    .nullish()
+    .describe(
+      "Wird ausschliesslich beim POST-Create gesetzt — danach IMMER null.",
+    ),
+});
+export const ListExternalCollaboratorsResponse = zod.array(
+  ListExternalCollaboratorsResponseItem,
+);
+
+/**
+ * @summary Magic-Link für externen Mitwirkenden erstellen (Plaintext-Token nur einmalig zurückgegeben)
+ */
+export const CreateExternalCollaboratorParams = zod.object({
+  id: zod.coerce.string(),
+});
+
+export const createExternalCollaboratorBodyExpiresInDaysDefault = 14;
+export const createExternalCollaboratorBodyExpiresInDaysMax = 90;
+
+export const CreateExternalCollaboratorBody = zod.object({
+  email: zod.string().email(),
+  name: zod.string().nullish(),
+  organization: zod.string().nullish(),
+  capabilities: zod.array(zod.enum(["view", "comment", "sign_party"])).min(1),
+  expiresInDays: zod
+    .number()
+    .min(1)
+    .max(createExternalCollaboratorBodyExpiresInDaysMax)
+    .default(createExternalCollaboratorBodyExpiresInDaysDefault),
+});
+
+/**
+ * @summary Magic-Link widerrufen
+ */
+export const RevokeExternalCollaboratorParams = zod.object({
+  id: zod.coerce.string(),
+});
+
+export const RevokeExternalCollaboratorResponse = zod.object({
+  id: zod.string(),
+  contractId: zod.string(),
+  email: zod.string().email(),
+  name: zod.string().nullish(),
+  organization: zod.string().nullish(),
+  capabilities: zod.array(zod.enum(["view", "comment", "sign_party"])),
+  status: zod.enum(["active", "expired", "revoked"]),
+  expiresAt: zod.coerce.date(),
+  revokedAt: zod.coerce.date().nullish(),
+  revokedBy: zod.string().nullish(),
+  createdBy: zod.string(),
+  createdAt: zod.coerce.date(),
+  lastUsedAt: zod.coerce.date().nullish(),
+  tokenPlaintext: zod
+    .string()
+    .nullish()
+    .describe(
+      "Wird ausschliesslich beim POST-Create gesetzt — danach IMMER null.",
+    ),
+});
+
+/**
+ * @summary Kommentare zu einem Vertrag (intern + extern) auflisten
+ */
+export const ListContractCommentsParams = zod.object({
+  id: zod.coerce.string(),
+});
+
+export const ListContractCommentsResponseItem = zod.object({
+  id: zod.string(),
+  contractId: zod.string(),
+  contractClauseId: zod.string().nullish(),
+  authorType: zod.enum(["user", "external"]),
+  authorName: zod.string(),
+  body: zod.string(),
+  createdAt: zod.coerce.date(),
+});
+export const ListContractCommentsResponse = zod.array(
+  ListContractCommentsResponseItem,
+);
+
+/**
+ * @summary Kommentar als interner User anfügen
+ */
+export const CreateContractCommentParams = zod.object({
+  id: zod.coerce.string(),
+});
+
+export const createContractCommentBodyBodyMax = 4000;
+
+export const CreateContractCommentBody = zod.object({
+  body: zod.string().min(1).max(createContractCommentBodyBodyMax),
+  contractClauseId: zod.string().nullish(),
+});
+
+/**
+ * @summary Public: Magic-Link auflösen und Vertrags-Snapshot zurückgeben
+ */
+export const ResolveExternalTokenParams = zod.object({
+  token: zod.coerce.string(),
+});
+
+export const ResolveExternalTokenResponse = zod.object({
+  collaborator: zod.object({
+    id: zod.string(),
+    email: zod.string().email(),
+    name: zod.string().nullish(),
+    organization: zod.string().nullish(),
+    capabilities: zod.array(zod.enum(["view", "comment", "sign_party"])),
+    expiresAt: zod.coerce.date(),
+  }),
+  contract: zod.object({
+    id: zod.string(),
+    title: zod.string(),
+    status: zod.string(),
+    template: zod.string().nullish(),
+    currency: zod.string().nullish(),
+    effectiveFrom: zod.coerce.date().nullish(),
+    effectiveTo: zod.coerce.date().nullish(),
+    governingLaw: zod.string().nullish(),
+    jurisdiction: zod.string().nullish(),
+  }),
+  brand: zod.union([
+    zod.null(),
+    zod.object({
+      id: zod.string(),
+      name: zod.string(),
+      primaryColor: zod.string().nullish(),
+      logoUrl: zod.string().nullish(),
+    }),
+  ]),
+  clauses: zod.array(
+    zod.object({
+      id: zod.string(),
+      family: zod.string(),
+      variant: zod.string(),
+      severity: zod.string(),
+      summary: zod.string(),
+    }),
+  ),
+  comments: zod.array(
+    zod.object({
+      id: zod.string(),
+      contractId: zod.string(),
+      contractClauseId: zod.string().nullish(),
+      authorType: zod.enum(["user", "external"]),
+      authorName: zod.string(),
+      body: zod.string(),
+      createdAt: zod.coerce.date(),
+    }),
+  ),
+});
+
+/**
+ * @summary Public: Kommentar als externer Mitwirkender posten (Capability comment erforderlich)
+ */
+export const CreateExternalCommentParams = zod.object({
+  token: zod.coerce.string(),
+});
+
+export const createExternalCommentBodyBodyMax = 4000;
+
+export const CreateExternalCommentBody = zod.object({
+  body: zod.string().min(1).max(createExternalCommentBodyBodyMax),
+  contractClauseId: zod.string().nullish(),
+});
+
+/**
+ * @summary AI-Empfehlungen filtern (entityType, entityId, status)
+ */
+export const ListAiRecommendationsQueryParams = zod.object({
+  entityType: zod.coerce.string().optional(),
+  entityId: zod.coerce.string().optional(),
+  status: zod.enum(["pending", "accepted", "rejected", "modified"]).optional(),
+});
+
+export const listAiRecommendationsResponseConfidenceMin = 0;
+export const listAiRecommendationsResponseConfidenceMax = 1;
+
+export const ListAiRecommendationsResponseItem = zod.object({
+  id: zod.string(),
+  promptKey: zod.string(),
+  entityType: zod.string().nullish(),
+  entityId: zod.string().nullish(),
+  suggestion: zod.unknown(),
+  confidence: zod
+    .number()
+    .min(listAiRecommendationsResponseConfidenceMin)
+    .max(listAiRecommendationsResponseConfidenceMax),
+  status: zod.enum(["pending", "accepted", "rejected", "modified"]),
+  modifiedSuggestion: zod.unknown().optional(),
+  feedbackText: zod.string().nullish(),
+  decidedBy: zod.string().nullish(),
+  decidedAt: zod.coerce.date().nullish(),
+  aiInvocationId: zod.string().nullish(),
+  createdAt: zod.coerce.date(),
+});
+export const ListAiRecommendationsResponse = zod.array(
+  ListAiRecommendationsResponseItem,
+);
+
+/**
+ * @summary Acceptance-Rate und Konfidenz-Kalibrierung pro Prompt
+ */
+export const GetAiRecommendationMetricsQueryParams = zod.object({
+  promptKey: zod.coerce.string().optional(),
+});
+
+export const getAiRecommendationMetricsResponseCountMin = 0;
+
+export const getAiRecommendationMetricsResponsePendingMin = 0;
+
+export const getAiRecommendationMetricsResponseAcceptedMin = 0;
+
+export const getAiRecommendationMetricsResponseRejectedMin = 0;
+
+export const getAiRecommendationMetricsResponseModifiedMin = 0;
+
+export const getAiRecommendationMetricsResponseAcceptanceRateMin = 0;
+export const getAiRecommendationMetricsResponseAcceptanceRateMax = 1;
+
+export const getAiRecommendationMetricsResponseAverageConfidenceMin = 0;
+export const getAiRecommendationMetricsResponseAverageConfidenceMax = 1;
+
+export const getAiRecommendationMetricsResponseCalibrationItemTotalMin = 0;
+
+export const getAiRecommendationMetricsResponseCalibrationItemAcceptanceRateMin = 0;
+export const getAiRecommendationMetricsResponseCalibrationItemAcceptanceRateMax = 1;
+
+export const GetAiRecommendationMetricsResponseItem = zod.object({
+  promptKey: zod.string(),
+  count: zod.number().min(getAiRecommendationMetricsResponseCountMin),
+  pending: zod.number().min(getAiRecommendationMetricsResponsePendingMin),
+  accepted: zod.number().min(getAiRecommendationMetricsResponseAcceptedMin),
+  rejected: zod.number().min(getAiRecommendationMetricsResponseRejectedMin),
+  modified: zod.number().min(getAiRecommendationMetricsResponseModifiedMin),
+  acceptanceRate: zod
+    .number()
+    .min(getAiRecommendationMetricsResponseAcceptanceRateMin)
+    .max(getAiRecommendationMetricsResponseAcceptanceRateMax)
+    .nullable(),
+  averageConfidence: zod
+    .number()
+    .min(getAiRecommendationMetricsResponseAverageConfidenceMin)
+    .max(getAiRecommendationMetricsResponseAverageConfidenceMax),
+  calibration: zod.array(
+    zod.object({
+      range: zod.enum(["0-25", "25-50", "50-75", "75-100"]),
+      total: zod
+        .number()
+        .min(getAiRecommendationMetricsResponseCalibrationItemTotalMin),
+      acceptanceRate: zod
+        .number()
+        .min(getAiRecommendationMetricsResponseCalibrationItemAcceptanceRateMin)
+        .max(getAiRecommendationMetricsResponseCalibrationItemAcceptanceRateMax)
+        .nullable(),
+    }),
+  ),
+});
+export const GetAiRecommendationMetricsResponse = zod.array(
+  GetAiRecommendationMetricsResponseItem,
+);
+
+/**
+ * @summary User-Entscheidung (accepted/rejected/modified) zu einer Empfehlung
+ */
+export const PatchAiRecommendationParams = zod.object({
+  id: zod.coerce.string(),
+});
+
+export const patchAiRecommendationBodyFeedbackMax = 2000;
+
+export const PatchAiRecommendationBody = zod.object({
+  status: zod.enum(["pending", "accepted", "rejected", "modified"]),
+  modifiedSuggestion: zod
+    .unknown()
+    .optional()
+    .describe(
+      "Pflicht bei status=modified — der vom User editierte Vorschlag.",
+    ),
+  feedback: zod.string().max(patchAiRecommendationBodyFeedbackMax).nullish(),
+});
+
+export const patchAiRecommendationResponseConfidenceMin = 0;
+export const patchAiRecommendationResponseConfidenceMax = 1;
+
+export const PatchAiRecommendationResponse = zod.object({
+  id: zod.string(),
+  promptKey: zod.string(),
+  entityType: zod.string().nullish(),
+  entityId: zod.string().nullish(),
+  suggestion: zod.unknown(),
+  confidence: zod
+    .number()
+    .min(patchAiRecommendationResponseConfidenceMin)
+    .max(patchAiRecommendationResponseConfidenceMax),
+  status: zod.enum(["pending", "accepted", "rejected", "modified"]),
+  modifiedSuggestion: zod.unknown().optional(),
+  feedbackText: zod.string().nullish(),
+  decidedBy: zod.string().nullish(),
+  decidedAt: zod.coerce.date().nullish(),
+  aiInvocationId: zod.string().nullish(),
+  createdAt: zod.coerce.date(),
+});

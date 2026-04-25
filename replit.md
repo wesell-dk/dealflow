@@ -109,6 +109,57 @@ Validierung: Backend-Typecheck grün, dealflow-web Typecheck grün, alle Smoke-E
   Override-Snapshot bei Materialisierung + Variant-Switch, Brand-Scope-Isolation,
   Role-Gates, Compatibility-Evaluator-Statuslogik, Invalid-Input-Reject.
 
+## Magic-Link für externe Mitwirkende (Apr 2026, Task #70)
+
+- **Schema** (`lib/db/src/schema/index.ts`): `externalCollaboratorsTable`
+  (id, tenantId, contractId, email, name?, organization?, capabilitiesJson,
+  tokenHash, expiresAt, revokedAt?, createdBy, createdAt, lastUsedAt?,
+  Unique(contractId, email)) + `externalCollaboratorEventsTable` (Audit pro
+  Aktion: created/viewed/comment/expired_attempt/revoked).
+- **Backend** (`artifacts/api-server/src/routes/dealflow.ts`): Tenant-scoped
+  `GET/POST /contracts/:id/external-collaborators` + `DELETE
+  /external-collaborators/:id` (Plaintext-Token nur 1× zurück), public
+  `GET /external/:token` und `POST /external/:token/comments`. Auth-Middleware
+  whitelistet `/external/` und `/v1/external/` als PUBLIC_PREFIXES (requireAuth
+  ist 2× gemountet). Defense-in-depth: Public-Resolver verifiziert
+  `companies.tenantId === collaborator.tenantId` über `dealId → companyId`.
+- **Frontend**: `ExternalCollaboratorsCard` in `pages/contract.tsx` (Liste +
+  Add-Dialog mit Capabilities + Expiry-Picker + Revoke), neue Public-Route
+  `pages/external-view.tsx` mit Read-only-Vertragsanzeige (Header, Klauseln,
+  Comments) + optionalem Comment-Form; in `App.tsx` vor `/login` gemounted.
+- **Tests** (`tests/external-collaborators.test.ts`, 11 Tests grün):
+  Tenant-Admin- und AE-Anlage, Cross-Tenant-404, Token expired/revoked → 401,
+  Capability-Gating für Comment, Audit-Trail, Plaintext-Token-Rotation.
+
+## KI-Empfehlungen mit Konfidenz + Lerneffekt (Apr 2026, Task #69)
+
+- **Schema** (`lib/db/src/schema/index.ts`): `aiRecommendationsTable`
+  (id, tenantId, entityType?, entityId?, promptKey, suggestionJson,
+  confidence numeric(4,3), status enum pending|accepted|rejected|modified,
+  modifiedSuggestionJson?, feedbackText?, decidedBy?, decidedAt?,
+  aiInvocationId?, createdAt) mit Indizes auf (tenant, status), (tenant,
+  promptKey), (tenant, entity).
+- **Backend** (`src/lib/ai/recommendations.ts` + `routes/dealflow.ts`):
+  Helper `recordRecommendation()` persistiert Empfehlung neben AI-Call,
+  `clampConfidence()` säubert Werte auf [0,1]. Routen:
+  `GET /ai-recommendations?promptKey&entityType&entityId&status`,
+  `PATCH /ai-recommendations/:id` (Status + ModifiedSuggestion + Feedback,
+  feedback ≤ 2000 Zeichen, Modified erfordert modifiedSuggestion),
+  `GET /ai-recommendations/_metrics?promptKey?` mit JS-Aggregation:
+  count, accepted/rejected/modified/pending, acceptanceRate,
+  averageConfidence, calibration (4 Buckets 0-25/25-50/50-75/75-100 mit
+  acceptance-rate je Bucket). Im Copilot `deal-summary` wird die Empfehlung
+  mit Konfidenz-Heuristik (green=0.85, yellow=0.6, red=0.4) protokolliert.
+- **Frontend**: `components/copilot/ai-recommendations-card.tsx` mit
+  ConfidencePill + Accept/Reject/Modify + Feedback-Textarea (in
+  `pages/copilot.tsx` vor Insights-Card). `components/admin/ai-recommendations-metrics-card.tsx`
+  mit Tabelle pro promptKey + Mini-Bars-Kalibrierung (in `pages/admin.tsx`
+  nach `ApprovalChainsCard`). DE/EN i18n.
+- **Tests** (`tests/ai-recommendations.test.ts`, 10 Tests grün):
+  clampConfidence-Edge-Cases, Persistenz, GET/PATCH-Validierung, Tenant-Scope
+  (Liste + Metrics + Cross-Tenant-PATCH-404), Metrics-Aggregation +
+  Kalibrierung, Status=modified erfordert modifiedSuggestion.
+
 ## External Dependencies
 
 - **PostgreSQL**: Primary database.

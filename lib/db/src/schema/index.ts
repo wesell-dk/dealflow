@@ -1086,3 +1086,114 @@ export const renewalOpportunitiesTable = pgTable("renewal_opportunities", {
   byNoticeDeadline: index("renewals_notice_deadline_idx").on(t.tenantId, t.noticeDeadline),
   byTenantBrand: index("renewals_tenant_brand_idx").on(t.tenantId, t.brandId),
 }));
+
+// Magic-Link-Zugang fuer externe Anwaelte/Berater. Pro Vertrag werden ein
+// oder mehrere Collaborator-Datensaetze angelegt, jeder mit einem eigenen
+// gehashten Token (Plaintext nur 1x bei Erstellung zurueck), Capabilities
+// (view / comment / sign_party) und Ablaufdatum. Revoke setzt revokedAt;
+// Token-Lookups muessen revokedAt + expiresAt pruefen.
+export const externalCollaboratorsTable = pgTable("external_collaborators", {
+  id: id(),
+  tenantId: text("tenant_id").notNull(),
+  contractId: text("contract_id").notNull(),
+  email: text("email").notNull(),
+  name: text("name"),
+  organization: text("organization"),
+  capabilities: jsonb("capabilities").$type<string[]>().notNull().default([]),
+  // sha256(plaintext) — Plaintext nie speichern, beim Erstellen 1x als
+  // tokenPlaintext zurueckgegeben.
+  tokenHash: text("token_hash").notNull(),
+  expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+  revokedAt: timestamp("revoked_at", { withTimezone: true }),
+  revokedBy: text("revoked_by"),
+  createdBy: text("created_by").notNull(),
+  createdAt: ts("created_at"),
+  lastUsedAt: timestamp("last_used_at", { withTimezone: true }),
+}, (t) => ({
+  byTenantContract: index("external_collab_tenant_contract_idx").on(t.tenantId, t.contractId),
+  byContractEmail: uniqueIndex("external_collab_contract_email_uq").on(t.contractId, t.email),
+  byTokenHash: uniqueIndex("external_collab_token_hash_uq").on(t.tokenHash),
+}));
+
+// Audit-Trail fuer jede Magic-Link-Aktion (view, comment, revoke, ...).
+// Wird sowohl auf der Tenant-Seite (Aktivitaeten-Card) als auch im
+// globalen audit-log gelesen.
+export const externalCollaboratorEventsTable = pgTable("external_collaborator_events", {
+  id: id(),
+  tenantId: text("tenant_id").notNull(),
+  collaboratorId: text("collaborator_id").notNull(),
+  contractId: text("contract_id").notNull(),
+  // 'created' | 'viewed' | 'commented' | 'revoked' | 'expired_attempt'
+  action: text("action").notNull(),
+  payload: jsonb("payload").$type<Record<string, unknown>>().notNull().default({}),
+  ipAddress: text("ip_address"),
+  userAgent: text("user_agent"),
+  createdAt: ts("created_at"),
+}, (t) => ({
+  byTenantContract: index("external_collab_events_tenant_contract_idx").on(t.tenantId, t.contractId),
+  byCollaborator: index("external_collab_events_collab_idx").on(t.collaboratorId),
+}));
+
+// Vertrags-Kommentare. Werden sowohl von internen Usern als auch von
+// externen Collaboratoren (mit comment-Capability) geschrieben.
+export const contractCommentsTable = pgTable("contract_comments", {
+  id: id(),
+  tenantId: text("tenant_id").notNull(),
+  contractId: text("contract_id").notNull(),
+  // 'user' fuer interne Tenant-User, 'external' fuer Magic-Link-Collaborator
+  authorType: text("author_type").notNull(),
+  authorUserId: text("author_user_id"),
+  externalCollaboratorId: text("external_collaborator_id"),
+  authorName: text("author_name").notNull(),
+  body: text("body").notNull(),
+  // Optional: Kommentar haengt an einer bestimmten Klausel-Zeile.
+  contractClauseId: text("contract_clause_id"),
+  createdAt: ts("created_at"),
+}, (t) => ({
+  byTenantContract: index("contract_comments_tenant_contract_idx").on(t.tenantId, t.contractId),
+  byContractCreated: index("contract_comments_contract_created_idx").on(t.contractId, t.createdAt),
+}));
+
+// =============================================================================
+// AI-Empfehlungen mit Vertrauensanzeige + Lerneffekt (Task #69)
+// =============================================================================
+// Persistiert jede AI-Empfehlung (z. B. Copilot-Suggestion, Klausel-Vorschlag)
+// inkl. Konfidenz-Score und User-Entscheidung. Wird als Lern-Signal fuer:
+//  - Acceptance-Rate pro promptKey (Admin-Dashboard "KI-Vertrauensgenauigkeit")
+//  - Konfidenz-Kalibrierung (Bucket 0-25/25-50/50-75/75-100 % vs. acceptance)
+//  - Audit + Replay (suggestionJson erlaubt nachtraegliches Anzeigen)
+// genutzt. Tenant-isoliert; entityType/entityId binden die Empfehlung an die
+// fachliche Entitaet (z. B. "deal" / "contract").
+export const aiRecommendationsTable = pgTable("ai_recommendations", {
+  id: id(),
+  tenantId: text("tenant_id").notNull(),
+  // Stabiler Prompt-Key aus PROMPT_REGISTRY (z. B. "copilot.next_step").
+  promptKey: text("prompt_key").notNull(),
+  // Optionales Binding an die Fach-Entitaet, fuer die der Vorschlag gedacht ist.
+  entityType: text("entity_type"),
+  entityId: text("entity_id"),
+  // Roh-Vorschlag des Modells (string/object/array, je nach Prompt).
+  suggestion: jsonb("suggestion").$type<unknown>().notNull(),
+  // Konfidenz 0.000 - 1.000. Modell-eigene oder kalibrierte Schaetzung.
+  confidence: numeric("confidence", { precision: 4, scale: 3 }).notNull(),
+  // pending | accepted | rejected | modified
+  status: text("status").notNull().default("pending"),
+  // Bei status=modified: tatsaechlich uebernommener (vom User editierter) Vorschlag.
+  modifiedSuggestion: jsonb("modified_suggestion").$type<unknown>(),
+  // Optionales Freitext-Feedback (max 2000 chars, app-seitig validiert).
+  feedbackText: text("feedback_text"),
+  // Wer hat entschieden (users.id) und wann.
+  decidedBy: text("decided_by"),
+  decidedAt: timestamp("decided_at", { withTimezone: true }),
+  // Verbindung zur konkreten LLM-Inferenz (ai_invocations.id) — optional,
+  // damit recordRecommendation auch ohne Audit-Eintrag nutzbar bleibt.
+  aiInvocationId: text("ai_invocation_id"),
+  createdAt: ts("created_at"),
+}, (t) => [
+  // Reporting/Listing pro Tenant + Prompt + Zeitfenster.
+  index("ai_recommendations_tenant_prompt_idx").on(t.tenantId, t.promptKey, t.createdAt),
+  // "Empfehlungen fuer diese Entity" (z. B. Copilot-Panel im Deal).
+  index("ai_recommendations_entity_idx").on(t.tenantId, t.entityType, t.entityId, t.createdAt),
+  // Status-Filter im Admin-Dashboard / Metrics.
+  index("ai_recommendations_tenant_status_idx").on(t.tenantId, t.status),
+]);

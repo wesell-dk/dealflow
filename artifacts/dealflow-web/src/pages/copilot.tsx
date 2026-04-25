@@ -15,6 +15,7 @@ import {
 } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { AiRecommendationsCard } from "@/components/copilot/ai-recommendations-card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -236,6 +237,8 @@ export default function Copilot() {
             )}
           </CardContent>
         </Card>
+
+        <AiRecommendationsCard />
 
         <Card>
           <CardHeader className="space-y-2">

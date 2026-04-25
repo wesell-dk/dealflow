@@ -13,7 +13,9 @@
     "test:approvals": "node --import tsx --test --test-reporter=spec tests/approval-chains.test.ts",
     "test:external": "node --import tsx --test --test-reporter=spec tests/external-contracts.test.ts",
     "test:clauses": "node --import tsx --test --test-reporter=spec tests/clause-variants.test.ts",
-    "test": "pnpm run test:isolation && pnpm run test:renewals && pnpm run test:approvals && pnpm run test:external && pnpm run test:clauses"
+    "test:external-collab": "node --import tsx --test --test-reporter=spec tests/external-collaborators.test.ts",
+    "test:airec": "node --import tsx --test --test-reporter=spec --test-timeout=60000 tests/ai-recommendations.test.ts",
+    "test": "pnpm run test:isolation && pnpm run test:renewals && pnpm run test:approvals && pnpm run test:external && pnpm run test:clauses && pnpm run test:external-collab && pnpm run test:airec"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.90.0",

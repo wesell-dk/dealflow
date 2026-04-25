@@ -15,13 +15,27 @@ const PUBLIC_PATHS = new Set<string>([
   "/healthz",
 ]);
 
+/**
+ * Path prefixes that bypass session auth. The handlers under these prefixes
+ * MUST do their own authorization (e.g. magic-link tokens for /external/).
+ *
+ * `requireAuth` is mounted on both `/api` and `/api/v1`. For a request to
+ * `/api/v1/external/<token>`, the `/api` mount's `req.path` is
+ * `/v1/external/<token>`, while the `/api/v1` mount's `req.path` is
+ * `/external/<token>`. Both prefixes must be allowed.
+ */
+const PUBLIC_PREFIXES = ["/external/", "/v1/external/"];
+
 export async function requireAuth(
   req: AuthedRequest,
   res: Response,
   next: NextFunction,
 ): Promise<void> {
   // req.path inside /api router does not include the /api prefix.
-  if (PUBLIC_PATHS.has(req.path)) {
+  if (
+    PUBLIC_PATHS.has(req.path) ||
+    PUBLIC_PREFIXES.some((p) => req.path.startsWith(p))
+  ) {
     next();
     return;
   }

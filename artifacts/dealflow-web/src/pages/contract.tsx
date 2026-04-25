@@ -16,6 +16,10 @@ import {
   useUpdateObligation,
   useDeriveContractObligations,
   useGetContractClauseCompatibility,
+  useListExternalCollaborators,
+  useCreateExternalCollaborator,
+  useRevokeExternalCollaborator,
+  getListExternalCollaboratorsQueryKey,
   getGetContractQueryKey,
   getListContractClausesQueryKey,
   getListContractAmendmentsQueryKey,
@@ -26,6 +30,7 @@ import {
   type ClauseFamily,
   type ClauseDeviation,
   type Obligation,
+  type ExternalCollaborator,
 } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -351,6 +356,8 @@ export default function Contract() {
           ))}
         </div>
       </div>
+
+      <ExternalCollaboratorsCard contractId={id} />
 
       <Dialog open={!!diff} onOpenChange={(o) => !o && setDiff(null)}>
         <DialogContent className="max-w-4xl">
@@ -1024,5 +1031,277 @@ function CompatBadge({ compat }: { compat: CompatEntry }) {
       {isConflict ? "✕ " : "⚠ "}
       {isConflict ? t("pages.clauses.compatBadgeConflict") : t("pages.clauses.compatBadgeWarning")}
     </Badge>
+  );
+}
+
+// =========================================================================
+// External Collaborators (Magic-Link) Card — Task #70
+// =========================================================================
+
+function ExternalCollaboratorsCard({ contractId }: { contractId: string }) {
+  const { t } = useTranslation();
+  const { toast } = useToast();
+  const qc = useQueryClient();
+  const { data: collabs, isLoading } = useListExternalCollaborators(contractId);
+  const create = useCreateExternalCollaborator();
+  const revoke = useRevokeExternalCollaborator();
+
+  const [open, setOpen] = useState(false);
+  const [email, setEmail] = useState("");
+  const [name, setName] = useState("");
+  const [organization, setOrganization] = useState("");
+  const [capView] = useState(true); // implicit
+  const [capComment, setCapComment] = useState(true);
+  const [capSign, setCapSign] = useState(false);
+  const [expiresInDays, setExpiresInDays] = useState(14);
+  const [createdToken, setCreatedToken] = useState<{ url: string; email: string } | null>(null);
+
+  function reset() {
+    setEmail(""); setName(""); setOrganization("");
+    setCapComment(true); setCapSign(false); setExpiresInDays(14);
+  }
+
+  async function handleSubmit() {
+    const caps: ("view" | "comment" | "sign_party")[] = ["view"];
+    if (capComment) caps.push("comment");
+    if (capSign) caps.push("sign_party");
+    try {
+      const r = await create.mutateAsync({
+        id: contractId,
+        data: {
+          email: email.trim().toLowerCase(),
+          name: name.trim() || null,
+          organization: organization.trim() || null,
+          capabilities: caps as unknown as ExternalCollaborator["capabilities"],
+          expiresInDays,
+        },
+      });
+      // Build absolute magic-link URL relative to current origin + BASE_URL.
+      const base = import.meta.env.BASE_URL.replace(/\/$/, "");
+      const url = `${window.location.origin}${base}/external/${r.tokenPlaintext ?? ""}`;
+      setCreatedToken({ url, email: r.email });
+      setOpen(false);
+      reset();
+      qc.invalidateQueries({ queryKey: getListExternalCollaboratorsQueryKey(contractId) });
+      toast({ title: t("pages.contracts.extCollabCreated") });
+    } catch (e) {
+      toast({ title: String(e), variant: "destructive" });
+    }
+  }
+
+  async function handleRevoke(id: string, email: string) {
+    try {
+      await revoke.mutateAsync({ id });
+      qc.invalidateQueries({ queryKey: getListExternalCollaboratorsQueryKey(contractId) });
+      toast({ title: t("pages.contracts.extCollabRevoked"), description: email });
+    } catch (e) {
+      toast({ title: String(e), variant: "destructive" });
+    }
+  }
+
+  function statusBadge(status: ExternalCollaborator["status"]) {
+    const cls =
+      status === "active" ? "bg-emerald-500/10 text-emerald-600 border-emerald-500/30"
+      : status === "expired" ? "bg-amber-500/10 text-amber-600 border-amber-500/30"
+      : "bg-muted text-muted-foreground";
+    const label =
+      status === "active" ? t("pages.contracts.extCollabStatusActive")
+      : status === "expired" ? t("pages.contracts.extCollabStatusExpired")
+      : t("pages.contracts.extCollabStatusRevoked");
+    return <Badge variant="outline" className={`${cls} text-xs`}>{label}</Badge>;
+  }
+
+  return (
+    <div className="space-y-4 pt-4">
+      <div className="flex items-center justify-between pb-2 border-b">
+        <div className="flex items-center gap-2">
+          <FileStack className="h-5 w-5 text-muted-foreground" />
+          <h2 className="text-xl font-semibold">{t("pages.contracts.extCollab")}</h2>
+        </div>
+        <Button size="sm" onClick={() => setOpen(true)} data-testid="ext-collab-add-btn">
+          <Plus className="h-4 w-4 mr-2" /> {t("pages.contracts.extCollabAdd")}
+        </Button>
+      </div>
+      <p className="text-sm text-muted-foreground">{t("pages.contracts.extCollabHint")}</p>
+
+      {isLoading && <Skeleton className="h-24 w-full" />}
+      {!isLoading && (collabs?.length ?? 0) === 0 && (
+        <p className="text-sm text-muted-foreground italic">{t("pages.contracts.extCollabNone")}</p>
+      )}
+      {!isLoading && (collabs?.length ?? 0) > 0 && (
+        <div className="space-y-2">
+          {collabs!.map((c) => (
+            <div
+              key={c.id}
+              className="flex items-center justify-between gap-4 border rounded-md p-3 bg-card"
+              data-testid={`ext-collab-row-${c.id}`}
+            >
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="font-medium truncate">{c.email}</span>
+                  {statusBadge(c.status)}
+                  {(c.capabilities ?? []).map((cap) => (
+                    <Badge key={cap} variant="outline" className="text-[10px] uppercase tracking-wide">
+                      {cap === "view"
+                        ? t("pages.contracts.extCollabCapView")
+                        : cap === "comment"
+                        ? t("pages.contracts.extCollabCapComment")
+                        : t("pages.contracts.extCollabCapSign")}
+                    </Badge>
+                  ))}
+                </div>
+                <div className="text-xs text-muted-foreground mt-1 flex flex-wrap gap-3">
+                  {c.organization && <span>{c.organization}</span>}
+                  <span>
+                    {t("pages.contracts.extCollabExpires")}: {new Date(c.expiresAt).toLocaleDateString()}
+                  </span>
+                  <span>
+                    {t("pages.contracts.extCollabLastUsed")}:{" "}
+                    {c.lastUsedAt
+                      ? new Date(c.lastUsedAt).toLocaleString()
+                      : t("pages.contracts.extCollabNeverUsed")}
+                  </span>
+                </div>
+              </div>
+              {c.status === "active" && (
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  className="text-destructive hover:text-destructive"
+                  onClick={() => handleRevoke(c.id, c.email)}
+                  data-testid={`ext-collab-revoke-${c.id}`}
+                >
+                  {t("pages.contracts.extCollabRevoke")}
+                </Button>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Add Dialog */}
+      <Dialog open={open} onOpenChange={setOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>{t("pages.contracts.extCollabAdd")}</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div className="space-y-1">
+              <label className="text-sm font-medium">{t("pages.contracts.extCollabEmail")} *</label>
+              <input
+                type="email"
+                className="w-full border rounded px-2 py-1 text-sm bg-background"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                data-testid="ext-collab-email"
+                autoFocus
+              />
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1">
+                <label className="text-sm font-medium">{t("pages.contracts.extCollabName")}</label>
+                <input
+                  type="text"
+                  className="w-full border rounded px-2 py-1 text-sm bg-background"
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                />
+              </div>
+              <div className="space-y-1">
+                <label className="text-sm font-medium">{t("pages.contracts.extCollabExpiresIn")}</label>
+                <input
+                  type="number"
+                  min={1}
+                  max={90}
+                  className="w-full border rounded px-2 py-1 text-sm bg-background"
+                  value={expiresInDays}
+                  onChange={(e) => setExpiresInDays(Math.max(1, Math.min(90, Number(e.target.value) || 14)))}
+                />
+              </div>
+            </div>
+            <div className="space-y-1">
+              <label className="text-sm font-medium">{t("pages.contracts.extCollabOrg")}</label>
+              <input
+                type="text"
+                className="w-full border rounded px-2 py-1 text-sm bg-background"
+                value={organization}
+                onChange={(e) => setOrganization(e.target.value)}
+              />
+            </div>
+            <div className="space-y-2">
+              <label className="text-sm font-medium">{t("pages.contracts.extCollabCaps")}</label>
+              <div className="flex flex-col gap-1">
+                <label className="flex items-center gap-2 text-sm text-muted-foreground">
+                  <input type="checkbox" checked={capView} disabled />
+                  {t("pages.contracts.extCollabCapView")} (implizit)
+                </label>
+                <label className="flex items-center gap-2 text-sm">
+                  <input type="checkbox" checked={capComment} onChange={(e) => setCapComment(e.target.checked)} />
+                  {t("pages.contracts.extCollabCapComment")}
+                </label>
+                <label className="flex items-center gap-2 text-sm">
+                  <input type="checkbox" checked={capSign} onChange={(e) => setCapSign(e.target.checked)} />
+                  {t("pages.contracts.extCollabCapSign")}
+                </label>
+              </div>
+            </div>
+            <div className="flex justify-end gap-2 pt-2">
+              <Button variant="outline" size="sm" onClick={() => setOpen(false)}>
+                {t("common.cancel")}
+              </Button>
+              <Button
+                size="sm"
+                disabled={!email.includes("@") || create.isPending}
+                onClick={handleSubmit}
+                data-testid="ext-collab-submit"
+              >
+                {t("pages.contracts.extCollabAdd")}
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* One-time-token reveal Dialog */}
+      <Dialog open={!!createdToken} onOpenChange={(o) => !o && setCreatedToken(null)}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <ShieldAlert className="h-5 w-5 text-amber-600" />
+              {t("pages.contracts.extCollabTokenTitle")}
+            </DialogTitle>
+            <DialogDescription>
+              {createdToken?.email}
+            </DialogDescription>
+          </DialogHeader>
+          {createdToken && (
+            <div className="space-y-3">
+              <p className="text-sm text-amber-700 bg-amber-500/10 border border-amber-500/30 rounded p-3">
+                {t("pages.contracts.extCollabTokenWarning")}
+              </p>
+              <pre
+                className="text-xs bg-muted p-3 rounded border overflow-x-auto break-all whitespace-pre-wrap"
+                data-testid="ext-collab-token-url"
+              >
+                {createdToken.url}
+              </pre>
+              <Button
+                size="sm"
+                onClick={async () => {
+                  try {
+                    await navigator.clipboard.writeText(createdToken.url);
+                    toast({ title: t("pages.contracts.extCollabTokenCopied") });
+                  } catch {
+                    /* noop */
+                  }
+                }}
+              >
+                {t("pages.contracts.extCollabTokenCopy")}
+              </Button>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+    </div>
   );
 }

@@ -97,7 +97,12 @@ import {
   renewalOpportunitiesTable,
   brandClauseVariantOverridesTable,
   clauseVariantCompatibilityTable,
+  externalCollaboratorsTable,
+  aiRecommendationsTable,
+  externalCollaboratorEventsTable,
+  contractCommentsTable,
 } from '@workspace/db';
+import { createHash } from 'node:crypto';
 import {
   generatePriceRejectionForReaction,
   generateHighDiscountForApproval,
@@ -121,6 +126,7 @@ import {
 import { emitEvent, WEBHOOK_EVENTS, assertSafeWebhookUrl, assertSafeResolvedUrl } from '../lib/webhooks';
 import { parseAsOf, resolveSnapshot, isInvalidAsOf } from '../lib/asOf';
 import { runStructured, isAIConfigured, AIOrchestrationError } from '../lib/ai';
+import { recordRecommendation, clampConfidence } from '../lib/ai/recommendations.js';
 import type { HelpAssistantInput } from '../lib/ai/prompts/dealflow';
 import { runAgent, type AgentTrace } from '../lib/ai/agent.js';
 import { HELP_BOT_TOOLS_AS_AGENT_TOOLS } from '../lib/ai/tools/dealflowAgent.js';
@@ -5872,11 +5878,26 @@ router.post('/copilot/deal-summary/:dealId', async (req, res) => {
       actionType: result.output.recommendedAction === 'none' ? null : result.output.recommendedAction,
       actionPayload: { dealId },
     });
+    // Konfidenz-Heuristik: gruene Health -> 0.85, gelb -> 0.6, rot -> 0.4.
+    // Echte Modell-Logprobs sind in der aktuellen AI-Layer noch nicht verfuegbar.
+    const conf = result.output.health === 'green' ? 0.85
+      : result.output.health === 'yellow' ? 0.6 : 0.4;
+    const recommendationId = await recordRecommendation({
+      tenantId: scope.tenantId,
+      promptKey: 'deal.summary',
+      suggestion: result.output,
+      confidence: conf,
+      entityType: 'deal',
+      entityId: dealId,
+      aiInvocationId: result.invocationId,
+    });
     res.json({
       ok: true,
       result: result.output,
       invocationId: result.invocationId,
       insightId,
+      recommendationId,
+      confidence: conf,
       model: result.model,
       latencyMs: result.latencyMs,
       status: 'open',
@@ -9079,6 +9100,564 @@ router.get('/contracts/:id/clauses/_compatibility', async (req, res) => {
   });
 
   res.json({ contractId: c.id, items });
+});
+
+// =========================================================================
+// Magic-Link-Zugang fuer externe Anwaelte / Berater (Task #70)
+// =========================================================================
+
+const COLLAB_CAPABILITIES = ['view', 'comment', 'sign_party'] as const;
+type CollabCapability = typeof COLLAB_CAPABILITIES[number];
+
+function hashToken(plain: string): string {
+  return createHash('sha256').update(plain).digest('hex');
+}
+
+function generateCollabToken(): string {
+  // 32 zufaellige Bytes -> 64 hex chars. Kombiniert mit Hash-Lookup
+  // (uniqueIndex auf token_hash) ist das Brute-Force-resistent.
+  return randomBytes(32).toString('hex');
+}
+
+function isEmail(s: unknown): s is string {
+  return typeof s === 'string' && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(s);
+}
+
+function normaliseCapabilities(input: unknown): CollabCapability[] | null {
+  if (!Array.isArray(input)) return null;
+  const set = new Set<CollabCapability>();
+  for (const v of input) {
+    if (typeof v !== 'string') return null;
+    if (!(COLLAB_CAPABILITIES as readonly string[]).includes(v)) return null;
+    set.add(v as CollabCapability);
+  }
+  if (set.size === 0) return null;
+  // 'view' is implicit — always include.
+  set.add('view');
+  return Array.from(set);
+}
+
+function mapCollab(
+  row: typeof externalCollaboratorsTable.$inferSelect,
+  opts: { tokenPlaintext?: string } = {},
+) {
+  const now = Date.now();
+  const expired = row.expiresAt.getTime() <= now;
+  const revoked = row.revokedAt != null;
+  const status = revoked ? 'revoked' : (expired ? 'expired' : 'active');
+  return {
+    id: row.id,
+    contractId: row.contractId,
+    email: row.email,
+    name: row.name ?? null,
+    organization: row.organization ?? null,
+    capabilities: row.capabilities,
+    status,
+    expiresAt: row.expiresAt.toISOString(),
+    revokedAt: row.revokedAt ? row.revokedAt.toISOString() : null,
+    revokedBy: row.revokedBy ?? null,
+    createdBy: row.createdBy,
+    createdAt: row.createdAt.toISOString(),
+    lastUsedAt: row.lastUsedAt ? row.lastUsedAt.toISOString() : null,
+    // Plaintext only ever returned at create-time.
+    tokenPlaintext: opts.tokenPlaintext ?? null,
+  };
+}
+
+/**
+ * Lade Vertrag, wenn der aktuelle Request-User berechtigt ist (Tenant + Scope).
+ * Liefert null bei not-found ODER cross-tenant ODER ausserhalb des aktiven
+ * Scope-Filters. Cross-tenant leakt absichtlich als 404 statt 403.
+ */
+async function loadContractForCollab(
+  req: Request,
+  contractId: string,
+): Promise<typeof contractsTable.$inferSelect | null> {
+  const [c] = await db.select().from(contractsTable)
+    .where(eq(contractsTable.id, contractId));
+  if (!c) return null;
+  const dealAllowed = await allowedDealIds(req);
+  if (!dealAllowed.has(c.dealId)) return null;
+  return c;
+}
+
+async function recordCollabEvent(
+  collab: typeof externalCollaboratorsTable.$inferSelect,
+  action: string,
+  payload: Record<string, unknown>,
+  req?: Request,
+): Promise<void> {
+  await db.insert(externalCollaboratorEventsTable).values({
+    id: `ece_${randomUUID().slice(0, 12)}`,
+    tenantId: collab.tenantId,
+    collaboratorId: collab.id,
+    contractId: collab.contractId,
+    action,
+    payload,
+    ipAddress: req?.ip ?? null,
+    userAgent: typeof req?.headers?.['user-agent'] === 'string'
+      ? (req.headers['user-agent'] as string).slice(0, 256)
+      : null,
+  });
+}
+
+async function loadCollabByToken(
+  plaintext: string,
+): Promise<typeof externalCollaboratorsTable.$inferSelect | null> {
+  if (!plaintext || plaintext.length < 16 || plaintext.length > 256) return null;
+  const hash = hashToken(plaintext);
+  const [row] = await db.select().from(externalCollaboratorsTable)
+    .where(eq(externalCollaboratorsTable.tokenHash, hash));
+  return row ?? null;
+}
+
+// --- GET /contracts/:id/external-collaborators ---------------------------
+router.get('/contracts/:id/external-collaborators', async (req, res) => {
+  const scope = getScope(req);
+  const c = await loadContractForCollab(req, req.params.id);
+  if (!c) { res.status(404).json({ error: 'contract not found' }); return; }
+  const rows = await db.select().from(externalCollaboratorsTable)
+    .where(and(
+      eq(externalCollaboratorsTable.tenantId, scope.tenantId),
+      eq(externalCollaboratorsTable.contractId, c.id),
+    ))
+    .orderBy(desc(externalCollaboratorsTable.createdAt));
+  res.json(rows.map((r) => mapCollab(r)));
+});
+
+// --- POST /contracts/:id/external-collaborators ---------------------------
+router.post('/contracts/:id/external-collaborators', async (req, res) => {
+  const scope = getScope(req);
+  const c = await loadContractForCollab(req, req.params.id);
+  if (!c) { res.status(404).json({ error: 'contract not found' }); return; }
+  const body = (req.body ?? {}) as {
+    email?: unknown;
+    name?: unknown;
+    organization?: unknown;
+    capabilities?: unknown;
+    expiresInDays?: unknown;
+  };
+  if (!isEmail(body.email)) {
+    res.status(400).json({ error: 'email must be a valid e-mail address' }); return;
+  }
+  const caps = normaliseCapabilities(body.capabilities);
+  if (!caps) {
+    res.status(400).json({
+      error: `capabilities must be a non-empty array of: ${COLLAB_CAPABILITIES.join(', ')}`,
+    }); return;
+  }
+  const days = Number(body.expiresInDays ?? 14);
+  if (!Number.isFinite(days) || !Number.isInteger(days) || days < 1 || days > 90) {
+    res.status(400).json({ error: 'expiresInDays must be an integer between 1 and 90' }); return;
+  }
+  const email = String(body.email).trim().toLowerCase();
+  const [existing] = await db.select().from(externalCollaboratorsTable)
+    .where(and(
+      eq(externalCollaboratorsTable.contractId, c.id),
+      eq(externalCollaboratorsTable.email, email),
+    ));
+  if (existing && !existing.revokedAt) {
+    res.status(409).json({ error: 'collaborator with this email already active for this contract' });
+    return;
+  }
+  const tokenPlaintext = generateCollabToken();
+  const tokenHash = hashToken(tokenPlaintext);
+  const now = new Date();
+  const expiresAt = new Date(now.getTime() + days * 24 * 60 * 60 * 1000);
+  const id = `ec_${randomUUID().slice(0, 12)}`;
+  await db.insert(externalCollaboratorsTable).values({
+    id,
+    tenantId: scope.tenantId,
+    contractId: c.id,
+    email,
+    name: typeof body.name === 'string' && body.name.trim() ? body.name.trim().slice(0, 200) : null,
+    organization: typeof body.organization === 'string' && body.organization.trim() ? body.organization.trim().slice(0, 200) : null,
+    capabilities: caps,
+    tokenHash,
+    expiresAt,
+    createdBy: scope.user.id,
+  });
+  const [row] = await db.select().from(externalCollaboratorsTable)
+    .where(eq(externalCollaboratorsTable.id, id));
+  await recordCollabEvent(row!, 'created', { email, capabilities: caps, expiresAt: expiresAt.toISOString() }, req);
+  await writeAuditFromReq(req, {
+    entityType: 'contract', entityId: c.id, action: 'external_collaborator_created',
+    summary: `Magic-Link erstellt für ${email}`,
+    after: { collaboratorId: id, capabilities: caps, expiresAt: expiresAt.toISOString() },
+  });
+  res.status(201).json(mapCollab(row!, { tokenPlaintext }));
+});
+
+// --- DELETE /external-collaborators/:id (revoke) -------------------------
+router.delete('/external-collaborators/:id', async (req, res) => {
+  const scope = getScope(req);
+  const [collab] = await db.select().from(externalCollaboratorsTable)
+    .where(and(
+      eq(externalCollaboratorsTable.id, req.params.id),
+      eq(externalCollaboratorsTable.tenantId, scope.tenantId),
+    ));
+  if (!collab) { res.status(404).json({ error: 'collaborator not found' }); return; }
+  const c = await loadContractForCollab(req, collab.contractId);
+  if (!c) { res.status(404).json({ error: 'contract not found' }); return; }
+  if (collab.revokedAt) {
+    res.json(mapCollab(collab)); return;
+  }
+  const now = new Date();
+  await db.update(externalCollaboratorsTable)
+    .set({ revokedAt: now, revokedBy: scope.user.id })
+    .where(eq(externalCollaboratorsTable.id, collab.id));
+  const [row] = await db.select().from(externalCollaboratorsTable)
+    .where(eq(externalCollaboratorsTable.id, collab.id));
+  await recordCollabEvent(row!, 'revoked', { revokedBy: scope.user.id }, req);
+  await writeAuditFromReq(req, {
+    entityType: 'contract', entityId: c.id, action: 'external_collaborator_revoked',
+    summary: `Magic-Link widerrufen für ${collab.email}`,
+    after: { collaboratorId: collab.id },
+  });
+  res.json(mapCollab(row!));
+});
+
+// --- GET /contracts/:id/comments -----------------------------------------
+router.get('/contracts/:id/comments', async (req, res) => {
+  const c = await loadContractForCollab(req, req.params.id);
+  if (!c) { res.status(404).json({ error: 'contract not found' }); return; }
+  const rows = await db.select().from(contractCommentsTable)
+    .where(eq(contractCommentsTable.contractId, c.id))
+    .orderBy(asc(contractCommentsTable.createdAt));
+  res.json(rows.map((r) => ({
+    id: r.id,
+    contractId: r.contractId,
+    contractClauseId: r.contractClauseId ?? null,
+    authorType: r.authorType,
+    authorName: r.authorName,
+    body: r.body,
+    createdAt: r.createdAt.toISOString(),
+  })));
+});
+
+// --- POST /contracts/:id/comments (interner User) ------------------------
+router.post('/contracts/:id/comments', async (req, res) => {
+  const scope = getScope(req);
+  const c = await loadContractForCollab(req, req.params.id);
+  if (!c) { res.status(404).json({ error: 'contract not found' }); return; }
+  const body = (req.body ?? {}) as { body?: unknown; contractClauseId?: unknown };
+  if (typeof body.body !== 'string' || body.body.trim().length === 0 || body.body.length > 4000) {
+    res.status(400).json({ error: 'body must be a non-empty string up to 4000 chars' }); return;
+  }
+  const id = `cmt_${randomUUID().slice(0, 12)}`;
+  await db.insert(contractCommentsTable).values({
+    id,
+    tenantId: scope.tenantId,
+    contractId: c.id,
+    authorType: 'user',
+    authorUserId: scope.user.id,
+    authorName: scope.user.name,
+    body: body.body.trim(),
+    contractClauseId: typeof body.contractClauseId === 'string' ? body.contractClauseId : null,
+  });
+  const [row] = await db.select().from(contractCommentsTable).where(eq(contractCommentsTable.id, id));
+  res.status(201).json({
+    id: row!.id,
+    contractId: row!.contractId,
+    contractClauseId: row!.contractClauseId ?? null,
+    authorType: row!.authorType,
+    authorName: row!.authorName,
+    body: row!.body,
+    createdAt: row!.createdAt.toISOString(),
+  });
+});
+
+// =========================================================================
+// PUBLIC (No-Auth) ROUTES — bypassed via PUBLIC_PREFIXES in auth middleware.
+// All authorization happens via token-hash lookup + revoked/expired checks.
+// =========================================================================
+
+// --- GET /external/:token (resolve magic-link) ---------------------------
+router.get('/external/:token', async (req, res) => {
+  const collab = await loadCollabByToken(req.params.token);
+  if (!collab) { res.status(404).json({ error: 'invalid token' }); return; }
+  const now = Date.now();
+  if (collab.revokedAt) {
+    await recordCollabEvent(collab, 'expired_attempt', { reason: 'revoked' }, req);
+    res.status(401).json({ error: 'token revoked' }); return;
+  }
+  if (collab.expiresAt.getTime() <= now) {
+    await recordCollabEvent(collab, 'expired_attempt', { reason: 'expired' }, req);
+    res.status(401).json({ error: 'token expired' }); return;
+  }
+  const [c] = await db.select().from(contractsTable)
+    .where(eq(contractsTable.id, collab.contractId));
+  if (!c) { res.status(404).json({ error: 'contract not found' }); return; }
+  // Defense-in-depth: Token bindet contractId, aber wenn ein Tenant-Drift
+  // entstuende (z. B. durch Datenmigration), wuerden wir cross-tenant Daten
+  // leaken. deals.companyId -> companies.tenantId scopen.
+  const tenantRow = await db
+    .select({ tenantId: companiesTable.tenantId })
+    .from(dealsTable)
+    .innerJoin(companiesTable, eq(dealsTable.companyId, companiesTable.id))
+    .where(eq(dealsTable.id, c.dealId));
+  if (!tenantRow[0] || tenantRow[0].tenantId !== collab.tenantId) {
+    res.status(404).json({ error: 'contract not found' }); return;
+  }
+  // Brand fuer Branding (Logo/Tone). Optional — Vertraege ohne Brand sind ok.
+  let brandSnapshot: { id: string; name: string; primaryColor: string | null; logoUrl: string | null } | null = null;
+  if (c.brandId) {
+    const [b] = await db.select().from(brandsTable).where(eq(brandsTable.id, c.brandId));
+    if (b) {
+      brandSnapshot = { id: b.id, name: b.name, primaryColor: b.primaryColor ?? null, logoUrl: b.logoUrl ?? null };
+    }
+  }
+  const clauses = await db.select().from(contractClausesTable)
+    .where(eq(contractClausesTable.contractId, c.id))
+    .orderBy(asc(contractClausesTable.family));
+  const comments = await db.select().from(contractCommentsTable)
+    .where(eq(contractCommentsTable.contractId, c.id))
+    .orderBy(asc(contractCommentsTable.createdAt));
+  await db.update(externalCollaboratorsTable).set({ lastUsedAt: new Date() })
+    .where(eq(externalCollaboratorsTable.id, collab.id));
+  await recordCollabEvent(collab, 'viewed', {}, req);
+  res.json({
+    collaborator: {
+      id: collab.id,
+      email: collab.email,
+      name: collab.name ?? null,
+      organization: collab.organization ?? null,
+      capabilities: collab.capabilities,
+      expiresAt: collab.expiresAt.toISOString(),
+    },
+    contract: {
+      id: c.id,
+      title: c.title,
+      status: c.status,
+      template: c.template,
+      currency: c.currency,
+      effectiveFrom: c.effectiveFrom,
+      effectiveTo: c.effectiveTo,
+      governingLaw: c.governingLaw,
+      jurisdiction: c.jurisdiction,
+    },
+    brand: brandSnapshot,
+    clauses: clauses.map((cl) => ({
+      id: cl.id,
+      family: cl.family,
+      variant: cl.variant,
+      severity: cl.severity,
+      summary: cl.summary,
+    })),
+    comments: comments.map((cm) => ({
+      id: cm.id,
+      authorType: cm.authorType,
+      authorName: cm.authorName,
+      body: cm.body,
+      contractClauseId: cm.contractClauseId ?? null,
+      createdAt: cm.createdAt.toISOString(),
+    })),
+  });
+});
+
+// --- POST /external/:token/comments (externer Kommentar) -----------------
+router.post('/external/:token/comments', async (req, res) => {
+  const collab = await loadCollabByToken(req.params.token);
+  if (!collab) { res.status(404).json({ error: 'invalid token' }); return; }
+  const now = Date.now();
+  if (collab.revokedAt) { res.status(401).json({ error: 'token revoked' }); return; }
+  if (collab.expiresAt.getTime() <= now) { res.status(401).json({ error: 'token expired' }); return; }
+  if (!collab.capabilities.includes('comment')) {
+    res.status(403).json({ error: 'comment capability missing' }); return;
+  }
+  const body = (req.body ?? {}) as { body?: unknown; contractClauseId?: unknown };
+  if (typeof body.body !== 'string' || body.body.trim().length === 0 || body.body.length > 4000) {
+    res.status(400).json({ error: 'body must be a non-empty string up to 4000 chars' }); return;
+  }
+  const id = `cmt_${randomUUID().slice(0, 12)}`;
+  const authorName = collab.name?.trim() || collab.email;
+  await db.insert(contractCommentsTable).values({
+    id,
+    tenantId: collab.tenantId,
+    contractId: collab.contractId,
+    authorType: 'external',
+    externalCollaboratorId: collab.id,
+    authorName,
+    body: body.body.trim(),
+    contractClauseId: typeof body.contractClauseId === 'string' ? body.contractClauseId : null,
+  });
+  await db.update(externalCollaboratorsTable).set({ lastUsedAt: new Date() })
+    .where(eq(externalCollaboratorsTable.id, collab.id));
+  await recordCollabEvent(collab, 'commented', { commentId: id, length: body.body.length }, req);
+  const [row] = await db.select().from(contractCommentsTable).where(eq(contractCommentsTable.id, id));
+  res.status(201).json({
+    id: row!.id,
+    contractId: row!.contractId,
+    contractClauseId: row!.contractClauseId ?? null,
+    authorType: row!.authorType,
+    authorName: row!.authorName,
+    body: row!.body,
+    createdAt: row!.createdAt.toISOString(),
+  });
+});
+
+// =============================================================================
+// AI-Empfehlungen: Liste, Patch, Metrics (Task #69)
+// =============================================================================
+
+const AI_REC_STATUS = new Set(['pending', 'accepted', 'rejected', 'modified']);
+
+function mapRecommendation(r: typeof aiRecommendationsTable.$inferSelect) {
+  return {
+    id: r.id,
+    promptKey: r.promptKey,
+    entityType: r.entityType,
+    entityId: r.entityId,
+    suggestion: r.suggestion,
+    confidence: Number(r.confidence),
+    status: r.status,
+    modifiedSuggestion: r.modifiedSuggestion ?? null,
+    feedbackText: r.feedbackText ?? null,
+    decidedBy: r.decidedBy ?? null,
+    decidedAt: r.decidedAt ? r.decidedAt.toISOString() : null,
+    aiInvocationId: r.aiInvocationId ?? null,
+    createdAt: r.createdAt.toISOString(),
+  };
+}
+
+router.get('/ai-recommendations', async (req, res) => {
+  const scope = getScope(req);
+  const entityType = typeof req.query['entityType'] === 'string' ? req.query['entityType'] : undefined;
+  const entityId = typeof req.query['entityId'] === 'string' ? req.query['entityId'] : undefined;
+  const status = typeof req.query['status'] === 'string' ? req.query['status'] : undefined;
+  const promptKey = typeof req.query['promptKey'] === 'string' ? req.query['promptKey'] : undefined;
+  if (status && !AI_REC_STATUS.has(status)) {
+    res.status(400).json({ error: `status must be one of: ${[...AI_REC_STATUS].join(', ')}` });
+    return;
+  }
+  const conds = [eq(aiRecommendationsTable.tenantId, scope.tenantId)];
+  if (entityType) conds.push(eq(aiRecommendationsTable.entityType, entityType));
+  if (entityId) conds.push(eq(aiRecommendationsTable.entityId, entityId));
+  if (status) conds.push(eq(aiRecommendationsTable.status, status));
+  if (promptKey) conds.push(eq(aiRecommendationsTable.promptKey, promptKey));
+  const rows = await db.select().from(aiRecommendationsTable)
+    .where(and(...conds))
+    .orderBy(desc(aiRecommendationsTable.createdAt))
+    .limit(200);
+  res.json(rows.map(mapRecommendation));
+});
+
+router.patch('/ai-recommendations/:id', async (req, res) => {
+  const scope = getScope(req);
+  const [rec] = await db.select().from(aiRecommendationsTable)
+    .where(and(
+      eq(aiRecommendationsTable.id, req.params.id),
+      eq(aiRecommendationsTable.tenantId, scope.tenantId),
+    ));
+  if (!rec) { res.status(404).json({ error: 'recommendation not found' }); return; }
+  const body = (req.body ?? {}) as {
+    status?: unknown;
+    modifiedSuggestion?: unknown;
+    feedback?: unknown;
+  };
+  if (typeof body.status !== 'string' || !AI_REC_STATUS.has(body.status)) {
+    res.status(400).json({ error: `status must be one of: ${[...AI_REC_STATUS].join(', ')}` });
+    return;
+  }
+  const newStatus = body.status as 'pending' | 'accepted' | 'rejected' | 'modified';
+  if (newStatus === 'modified' && body.modifiedSuggestion === undefined) {
+    res.status(400).json({ error: 'status=modified requires modifiedSuggestion' });
+    return;
+  }
+  const feedback = typeof body.feedback === 'string' ? body.feedback.trim() : null;
+  if (feedback && feedback.length > 2000) {
+    res.status(400).json({ error: 'feedback must be at most 2000 chars' });
+    return;
+  }
+  await db.update(aiRecommendationsTable)
+    .set({
+      status: newStatus,
+      modifiedSuggestion: newStatus === 'modified' ? (body.modifiedSuggestion as unknown) : null,
+      feedbackText: feedback || null,
+      decidedBy: scope.user.id,
+      decidedAt: new Date(),
+    })
+    .where(eq(aiRecommendationsTable.id, rec.id));
+  const [updated] = await db.select().from(aiRecommendationsTable)
+    .where(eq(aiRecommendationsTable.id, rec.id));
+  await writeAuditFromReq(req, {
+    entityType: 'ai_recommendation', entityId: rec.id,
+    action: `ai_recommendation_${newStatus}`,
+    summary: `AI-Empfehlung ${newStatus} (${rec.promptKey})`,
+    after: { status: newStatus, hasFeedback: Boolean(feedback) },
+  });
+  res.json(mapRecommendation(updated!));
+});
+
+/**
+ * Metrics fuer das Admin-Dashboard "KI-Vertrauensgenauigkeit".
+ * Liefert pro promptKey: count, acceptanceRate (accepted+modified/decided),
+ * average confidence, sowie 4 Konfidenz-Buckets (0-25/25-50/50-75/75-100 %)
+ * mit jeweiliger acceptance-rate. Ermoeglicht Kalibrierungs-Check
+ * (Konfidenz korrekt = hohe Konfidenz korreliert mit hoher Acceptance).
+ */
+router.get('/ai-recommendations/_metrics', async (req, res) => {
+  const scope = getScope(req);
+  const promptKey = typeof req.query['promptKey'] === 'string' ? req.query['promptKey'] : undefined;
+  const conds = [eq(aiRecommendationsTable.tenantId, scope.tenantId)];
+  if (promptKey) conds.push(eq(aiRecommendationsTable.promptKey, promptKey));
+  const rows = await db.select().from(aiRecommendationsTable).where(and(...conds));
+  // Aggregation in JS — Datenmenge pro Tenant ist begrenzt (Index limitiert
+  // typische Listen auf <10k). Bei Skalierung -> SQL-Aggregation umstellen.
+  type Bucket = { range: string; total: number; accepted: number };
+  const groups = new Map<string, {
+    count: number;
+    accepted: number;
+    rejected: number;
+    modified: number;
+    pending: number;
+    confSum: number;
+    buckets: Bucket[];
+  }>();
+  const newGroup = () => ({
+    count: 0, accepted: 0, rejected: 0, modified: 0, pending: 0, confSum: 0,
+    buckets: [
+      { range: '0-25', total: 0, accepted: 0 },
+      { range: '25-50', total: 0, accepted: 0 },
+      { range: '50-75', total: 0, accepted: 0 },
+      { range: '75-100', total: 0, accepted: 0 },
+    ] as Bucket[],
+  });
+  for (const r of rows) {
+    const g = groups.get(r.promptKey) ?? newGroup();
+    const conf = clampConfidence(Number(r.confidence));
+    g.count += 1;
+    g.confSum += conf;
+    const isAccepted = r.status === 'accepted' || r.status === 'modified';
+    if (r.status === 'accepted') g.accepted += 1;
+    else if (r.status === 'rejected') g.rejected += 1;
+    else if (r.status === 'modified') g.modified += 1;
+    else g.pending += 1;
+    const bIdx = conf >= 0.75 ? 3 : conf >= 0.5 ? 2 : conf >= 0.25 ? 1 : 0;
+    const bucket = g.buckets[bIdx]!;
+    bucket.total += 1;
+    if (isAccepted) bucket.accepted += 1;
+    groups.set(r.promptKey, g);
+  }
+  const result = [...groups.entries()].map(([key, g]) => {
+    const decided = g.accepted + g.rejected + g.modified;
+    return {
+      promptKey: key,
+      count: g.count,
+      pending: g.pending,
+      accepted: g.accepted,
+      rejected: g.rejected,
+      modified: g.modified,
+      acceptanceRate: decided > 0 ? (g.accepted + g.modified) / decided : null,
+      averageConfidence: g.count > 0 ? g.confSum / g.count : 0,
+      calibration: g.buckets.map((b) => ({
+        range: b.range,
+        total: b.total,
+        acceptanceRate: b.total > 0 ? b.accepted / b.total : null,
+      })),
+    };
+  }).sort((a, b) => b.count - a.count);
+  res.json(result);
 });
 
 export default router;
