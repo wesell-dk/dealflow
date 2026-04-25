@@ -13251,7 +13251,7 @@ async function resolveRenewalOwner(
     const [u] = await db.select().from(usersTable).where(eq(usersTable.id, acc.ownerId));
     if (u) return { ownerId: u.id, ownerName: u.name, ownerEmail: u.email ?? null, source: 'account' };
   }
-  const [c] = await db.select().from(contractsTable).where(eq(contractsTable.id, row.contractId));
+  const [c] = await db.select().from(contractsTable).where(eq(contractsTable.id, row.contractId ?? ''));
   if (c?.dealId) {
     const [d] = await db.select().from(dealsTable).where(eq(dealsTable.id, c.dealId));
     if (d?.ownerId) {
@@ -13275,7 +13275,7 @@ router.post('/renewals/:id/notify-owner', async (req, res) => {
     return;
   }
   // Timeline am verknüpften Deal anhängen, falls vorhanden — sonst nur Audit.
-  const [contract] = await db.select().from(contractsTable).where(eq(contractsTable.id, existing.contractId));
+  const [contract] = await db.select().from(contractsTable).where(eq(contractsTable.id, existing.contractId ?? ''));
   const [acc] = await db.select().from(accountsTable).where(eq(accountsTable.id, existing.accountId));
   const accountLabel = acc?.name ?? existing.accountId;
   const contractLabel = contract?.title ?? existing.contractId;
@@ -13355,7 +13355,7 @@ router.post('/renewals/_bulk', async (req, res) => {
         skippedReasons[id] = 'no owner';
         continue;
       }
-      const [contract] = await db.select().from(contractsTable).where(eq(contractsTable.id, existing.contractId));
+      const [contract] = await db.select().from(contractsTable).where(eq(contractsTable.id, existing.contractId ?? ''));
       const [acc] = await db.select().from(accountsTable).where(eq(accountsTable.id, existing.accountId));
       await db.insert(timelineEventsTable).values({
         id: `tl_${randomUUID().slice(0, 8)}`,
