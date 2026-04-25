@@ -1,5 +1,5 @@
 import { Router, type IRouter, type Request, type Response } from 'express';
-import { and, asc, desc, eq, inArray, sql, type SQL } from 'drizzle-orm';
+import { and, asc, desc, eq, inArray, isNull, sql, type SQL } from 'drizzle-orm';
 import { randomUUID, randomBytes } from 'node:crypto';
 import { ObjectStorageService } from '../lib/objectStorage';
 import { extractTextFromUpload } from '../lib/extractContractText';
@@ -651,12 +651,25 @@ router.get('/accounts', async (req, res) => {
   // appear in `allowedAccountIds`. Deal aggregates are then re-filtered by
   // `allowedDealIds` so a restricted user who owns an account cannot see or
   // infer out-of-scope deal counts/values from cross-team activity.
+  //
+  // Soft-Delete-Filter: standardmäßig nur "aktive" (archivedAt IS NULL).
+  // Mit ?status=archived nur archivierte, ?status=all beides — gedacht für
+  // den Archiv-Tab und Wiederherstellungs-Workflows.
+  const statusParam = String(req.query.status ?? 'active').toLowerCase();
+  const status: 'active' | 'archived' | 'all' =
+    statusParam === 'archived' || statusParam === 'all' ? statusParam : 'active';
   const accIds = await allowedAccountIds(req);
   if (accIds.size === 0) { res.json([]); return; }
   const accIdList = [...accIds];
   const dealIds = await allowedDealIds(req);
+  const archiveCond =
+    status === 'active' ? isNull(accountsTable.archivedAt)
+    : status === 'archived' ? sql`${accountsTable.archivedAt} IS NOT NULL`
+    : undefined;
   const accs = await db.select().from(accountsTable)
-    .where(inArray(accountsTable.id, accIdList));
+    .where(archiveCond
+      ? and(inArray(accountsTable.id, accIdList), archiveCond)
+      : inArray(accountsTable.id, accIdList));
   const accDeals = dealIds.size === 0 ? [] : await db.select().from(dealsTable)
     .where(inArray(dealsTable.accountId, accIdList));
   res.json(accs.map(a => {
@@ -741,6 +754,16 @@ async function resolveOwnerId(
 router.patch('/accounts/:id', async (req, res) => {
   if (!validateInline(req, res, { params: Z.UpdateAccountParams, body: Z.UpdateAccountBody })) return;
   if (!(await gateAccount(req, res, req.params.id))) return;
+  // Archivierte Accounts sind read-only. Stammdaten/Owner werden erst nach
+  // Wiederherstellung wieder editierbar, damit "archiviert" wirklich
+  // bedeutet "ruhend". Lesen (GET /:id) bleibt erlaubt, damit Restore-
+  // Workflows aus Detailansichten möglich sind.
+  const [archCheck] = await db.select({ archivedAt: accountsTable.archivedAt })
+    .from(accountsTable).where(eq(accountsTable.id, req.params.id));
+  if (archCheck?.archivedAt) {
+    res.status(409).json({ error: 'account archived', message: 'Der Account ist archiviert. Bitte zuerst wiederherstellen, um Änderungen vorzunehmen.' });
+    return;
+  }
   const b = req.body as {
     name?: string; industry?: string; country?: string; healthScore?: number;
     ownerId?: string | null;
@@ -860,6 +883,14 @@ router.post('/deals', async (req, res) => {
   const allowedAccs = await allowedAccountIds(req);
   if (!allowedAccs.has(b.accountId)) {
     res.status(403).json({ error: 'forbidden (account not in scope)' }); return;
+  }
+  // Archivierte Accounts sind read-only — neue Deals würden bei Wieder-
+  // herstellung verwirrend auftauchen. User soll erst restoren.
+  const [accCheck] = await db.select({ archivedAt: accountsTable.archivedAt })
+    .from(accountsTable).where(eq(accountsTable.id, b.accountId));
+  if (accCheck?.archivedAt) {
+    res.status(422).json({ error: 'account archived', message: 'Der Account ist archiviert. Bitte zuerst wiederherstellen.' });
+    return;
   }
   // Owner muss innerhalb des Tenants liegen (Cross-Tenant-Owner-Assignment verhindern).
   const [owner] = await db.select({ id: usersTable.id })
@@ -7901,6 +7932,12 @@ async function cascadeDeleteAccounts(req: Request, accountIds: string[]): Promis
 }
 
 router.post('/accounts/bulk/delete', async (req, res) => {
+  // Soft-Delete als Default: "Löschen" archiviert nur (setzt archivedAt=now).
+  // Datensätze, Verknüpfungen, Audit-Trail und Verträge bleiben unangetastet —
+  // der Account verschwindet aus den Standardlisten und kann jederzeit über
+  // /accounts/bulk/restore wiederhergestellt werden.
+  // Mit cascade:true wird hart gelöscht (alle Verknüpfungen weg) — das ist
+  // die explizite Eskalation und sollte im Frontend deutlich markiert sein.
   const parsed = bulkDeleteSchema.safeParse(req.body);
   if (!parsed.success) { res.status(422).json({ error: 'validation', issues: parsed.error.issues }); return; }
   const cascade = parsed.data.cascade === true;
@@ -7915,9 +7952,14 @@ router.post('/accounts/bulk/delete', async (req, res) => {
     if (targetIds.length > 0) {
       await cascadeDeleteAccounts(req, targetIds);
       await db.delete(accountsTable).where(inArray(accountsTable.id, targetIds));
+      for (const id of targetIds) {
+        await writeAuditFromReq(req, { entityType: 'account', entityId: id, action: 'bulk_purge', summary: 'Kunde endgültig gelöscht (mit allen Daten)' });
+      }
     }
     res.json({
       updated: targetIds.length,
+      archived: 0,
+      mode: 'purged',
       skipped: skipped.length,
       skippedIds: skipped,
       skippedReasons,
@@ -7926,32 +7968,49 @@ router.post('/accounts/bulk/delete', async (req, res) => {
     return;
   }
 
-  // Default: blocken, wenn verknüpfte Daten existieren — und dem Frontend mitteilen, warum.
-  const refs = await accountReferenceCounts(targetIds);
-  const skipForRefs: string[] = [];
-  const blockedRefs: Record<string, AccountRefCounts> = {};
-  for (const id of targetIds) {
-    const r = refs[id];
-    const total = r.deals + r.contacts + r.contracts + r.letters + r.renewals + r.obligations + r.externalContracts;
-    if (total > 0) {
-      skipForRefs.push(id);
-      skippedReasons[id] = 'has_references';
-      blockedRefs[id] = r;
-    }
-  }
-  const finalIds = targetIds.filter(id => !skipForRefs.includes(id));
-  if (finalIds.length > 0) {
-    await db.delete(accountsTable).where(inArray(accountsTable.id, finalIds));
-    for (const id of finalIds) {
-      await writeAuditFromReq(req, { entityType: 'account', entityId: id, action: 'bulk_delete', summary: 'Kunde gelöscht (Bulk)' });
+  // Default: archivieren. Funktioniert auch mit verknüpften Daten — das ist
+  // ja gerade der Sinn. Bereits archivierte Accounts werden idempotent erneut
+  // gestempelt (der Zeitpunkt aktualisiert sich), das ist harmlos.
+  if (targetIds.length > 0) {
+    await db.update(accountsTable)
+      .set({ archivedAt: new Date() })
+      .where(inArray(accountsTable.id, targetIds));
+    for (const id of targetIds) {
+      await writeAuditFromReq(req, { entityType: 'account', entityId: id, action: 'bulk_archive', summary: 'Kunde archiviert' });
     }
   }
   res.json({
-    updated: finalIds.length,
-    skipped: skipped.length + skipForRefs.length,
-    skippedIds: [...skipped, ...skipForRefs],
+    updated: targetIds.length,
+    archived: targetIds.length,
+    mode: 'archived',
+    skipped: skipped.length,
+    skippedIds: skipped,
     skippedReasons,
-    references: blockedRefs,
+    references: {},
+  });
+});
+
+router.post('/accounts/bulk/restore', async (req, res) => {
+  // Wiederherstellen: setzt archivedAt = NULL für die übergebenen IDs.
+  // Permission-gated wie bulk/delete — ein User kann nur wiederherstellen,
+  // was in seinem Scope liegt.
+  const parsed = z.object({ ids: z.array(z.string()).min(1).max(500) }).safeParse(req.body);
+  if (!parsed.success) { res.status(422).json({ error: 'validation', issues: parsed.error.issues }); return; }
+  const allowed = await allowedAccountIds(req);
+  const targetIds = parsed.data.ids.filter(id => allowed.has(id));
+  const skipped = parsed.data.ids.filter(id => !allowed.has(id));
+  if (targetIds.length > 0) {
+    await db.update(accountsTable)
+      .set({ archivedAt: null })
+      .where(inArray(accountsTable.id, targetIds));
+    for (const id of targetIds) {
+      await writeAuditFromReq(req, { entityType: 'account', entityId: id, action: 'bulk_restore', summary: 'Kunde wiederhergestellt' });
+    }
+  }
+  res.json({
+    updated: targetIds.length,
+    skipped: skipped.length,
+    skippedIds: skipped,
   });
 });
 

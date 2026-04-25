@@ -45,4 +45,9 @@ export interface Account {
   sizeBracket?: string | null;
   /** @nullable */
   primaryContactId?: string | null;
+  /**
+   * Wenn gesetzt, ist der Account archiviert (Soft-Delete) und erscheint nur in der Archiv-Ansicht.
+   * @nullable
+   */
+  archivedAt?: Date | null;
 }

@@ -7,11 +7,16 @@ Multi-tenant, multi-company, multi-brand. Deal-centric.
 
  * OpenAPI spec version: 0.1.0
  */
+import type { BulkActionResultMode } from "./bulkActionResultMode";
 import type { BulkActionResultReferences } from "./bulkActionResultReferences";
 import type { BulkActionResultSkippedReasons } from "./bulkActionResultSkippedReasons";
 
 export interface BulkActionResult {
   updated: number;
+  /** Anzahl archivierter Datensätze (nur bei /accounts/bulk/delete im Default-Modus gesetzt). */
+  archived?: number;
+  /** Bei /accounts/bulk/delete: 'archived' (Default) oder 'purged' (mit cascade:true). */
+  mode?: BulkActionResultMode;
   skipped: number;
   skippedIds?: string[];
   skippedReasons?: BulkActionResultSkippedReasons;

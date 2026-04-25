@@ -8,9 +8,7 @@ Multi-tenant, multi-company, multi-brand. Deal-centric.
  * OpenAPI spec version: 0.1.0
  */
 
-export interface BulkDeleteInput {
+export interface BulkRestoreInput {
   /** @minItems 1 */
   ids: string[];
-  /** Wenn true: hartes Löschen mit Cascade. Wenn false/weglassen: Account wird nur archiviert (Soft-Delete). */
-  cascade?: boolean;
 }

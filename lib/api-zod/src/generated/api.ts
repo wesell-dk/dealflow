@@ -504,6 +504,15 @@ export const GetScopeTreeResponse = zod.object({
   ),
 });
 
+export const ListAccountsQueryParams = zod.object({
+  status: zod
+    .enum(["active", "archived", "all"])
+    .optional()
+    .describe(
+      "Filtert nach Soft-Delete-Status. Default: active (nur nicht-archivierte).",
+    ),
+});
+
 export const ListAccountsResponseItem = zod.object({
   id: zod.string(),
   name: zod.string(),
@@ -528,6 +537,12 @@ export const ListAccountsResponseItem = zod.object({
     .nullish()
     .describe("Mitarbeitergröße: 1-10 \/ 11-50 \/ 51-200 \/ 201-1000 \/ 1000+"),
   primaryContactId: zod.string().nullish(),
+  archivedAt: zod.coerce
+    .date()
+    .nullish()
+    .describe(
+      "Wenn gesetzt, ist der Account archiviert (Soft-Delete) und erscheint nur in der Archiv-Ansicht.",
+    ),
 });
 export const ListAccountsResponse = zod.array(ListAccountsResponseItem);
 
@@ -574,6 +589,12 @@ export const GetAccountResponse = zod
         "Mitarbeitergröße: 1-10 \/ 11-50 \/ 51-200 \/ 201-1000 \/ 1000+",
       ),
     primaryContactId: zod.string().nullish(),
+    archivedAt: zod.coerce
+      .date()
+      .nullish()
+      .describe(
+        "Wenn gesetzt, ist der Account archiviert (Soft-Delete) und erscheint nur in der Archiv-Ansicht.",
+      ),
   })
   .and(
     zod.object({
@@ -655,6 +676,12 @@ export const UpdateAccountResponse = zod.object({
     .nullish()
     .describe("Mitarbeitergröße: 1-10 \/ 11-50 \/ 51-200 \/ 201-1000 \/ 1000+"),
   primaryContactId: zod.string().nullish(),
+  archivedAt: zod.coerce
+    .date()
+    .nullish()
+    .describe(
+      "Wenn gesetzt, ist der Account archiviert (Soft-Delete) und erscheint nur in der Archiv-Ansicht.",
+    ),
 });
 
 export const ListContactsQueryParams = zod.object({
@@ -3831,6 +3858,18 @@ export const BulkUpdateAccountOwnerBody = zod.object({
 
 export const BulkUpdateAccountOwnerResponse = zod.object({
   updated: zod.number(),
+  archived: zod
+    .number()
+    .optional()
+    .describe(
+      "Anzahl archivierter Datensätze (nur bei \/accounts\/bulk\/delete im Default-Modus gesetzt).",
+    ),
+  mode: zod
+    .enum(["archived", "purged"])
+    .optional()
+    .describe(
+      "Bei \/accounts\/bulk\/delete: 'archived' (Default) oder 'purged' (mit cascade:true).",
+    ),
   skipped: zod.number(),
   skippedIds: zod.array(zod.string()).optional(),
   skippedReasons: zod.record(zod.string(), zod.string()).optional(),
@@ -3850,13 +3889,75 @@ export const BulkUpdateAccountOwnerResponse = zod.object({
     .optional(),
 });
 
+/**
+ * @summary Archiviert Accounts (Default) oder löscht hart (cascade:true).
+ */
+
 export const BulkDeleteAccountsBody = zod.object({
   ids: zod.array(zod.string()).min(1),
-  cascade: zod.boolean().optional(),
+  cascade: zod
+    .boolean()
+    .optional()
+    .describe(
+      "Wenn true: hartes Löschen mit Cascade. Wenn false\/weglassen: Account wird nur archiviert (Soft-Delete).",
+    ),
 });
 
 export const BulkDeleteAccountsResponse = zod.object({
   updated: zod.number(),
+  archived: zod
+    .number()
+    .optional()
+    .describe(
+      "Anzahl archivierter Datensätze (nur bei \/accounts\/bulk\/delete im Default-Modus gesetzt).",
+    ),
+  mode: zod
+    .enum(["archived", "purged"])
+    .optional()
+    .describe(
+      "Bei \/accounts\/bulk\/delete: 'archived' (Default) oder 'purged' (mit cascade:true).",
+    ),
+  skipped: zod.number(),
+  skippedIds: zod.array(zod.string()).optional(),
+  skippedReasons: zod.record(zod.string(), zod.string()).optional(),
+  references: zod
+    .record(
+      zod.string(),
+      zod.object({
+        deals: zod.number().optional(),
+        contacts: zod.number().optional(),
+        contracts: zod.number().optional(),
+        letters: zod.number().optional(),
+        renewals: zod.number().optional(),
+        obligations: zod.number().optional(),
+        externalContracts: zod.number().optional(),
+      }),
+    )
+    .optional(),
+});
+
+/**
+ * @summary Stellt zuvor archivierte Accounts wieder her.
+ */
+
+export const BulkRestoreAccountsBody = zod.object({
+  ids: zod.array(zod.string()).min(1),
+});
+
+export const BulkRestoreAccountsResponse = zod.object({
+  updated: zod.number(),
+  archived: zod
+    .number()
+    .optional()
+    .describe(
+      "Anzahl archivierter Datensätze (nur bei \/accounts\/bulk\/delete im Default-Modus gesetzt).",
+    ),
+  mode: zod
+    .enum(["archived", "purged"])
+    .optional()
+    .describe(
+      "Bei \/accounts\/bulk\/delete: 'archived' (Default) oder 'purged' (mit cascade:true).",
+    ),
   skipped: zod.number(),
   skippedIds: zod.array(zod.string()).optional(),
   skippedReasons: zod.record(zod.string(), zod.string()).optional(),
@@ -3883,6 +3984,18 @@ export const BulkUpdateDealOwnerBody = zod.object({
 
 export const BulkUpdateDealOwnerResponse = zod.object({
   updated: zod.number(),
+  archived: zod
+    .number()
+    .optional()
+    .describe(
+      "Anzahl archivierter Datensätze (nur bei \/accounts\/bulk\/delete im Default-Modus gesetzt).",
+    ),
+  mode: zod
+    .enum(["archived", "purged"])
+    .optional()
+    .describe(
+      "Bei \/accounts\/bulk\/delete: 'archived' (Default) oder 'purged' (mit cascade:true).",
+    ),
   skipped: zod.number(),
   skippedIds: zod.array(zod.string()).optional(),
   skippedReasons: zod.record(zod.string(), zod.string()).optional(),
@@ -4117,6 +4230,18 @@ export const BulkUpdateDealStageBody = zod.object({
 
 export const BulkUpdateDealStageResponse = zod.object({
   updated: zod.number(),
+  archived: zod
+    .number()
+    .optional()
+    .describe(
+      "Anzahl archivierter Datensätze (nur bei \/accounts\/bulk\/delete im Default-Modus gesetzt).",
+    ),
+  mode: zod
+    .enum(["archived", "purged"])
+    .optional()
+    .describe(
+      "Bei \/accounts\/bulk\/delete: 'archived' (Default) oder 'purged' (mit cascade:true).",
+    ),
   skipped: zod.number(),
   skippedIds: zod.array(zod.string()).optional(),
   skippedReasons: zod.record(zod.string(), zod.string()).optional(),

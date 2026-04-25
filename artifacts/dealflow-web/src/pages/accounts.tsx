@@ -8,6 +8,7 @@ import {
   useListUsers,
   useBulkUpdateAccountOwner,
   useBulkDeleteAccounts,
+  useBulkRestoreAccounts,
   getListAccountsQueryKey,
   type Account,
   type AccountInput,
@@ -20,7 +21,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
-import { Building, Plus, ArrowUp, ArrowDown, Trash2, UserCog, AlertTriangle } from "lucide-react";
+import { Building, Plus, ArrowUp, ArrowDown, Trash2, UserCog, AlertTriangle, Archive, ArchiveRestore } from "lucide-react";
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
@@ -58,12 +59,14 @@ export default function Accounts() {
   const { user } = useAuth();
   const { toast } = useToast();
   const qc = useQueryClient();
-  const { data: accounts, isLoading } = useListAccounts();
+  const [archiveStatus, setArchiveStatus] = useState<"active" | "archived">("active");
+  const { data: accounts, isLoading } = useListAccounts({ status: archiveStatus });
   const { data: users = [] } = useListUsers();
   const updateAccount = useUpdateAccount();
   const createAccount = useCreateAccount();
   const bulkOwner = useBulkUpdateAccountOwner();
   const bulkDelete = useBulkDeleteAccounts();
+  const bulkRestore = useBulkRestoreAccounts();
   const [createOpen, setCreateOpen] = useState(false);
 
   const builtIns: BuiltInView[] = useMemo(() => [
@@ -231,7 +234,8 @@ export default function Accounts() {
         id => res.skippedReasons?.[id] === "has_references",
       );
       if (!cascade && blockedIds.length > 0) {
-        // Stufe 2: Nutzer entscheidet über Cascade.
+        // Defensive Stage-2 (sollte mit dem neuen Soft-Delete-Default praktisch
+        // nie auftreten — Archivieren blockt nicht). Bleibt für Cascade-Fehlfälle.
         setDeleteDialog({
           stage: "blocked",
           ids: blockedIds,
@@ -243,12 +247,31 @@ export default function Accounts() {
       const noPermission = (res.skippedIds ?? []).filter(
         id => res.skippedReasons?.[id] === "no_permission",
       ).length;
+      const isPurge = cascade || res.mode === "purged";
+      const action = isPurge ? "Endgültig gelöscht" : "Archiviert";
+      const verb = isPurge ? "gelöscht" : "archiviert";
       const desc = noPermission > 0
-        ? `${res.updated} entfernt, ${noPermission} ohne Berechtigung übersprungen.`
-        : `${res.updated} entfernt.`;
-      toast({ title: "Gelöscht", description: desc });
+        ? `${res.updated} ${verb}, ${noPermission} ohne Berechtigung übersprungen.`
+        : `${res.updated} ${verb}.`;
+      toast({ title: action, description: desc });
       setSelected(new Set());
       setDeleteDialog(null);
+    } catch (e) {
+      toast({ title: "Fehler", description: e instanceof Error ? e.message : "", variant: "destructive" });
+    }
+  }
+
+  async function runBulkRestore(ids: string[]) {
+    try {
+      const res = await bulkRestore.mutateAsync({ data: { ids } });
+      await qc.invalidateQueries({ queryKey: getListAccountsQueryKey() });
+      toast({
+        title: "Wiederhergestellt",
+        description: res.skipped > 0
+          ? `${res.updated} wiederhergestellt, ${res.skipped} ohne Berechtigung übersprungen.`
+          : `${res.updated} wiederhergestellt.`,
+      });
+      setSelected(new Set());
     } catch (e) {
       toast({ title: "Fehler", description: e instanceof Error ? e.message : "", variant: "destructive" });
     }
@@ -295,6 +318,35 @@ export default function Accounts() {
         currentState={view}
         onSelect={selectView}
       />
+
+      <div className="inline-flex items-center gap-1 p-1 rounded-md border bg-muted/30 self-start" role="tablist" aria-label="Archiv-Status">
+        <button
+          type="button"
+          role="tab"
+          aria-selected={archiveStatus === "active"}
+          className={
+            "px-3 py-1.5 rounded text-sm font-medium transition-colors " +
+            (archiveStatus === "active" ? "bg-background shadow-sm" : "text-muted-foreground hover:text-foreground")
+          }
+          onClick={() => { setArchiveStatus("active"); setSelected(new Set()); setPage(1); }}
+          data-testid="status-tab-active"
+        >
+          Aktiv
+        </button>
+        <button
+          type="button"
+          role="tab"
+          aria-selected={archiveStatus === "archived"}
+          className={
+            "px-3 py-1.5 rounded text-sm font-medium transition-colors inline-flex items-center gap-1.5 " +
+            (archiveStatus === "archived" ? "bg-background shadow-sm" : "text-muted-foreground hover:text-foreground")
+          }
+          onClick={() => { setArchiveStatus("archived"); setSelected(new Set()); setPage(1); }}
+          data-testid="status-tab-archived"
+        >
+          <Archive className="h-3.5 w-3.5" /> Archiv
+        </button>
+      </div>
 
       <div className="flex items-center justify-between gap-2">
         <FilterChipsRow
@@ -461,26 +513,45 @@ export default function Accounts() {
       )}
 
       <BulkActionBar count={selected.size} onClear={() => setSelected(new Set())}>
-        <Select
-          open={bulkOwnerOpen}
-          onOpenChange={setBulkOwnerOpen}
-          value=""
-          onValueChange={(v) => void doBulkOwner(v)}
-        >
-          <SelectTrigger className="h-8 w-44" aria-label="Owner zuweisen" data-testid="bulk-owner-trigger">
-            <span className="inline-flex items-center gap-1.5 text-xs">
-              <UserCog className="h-3.5 w-3.5" /> Owner zuweisen
-            </span>
-          </SelectTrigger>
-          <SelectContent>
-            {users.map((u) => (
-              <SelectItem key={u.id} value={u.id}>{u.name}</SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-        <Button size="sm" variant="ghost" className="h-8 gap-1 text-destructive" onClick={openBulkDelete} data-testid="bulk-delete">
-          <Trash2 className="h-3.5 w-3.5" /> Löschen
-        </Button>
+        {archiveStatus === "active" ? (
+          <>
+            <Select
+              open={bulkOwnerOpen}
+              onOpenChange={setBulkOwnerOpen}
+              value=""
+              onValueChange={(v) => void doBulkOwner(v)}
+            >
+              <SelectTrigger className="h-8 w-44" aria-label="Owner zuweisen" data-testid="bulk-owner-trigger">
+                <span className="inline-flex items-center gap-1.5 text-xs">
+                  <UserCog className="h-3.5 w-3.5" /> Owner zuweisen
+                </span>
+              </SelectTrigger>
+              <SelectContent>
+                {users.map((u) => (
+                  <SelectItem key={u.id} value={u.id}>{u.name}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Button size="sm" variant="ghost" className="h-8 gap-1" onClick={openBulkDelete} data-testid="bulk-delete">
+              <Archive className="h-3.5 w-3.5" /> Archivieren
+            </Button>
+          </>
+        ) : (
+          <>
+            <Button
+              size="sm"
+              variant="ghost"
+              className="h-8 gap-1"
+              onClick={() => void runBulkRestore([...selected])}
+              data-testid="bulk-restore"
+            >
+              <ArchiveRestore className="h-3.5 w-3.5" /> Wiederherstellen
+            </Button>
+            <Button size="sm" variant="ghost" className="h-8 gap-1 text-destructive" onClick={openBulkDelete} data-testid="bulk-purge">
+              <Trash2 className="h-3.5 w-3.5" /> Endgültig löschen
+            </Button>
+          </>
+        )}
       </BulkActionBar>
 
       <AccountFormDialog open={createOpen} onOpenChange={setCreateOpen} />
@@ -492,45 +563,60 @@ export default function Accounts() {
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>
-              {deleteDialog?.stage === "confirm" && deleteDialog.ids.length === 1
-                ? `Account "${nameOf(deleteDialog.ids[0])}" löschen?`
-                : `${deleteDialog?.stage === "confirm" ? deleteDialog.ids.length : 0} Account(s) löschen?`}
+              {(() => {
+                if (deleteDialog?.stage !== "confirm") return "";
+                const isPurge = archiveStatus === "archived" || deleteDialog.cascade;
+                const verb = isPurge ? "endgültig löschen" : "archivieren";
+                return deleteDialog.ids.length === 1
+                  ? `Account "${nameOf(deleteDialog.ids[0])}" ${verb}?`
+                  : `${deleteDialog.ids.length} Account(s) ${verb}?`;
+              })()}
             </AlertDialogTitle>
             <AlertDialogDescription>
-              Accounts mit verknüpften Deals, Verträgen oder Kontakten können standardmäßig nicht gelöscht werden.
-              Du kannst stattdessen direkt erzwingen, dass alle abhängigen Daten mitgelöscht werden.
+              {archiveStatus === "archived"
+                ? "Diese Accounts sind bereits archiviert. Beim endgültigen Löschen werden auch alle verknüpften Deals, Kontakte, Angebote und Schreiben entfernt. Verträge und Verpflichtungen bleiben mit geleerter Zuordnung erhalten. Diese Aktion ist nicht umkehrbar."
+                : "Archivierte Accounts verschwinden aus den Standardlisten und sind im Archiv-Tab jederzeit wiederherstellbar. Verknüpfte Daten bleiben unangetastet."}
             </AlertDialogDescription>
           </AlertDialogHeader>
-          <label className="flex items-start gap-2 text-sm cursor-pointer p-3 rounded-md border bg-muted/30">
-            <Checkbox
-              checked={deleteDialog?.stage === "confirm" ? deleteDialog.cascade : false}
-              onCheckedChange={(v) => {
-                if (deleteDialog?.stage === "confirm") {
-                  setDeleteDialog({ ...deleteDialog, cascade: v === true });
-                }
-              }}
-              data-testid="delete-cascade-toggle"
-            />
-            <span>
-              <span className="font-medium">Auch alle verknüpften Daten löschen</span>
-              <span className="block text-xs text-muted-foreground mt-0.5">
-                Deals, Kontakte, Angebote, Renewals und Schreiben werden entfernt. Verträge und Verpflichtungen bleiben erhalten — nur die Account-Zuordnung wird geleert.
+          {archiveStatus === "active" && (
+            <label className="flex items-start gap-2 text-sm cursor-pointer p-3 rounded-md border bg-muted/30">
+              <Checkbox
+                checked={deleteDialog?.stage === "confirm" ? deleteDialog.cascade : false}
+                onCheckedChange={(v) => {
+                  if (deleteDialog?.stage === "confirm") {
+                    setDeleteDialog({ ...deleteDialog, cascade: v === true });
+                  }
+                }}
+                data-testid="delete-cascade-toggle"
+              />
+              <span>
+                <span className="font-medium text-destructive">Stattdessen endgültig löschen</span>
+                <span className="block text-xs text-muted-foreground mt-0.5">
+                  Account und alle verknüpften Deals, Kontakte, Angebote, Renewals und Schreiben werden unwiderruflich gelöscht. Verträge und Verpflichtungen bleiben erhalten — nur die Account-Zuordnung wird geleert.
+                </span>
               </span>
-            </span>
-          </label>
+            </label>
+          )}
           <AlertDialogFooter>
             <AlertDialogCancel>Abbrechen</AlertDialogCancel>
             <AlertDialogAction
-              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              className={
+                (archiveStatus === "archived" || (deleteDialog?.stage === "confirm" && deleteDialog.cascade))
+                  ? "bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                  : ""
+              }
               onClick={(e) => {
                 e.preventDefault();
                 if (deleteDialog?.stage === "confirm") {
-                  void runBulkDelete(deleteDialog.ids, deleteDialog.cascade);
+                  const cascade = archiveStatus === "archived" ? true : deleteDialog.cascade;
+                  void runBulkDelete(deleteDialog.ids, cascade);
                 }
               }}
               data-testid="delete-confirm"
             >
-              {deleteDialog?.stage === "confirm" && deleteDialog.cascade ? "Endgültig löschen" : "Löschen"}
+              {(archiveStatus === "archived" || (deleteDialog?.stage === "confirm" && deleteDialog.cascade))
+                ? "Endgültig löschen"
+                : "Archivieren"}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

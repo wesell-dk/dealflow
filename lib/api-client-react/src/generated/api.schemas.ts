@@ -582,6 +582,11 @@ export interface Account {
   sizeBracket?: string | null;
   /** @nullable */
   primaryContactId?: string | null;
+  /**
+   * Wenn gesetzt, ist der Account archiviert (Soft-Delete) und erscheint nur in der Archiv-Ansicht.
+   * @nullable
+   */
+  archivedAt?: string | null;
 }
 
 export interface Contact {
@@ -791,8 +796,25 @@ export interface BulkStageInput {
 export interface BulkDeleteInput {
   /** @minItems 1 */
   ids: string[];
+  /** Wenn true: hartes Löschen mit Cascade. Wenn false/weglassen: Account wird nur archiviert (Soft-Delete). */
   cascade?: boolean;
 }
+
+export interface BulkRestoreInput {
+  /** @minItems 1 */
+  ids: string[];
+}
+
+/**
+ * Bei /accounts/bulk/delete: 'archived' (Default) oder 'purged' (mit cascade:true).
+ */
+export type BulkActionResultMode =
+  (typeof BulkActionResultMode)[keyof typeof BulkActionResultMode];
+
+export const BulkActionResultMode = {
+  archived: "archived",
+  purged: "purged",
+} as const;
 
 export type BulkActionResultSkippedReasons = { [key: string]: string };
 
@@ -810,6 +832,10 @@ export type BulkActionResultReferences = {
 
 export interface BulkActionResult {
   updated: number;
+  /** Anzahl archivierter Datensätze (nur bei /accounts/bulk/delete im Default-Modus gesetzt). */
+  archived?: number;
+  /** Bei /accounts/bulk/delete: 'archived' (Default) oder 'purged' (mit cascade:true). */
+  mode?: BulkActionResultMode;
   skipped: number;
   skippedIds?: string[];
   skippedReasons?: BulkActionResultSkippedReasons;
@@ -3488,6 +3514,22 @@ Used by the scope picker so users can switch back from a restricted view.
  */
   permitted?: boolean;
 };
+
+export type ListAccountsParams = {
+  /**
+   * Filtert nach Soft-Delete-Status. Default: active (nur nicht-archivierte).
+   */
+  status?: ListAccountsStatus;
+};
+
+export type ListAccountsStatus =
+  (typeof ListAccountsStatus)[keyof typeof ListAccountsStatus];
+
+export const ListAccountsStatus = {
+  active: "active",
+  archived: "archived",
+  all: "all",
+} as const;
 
 export type ListContactsParams = {
   accountId?: string;

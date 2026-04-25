@@ -465,6 +465,12 @@ paths:
     get:
       operationId: listAccounts
       tags: [accounts]
+      parameters:
+        - in: query
+          name: status
+          required: false
+          schema: { type: string, enum: [active, archived, all] }
+          description: "Filtert nach Soft-Delete-Status. Default: active (nur nicht-archivierte)."
       responses:
         "200":
           description: ok
@@ -2649,11 +2655,28 @@ paths:
     post:
       operationId: bulkDeleteAccounts
       tags: [accounts]
+      summary: "Archiviert Accounts (Default) oder löscht hart (cascade:true)."
       requestBody:
         required: true
         content:
           application/json:
             schema: { $ref: "#/components/schemas/BulkDeleteInput" }
+      responses:
+        "200":
+          description: ok
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/BulkActionResult" }
+  /accounts/bulk/restore:
+    post:
+      operationId: bulkRestoreAccounts
+      tags: [accounts]
+      summary: "Stellt zuvor archivierte Accounts wieder her."
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/BulkRestoreInput" }
       responses:
         "200":
           description: ok
@@ -4291,6 +4314,10 @@ components:
         vatId: { type: ["string", "null"], description: "USt-IdNr. (z. B. DE123456789)." }
         sizeBracket: { type: ["string", "null"], description: "Mitarbeitergröße: 1-10 / 11-50 / 51-200 / 201-1000 / 1000+" }
         primaryContactId: { type: ["string", "null"] }
+        archivedAt:
+          type: ["string", "null"]
+          format: date-time
+          description: "Wenn gesetzt, ist der Account archiviert (Soft-Delete) und erscheint nur in der Archiv-Ansicht."
 
     AccountDetail:
       allOf:
@@ -4436,13 +4463,31 @@ components:
           type: array
           items: { type: string }
           minItems: 1
-        cascade: { type: boolean }
+        cascade:
+          type: boolean
+          description: "Wenn true: hartes Löschen mit Cascade. Wenn false/weglassen: Account wird nur archiviert (Soft-Delete)."
+
+    BulkRestoreInput:
+      type: object
+      required: [ids]
+      properties:
+        ids:
+          type: array
+          items: { type: string }
+          minItems: 1
 
     BulkActionResult:
       type: object
       required: [updated, skipped]
       properties:
         updated: { type: integer }
+        archived:
+          type: integer
+          description: "Anzahl archivierter Datensätze (nur bei /accounts/bulk/delete im Default-Modus gesetzt)."
+        mode:
+          type: string
+          enum: [archived, purged]
+          description: "Bei /accounts/bulk/delete: 'archived' (Default) oder 'purged' (mit cascade:true)."
         skipped: { type: integer }
         skippedIds:
           type: array

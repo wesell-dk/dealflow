@@ -125,6 +125,10 @@ export const accountsTable = pgTable("accounts", {
   vatId: text("vat_id"),
   sizeBracket: text("size_bracket"), // z. B. "1-10", "11-50", "51-200", ...
   primaryContactId: text("primary_contact_id"),
+  // Soft-Delete: gesetzt = archiviert. Standard-Listen blenden archivierte
+  // Accounts aus, hartes Löschen ist eine separate Eskalation. So bleiben
+  // Datensätze für Audit/Wiederaufnahme erhalten.
+  archivedAt: timestamp("archived_at", { withTimezone: true }),
 });
 
 export const contactsTable = pgTable("contacts", {

@@ -52,6 +52,7 @@ import type {
   BulkActionResult,
   BulkDeleteInput,
   BulkOwnerInput,
+  BulkRestoreInput,
   BulkStageInput,
   ClauseChangeResult,
   ClauseCompatibilityCreate,
@@ -136,6 +137,7 @@ import type {
   HelpBotReply,
   IndustryProfile,
   IndustryProfileInput,
+  ListAccountsParams,
   ListAiRecommendationsParams,
   ListApprovalsParams,
   ListAttachmentLibraryParams,
@@ -2187,41 +2189,57 @@ export function useGetScopeTree<
   return { ...query, queryKey: queryOptions.queryKey };
 }
 
-export const getListAccountsUrl = () => {
-  return `/api/v1/accounts`;
+export const getListAccountsUrl = (params?: ListAccountsParams) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? "null" : value.toString());
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0
+    ? `/api/v1/accounts?${stringifiedParams}`
+    : `/api/v1/accounts`;
 };
 
 export const listAccounts = async (
+  params?: ListAccountsParams,
   options?: RequestInit,
 ): Promise<Account[]> => {
-  return customFetch<Account[]>(getListAccountsUrl(), {
+  return customFetch<Account[]>(getListAccountsUrl(params), {
     ...options,
     method: "GET",
   });
 };
 
-export const getListAccountsQueryKey = () => {
-  return [`/api/v1/accounts`] as const;
+export const getListAccountsQueryKey = (params?: ListAccountsParams) => {
+  return [`/api/v1/accounts`, ...(params ? [params] : [])] as const;
 };
 
 export const getListAccountsQueryOptions = <
   TData = Awaited<ReturnType<typeof listAccounts>>,
   TError = ErrorType<unknown>,
->(options?: {
-  query?: UseQueryOptions<
-    Awaited<ReturnType<typeof listAccounts>>,
-    TError,
-    TData
-  >;
-  request?: SecondParameter<typeof customFetch>;
-}) => {
+>(
+  params?: ListAccountsParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof listAccounts>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
   const { query: queryOptions, request: requestOptions } = options ?? {};
 
-  const queryKey = queryOptions?.queryKey ?? getListAccountsQueryKey();
+  const queryKey = queryOptions?.queryKey ?? getListAccountsQueryKey(params);
 
   const queryFn: QueryFunction<Awaited<ReturnType<typeof listAccounts>>> = ({
     signal,
-  }) => listAccounts({ signal, ...requestOptions });
+  }) => listAccounts(params, { signal, ...requestOptions });
 
   return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
     Awaited<ReturnType<typeof listAccounts>>,
@@ -2238,15 +2256,18 @@ export type ListAccountsQueryError = ErrorType<unknown>;
 export function useListAccounts<
   TData = Awaited<ReturnType<typeof listAccounts>>,
   TError = ErrorType<unknown>,
->(options?: {
-  query?: UseQueryOptions<
-    Awaited<ReturnType<typeof listAccounts>>,
-    TError,
-    TData
-  >;
-  request?: SecondParameter<typeof customFetch>;
-}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
-  const queryOptions = getListAccountsQueryOptions(options);
+>(
+  params?: ListAccountsParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof listAccounts>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getListAccountsQueryOptions(params, options);
 
   const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
     queryKey: QueryKey;
@@ -12139,6 +12160,9 @@ export const useBulkUpdateAccountOwner = <
   return useMutation(getBulkUpdateAccountOwnerMutationOptions(options));
 };
 
+/**
+ * @summary Archiviert Accounts (Default) oder löscht hart (cascade:true).
+ */
 export const getBulkDeleteAccountsUrl = () => {
   return `/api/v1/accounts/bulk/delete`;
 };
@@ -12199,6 +12223,9 @@ export type BulkDeleteAccountsMutationResult = NonNullable<
 export type BulkDeleteAccountsMutationBody = BodyType<BulkDeleteInput>;
 export type BulkDeleteAccountsMutationError = ErrorType<unknown>;
 
+/**
+ * @summary Archiviert Accounts (Default) oder löscht hart (cascade:true).
+ */
 export const useBulkDeleteAccounts = <
   TError = ErrorType<unknown>,
   TContext = unknown,
@@ -12217,6 +12244,92 @@ export const useBulkDeleteAccounts = <
   TContext
 > => {
   return useMutation(getBulkDeleteAccountsMutationOptions(options));
+};
+
+/**
+ * @summary Stellt zuvor archivierte Accounts wieder her.
+ */
+export const getBulkRestoreAccountsUrl = () => {
+  return `/api/v1/accounts/bulk/restore`;
+};
+
+export const bulkRestoreAccounts = async (
+  bulkRestoreInput: BulkRestoreInput,
+  options?: RequestInit,
+): Promise<BulkActionResult> => {
+  return customFetch<BulkActionResult>(getBulkRestoreAccountsUrl(), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(bulkRestoreInput),
+  });
+};
+
+export const getBulkRestoreAccountsMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof bulkRestoreAccounts>>,
+    TError,
+    { data: BodyType<BulkRestoreInput> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof bulkRestoreAccounts>>,
+  TError,
+  { data: BodyType<BulkRestoreInput> },
+  TContext
+> => {
+  const mutationKey = ["bulkRestoreAccounts"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof bulkRestoreAccounts>>,
+    { data: BodyType<BulkRestoreInput> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return bulkRestoreAccounts(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type BulkRestoreAccountsMutationResult = NonNullable<
+  Awaited<ReturnType<typeof bulkRestoreAccounts>>
+>;
+export type BulkRestoreAccountsMutationBody = BodyType<BulkRestoreInput>;
+export type BulkRestoreAccountsMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Stellt zuvor archivierte Accounts wieder her.
+ */
+export const useBulkRestoreAccounts = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof bulkRestoreAccounts>>,
+    TError,
+    { data: BodyType<BulkRestoreInput> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof bulkRestoreAccounts>>,
+  TError,
+  { data: BodyType<BulkRestoreInput> },
+  TContext
+> => {
+  return useMutation(getBulkRestoreAccountsMutationOptions(options));
 };
 
 export const getBulkUpdateDealOwnerUrl = () => {

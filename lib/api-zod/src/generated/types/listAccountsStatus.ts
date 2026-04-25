@@ -8,9 +8,11 @@ Multi-tenant, multi-company, multi-brand. Deal-centric.
  * OpenAPI spec version: 0.1.0
  */
 
-export interface BulkDeleteInput {
-  /** @minItems 1 */
-  ids: string[];
-  /** Wenn true: hartes Löschen mit Cascade. Wenn false/weglassen: Account wird nur archiviert (Soft-Delete). */
-  cascade?: boolean;
-}
+export type ListAccountsStatus =
+  (typeof ListAccountsStatus)[keyof typeof ListAccountsStatus];
+
+export const ListAccountsStatus = {
+  active: "active",
+  archived: "archived",
+  all: "all",
+} as const;
