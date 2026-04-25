@@ -96,6 +96,7 @@ import {
   externalContractsTable,
   renewalOpportunitiesTable,
   brandClauseVariantOverridesTable,
+  clauseVariantTranslationsTable,
   clauseVariantCompatibilityTable,
   externalCollaboratorsTable,
   aiRecommendationsTable,
@@ -1384,6 +1385,7 @@ function mapQuote(q: typeof quotesTable.$inferSelect, dealName: string) {
     currency: q.currency,
     createdAt: iso(q.createdAt)!,
     validUntil: typeof q.validUntil === 'string' ? q.validUntil : iso(q.validUntil)!.slice(0, 10),
+    language: (q.language === 'en' ? 'en' : 'de') as 'de' | 'en',
   };
 }
 
@@ -1418,15 +1420,19 @@ router.get('/quotes', async (req, res) => {
 
 router.post('/quotes', async (req, res) => {
   if (!validateInline(req, res, { body: Z.CreateQuoteBody })) return;
-  const b = req.body;
+  const b = req.body as { dealId: string; validUntil?: string; language?: 'de' | 'en' };
   if (!(await gateDeal(req, res, b.dealId))) return;
   const [d] = await db.select().from(dealsTable).where(eq(dealsTable.id, b.dealId));
   if (!d) { res.status(404).json({ error: 'deal not found' }); return; }
   const id = `qt_${randomUUID().slice(0, 8)}`;
   const number = `Q-2026-${Math.floor(Math.random() * 9000) + 1000}`;
+  const language = b.language && SUPPORTED_LOCALES.includes(b.language)
+    ? b.language
+    : await resolveDefaultLanguage({ brandId: d.brandId, tenantId: getScope(req).tenantId });
   await db.insert(quotesTable).values({
     id, dealId: d.id, number, status: 'draft', currentVersion: 1,
     currency: d.currency,
+    language,
     validUntil: b.validUntil ?? new Date(Date.now() + 30 * 86400000).toISOString().slice(0, 10),
   });
   const qvId = `qv_${randomUUID().slice(0, 8)}`;
@@ -1587,6 +1593,7 @@ router.get('/quotes/:id/pdf', async (req, res) => {
     currency: q.currency,
     status: q.status,
     validUntil: String(q.validUntil),
+    language: q.language === 'en' ? 'en' : 'de',
     dealName: d?.name ?? 'Unknown',
     version: current?.version ?? 1,
     totalAmount: num(current?.totalAmount),
@@ -1622,6 +1629,32 @@ router.get('/quotes/:id/pdf', async (req, res) => {
   res.setHeader('Content-Type', 'application/pdf');
   res.setHeader('Content-Disposition', `inline; filename="quote-${q.number}.pdf"`);
   stream.pipe(res);
+});
+
+// PATCH quote — currently only supports updating the language.
+router.patch('/quotes/:id', async (req, res) => {
+  const [q] = await db.select().from(quotesTable).where(eq(quotesTable.id, req.params.id));
+  if (!q) { res.status(404).json({ error: 'not found' }); return; }
+  if (!(await gateDeal(req, res, q.dealId))) return;
+  const body = (req.body ?? {}) as { language?: unknown };
+  const patch: Partial<typeof quotesTable.$inferInsert> = {};
+  if (body.language !== undefined) {
+    if (typeof body.language !== 'string' || !SUPPORTED_LOCALES.includes(body.language as SupportedLocale)) {
+      res.status(400).json({ error: 'language must be one of de|en' }); return;
+    }
+    if (body.language !== q.language) patch.language = body.language as SupportedLocale;
+  }
+  if (Object.keys(patch).length > 0) {
+    await db.update(quotesTable).set(patch).where(eq(quotesTable.id, q.id));
+    await writeAuditFromReq(req, {
+      entityType: 'quote', entityId: q.id, action: 'language_changed',
+      summary: `Angebotssprache: ${q.language ?? 'de'} → ${patch.language}`,
+      before: { language: q.language }, after: { language: patch.language },
+    });
+  }
+  const [updated] = await db.select().from(quotesTable).where(eq(quotesTable.id, q.id));
+  const dealMap = await getDealMap();
+  res.json(mapQuote(updated!, dealMap.get(updated!.dealId)?.name ?? 'Unknown'));
 });
 
 router.post('/quotes/:id/versions', async (req, res) => {
@@ -2962,6 +2995,60 @@ function mapContract(c: typeof contractsTable.$inferSelect, dealName: string, cl
     version: c.version, riskLevel: c.riskLevel, riskScore, createdAt: iso(c.createdAt)!,
     template: c.template,
     validUntil: c.validUntil ? (typeof c.validUntil === 'string' ? c.validUntil : iso(c.validUntil)!.slice(0, 10)) : null,
+    language: normalizeLocale(c.language),
+  };
+}
+
+const SUPPORTED_LOCALES = ['de', 'en'] as const;
+type SupportedLocale = (typeof SUPPORTED_LOCALES)[number];
+
+function normalizeLocale(value: string | null | undefined): SupportedLocale {
+  return value === 'en' ? 'en' : 'de';
+}
+
+async function resolveDefaultLanguage(opts: {
+  brandId?: string | null;
+  tenantId: string;
+}): Promise<SupportedLocale> {
+  if (opts.brandId) {
+    const [b] = await db.select().from(brandsTable).where(eq(brandsTable.id, opts.brandId));
+    if (b?.defaultLanguage) return normalizeLocale(b.defaultLanguage);
+  }
+  const [t] = await db.select().from(tenantsTable).where(eq(tenantsTable.id, opts.tenantId));
+  if (t?.defaultLanguage) return normalizeLocale(t.defaultLanguage);
+  return 'de';
+}
+
+async function loadVariantTranslations(variantIds: string[]): Promise<Map<string, Map<string, typeof clauseVariantTranslationsTable.$inferSelect>>> {
+  if (variantIds.length === 0) return new Map();
+  const rows = await db.select().from(clauseVariantTranslationsTable)
+    .where(inArray(clauseVariantTranslationsTable.variantId, variantIds));
+  const out = new Map<string, Map<string, typeof clauseVariantTranslationsTable.$inferSelect>>();
+  for (const r of rows) {
+    let inner = out.get(r.variantId);
+    if (!inner) { inner = new Map(); out.set(r.variantId, inner); }
+    inner.set(r.locale, r);
+  }
+  return out;
+}
+
+function pickClauseTranslation(
+  variant: typeof clauseVariantsTable.$inferSelect | undefined,
+  translations: Map<string, typeof clauseVariantTranslationsTable.$inferSelect> | undefined,
+  locale: SupportedLocale,
+): { name: string | null; summary: string | null; body: string | null; usedLocale: SupportedLocale; missing: boolean } {
+  const t = translations?.get(locale);
+  if (t) {
+    return { name: t.name, summary: t.summary, body: t.body, usedLocale: locale, missing: false };
+  }
+  // Locale missing → fallback to base variant ('de' source) but flag as missing if the
+  // requested locale was non-DE.
+  return {
+    name: variant?.name ?? null,
+    summary: variant?.summary ?? null,
+    body: variant?.body ?? null,
+    usedLocale: 'de',
+    missing: locale !== 'de',
   };
 }
 
@@ -2985,7 +3072,7 @@ router.get('/contracts', async (req, res) => {
 
 router.post('/contracts', async (req, res) => {
   if (!validateInline(req, res, { body: Z.CreateContractBody })) return;
-  const b = req.body;
+  const b = req.body as { dealId: string; title: string; template: string; brandId?: string; language?: 'de' | 'en' };
   if (!(await gateDeal(req, res, b.dealId))) return;
   // Pre-validate brand (existence + visibility) BEFORE any writes.
   let brandForSeed: typeof brandsTable.$inferSelect | undefined;
@@ -3000,17 +3087,21 @@ router.post('/contracts', async (req, res) => {
     if (!(await brandVisible(req, brand))) { res.status(403).json({ error: 'forbidden' }); return; }
     brandForSeed = brand;
   }
+  const tenantIdForSeed = getScope(req).tenantId;
+  const language: SupportedLocale = b.language && SUPPORTED_LOCALES.includes(b.language)
+    ? b.language
+    : await resolveDefaultLanguage({ brandId: effectiveBrandId, tenantId: tenantIdForSeed });
   const id = `ctr_${randomUUID().slice(0, 8)}`;
   await db.insert(contractsTable).values({
     id, dealId: b.dealId, title: b.title, status: 'drafting',
     version: 1, riskLevel: 'low', template: b.template,
+    language,
     validUntil: new Date(Date.now() + 365 * 86400000).toISOString().slice(0, 10),
   });
   // Seed clauses from brand defaults if provided
   if (brandForSeed) {
     const brand = brandForSeed;
     if (brand.defaultClauseVariants) {
-      const tenantIdForSeed = getScope(req).tenantId;
       const families = await db.select().from(clauseFamiliesTable);
       const variants = await db.select().from(clauseVariantsTable);
       const vById = new Map(variants.map(v => [v.id, v]));
@@ -3020,6 +3111,12 @@ router.post('/contracts', async (req, res) => {
         eq(brandClauseVariantOverridesTable.brandId, brand.id),
       ));
       const ovByVariant = new Map(overrides.map(o => [o.baseVariantId, o]));
+      // Lade Übersetzungen für die Vertragssprache, damit der Snapshot
+      // (variant/summary) bereits in der richtigen Sprache materialisiert wird.
+      const seedVariantIds = families
+        .map(f => (brand.defaultClauseVariants as Record<string, string>)[f.id])
+        .filter((v): v is string => Boolean(v));
+      const trMap = await loadVariantTranslations(seedVariantIds);
       const rows = families
         .map(f => {
           const vId = (brand.defaultClauseVariants as Record<string, string>)[f.id];
@@ -3028,10 +3125,19 @@ router.post('/contracts', async (req, res) => {
           const ov = ovByVariant.get(v.id);
           const resolved = applyOverride(v, ov, brand.id);
           const sev = resolved.severity || severityLabelFromScore(resolved.severityScore);
+          // Brand-Override hat Vorrang vor der Übersetzung; ohne Override wird
+          // die Locale-Variante verwendet (Fallback DE).
+          let snapName = resolved.name;
+          let snapSummary = resolved.summary;
+          if (!ov) {
+            const tr = pickClauseTranslation(v, trMap.get(v.id), language);
+            if (tr.name) snapName = tr.name;
+            if (tr.summary) snapSummary = tr.summary;
+          }
           return {
             id: `cc_${randomUUID().slice(0, 8)}`,
             contractId: id, familyId: f.id, activeVariantId: v.id,
-            family: f.name, variant: resolved.name, severity: sev, summary: resolved.summary,
+            family: f.name, variant: snapName, severity: sev, summary: snapSummary,
           };
         })
         .filter((r): r is NonNullable<typeof r> => r !== null);
@@ -3041,6 +3147,36 @@ router.post('/contracts', async (req, res) => {
   const [c] = await db.select().from(contractsTable).where(eq(contractsTable.id, id));
   const dealMap = await getDealMap();
   res.status(201).json(mapContract(c!, dealMap.get(c!.dealId)?.name ?? 'Unknown'));
+});
+
+// PATCH contract — currently only supports updating the language.
+router.patch('/contracts/:id', async (req, res) => {
+  const [c] = await db.select().from(contractsTable).where(eq(contractsTable.id, req.params.id));
+  if (!c) { res.status(404).json({ error: 'not found' }); return; }
+  if (!(await gateDeal(req, res, c.dealId))) return;
+  const body = (req.body ?? {}) as { language?: unknown };
+  const patch: Partial<typeof contractsTable.$inferInsert> = {};
+  if (body.language !== undefined) {
+    if (typeof body.language !== 'string' || !SUPPORTED_LOCALES.includes(body.language as SupportedLocale)) {
+      res.status(400).json({ error: 'language must be one of de|en' }); return;
+    }
+    if (body.language === c.language) {
+      // no-op
+    } else {
+      patch.language = body.language as SupportedLocale;
+    }
+  }
+  if (Object.keys(patch).length > 0) {
+    await db.update(contractsTable).set(patch).where(eq(contractsTable.id, c.id));
+    await writeAuditFromReq(req, {
+      entityType: 'contract', entityId: c.id, action: 'language_changed',
+      summary: `Vertragssprache: ${c.language ?? 'de'} → ${patch.language}`,
+      before: { language: c.language }, after: { language: patch.language },
+    });
+  }
+  const [updated] = await db.select().from(contractsTable).where(eq(contractsTable.id, c.id));
+  const dealMap = await getDealMap();
+  res.json(mapContract(updated!, dealMap.get(updated!.dealId)?.name ?? 'Unknown'));
 });
 
 function mapBrand(b: typeof brandsTable.$inferSelect) {
@@ -3249,15 +3385,23 @@ router.get('/contracts/:id', async (req, res) => {
     const dealMapA = await getDealMap();
     const variantsAllA = await db.select().from(clauseVariantsTable);
     const vByIdA = new Map(variantsAllA.map(v => [v.id, v]));
+    const languageA = normalizeLocale(rehydrated.language);
+    const variantIdsA = effectiveClauses.map(cl => cl.activeVariantId).filter((v): v is string => Boolean(v));
+    const trMapA = await loadVariantTranslations(variantIdsA);
     const mappedClauses = effectiveClauses.map(cl => {
       const active = cl.activeVariantId ? vByIdA.get(cl.activeVariantId) : undefined;
+      const tr = pickClauseTranslation(active, cl.activeVariantId ? trMapA.get(cl.activeVariantId) : undefined, languageA);
       return {
-        id: cl.id, contractId: cl.contractId, family: cl.family, variant: cl.variant,
-        severity: cl.severity, summary: cl.summary,
+        id: cl.id, contractId: cl.contractId, family: cl.family,
+        variant: tr.name ?? cl.variant,
+        severity: cl.severity,
+        summary: tr.summary ?? cl.summary,
         familyId: cl.familyId ?? null, activeVariantId: cl.activeVariantId ?? null,
         severityScore: active?.severityScore ?? 3,
         tone: active?.tone ?? 'standard',
-        body: active?.body ?? '',
+        body: tr.body ?? active?.body ?? '',
+        translationLocale: tr.usedLocale,
+        translationMissing: tr.missing,
       };
     });
     res.json({
@@ -3278,15 +3422,23 @@ router.get('/contracts/:id', async (req, res) => {
   const rawClauses = await db.select().from(contractClausesTable).where(eq(contractClausesTable.contractId, c.id));
   const variantsAll = await db.select().from(clauseVariantsTable);
   const vById = new Map(variantsAll.map(v => [v.id, v]));
+  const language = normalizeLocale(c.language);
+  const variantIds = rawClauses.map(cl => cl.activeVariantId).filter((v): v is string => Boolean(v));
+  const trMap = await loadVariantTranslations(variantIds);
   const clauses = rawClauses.map(cl => {
     const active = cl.activeVariantId ? vById.get(cl.activeVariantId) : undefined;
+    const tr = pickClauseTranslation(active, cl.activeVariantId ? trMap.get(cl.activeVariantId) : undefined, language);
     return {
-      id: cl.id, contractId: cl.contractId, family: cl.family, variant: cl.variant,
-      severity: cl.severity, summary: cl.summary,
+      id: cl.id, contractId: cl.contractId, family: cl.family,
+      variant: tr.name ?? cl.variant,
+      severity: cl.severity,
+      summary: tr.summary ?? cl.summary,
       familyId: cl.familyId ?? null, activeVariantId: cl.activeVariantId ?? null,
       severityScore: active?.severityScore ?? 3,
       tone: active?.tone ?? 'standard',
-      body: active?.body ?? '',
+      body: tr.body ?? active?.body ?? '',
+      translationLocale: tr.usedLocale,
+      translationMissing: tr.missing,
     };
   });
   res.json({
@@ -3610,6 +3762,11 @@ router.get('/contracts/:id/pdf', async (req, res) => {
   const rawClauses = await db.select().from(contractClausesTable).where(eq(contractClausesTable.contractId, c.id));
   const variantsAll = await db.select().from(clauseVariantsTable);
   const vById = new Map(variantsAll.map(v => [v.id, v]));
+  const language = normalizeLocale(c.language);
+  const variantIds = rawClauses
+    .map(cl => cl.activeVariantId)
+    .filter((v): v is string => Boolean(v));
+  const trMap = await loadVariantTranslations(variantIds);
   let brand: typeof brandsTable.$inferSelect | undefined;
   if (d?.brandId) {
     const [b] = await db.select().from(brandsTable).where(eq(brandsTable.id, d.brandId));
@@ -3623,14 +3780,16 @@ router.get('/contracts/:id/pdf', async (req, res) => {
     signedAt: null,
     effectiveFrom: null,
     effectiveTo: c.validUntil ? (typeof c.validUntil === 'string' ? c.validUntil : null) : null,
+    language,
     clauses: rawClauses.map(cl => {
       const active = cl.activeVariantId ? vById.get(cl.activeVariantId) : undefined;
+      const tr = pickClauseTranslation(active, cl.activeVariantId ? trMap.get(cl.activeVariantId) : undefined, language);
       return {
         family: cl.family,
-        variant: cl.variant,
+        variant: tr.name ?? cl.variant,
         severity: cl.severity,
-        summary: cl.summary,
-        body: active?.body ?? '',
+        summary: tr.summary ?? cl.summary,
+        body: tr.body ?? active?.body ?? '',
       };
     }),
     brand: brand ? {
@@ -4308,16 +4467,122 @@ router.post('/contracts/:id/obligations/derive', async (req, res) => {
 router.get('/clause-families', async (_req, res) => {
   const families = await db.select().from(clauseFamiliesTable);
   const variants = await db.select().from(clauseVariantsTable);
+  const trMap = await loadVariantTranslations(variants.map(v => v.id));
   res.json(families.map(f => ({
     ...f,
     variants: variants
       .filter(v => v.familyId === f.id)
       .sort((a, b) => a.severityScore - b.severityScore)
-      .map(v => ({
-        id: v.id, name: v.name, severity: v.severity,
-        severityScore: v.severityScore, summary: v.summary, body: v.body, tone: v.tone,
-      })),
+      .map(v => {
+        const trs = trMap.get(v.id);
+        return {
+          id: v.id, name: v.name, severity: v.severity,
+          severityScore: v.severityScore, summary: v.summary, body: v.body, tone: v.tone,
+          translations: trs
+            ? Array.from(trs.values()).map(t => ({
+                id: t.id, variantId: t.variantId, locale: t.locale,
+                name: t.name, summary: t.summary, body: t.body,
+                source: t.source ?? null, license: t.license ?? null,
+                sourceUrl: t.sourceUrl ?? null,
+                createdAt: iso(t.createdAt)!, updatedAt: iso(t.updatedAt)!,
+              }))
+            : [],
+        };
+      }),
   })));
+});
+
+// ── CLAUSE-VARIANT TRANSLATIONS ──
+router.get('/clause-variants/:variantId/translations', async (req, res) => {
+  const variantId = req.params.variantId;
+  const [v] = await db.select().from(clauseVariantsTable).where(eq(clauseVariantsTable.id, variantId));
+  if (!v) { res.status(404).json({ error: 'variant not found' }); return; }
+  const rows = await db.select().from(clauseVariantTranslationsTable)
+    .where(eq(clauseVariantTranslationsTable.variantId, variantId));
+  res.json(rows.map(t => ({
+    id: t.id, variantId: t.variantId, locale: t.locale,
+    name: t.name, summary: t.summary, body: t.body,
+    source: t.source ?? null, license: t.license ?? null, sourceUrl: t.sourceUrl ?? null,
+    createdAt: iso(t.createdAt)!, updatedAt: iso(t.updatedAt)!,
+  })));
+});
+
+router.put('/clause-variants/:variantId/translations/:locale', async (req, res) => {
+  if (!requireAdmin(req, res)) return;
+  const variantId = req.params.variantId;
+  const locale = req.params.locale;
+  if (!SUPPORTED_LOCALES.includes(locale as SupportedLocale)) {
+    res.status(400).json({ error: 'locale must be one of de|en' }); return;
+  }
+  const [v] = await db.select().from(clauseVariantsTable).where(eq(clauseVariantsTable.id, variantId));
+  if (!v) { res.status(404).json({ error: 'variant not found' }); return; }
+  const body = (req.body ?? {}) as {
+    name?: unknown; summary?: unknown; body?: unknown;
+    source?: unknown; license?: unknown; sourceUrl?: unknown;
+  };
+  const name = typeof body.name === 'string' ? body.name.trim() : '';
+  const summary = typeof body.summary === 'string' ? body.summary.trim() : '';
+  const text = typeof body.body === 'string' ? body.body : '';
+  if (!name || name.length > 200) { res.status(400).json({ error: 'name required (1..200 chars)' }); return; }
+  if (!summary || summary.length > 1000) { res.status(400).json({ error: 'summary required (1..1000 chars)' }); return; }
+  if (text.length > 8000) { res.status(400).json({ error: 'body too long (>8000 chars)' }); return; }
+  const source = typeof body.source === 'string' ? body.source.slice(0, 200) : null;
+  const license = typeof body.license === 'string' ? body.license.slice(0, 200) : null;
+  const sourceUrl = typeof body.sourceUrl === 'string' ? body.sourceUrl.slice(0, 1000) : null;
+  const [existing] = await db.select().from(clauseVariantTranslationsTable).where(and(
+    eq(clauseVariantTranslationsTable.variantId, variantId),
+    eq(clauseVariantTranslationsTable.locale, locale),
+  ));
+  const now = new Date();
+  if (existing) {
+    await db.update(clauseVariantTranslationsTable).set({
+      name, summary, body: text, source, license, sourceUrl, updatedAt: now,
+    }).where(eq(clauseVariantTranslationsTable.id, existing.id));
+  } else {
+    await db.insert(clauseVariantTranslationsTable).values({
+      id: `cvt_${randomUUID().slice(0, 8)}`,
+      variantId, locale, name, summary, body: text,
+      source, license, sourceUrl,
+    });
+  }
+  const [after] = await db.select().from(clauseVariantTranslationsTable).where(and(
+    eq(clauseVariantTranslationsTable.variantId, variantId),
+    eq(clauseVariantTranslationsTable.locale, locale),
+  ));
+  await writeAuditFromReq(req, {
+    entityType: 'clause_variant', entityId: variantId, action: 'translation_upserted',
+    summary: `Übersetzung [${locale}] für Variante ${v.name} ${existing ? 'aktualisiert' : 'angelegt'}`,
+    after: { locale, name },
+  });
+  res.json({
+    id: after!.id, variantId: after!.variantId, locale: after!.locale,
+    name: after!.name, summary: after!.summary, body: after!.body,
+    source: after!.source ?? null, license: after!.license ?? null, sourceUrl: after!.sourceUrl ?? null,
+    createdAt: iso(after!.createdAt)!, updatedAt: iso(after!.updatedAt)!,
+  });
+});
+
+router.delete('/clause-variants/:variantId/translations/:locale', async (req, res) => {
+  if (!requireAdmin(req, res)) return;
+  const variantId = req.params.variantId;
+  const locale = req.params.locale;
+  if (!SUPPORTED_LOCALES.includes(locale as SupportedLocale)) {
+    res.status(400).json({ error: 'locale must be one of de|en' }); return;
+  }
+  const [v] = await db.select().from(clauseVariantsTable).where(eq(clauseVariantsTable.id, variantId));
+  if (!v) { res.status(404).json({ error: 'variant not found' }); return; }
+  const [existing] = await db.select().from(clauseVariantTranslationsTable).where(and(
+    eq(clauseVariantTranslationsTable.variantId, variantId),
+    eq(clauseVariantTranslationsTable.locale, locale),
+  ));
+  if (!existing) { res.status(204).end(); return; }
+  await db.delete(clauseVariantTranslationsTable).where(eq(clauseVariantTranslationsTable.id, existing.id));
+  await writeAuditFromReq(req, {
+    entityType: 'clause_variant', entityId: variantId, action: 'translation_deleted',
+    summary: `Übersetzung [${locale}] für Variante ${v.name} entfernt`,
+    before: { locale, name: existing.name },
+  });
+  res.status(204).end();
 });
 
 router.get('/contracts/:id/clauses', async (req, res) => {
@@ -4329,15 +4594,23 @@ router.get('/contracts/:id/clauses', async (req, res) => {
     .where(eq(contractClausesTable.contractId, c.id));
   const variants = await db.select().from(clauseVariantsTable);
   const variantById = new Map(variants.map(v => [v.id, v]));
+  const language = normalizeLocale(c.language);
+  const variantIds = clauses.map(cl => cl.activeVariantId).filter((v): v is string => Boolean(v));
+  const trMap = await loadVariantTranslations(variantIds);
   res.json(clauses.map(cl => {
     const active = cl.activeVariantId ? variantById.get(cl.activeVariantId) : undefined;
+    const tr = pickClauseTranslation(active, cl.activeVariantId ? trMap.get(cl.activeVariantId) : undefined, language);
     return {
-      id: cl.id, contractId: cl.contractId, family: cl.family, variant: cl.variant,
-      severity: cl.severity, summary: cl.summary,
+      id: cl.id, contractId: cl.contractId, family: cl.family,
+      variant: tr.name ?? cl.variant,
+      severity: cl.severity,
+      summary: tr.summary ?? cl.summary,
       familyId: cl.familyId ?? null, activeVariantId: cl.activeVariantId ?? null,
       severityScore: active?.severityScore ?? 3,
       tone: active?.tone ?? 'standard',
-      body: active?.body ?? '',
+      body: tr.body ?? active?.body ?? '',
+      translationLocale: tr.usedLocale,
+      translationMissing: tr.missing,
     };
   }));
 });
@@ -4373,13 +4646,23 @@ router.patch('/contract-clauses/:id', async (req, res) => {
   let snapSeverity = sevLabel(nextScore);
   let snapSummary = nextVar.summary;
   const [dealRowForBrand] = await db.select().from(dealsTable).where(eq(dealsTable.id, ctr.dealId));
+  let appliedOverride = false;
   if (dealRowForBrand?.brandId) {
     const ov = await loadBrandOverride(dealRowForBrand.brandId, nextVar.id, getScope(req).tenantId);
     if (ov) {
       snapName = ov.name ?? nextVar.name;
       snapSummary = ov.summary ?? nextVar.summary;
       snapSeverity = ov.severity ?? (ov.severityScore != null ? sevLabel(ov.severityScore) : sevLabel(nextScore));
+      appliedOverride = true;
     }
+  }
+  // Wenn kein Brand-Override greift, nutze die Übersetzung in der Vertragssprache.
+  if (!appliedOverride) {
+    const language = normalizeLocale(ctr.language);
+    const trMap = await loadVariantTranslations([nextVar.id]);
+    const tr = pickClauseTranslation(nextVar, trMap.get(nextVar.id), language);
+    if (tr.name) snapName = tr.name;
+    if (tr.summary) snapSummary = tr.summary;
   }
   await db.update(contractClausesTable).set({
     activeVariantId: nextVar.id,
@@ -6677,6 +6960,23 @@ router.post('/copilot/approval-readiness/:approvalId', async (req, res) => {
       scope,
       entityRef: { entityType: 'approval', entityId: approvalId },
     });
+    // Deterministische Ergänzung: Fehlende Klausel-Übersetzungen werden in
+    // missingInformation aufgenommen — unabhängig davon, ob das Modell sie
+    // erwähnt. Wenn so etwas vorliegt, gilt der Fall nicht als
+    // entscheidungsreif (Auslieferung in nicht freigegebener Sprache wäre
+    // riskant).
+    if (ctx.missingTranslations.length > 0) {
+      const locale = ctx.contract?.language ?? 'en';
+      const families = Array.from(new Set(ctx.missingTranslations.map((m) => m.family))).sort();
+      const existing = new Set(result.output.missingInformation.map((s) => s.toLowerCase()));
+      for (const fam of families) {
+        const line = `Übersetzung [${locale}] fehlt: ${fam}`;
+        if (!existing.has(line.toLowerCase()) && result.output.missingInformation.length < 8) {
+          result.output.missingInformation.push(line);
+        }
+      }
+      result.output.decisionReady = false;
+    }
     const insightId = await persistAiInsight(scope.tenantId, {
       kind: 'ai_approval_readiness',
       title: `Approval-Empfehlung: ${result.output.recommendation}`,

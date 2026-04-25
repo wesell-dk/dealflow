@@ -33,6 +33,7 @@ import {
   contactsTable,
   contractsTable,
   contractClausesTable,
+  clauseVariantTranslationsTable,
   dealsTable,
   lineItemsTable,
   pricePositionsTable,
@@ -232,7 +233,22 @@ export interface ApprovalContext {
     title: string;
     status: string;
     riskLevel: string;
+    language: 'de' | 'en';
   } | null;
+  /**
+   * Klauseln des verknüpften Vertrags, deren Übersetzung in der gewählten
+   * Vertragssprache fehlt (Fallback DE wird gerendert). Wird vom
+   * approval-readiness Prompt deterministisch in `missingInformation`
+   * eingespielt, um eine Auslieferung in nicht freigegebener Sprache zu
+   * verhindern.
+   */
+  missingTranslations: Array<{
+    contractClauseId: string;
+    family: string;
+    variantId: string;
+    variantName: string;
+    locale: 'de' | 'en';
+  }>;
 }
 
 // ───────────────────────── Helpers ─────────────────────────
@@ -694,6 +710,46 @@ export async function buildApprovalContext(
     .orderBy(desc(contractsTable.createdAt))
     .limit(1);
 
+  // Sammle fehlende Übersetzungen für die Vertragssprache: Wenn der Vertrag in
+  // 'en' geführt wird, aber für eine aktive Variante keine EN-Übersetzung
+  // existiert, fließt das in `missingTranslations` und damit in
+  // `missingInformation` ein.
+  const missingTranslations: ApprovalContext['missingTranslations'] = [];
+  const contractLanguage: 'de' | 'en' = contractRow?.language === 'en' ? 'en' : 'de';
+  if (contractRow && contractLanguage !== 'de') {
+    const clauses = await db
+      .select()
+      .from(contractClausesTable)
+      .where(eq(contractClausesTable.contractId, contractRow.id));
+    const variantIds = clauses
+      .map((c) => c.activeVariantId)
+      .filter((v): v is string => Boolean(v));
+    if (variantIds.length > 0) {
+      const trs = await db
+        .select()
+        .from(clauseVariantTranslationsTable)
+        .where(
+          and(
+            inArray(clauseVariantTranslationsTable.variantId, variantIds),
+            eq(clauseVariantTranslationsTable.locale, contractLanguage),
+          ),
+        );
+      const have = new Set(trs.map((t) => t.variantId));
+      for (const cl of clauses) {
+        if (!cl.activeVariantId) continue;
+        if (!have.has(cl.activeVariantId)) {
+          missingTranslations.push({
+            contractClauseId: cl.id,
+            family: cl.family,
+            variantId: cl.activeVariantId,
+            variantName: cl.variant,
+            locale: contractLanguage,
+          });
+        }
+      }
+    }
+  }
+
   void scope;
 
   return {
@@ -708,7 +764,9 @@ export async function buildApprovalContext(
           title: contractRow.title,
           status: contractRow.status,
           riskLevel: contractRow.riskLevel,
+          language: contractLanguage,
         }
       : null,
+    missingTranslations,
   };
 }

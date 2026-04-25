@@ -178,6 +178,10 @@ export const ListBrandsResponseItem = zod.object({
   tone: zod.string().nullish().describe("precise | premium | concise | bold"),
   legalEntityName: zod.string().nullish(),
   addressLine: zod.string().nullish(),
+  defaultLanguage: zod
+    .enum(["de", "en"])
+    .nullish()
+    .describe("Default-Vertragssprache der Brand. NULL → Tenant-Default."),
 });
 export const ListBrandsResponse = zod.array(ListBrandsResponseItem);
 
@@ -235,6 +239,10 @@ export const ListBrandsWithDefaultsResponseItem = zod.object({
   tone: zod.string().nullish().describe("precise | premium | concise | bold"),
   legalEntityName: zod.string().nullish(),
   addressLine: zod.string().nullish(),
+  defaultLanguage: zod
+    .enum(["de", "en"])
+    .nullish()
+    .describe("Default-Vertragssprache der Brand. NULL → Tenant-Default."),
 });
 export const ListBrandsWithDefaultsResponse = zod.array(
   ListBrandsWithDefaultsResponseItem,
@@ -255,6 +263,7 @@ export const UpdateBrandBody = zod.object({
   tone: zod.string().nullish(),
   legalEntityName: zod.string().nullish(),
   addressLine: zod.string().nullish(),
+  defaultLanguage: zod.enum(["de", "en"]).nullish(),
 });
 
 export const UpdateBrandResponse = zod.object({
@@ -277,6 +286,10 @@ export const UpdateBrandResponse = zod.object({
   tone: zod.string().nullish().describe("precise | premium | concise | bold"),
   legalEntityName: zod.string().nullish(),
   addressLine: zod.string().nullish(),
+  defaultLanguage: zod
+    .enum(["de", "en"])
+    .nullish()
+    .describe("Default-Vertragssprache der Brand. NULL → Tenant-Default."),
 });
 
 export const UpdateBrandDefaultClausesParams = zod.object({
@@ -307,6 +320,10 @@ export const UpdateBrandDefaultClausesResponse = zod.object({
   tone: zod.string().nullish().describe("precise | premium | concise | bold"),
   legalEntityName: zod.string().nullish(),
   addressLine: zod.string().nullish(),
+  defaultLanguage: zod
+    .enum(["de", "en"])
+    .nullish()
+    .describe("Default-Vertragssprache der Brand. NULL → Tenant-Default."),
 });
 
 export const ListUsersResponseItem = zod.object({
@@ -897,6 +914,9 @@ export const GetDealResponse = zod
           currency: zod.string(),
           createdAt: zod.coerce.date(),
           validUntil: zod.coerce.date(),
+          language: zod
+            .enum(["de", "en"])
+            .describe("Sprachfassung des Angebots."),
         }),
       ),
       contracts: zod.array(
@@ -915,6 +935,11 @@ export const GetDealResponse = zod
           createdAt: zod.coerce.date(),
           template: zod.string(),
           validUntil: zod.coerce.date().nullish(),
+          language: zod
+            .enum(["de", "en"])
+            .describe(
+              "Sprachfassung des Vertrags. Default ergibt sich aus Brand- bzw. Tenant-Default.",
+            ),
         }),
       ),
       approvals: zod.array(
@@ -1082,12 +1107,17 @@ export const ListQuotesResponseItem = zod.object({
   currency: zod.string(),
   createdAt: zod.coerce.date(),
   validUntil: zod.coerce.date(),
+  language: zod.enum(["de", "en"]).describe("Sprachfassung des Angebots."),
 });
 export const ListQuotesResponse = zod.array(ListQuotesResponseItem);
 
 export const CreateQuoteBody = zod.object({
   dealId: zod.string(),
   validUntil: zod.coerce.date().optional(),
+  language: zod
+    .enum(["de", "en"])
+    .optional()
+    .describe("Optionale Sprachfassung. NULL\/leer → Brand-\/Tenant-Default."),
 });
 
 export const GetQuoteParams = zod.object({
@@ -1108,6 +1138,7 @@ export const GetQuoteResponse = zod
     currency: zod.string(),
     createdAt: zod.coerce.date(),
     validUntil: zod.coerce.date(),
+    language: zod.enum(["de", "en"]).describe("Sprachfassung des Angebots."),
   })
   .and(
     zod.object({
@@ -1140,6 +1171,30 @@ export const GetQuoteResponse = zod
     }),
   );
 
+export const PatchQuoteParams = zod.object({
+  id: zod.coerce.string(),
+});
+
+export const PatchQuoteBody = zod.object({
+  language: zod.enum(["de", "en"]).optional(),
+});
+
+export const PatchQuoteResponse = zod.object({
+  id: zod.string(),
+  dealId: zod.string(),
+  dealName: zod.string(),
+  number: zod.string(),
+  status: zod.string(),
+  currentVersion: zod.number(),
+  totalAmount: zod.number(),
+  discountPct: zod.number(),
+  marginPct: zod.number(),
+  currency: zod.string(),
+  createdAt: zod.coerce.date(),
+  validUntil: zod.coerce.date(),
+  language: zod.enum(["de", "en"]).describe("Sprachfassung des Angebots."),
+});
+
 export const GetQuotePdfParams = zod.object({
   id: zod.coerce.string(),
 });
@@ -1170,6 +1225,7 @@ export const AcceptQuoteResponse = zod.object({
   currency: zod.string(),
   createdAt: zod.coerce.date(),
   validUntil: zod.coerce.date(),
+  language: zod.enum(["de", "en"]).describe("Sprachfassung des Angebots."),
 });
 
 /**
@@ -2002,6 +2058,11 @@ export const ListContractsResponseItem = zod.object({
   createdAt: zod.coerce.date(),
   template: zod.string(),
   validUntil: zod.coerce.date().nullish(),
+  language: zod
+    .enum(["de", "en"])
+    .describe(
+      "Sprachfassung des Vertrags. Default ergibt sich aus Brand- bzw. Tenant-Default.",
+    ),
 });
 export const ListContractsResponse = zod.array(ListContractsResponseItem);
 
@@ -2015,6 +2076,10 @@ export const CreateContractBody = zod.object({
     .describe(
       "Optional brand whose default clause variants should be applied on creation.",
     ),
+  language: zod
+    .enum(["de", "en"])
+    .optional()
+    .describe("Optionale Sprachfassung. NULL\/leer → Brand-\/Tenant-Default."),
 });
 
 export const GetContractPdfParams = zod.object({
@@ -2041,6 +2106,11 @@ export const GetContractResponse = zod
     createdAt: zod.coerce.date(),
     template: zod.string(),
     validUntil: zod.coerce.date().nullish(),
+    language: zod
+      .enum(["de", "en"])
+      .describe(
+        "Sprachfassung des Vertrags. Default ergibt sich aus Brand- bzw. Tenant-Default.",
+      ),
   })
   .and(
     zod.object({
@@ -2057,10 +2127,53 @@ export const GetContractResponse = zod
           severityScore: zod.number(),
           tone: zod.string(),
           body: zod.string(),
+          translationLocale: zod
+            .enum(["de", "en"])
+            .optional()
+            .describe("Locale, in der die Klausel aktuell ausgeliefert wird."),
+          translationMissing: zod
+            .boolean()
+            .optional()
+            .describe(
+              "true, wenn für die Vertragssprache keine Übersetzung gepflegt ist und auf die Quell-Sprache zurückgefallen wurde.",
+            ),
         }),
       ),
     }),
   );
+
+export const PatchContractParams = zod.object({
+  id: zod.coerce.string(),
+});
+
+export const PatchContractBody = zod.object({
+  language: zod
+    .enum(["de", "en"])
+    .optional()
+    .describe("Aktualisiert die aktive Sprachfassung des Vertrags."),
+});
+
+export const PatchContractResponse = zod.object({
+  id: zod.string(),
+  dealId: zod.string(),
+  dealName: zod.string(),
+  title: zod.string(),
+  status: zod.string(),
+  version: zod.number(),
+  riskLevel: zod.string(),
+  riskScore: zod
+    .number()
+    .optional()
+    .describe("0-100 calculated from clause severities"),
+  createdAt: zod.coerce.date(),
+  template: zod.string(),
+  validUntil: zod.coerce.date().nullish(),
+  language: zod
+    .enum(["de", "en"])
+    .describe(
+      "Sprachfassung des Vertrags. Default ergibt sich aus Brand- bzw. Tenant-Default.",
+    ),
+});
 
 export const ListClauseFamiliesResponseItem = zod.object({
   id: zod.string(),
@@ -2075,12 +2188,111 @@ export const ListClauseFamiliesResponseItem = zod.object({
       summary: zod.string(),
       body: zod.string(),
       tone: zod.string(),
+      translations: zod
+        .array(
+          zod.object({
+            id: zod.string(),
+            variantId: zod.string(),
+            locale: zod.enum(["de", "en"]),
+            name: zod.string(),
+            summary: zod.string(),
+            body: zod.string(),
+            source: zod
+              .string()
+              .nullish()
+              .describe("z. B. bonterms-mutual-2024"),
+            license: zod.string().nullish().describe("z. B. CC-BY-4.0"),
+            sourceUrl: zod.string().nullish(),
+            createdAt: zod.coerce.date(),
+            updatedAt: zod.coerce.date(),
+          }),
+        )
+        .optional()
+        .describe("Vorhandene Sprachfassungen je Variante (de\/en\/…)."),
     }),
   ),
 });
 export const ListClauseFamiliesResponse = zod.array(
   ListClauseFamiliesResponseItem,
 );
+
+export const ListClauseVariantTranslationsParams = zod.object({
+  variantId: zod.coerce.string(),
+});
+
+export const ListClauseVariantTranslationsResponseItem = zod.object({
+  id: zod.string(),
+  variantId: zod.string(),
+  locale: zod.enum(["de", "en"]),
+  name: zod.string(),
+  summary: zod.string(),
+  body: zod.string(),
+  source: zod.string().nullish().describe("z. B. bonterms-mutual-2024"),
+  license: zod.string().nullish().describe("z. B. CC-BY-4.0"),
+  sourceUrl: zod.string().nullish(),
+  createdAt: zod.coerce.date(),
+  updatedAt: zod.coerce.date(),
+});
+export const ListClauseVariantTranslationsResponse = zod.array(
+  ListClauseVariantTranslationsResponseItem,
+);
+
+export const UpsertClauseVariantTranslationParams = zod.object({
+  variantId: zod.coerce.string(),
+  locale: zod.enum(["de", "en"]),
+});
+
+export const upsertClauseVariantTranslationBodyNameMax = 200;
+
+export const upsertClauseVariantTranslationBodySummaryMax = 1000;
+
+export const upsertClauseVariantTranslationBodyBodyMax = 8000;
+
+export const upsertClauseVariantTranslationBodySourceMax = 200;
+
+export const upsertClauseVariantTranslationBodyLicenseMax = 200;
+
+export const upsertClauseVariantTranslationBodySourceUrlMax = 1000;
+
+export const UpsertClauseVariantTranslationBody = zod.object({
+  name: zod.string().min(1).max(upsertClauseVariantTranslationBodyNameMax),
+  summary: zod
+    .string()
+    .min(1)
+    .max(upsertClauseVariantTranslationBodySummaryMax),
+  body: zod.string().max(upsertClauseVariantTranslationBodyBodyMax),
+  source: zod
+    .string()
+    .max(upsertClauseVariantTranslationBodySourceMax)
+    .nullish(),
+  license: zod
+    .string()
+    .max(upsertClauseVariantTranslationBodyLicenseMax)
+    .nullish(),
+  sourceUrl: zod
+    .string()
+    .max(upsertClauseVariantTranslationBodySourceUrlMax)
+    .nullish(),
+});
+
+export const UpsertClauseVariantTranslationResponse = zod.object({
+  id: zod.string(),
+  variantId: zod.string(),
+  locale: zod.enum(["de", "en"]),
+  name: zod.string(),
+  summary: zod.string(),
+  body: zod.string(),
+  source: zod.string().nullish().describe("z. B. bonterms-mutual-2024"),
+  license: zod.string().nullish().describe("z. B. CC-BY-4.0"),
+  sourceUrl: zod.string().nullish(),
+  createdAt: zod.coerce.date(),
+  updatedAt: zod.coerce.date(),
+});
+
+export const DeleteClauseVariantTranslationParams = zod.object({
+  variantId: zod.coerce.string(),
+  locale: zod.enum(["de", "en"]),
+});
 
 export const ListContractAmendmentsParams = zod.object({
   id: zod.coerce.string(),
@@ -2146,6 +2358,16 @@ export const GetContractEffectiveStateResponse = zod.object({
       severityScore: zod.number(),
       tone: zod.string(),
       body: zod.string(),
+      translationLocale: zod
+        .enum(["de", "en"])
+        .optional()
+        .describe("Locale, in der die Klausel aktuell ausgeliefert wird."),
+      translationMissing: zod
+        .boolean()
+        .optional()
+        .describe(
+          "true, wenn für die Vertragssprache keine Übersetzung gepflegt ist und auf die Quell-Sprache zurückgefallen wurde.",
+        ),
     }),
   ),
   appliedAmendments: zod.array(
@@ -2259,6 +2481,16 @@ export const ListContractClausesResponseItem = zod.object({
   severityScore: zod.number(),
   tone: zod.string(),
   body: zod.string(),
+  translationLocale: zod
+    .enum(["de", "en"])
+    .optional()
+    .describe("Locale, in der die Klausel aktuell ausgeliefert wird."),
+  translationMissing: zod
+    .boolean()
+    .optional()
+    .describe(
+      "true, wenn für die Vertragssprache keine Übersetzung gepflegt ist und auf die Quell-Sprache zurückgefallen wurde.",
+    ),
 });
 export const ListContractClausesResponse = zod.array(
   ListContractClausesResponseItem,
@@ -2285,6 +2517,16 @@ export const PatchContractClauseResponse = zod.object({
     severityScore: zod.number(),
     tone: zod.string(),
     body: zod.string(),
+    translationLocale: zod
+      .enum(["de", "en"])
+      .optional()
+      .describe("Locale, in der die Klausel aktuell ausgeliefert wird."),
+    translationMissing: zod
+      .boolean()
+      .optional()
+      .describe(
+        "true, wenn für die Vertragssprache keine Übersetzung gepflegt ist und auf die Quell-Sprache zurückgefallen wurde.",
+      ),
   }),
   contractRiskLevel: zod.string(),
   contractRiskScore: zod.number(),
@@ -2309,6 +2551,24 @@ export const GetClauseDiffResponse = zod.object({
     summary: zod.string(),
     body: zod.string(),
     tone: zod.string(),
+    translations: zod
+      .array(
+        zod.object({
+          id: zod.string(),
+          variantId: zod.string(),
+          locale: zod.enum(["de", "en"]),
+          name: zod.string(),
+          summary: zod.string(),
+          body: zod.string(),
+          source: zod.string().nullish().describe("z. B. bonterms-mutual-2024"),
+          license: zod.string().nullish().describe("z. B. CC-BY-4.0"),
+          sourceUrl: zod.string().nullish(),
+          createdAt: zod.coerce.date(),
+          updatedAt: zod.coerce.date(),
+        }),
+      )
+      .optional()
+      .describe("Vorhandene Sprachfassungen je Variante (de\/en\/…)."),
   }),
   to: zod.object({
     id: zod.string(),
@@ -2318,6 +2578,24 @@ export const GetClauseDiffResponse = zod.object({
     summary: zod.string(),
     body: zod.string(),
     tone: zod.string(),
+    translations: zod
+      .array(
+        zod.object({
+          id: zod.string(),
+          variantId: zod.string(),
+          locale: zod.enum(["de", "en"]),
+          name: zod.string(),
+          summary: zod.string(),
+          body: zod.string(),
+          source: zod.string().nullish().describe("z. B. bonterms-mutual-2024"),
+          license: zod.string().nullish().describe("z. B. CC-BY-4.0"),
+          sourceUrl: zod.string().nullish(),
+          createdAt: zod.coerce.date(),
+          updatedAt: zod.coerce.date(),
+        }),
+      )
+      .optional()
+      .describe("Vorhandene Sprachfassungen je Variante (de\/en\/…)."),
   }),
   deltaScore: zod.number(),
   softer: zod.boolean(),

@@ -7,6 +7,7 @@ Multi-tenant, multi-company, multi-brand. Deal-centric.
 
  * OpenAPI spec version: 0.1.0
  */
+import type { ClauseVariantTranslation } from "./clauseVariantTranslation";
 
 export interface ClauseVariant {
   id: string;
@@ -16,4 +17,6 @@ export interface ClauseVariant {
   summary: string;
   body: string;
   tone: string;
+  /** Vorhandene Sprachfassungen je Variante (de/en/…). */
+  translations?: ClauseVariantTranslation[];
 }

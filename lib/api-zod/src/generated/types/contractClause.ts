@@ -7,6 +7,7 @@ Multi-tenant, multi-company, multi-brand. Deal-centric.
 
  * OpenAPI spec version: 0.1.0
  */
+import type { ContractClauseTranslationLocale } from "./contractClauseTranslationLocale";
 
 export interface ContractClause {
   id: string;
@@ -22,4 +23,8 @@ export interface ContractClause {
   severityScore: number;
   tone: string;
   body: string;
+  /** Locale, in der die Klausel aktuell ausgeliefert wird. */
+  translationLocale?: ContractClauseTranslationLocale;
+  /** true, wenn für die Vertragssprache keine Übersetzung gepflegt ist und auf die Quell-Sprache zurückgefallen wurde. */
+  translationMissing?: boolean;
 }

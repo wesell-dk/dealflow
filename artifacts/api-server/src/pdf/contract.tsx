@@ -36,11 +36,41 @@ export interface ContractPdfData {
   effectiveTo: string | null;
   clauses: ContractPdfClause[];
   brand: ContractPdfBrand | null;
+  language?: 'de' | 'en';
 }
+
+const CONTRACT_LABELS = {
+  de: {
+    docTitle: 'Vertrag',
+    contractNumber: 'Vertragsnummer',
+    deal: 'Deal',
+    status: 'Status',
+    signedAt: 'Unterzeichnet am',
+    termFrom: 'Laufzeit von',
+    termTo: 'Laufzeit bis',
+    clausesHeading: 'Vertragsklauseln',
+    severity: 'Schweregrad',
+    emptyClause: '(kein Klauseltext hinterlegt)',
+  },
+  en: {
+    docTitle: 'Contract',
+    contractNumber: 'Contract number',
+    deal: 'Deal',
+    status: 'Status',
+    signedAt: 'Signed on',
+    termFrom: 'Term from',
+    termTo: 'Term to',
+    clausesHeading: 'Contract clauses',
+    severity: 'Severity',
+    emptyClause: '(no clause text provided)',
+  },
+} as const;
 
 export function ContractDocument({ data }: { data: ContractPdfData }) {
   const primary = data.brand?.primaryColor || '#0b5fff';
   const secondary = data.brand?.secondaryColor || '#1f2937';
+  const lang: 'de' | 'en' = data.language === 'en' ? 'en' : 'de';
+  const L = CONTRACT_LABELS[lang];
 
   const styles = StyleSheet.create({
     page: { padding: 36, fontSize: 10, fontFamily: 'Helvetica', color: '#111827' },
@@ -86,7 +116,7 @@ export function ContractDocument({ data }: { data: ContractPdfData }) {
   });
 
   return (
-    <Document title={`Vertrag ${data.number}`}>
+    <Document title={`${L.docTitle} ${data.number}`}>
       <Page size="A4" style={styles.page}>
         <View style={styles.headerBar}>
           <View>
@@ -105,45 +135,45 @@ export function ContractDocument({ data }: { data: ContractPdfData }) {
           </View>
         </View>
 
-        <Text style={styles.h1}>Vertrag</Text>
+        <Text style={styles.h1}>{L.docTitle}</Text>
         <View style={styles.meta}>
           <View style={styles.metaCol}>
-            <Text style={styles.metaLabel}>Vertragsnummer</Text>
+            <Text style={styles.metaLabel}>{L.contractNumber}</Text>
             <Text style={styles.metaValue}>{data.number}</Text>
-            <Text style={styles.metaLabel}>Deal</Text>
+            <Text style={styles.metaLabel}>{L.deal}</Text>
             <Text style={styles.metaValue}>{data.dealName}</Text>
           </View>
           <View style={styles.metaCol}>
-            <Text style={styles.metaLabel}>Status</Text>
+            <Text style={styles.metaLabel}>{L.status}</Text>
             <Text style={styles.metaValue}>{data.status}</Text>
-            <Text style={styles.metaLabel}>Unterzeichnet am</Text>
+            <Text style={styles.metaLabel}>{L.signedAt}</Text>
             <Text style={styles.metaValue}>{data.signedAt ?? '—'}</Text>
           </View>
           <View style={styles.metaCol}>
-            <Text style={styles.metaLabel}>Laufzeit von</Text>
+            <Text style={styles.metaLabel}>{L.termFrom}</Text>
             <Text style={styles.metaValue}>{data.effectiveFrom ?? '—'}</Text>
-            <Text style={styles.metaLabel}>Laufzeit bis</Text>
+            <Text style={styles.metaLabel}>{L.termTo}</Text>
             <Text style={styles.metaValue}>{data.effectiveTo ?? '—'}</Text>
           </View>
         </View>
 
-        <Text style={styles.h2}>Vertragsklauseln</Text>
+        <Text style={styles.h2}>{L.clausesHeading}</Text>
         {data.clauses.map((c, i) => (
           <View key={i} style={styles.clause} wrap={false}>
             <Text style={styles.clauseTitle}>
               {i + 1}. {c.family} — {c.variant}
             </Text>
-            <Text style={styles.clauseMeta}>Schweregrad: {c.severity}</Text>
+            <Text style={styles.clauseMeta}>{L.severity}: {c.severity}</Text>
             {c.summary ? (
               <Text style={{ fontSize: 9, color: '#374151', marginBottom: 3 }}>{c.summary}</Text>
             ) : null}
-            <Text style={styles.clauseBody}>{c.body || '(kein Klauseltext hinterlegt)'}</Text>
+            <Text style={styles.clauseBody}>{c.body || L.emptyClause}</Text>
           </View>
         ))}
 
         <Text style={styles.footer} fixed>
           {data.brand?.legalEntityName ?? 'DealFlow One'} · {data.brand?.addressLine ?? ''}
-          {'  '}· Vertrag {data.number}
+          {'  '}· {L.docTitle} {data.number}
         </Text>
       </Page>
     </Document>

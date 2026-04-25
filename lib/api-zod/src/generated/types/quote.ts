@@ -7,6 +7,7 @@ Multi-tenant, multi-company, multi-brand. Deal-centric.
 
  * OpenAPI spec version: 0.1.0
  */
+import type { QuoteLanguage } from "./quoteLanguage";
 
 export interface Quote {
   id: string;
@@ -21,4 +22,6 @@ export interface Quote {
   currency: string;
   createdAt: Date;
   validUntil: Date;
+  /** Sprachfassung des Angebots. */
+  language: QuoteLanguage;
 }

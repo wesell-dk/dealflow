@@ -7,6 +7,7 @@ Multi-tenant, multi-company, multi-brand. Deal-centric.
 
  * OpenAPI spec version: 0.1.0
  */
+import type { ContractLanguage } from "./contractLanguage";
 
 export interface Contract {
   id: string;
@@ -22,4 +23,6 @@ export interface Contract {
   template: string;
   /** @nullable */
   validUntil?: Date | null;
+  /** Sprachfassung des Vertrags. Default ergibt sich aus Brand- bzw. Tenant-Default. */
+  language: ContractLanguage;
 }

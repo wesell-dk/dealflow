@@ -3,23 +3,48 @@ import { useTranslation } from "react-i18next";
 import {
   useGetQuote,
   useListQuoteAttachments,
+  usePatchQuote,
+  getGetQuoteQueryKey,
 } from "@workspace/api-client-react";
+import { useQueryClient } from "@tanstack/react-query";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { FileText, Download, Paperclip } from "lucide-react";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { FileText, Download, Paperclip, Languages } from "lucide-react";
 import { QuoteDuplicateButton } from "@/components/quotes/quote-duplicate-button";
+import { useToast } from "@/hooks/use-toast";
 
 export default function Quote() {
   const params = useParams();
   const { t } = useTranslation();
+  const { toast } = useToast();
+  const qc = useQueryClient();
   const id = params.id as string;
   const { data: quote, isLoading } = useGetQuote(id);
   const versionId = quote?.versions?.[0]?.id ?? "";
   const { data: attachments } = useListQuoteAttachments(versionId, {
     query: { enabled: !!versionId, queryKey: ["quoteAttachments", versionId] },
   });
+  const patchQuote = usePatchQuote();
+
+  async function changeLanguage(next: "de" | "en") {
+    if (!quote || quote.language === next) return;
+    try {
+      await patchQuote.mutateAsync({ id, data: { language: next } });
+      await qc.invalidateQueries({ queryKey: getGetQuoteQueryKey(id) });
+      toast({ description: t("pages.quote.languageChanged") });
+    } catch (e) {
+      toast({ title: "Error", description: String(e), variant: "destructive" });
+    }
+  }
 
   if (isLoading) return <div className="p-8"><Skeleton className="h-64 w-full" /></div>;
   if (!quote) return <div className="p-8">Quote not found</div>;
@@ -32,6 +57,18 @@ export default function Quote() {
           <p className="text-muted-foreground mt-1">{quote.dealName}</p>
         </div>
         <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1.5">
+            <Languages className="h-4 w-4 text-muted-foreground" />
+            <Select value={quote.language ?? "de"} onValueChange={(v) => changeLanguage(v as "de" | "en")}>
+              <SelectTrigger className="h-8 w-[120px]" data-testid="quote-language-select">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="de">DE</SelectItem>
+                <SelectItem value="en">EN</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
           <Button variant="outline" size="sm" onClick={() => window.open(`/api/quotes/${id}/pdf`, '_blank')}>
             <FileText className="h-4 w-4 mr-2" /> {t("pages.quote.openPdf")}
           </Button>

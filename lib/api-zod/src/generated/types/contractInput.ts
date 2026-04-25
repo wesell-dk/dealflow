@@ -7,6 +7,7 @@ Multi-tenant, multi-company, multi-brand. Deal-centric.
 
  * OpenAPI spec version: 0.1.0
  */
+import type { ContractInputLanguage } from "./contractInputLanguage";
 
 export interface ContractInput {
   dealId: string;
@@ -14,4 +15,6 @@ export interface ContractInput {
   template: string;
   /** Optional brand whose default clause variants should be applied on creation. */
   brandId?: string;
+  /** Optionale Sprachfassung. NULL/leer → Brand-/Tenant-Default. */
+  language?: ContractInputLanguage;
 }

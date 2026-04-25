@@ -162,7 +162,8 @@
       "margin": "Margin",
       "openPdf": "Open PDF",
       "attachments": "Attachments",
-      "noAttachments": "No attachments on this version."
+      "noAttachments": "No attachments on this version.",
+      "languageChanged": "Quote language updated"
     },
     "templates": {
       "title": "Quote Templates",
@@ -237,7 +238,25 @@
       "compatBadgeWarning": "Requirement open",
       "compatBadgeConflict": "Conflict",
       "compatRequiresOpenLine": "Requires variant \"{{variant}}\" in family \"{{family}}\".",
-      "compatConflictLine": "Conflicts with variant \"{{variant}}\" in family \"{{family}}\"."
+      "compatConflictLine": "Conflicts with variant \"{{variant}}\" in family \"{{family}}\".",
+      "translations": "Language versions",
+      "translationsHint": "Maintain one translation per language for each variant (German is the source). Rendered in contracts/quotes per contract language.",
+      "translationLocale": "Language",
+      "translationName": "Name",
+      "translationSummary": "Summary",
+      "translationBody": "Body (optional)",
+      "translationSource": "Source (optional)",
+      "translationLicense": "License (optional)",
+      "translationSourceUrl": "Source URL (optional)",
+      "translationSaved": "Translation saved",
+      "translationRemoved": "Translation removed",
+      "translationEditFor": "Edit translation: {{variant}} ({{locale}})",
+      "translationMissing": "Translation missing",
+      "translationPresent": "available",
+      "translationOpen": "Edit",
+      "translationDelete": "Remove",
+      "translationLocaleDe": "German (source)",
+      "translationLocaleEn": "English"
     },
     "contracts": {
       "title": "Contracts",
@@ -245,6 +264,9 @@
       "riskScore": "Risk Score",
       "riskScoreInfo": "Calculated from {{count}} clause severity weights (high·25 / medium·10 / low·3, capped at 100).",
       "currentClauses": "Active clauses",
+      "language": "Language",
+      "languageChanged": "Contract language updated",
+      "translationMissingClause": "EN translation missing — falling back to DE",
       "clauseLibrary": "Clause library",
       "variant": "Variant",
       "tone": "Tone",

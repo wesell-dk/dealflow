@@ -60,6 +60,8 @@ import type {
   ClauseDeviation,
   ClauseDiff,
   ClauseFamily,
+  ClauseVariantTranslation,
+  ClauseVariantTranslationUpsert,
   Company,
   CompanyCreate,
   CompanyUpdate,
@@ -78,6 +80,7 @@ import type {
   ContractCompatibilityReport,
   ContractDetail,
   ContractInput,
+  ContractPatchInput,
   ContractPlaybook,
   ContractPlaybookCreate,
   ContractPlaybookUpdate,
@@ -204,6 +207,7 @@ import type {
   QuoteDuplicateResult,
   QuoteFromTemplateInput,
   QuoteInput,
+  QuotePatchInput,
   QuoteTemplate,
   QuoteTemplateInput,
   QuoteVersion,
@@ -3669,6 +3673,87 @@ export function useGetQuote<
   return { ...query, queryKey: queryOptions.queryKey };
 }
 
+export const getPatchQuoteUrl = (id: string) => {
+  return `/api/v1/quotes/${id}`;
+};
+
+export const patchQuote = async (
+  id: string,
+  quotePatchInput: QuotePatchInput,
+  options?: RequestInit,
+): Promise<Quote> => {
+  return customFetch<Quote>(getPatchQuoteUrl(id), {
+    ...options,
+    method: "PATCH",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(quotePatchInput),
+  });
+};
+
+export const getPatchQuoteMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof patchQuote>>,
+    TError,
+    { id: string; data: BodyType<QuotePatchInput> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof patchQuote>>,
+  TError,
+  { id: string; data: BodyType<QuotePatchInput> },
+  TContext
+> => {
+  const mutationKey = ["patchQuote"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof patchQuote>>,
+    { id: string; data: BodyType<QuotePatchInput> }
+  > = (props) => {
+    const { id, data } = props ?? {};
+
+    return patchQuote(id, data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type PatchQuoteMutationResult = NonNullable<
+  Awaited<ReturnType<typeof patchQuote>>
+>;
+export type PatchQuoteMutationBody = BodyType<QuotePatchInput>;
+export type PatchQuoteMutationError = ErrorType<unknown>;
+
+export const usePatchQuote = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof patchQuote>>,
+    TError,
+    { id: string; data: BodyType<QuotePatchInput> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof patchQuote>>,
+  TError,
+  { id: string; data: BodyType<QuotePatchInput> },
+  TContext
+> => {
+  return useMutation(getPatchQuoteMutationOptions(options));
+};
+
 export const getGetQuotePdfUrl = (id: string) => {
   return `/api/v1/quotes/${id}/pdf`;
 };
@@ -7100,6 +7185,87 @@ export function useGetContract<
   return { ...query, queryKey: queryOptions.queryKey };
 }
 
+export const getPatchContractUrl = (id: string) => {
+  return `/api/v1/contracts/${id}`;
+};
+
+export const patchContract = async (
+  id: string,
+  contractPatchInput: ContractPatchInput,
+  options?: RequestInit,
+): Promise<Contract> => {
+  return customFetch<Contract>(getPatchContractUrl(id), {
+    ...options,
+    method: "PATCH",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(contractPatchInput),
+  });
+};
+
+export const getPatchContractMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof patchContract>>,
+    TError,
+    { id: string; data: BodyType<ContractPatchInput> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof patchContract>>,
+  TError,
+  { id: string; data: BodyType<ContractPatchInput> },
+  TContext
+> => {
+  const mutationKey = ["patchContract"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof patchContract>>,
+    { id: string; data: BodyType<ContractPatchInput> }
+  > = (props) => {
+    const { id, data } = props ?? {};
+
+    return patchContract(id, data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type PatchContractMutationResult = NonNullable<
+  Awaited<ReturnType<typeof patchContract>>
+>;
+export type PatchContractMutationBody = BodyType<ContractPatchInput>;
+export type PatchContractMutationError = ErrorType<unknown>;
+
+export const usePatchContract = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof patchContract>>,
+    TError,
+    { id: string; data: BodyType<ContractPatchInput> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof patchContract>>,
+  TError,
+  { id: string; data: BodyType<ContractPatchInput> },
+  TContext
+> => {
+  return useMutation(getPatchContractMutationOptions(options));
+};
+
 export const getListClauseFamiliesUrl = () => {
   return `/api/v1/clause-families`;
 };
@@ -7167,6 +7333,294 @@ export function useListClauseFamilies<
 
   return { ...query, queryKey: queryOptions.queryKey };
 }
+
+export const getListClauseVariantTranslationsUrl = (variantId: string) => {
+  return `/api/v1/clause-variants/${variantId}/translations`;
+};
+
+export const listClauseVariantTranslations = async (
+  variantId: string,
+  options?: RequestInit,
+): Promise<ClauseVariantTranslation[]> => {
+  return customFetch<ClauseVariantTranslation[]>(
+    getListClauseVariantTranslationsUrl(variantId),
+    {
+      ...options,
+      method: "GET",
+    },
+  );
+};
+
+export const getListClauseVariantTranslationsQueryKey = (variantId: string) => {
+  return [`/api/v1/clause-variants/${variantId}/translations`] as const;
+};
+
+export const getListClauseVariantTranslationsQueryOptions = <
+  TData = Awaited<ReturnType<typeof listClauseVariantTranslations>>,
+  TError = ErrorType<unknown>,
+>(
+  variantId: string,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof listClauseVariantTranslations>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey =
+    queryOptions?.queryKey ??
+    getListClauseVariantTranslationsQueryKey(variantId);
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof listClauseVariantTranslations>>
+  > = ({ signal }) =>
+    listClauseVariantTranslations(variantId, { signal, ...requestOptions });
+
+  return {
+    queryKey,
+    queryFn,
+    enabled: !!variantId,
+    ...queryOptions,
+  } as UseQueryOptions<
+    Awaited<ReturnType<typeof listClauseVariantTranslations>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type ListClauseVariantTranslationsQueryResult = NonNullable<
+  Awaited<ReturnType<typeof listClauseVariantTranslations>>
+>;
+export type ListClauseVariantTranslationsQueryError = ErrorType<unknown>;
+
+export function useListClauseVariantTranslations<
+  TData = Awaited<ReturnType<typeof listClauseVariantTranslations>>,
+  TError = ErrorType<unknown>,
+>(
+  variantId: string,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof listClauseVariantTranslations>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getListClauseVariantTranslationsQueryOptions(
+    variantId,
+    options,
+  );
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+export const getUpsertClauseVariantTranslationUrl = (
+  variantId: string,
+  locale: "de" | "en",
+) => {
+  return `/api/v1/clause-variants/${variantId}/translations/${locale}`;
+};
+
+export const upsertClauseVariantTranslation = async (
+  variantId: string,
+  locale: "de" | "en",
+  clauseVariantTranslationUpsert: ClauseVariantTranslationUpsert,
+  options?: RequestInit,
+): Promise<ClauseVariantTranslation> => {
+  return customFetch<ClauseVariantTranslation>(
+    getUpsertClauseVariantTranslationUrl(variantId, locale),
+    {
+      ...options,
+      method: "PUT",
+      headers: { "Content-Type": "application/json", ...options?.headers },
+      body: JSON.stringify(clauseVariantTranslationUpsert),
+    },
+  );
+};
+
+export const getUpsertClauseVariantTranslationMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof upsertClauseVariantTranslation>>,
+    TError,
+    {
+      variantId: string;
+      locale: "de" | "en";
+      data: BodyType<ClauseVariantTranslationUpsert>;
+    },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof upsertClauseVariantTranslation>>,
+  TError,
+  {
+    variantId: string;
+    locale: "de" | "en";
+    data: BodyType<ClauseVariantTranslationUpsert>;
+  },
+  TContext
+> => {
+  const mutationKey = ["upsertClauseVariantTranslation"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof upsertClauseVariantTranslation>>,
+    {
+      variantId: string;
+      locale: "de" | "en";
+      data: BodyType<ClauseVariantTranslationUpsert>;
+    }
+  > = (props) => {
+    const { variantId, locale, data } = props ?? {};
+
+    return upsertClauseVariantTranslation(
+      variantId,
+      locale,
+      data,
+      requestOptions,
+    );
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type UpsertClauseVariantTranslationMutationResult = NonNullable<
+  Awaited<ReturnType<typeof upsertClauseVariantTranslation>>
+>;
+export type UpsertClauseVariantTranslationMutationBody =
+  BodyType<ClauseVariantTranslationUpsert>;
+export type UpsertClauseVariantTranslationMutationError = ErrorType<unknown>;
+
+export const useUpsertClauseVariantTranslation = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof upsertClauseVariantTranslation>>,
+    TError,
+    {
+      variantId: string;
+      locale: "de" | "en";
+      data: BodyType<ClauseVariantTranslationUpsert>;
+    },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof upsertClauseVariantTranslation>>,
+  TError,
+  {
+    variantId: string;
+    locale: "de" | "en";
+    data: BodyType<ClauseVariantTranslationUpsert>;
+  },
+  TContext
+> => {
+  return useMutation(getUpsertClauseVariantTranslationMutationOptions(options));
+};
+
+export const getDeleteClauseVariantTranslationUrl = (
+  variantId: string,
+  locale: "de" | "en",
+) => {
+  return `/api/v1/clause-variants/${variantId}/translations/${locale}`;
+};
+
+export const deleteClauseVariantTranslation = async (
+  variantId: string,
+  locale: "de" | "en",
+  options?: RequestInit,
+): Promise<void> => {
+  return customFetch<void>(
+    getDeleteClauseVariantTranslationUrl(variantId, locale),
+    {
+      ...options,
+      method: "DELETE",
+    },
+  );
+};
+
+export const getDeleteClauseVariantTranslationMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof deleteClauseVariantTranslation>>,
+    TError,
+    { variantId: string; locale: "de" | "en" },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof deleteClauseVariantTranslation>>,
+  TError,
+  { variantId: string; locale: "de" | "en" },
+  TContext
+> => {
+  const mutationKey = ["deleteClauseVariantTranslation"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof deleteClauseVariantTranslation>>,
+    { variantId: string; locale: "de" | "en" }
+  > = (props) => {
+    const { variantId, locale } = props ?? {};
+
+    return deleteClauseVariantTranslation(variantId, locale, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type DeleteClauseVariantTranslationMutationResult = NonNullable<
+  Awaited<ReturnType<typeof deleteClauseVariantTranslation>>
+>;
+
+export type DeleteClauseVariantTranslationMutationError = ErrorType<unknown>;
+
+export const useDeleteClauseVariantTranslation = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof deleteClauseVariantTranslation>>,
+    TError,
+    { variantId: string; locale: "de" | "en" },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof deleteClauseVariantTranslation>>,
+  TError,
+  { variantId: string; locale: "de" | "en" },
+  TContext
+> => {
+  return useMutation(getDeleteClauseVariantTranslationMutationOptions(options));
+};
 
 export const getListContractAmendmentsUrl = (id: string) => {
   return `/api/v1/contracts/${id}/amendments`;

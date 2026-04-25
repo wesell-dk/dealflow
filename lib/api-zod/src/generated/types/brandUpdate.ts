@@ -7,6 +7,7 @@ Multi-tenant, multi-company, multi-brand. Deal-centric.
 
  * OpenAPI spec version: 0.1.0
  */
+import type { BrandUpdateDefaultLanguage } from "./brandUpdateDefaultLanguage";
 
 export interface BrandUpdate {
   name?: string;
@@ -19,4 +20,5 @@ export interface BrandUpdate {
   tone?: string | null;
   legalEntityName?: string | null;
   addressLine?: string | null;
+  defaultLanguage?: BrandUpdateDefaultLanguage;
 }

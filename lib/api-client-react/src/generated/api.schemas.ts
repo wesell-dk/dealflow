@@ -285,6 +285,18 @@ export interface Company {
  */
 export type BrandDefaultClauseVariants = { [key: string]: string };
 
+/**
+ * Default-Vertragssprache der Brand. NULL → Tenant-Default.
+ */
+export type BrandDefaultLanguage =
+  | (typeof BrandDefaultLanguage)[keyof typeof BrandDefaultLanguage]
+  | null;
+
+export const BrandDefaultLanguage = {
+  de: "de",
+  en: "en",
+} as const;
+
 export interface Brand {
   id: string;
   companyId: string;
@@ -302,7 +314,18 @@ export interface Brand {
   tone?: string | null;
   legalEntityName?: string | null;
   addressLine?: string | null;
+  /** Default-Vertragssprache der Brand. NULL → Tenant-Default. */
+  defaultLanguage?: BrandDefaultLanguage;
 }
+
+export type BrandUpdateDefaultLanguage =
+  | (typeof BrandUpdateDefaultLanguage)[keyof typeof BrandUpdateDefaultLanguage]
+  | null;
+
+export const BrandUpdateDefaultLanguage = {
+  de: "de",
+  en: "en",
+} as const;
 
 export interface BrandUpdate {
   name?: string;
@@ -315,6 +338,7 @@ export interface BrandUpdate {
   tone?: string | null;
   legalEntityName?: string | null;
   addressLine?: string | null;
+  defaultLanguage?: BrandUpdateDefaultLanguage;
 }
 
 export interface CompanyCreate {
@@ -911,6 +935,16 @@ export interface DealPatch {
   expectedCloseDate?: string;
 }
 
+/**
+ * Sprachfassung des Angebots.
+ */
+export type QuoteLanguage = (typeof QuoteLanguage)[keyof typeof QuoteLanguage];
+
+export const QuoteLanguage = {
+  de: "de",
+  en: "en",
+} as const;
+
 export interface Quote {
   id: string;
   dealId: string;
@@ -924,7 +958,20 @@ export interface Quote {
   currency: string;
   createdAt: string;
   validUntil: string;
+  /** Sprachfassung des Angebots. */
+  language: QuoteLanguage;
 }
+
+/**
+ * Sprachfassung des Vertrags. Default ergibt sich aus Brand- bzw. Tenant-Default.
+ */
+export type ContractLanguage =
+  (typeof ContractLanguage)[keyof typeof ContractLanguage];
+
+export const ContractLanguage = {
+  de: "de",
+  en: "en",
+} as const;
 
 export interface Contract {
   id: string;
@@ -940,6 +987,8 @@ export interface Contract {
   template: string;
   /** @nullable */
   validUntil?: string | null;
+  /** Sprachfassung des Vertrags. Default ergibt sich aus Brand- bzw. Tenant-Default. */
+  language: ContractLanguage;
 }
 
 export type ApprovalStageStatus =
@@ -1092,9 +1141,34 @@ export interface TimelineEvent {
   dealName?: string | null;
 }
 
+/**
+ * Optionale Sprachfassung. NULL/leer → Brand-/Tenant-Default.
+ */
+export type QuoteInputLanguage =
+  (typeof QuoteInputLanguage)[keyof typeof QuoteInputLanguage];
+
+export const QuoteInputLanguage = {
+  de: "de",
+  en: "en",
+} as const;
+
 export interface QuoteInput {
   dealId: string;
   validUntil?: string;
+  /** Optionale Sprachfassung. NULL/leer → Brand-/Tenant-Default. */
+  language?: QuoteInputLanguage;
+}
+
+export type QuotePatchInputLanguage =
+  (typeof QuotePatchInputLanguage)[keyof typeof QuotePatchInputLanguage];
+
+export const QuotePatchInputLanguage = {
+  de: "de",
+  en: "en",
+} as const;
+
+export interface QuotePatchInput {
+  language?: QuotePatchInputLanguage;
 }
 
 export interface QuoteVersion {
@@ -1497,13 +1571,53 @@ export interface UserDelegationPatch {
   active?: boolean;
 }
 
+/**
+ * Optionale Sprachfassung. NULL/leer → Brand-/Tenant-Default.
+ */
+export type ContractInputLanguage =
+  (typeof ContractInputLanguage)[keyof typeof ContractInputLanguage];
+
+export const ContractInputLanguage = {
+  de: "de",
+  en: "en",
+} as const;
+
 export interface ContractInput {
   dealId: string;
   title: string;
   template: string;
   /** Optional brand whose default clause variants should be applied on creation. */
   brandId?: string;
+  /** Optionale Sprachfassung. NULL/leer → Brand-/Tenant-Default. */
+  language?: ContractInputLanguage;
 }
+
+/**
+ * Aktualisiert die aktive Sprachfassung des Vertrags.
+ */
+export type ContractPatchInputLanguage =
+  (typeof ContractPatchInputLanguage)[keyof typeof ContractPatchInputLanguage];
+
+export const ContractPatchInputLanguage = {
+  de: "de",
+  en: "en",
+} as const;
+
+export interface ContractPatchInput {
+  /** Aktualisiert die aktive Sprachfassung des Vertrags. */
+  language?: ContractPatchInputLanguage;
+}
+
+/**
+ * Locale, in der die Klausel aktuell ausgeliefert wird.
+ */
+export type ContractClauseTranslationLocale =
+  (typeof ContractClauseTranslationLocale)[keyof typeof ContractClauseTranslationLocale];
+
+export const ContractClauseTranslationLocale = {
+  de: "de",
+  en: "en",
+} as const;
 
 export interface ContractClause {
   id: string;
@@ -1519,6 +1633,10 @@ export interface ContractClause {
   severityScore: number;
   tone: string;
   body: string;
+  /** Locale, in der die Klausel aktuell ausgeliefert wird. */
+  translationLocale?: ContractClauseTranslationLocale;
+  /** true, wenn für die Vertragssprache keine Übersetzung gepflegt ist und auf die Quell-Sprache zurückgefallen wurde. */
+  translationMissing?: boolean;
 }
 
 export type ContractDetail = Contract & {
@@ -1529,6 +1647,30 @@ export interface ContractClausePatchInput {
   variantId: string;
 }
 
+export type ClauseVariantTranslationLocale =
+  (typeof ClauseVariantTranslationLocale)[keyof typeof ClauseVariantTranslationLocale];
+
+export const ClauseVariantTranslationLocale = {
+  de: "de",
+  en: "en",
+} as const;
+
+export interface ClauseVariantTranslation {
+  id: string;
+  variantId: string;
+  locale: ClauseVariantTranslationLocale;
+  name: string;
+  summary: string;
+  body: string;
+  /** z. B. bonterms-mutual-2024 */
+  source?: string | null;
+  /** z. B. CC-BY-4.0 */
+  license?: string | null;
+  sourceUrl?: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface ClauseVariant {
   id: string;
   name: string;
@@ -1537,6 +1679,29 @@ export interface ClauseVariant {
   summary: string;
   body: string;
   tone: string;
+  /** Vorhandene Sprachfassungen je Variante (de/en/…). */
+  translations?: ClauseVariantTranslation[];
+}
+
+export interface ClauseVariantTranslationUpsert {
+  /**
+   * @minLength 1
+   * @maxLength 200
+   */
+  name: string;
+  /**
+   * @minLength 1
+   * @maxLength 1000
+   */
+  summary: string;
+  /** @maxLength 8000 */
+  body: string;
+  /** @maxLength 200 */
+  source?: string | null;
+  /** @maxLength 200 */
+  license?: string | null;
+  /** @maxLength 1000 */
+  sourceUrl?: string | null;
 }
 
 export interface ClauseFamily {

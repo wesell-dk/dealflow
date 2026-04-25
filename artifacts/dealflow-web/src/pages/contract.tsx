@@ -3,6 +3,7 @@ import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
   useGetContract,
+  usePatchContract,
   useListClauseFamilies,
   useListContractClauses,
   usePatchContractClause,
@@ -52,7 +53,7 @@ import {
   DialogTitle,
   DialogDescription,
 } from "@/components/ui/dialog";
-import { FileText, ShieldAlert, Library, Activity, GitCompare, AlertTriangle, FileStack, Plus } from "lucide-react";
+import { FileText, ShieldAlert, Library, Activity, GitCompare, AlertTriangle, FileStack, Plus, Languages } from "lucide-react";
 import { EntityVersions } from "@/components/ui/entity-versions";
 import { useToast } from "@/hooks/use-toast";
 
@@ -111,6 +112,18 @@ export default function Contract() {
     query: { enabled: !!id, queryKey: ["contractClauseCompatibility", id] },
   });
   const patchClause = usePatchContractClause();
+  const patchContract = usePatchContract();
+  async function changeLanguage(next: "de" | "en") {
+    if (!contract || (contract.language ?? "de") === next) return;
+    try {
+      await patchContract.mutateAsync({ id: id ?? "", data: { language: next } });
+      await qc.invalidateQueries({ queryKey: getGetContractQueryKey(id ?? "") });
+      await qc.invalidateQueries({ queryKey: ["/api/v1/contracts", id, "clauses"] });
+      toast({ description: t("pages.contracts.languageChanged") });
+    } catch (e) {
+      toast({ title: "Error", description: String(e), variant: "destructive" });
+    }
+  }
 
   const [diff, setDiff] = useState<DiffState>(null);
   const [pending, setPending] = useState<string | null>(null);
@@ -174,6 +187,21 @@ export default function Contract() {
             <h1 className="text-3xl font-bold tracking-tight">{contract.title}</h1>
           </div>
           <div className="flex gap-2 items-center">
+            <div className="flex items-center gap-1.5">
+              <Languages className="h-4 w-4 text-muted-foreground" />
+              <Select
+                value={contract.language ?? "de"}
+                onValueChange={(v) => changeLanguage(v as "de" | "en")}
+              >
+                <SelectTrigger className="h-8 w-[120px]" data-testid="contract-language-select">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="de">DE</SelectItem>
+                  <SelectItem value="en">EN</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
             <Button variant="outline" size="sm" onClick={() => window.open(`/api/contracts/${id}/pdf`, '_blank')}>
               <FileText className="h-4 w-4 mr-2" /> PDF anzeigen
             </Button>
@@ -268,6 +296,16 @@ export default function Contract() {
                           {t("pages.contracts.score")}: <strong className="tabular-nums">{clause.severityScore ?? "—"}</strong>
                         </span>
                         {compat && <CompatBadge compat={compat} />}
+                        {clause.translationMissing && (
+                          <Badge
+                            variant="outline"
+                            className="bg-amber-500/10 text-amber-600 border-amber-500/30"
+                            data-testid={`clause-translation-missing-${clause.id}`}
+                          >
+                            <Languages className="h-3 w-3 mr-1" />
+                            {t("pages.contracts.translationMissingClause")}
+                          </Badge>
+                        )}
                       </div>
                     </div>
                     <div className="flex items-center gap-2 shrink-0">

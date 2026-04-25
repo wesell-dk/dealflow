@@ -671,6 +671,7 @@ function BrandRow({ brand }: { brand: Brand }) {
     legalEntityName: brand.legalEntityName ?? "",
     addressLine: brand.addressLine ?? "",
     parentBrandId: brand.parentBrandId ?? null,
+    defaultLanguage: brand.defaultLanguage ?? "de",
   });
   const allBrandsQ = useListBrands();
   const NO_PARENT = "_none_";

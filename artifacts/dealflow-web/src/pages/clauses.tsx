@@ -13,6 +13,9 @@ import {
   useCreateClauseCompatibility,
   useDeleteClauseCompatibility,
   getListClauseCompatibilityQueryKey,
+  useUpsertClauseVariantTranslation,
+  useDeleteClauseVariantTranslation,
+  getListClauseFamiliesQueryKey,
 } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/contexts/auth-context";
@@ -38,7 +41,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Library, Palette, Save, Pencil, Trash2, Link2, Plus } from "lucide-react";
+import { Library, Palette, Save, Pencil, Trash2, Link2, Plus, Languages } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
 function toneClass(tone: string) {
@@ -179,6 +182,13 @@ export default function Clauses() {
         <BrandOverridesSection brands={brands ?? []} families={families ?? []} />
       )}
 
+      {(families?.length ?? 0) > 0 && (
+        <ClauseTranslationsSection
+          families={families ?? []}
+          isTenantAdmin={isTenantAdmin}
+        />
+      )}
+
       {isTenantAdmin && (families?.length ?? 0) > 0 && (
         <CompatibilityRulesSection families={families ?? []} />
       )}
@@ -242,6 +252,17 @@ export default function Clauses() {
 }
 
 type BrandLite = { id: string; name: string; color?: string | null };
+type TranslationLite = {
+  id: string;
+  variantId: string;
+  locale: "de" | "en";
+  name: string;
+  summary: string;
+  body: string;
+  source?: string | null;
+  license?: string | null;
+  sourceUrl?: string | null;
+};
 type FamilyLite = {
   id: string;
   name: string;
@@ -253,6 +274,7 @@ type FamilyLite = {
     tone: string;
     severity: string;
     severityScore: number;
+    translations?: TranslationLite[];
   }>;
 };
 
@@ -641,6 +663,239 @@ function CompatibilityRulesSection({ families }: { families: FamilyLite[] }) {
           </div>
         )}
       </CardContent>
+    </Card>
+  );
+}
+
+function ClauseTranslationsSection({
+  families,
+  isTenantAdmin,
+}: {
+  families: FamilyLite[];
+  isTenantAdmin: boolean;
+}) {
+  const { t } = useTranslation();
+  const { toast } = useToast();
+  const qc = useQueryClient();
+  const upsert = useUpsertClauseVariantTranslation();
+  const remove = useDeleteClauseVariantTranslation();
+  const [editing, setEditing] = useState<{
+    variantId: string;
+    locale: "en";
+    variantName: string;
+    familyName: string;
+  } | null>(null);
+  const [form, setForm] = useState<{
+    name: string;
+    summary: string;
+    body: string;
+    source: string;
+    license: string;
+    sourceUrl: string;
+  }>({ name: "", summary: "", body: "", source: "", license: "", sourceUrl: "" });
+
+  function openEditor(
+    variant: FamilyLite["variants"][number],
+    familyName: string,
+    locale: "en",
+  ) {
+    const tr = (variant.translations ?? []).find((x) => x.locale === locale);
+    setEditing({ variantId: variant.id, locale, variantName: variant.name, familyName });
+    setForm({
+      name: tr?.name ?? "",
+      summary: tr?.summary ?? "",
+      body: tr?.body ?? "",
+      source: tr?.source ?? "",
+      license: tr?.license ?? "",
+      sourceUrl: tr?.sourceUrl ?? "",
+    });
+  }
+
+  async function save() {
+    if (!editing) return;
+    try {
+      await upsert.mutateAsync({
+        variantId: editing.variantId,
+        locale: editing.locale,
+        data: {
+          name: form.name.trim(),
+          summary: form.summary.trim(),
+          body: form.body,
+          source: form.source.trim() || null,
+          license: form.license.trim() || null,
+          sourceUrl: form.sourceUrl.trim() || null,
+        },
+      });
+      await qc.invalidateQueries({ queryKey: getListClauseFamiliesQueryKey() });
+      toast({ description: t("pages.clauses.translationSaved") });
+      setEditing(null);
+    } catch (e) {
+      toast({ title: "Error", description: String(e), variant: "destructive" });
+    }
+  }
+
+  async function removeTr(variantId: string, locale: "en") {
+    try {
+      await remove.mutateAsync({ variantId, locale });
+      await qc.invalidateQueries({ queryKey: getListClauseFamiliesQueryKey() });
+      toast({ description: t("pages.clauses.translationRemoved") });
+    } catch (e) {
+      toast({ title: "Error", description: String(e), variant: "destructive" });
+    }
+  }
+
+  return (
+    <Card data-testid="clause-translations-card">
+      <CardHeader className="flex flex-row items-center gap-2 space-y-0">
+        <Languages className="h-5 w-5 text-muted-foreground" />
+        <div>
+          <CardTitle>{t("pages.clauses.translations")}</CardTitle>
+          <p className="text-xs text-muted-foreground mt-1">
+            {t("pages.clauses.translationsHint")}
+          </p>
+        </div>
+      </CardHeader>
+      <CardContent className="space-y-6">
+        {families.map((fam) => (
+          <div key={fam.id} className="space-y-2">
+            <h4 className="text-sm font-semibold text-muted-foreground">{fam.name}</h4>
+            <div className="grid md:grid-cols-2 gap-2">
+              {fam.variants.map((v) => {
+                const enTr = (v.translations ?? []).find((x) => x.locale === "en");
+                return (
+                  <div
+                    key={v.id}
+                    className="flex items-center justify-between gap-2 p-2 border rounded-md text-sm"
+                    data-testid={`translation-row-${v.id}`}
+                  >
+                    <div className="flex-1 min-w-0">
+                      <div className="font-medium truncate">{v.name}</div>
+                      <div className="text-xs text-muted-foreground flex items-center gap-2 mt-0.5">
+                        <Badge variant="outline" className="bg-emerald-500/10 text-emerald-600 border-emerald-500/30 text-xs">
+                          DE · {t("pages.clauses.translationPresent")}
+                        </Badge>
+                        {enTr ? (
+                          <Badge variant="outline" className="bg-sky-500/10 text-sky-600 border-sky-500/30 text-xs">
+                            EN · {t("pages.clauses.translationPresent")}
+                          </Badge>
+                        ) : (
+                          <Badge variant="outline" className="bg-amber-500/10 text-amber-600 border-amber-500/30 text-xs">
+                            EN · {t("pages.clauses.translationMissing")}
+                          </Badge>
+                        )}
+                      </div>
+                    </div>
+                    {isTenantAdmin && (
+                      <>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => openEditor(v, fam.name, "en")}
+                          data-testid={`translation-edit-${v.id}`}
+                        >
+                          <Pencil className="h-3 w-3" />
+                        </Button>
+                        {enTr && (
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            onClick={() => removeTr(v.id, "en")}
+                            data-testid={`translation-remove-${v.id}`}
+                          >
+                            <Trash2 className="h-3 w-3 text-destructive" />
+                          </Button>
+                        )}
+                      </>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        ))}
+      </CardContent>
+
+      <Dialog open={!!editing} onOpenChange={(o) => !o && setEditing(null)}>
+        <DialogContent className="max-w-2xl">
+          {editing && (
+            <>
+              <DialogHeader>
+                <DialogTitle className="flex items-center gap-2">
+                  <Languages className="h-4 w-4" />
+                  {t("pages.clauses.translationEditFor", {
+                    variant: `${editing.familyName} · ${editing.variantName}`,
+                    locale: editing.locale.toUpperCase(),
+                  })}
+                </DialogTitle>
+              </DialogHeader>
+              <div className="space-y-3">
+                <div>
+                  <Label>{t("pages.clauses.translationName")}</Label>
+                  <Input
+                    value={form.name}
+                    onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
+                    data-testid="translation-input-name"
+                  />
+                </div>
+                <div>
+                  <Label>{t("pages.clauses.translationSummary")}</Label>
+                  <Textarea
+                    value={form.summary}
+                    onChange={(e) => setForm((f) => ({ ...f, summary: e.target.value }))}
+                    rows={3}
+                    data-testid="translation-input-summary"
+                  />
+                </div>
+                <div>
+                  <Label>{t("pages.clauses.translationBody")}</Label>
+                  <Textarea
+                    value={form.body}
+                    onChange={(e) => setForm((f) => ({ ...f, body: e.target.value }))}
+                    rows={4}
+                    data-testid="translation-input-body"
+                  />
+                </div>
+                <div className="grid grid-cols-3 gap-2">
+                  <div>
+                    <Label>{t("pages.clauses.translationSource")}</Label>
+                    <Input
+                      value={form.source}
+                      onChange={(e) => setForm((f) => ({ ...f, source: e.target.value }))}
+                    />
+                  </div>
+                  <div>
+                    <Label>{t("pages.clauses.translationLicense")}</Label>
+                    <Input
+                      value={form.license}
+                      onChange={(e) => setForm((f) => ({ ...f, license: e.target.value }))}
+                    />
+                  </div>
+                  <div>
+                    <Label>{t("pages.clauses.translationSourceUrl")}</Label>
+                    <Input
+                      value={form.sourceUrl}
+                      onChange={(e) => setForm((f) => ({ ...f, sourceUrl: e.target.value }))}
+                    />
+                  </div>
+                </div>
+              </div>
+              <DialogFooter>
+                <Button variant="outline" onClick={() => setEditing(null)}>
+                  {t("common.cancel")}
+                </Button>
+                <Button
+                  onClick={save}
+                  disabled={!form.name.trim() || !form.summary.trim() || upsert.isPending}
+                  data-testid="translation-save"
+                >
+                  <Save className="h-3 w-3 mr-1" />
+                  {t("common.save")}
+                </Button>
+              </DialogFooter>
+            </>
+          )}
+        </DialogContent>
+      </Dialog>
     </Card>
   );
 }

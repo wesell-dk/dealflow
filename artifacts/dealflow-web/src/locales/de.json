@@ -162,7 +162,8 @@
       "margin": "Marge",
       "openPdf": "PDF anzeigen",
       "attachments": "Anhänge",
-      "noAttachments": "Keine Anhänge an diese Version gehängt."
+      "noAttachments": "Keine Anhänge an diese Version gehängt.",
+      "languageChanged": "Angebotssprache aktualisiert"
     },
     "templates": {
       "title": "Angebots-Vorlagen",
@@ -203,6 +204,9 @@
       "riskScore": "Risiko-Score",
       "riskScoreInfo": "Berechnet aus {{count}} Klausel-Severities (high·25 / medium·10 / low·3, max. 100).",
       "currentClauses": "Aktive Klauseln",
+      "language": "Sprache",
+      "languageChanged": "Vertragssprache aktualisiert",
+      "translationMissingClause": "EN-Übersetzung fehlt — Anzeige in DE",
       "clauseLibrary": "Klausel-Bibliothek",
       "variant": "Variante",
       "tone": "Tonalität",
@@ -286,7 +290,25 @@
       "compatBadgeWarning": "Voraussetzung offen",
       "compatBadgeConflict": "Konflikt",
       "compatRequiresOpenLine": "Verlangt Variante \"{{variant}}\" in Familie \"{{family}}\".",
-      "compatConflictLine": "Kollidiert mit Variante \"{{variant}}\" in Familie \"{{family}}\"."
+      "compatConflictLine": "Kollidiert mit Variante \"{{variant}}\" in Familie \"{{family}}\".",
+      "translations": "Sprachfassungen",
+      "translationsHint": "Pflege je Variante eine Übersetzung pro Sprache (Deutsch ist Quelle). Wird in Verträgen/Angeboten gemäß Vertragssprache gerendert.",
+      "translationLocale": "Sprache",
+      "translationName": "Name",
+      "translationSummary": "Zusammenfassung",
+      "translationBody": "Volltext (optional)",
+      "translationSource": "Quelle (optional)",
+      "translationLicense": "Lizenz (optional)",
+      "translationSourceUrl": "Quelle URL (optional)",
+      "translationSaved": "Sprachfassung gespeichert",
+      "translationRemoved": "Sprachfassung entfernt",
+      "translationEditFor": "Sprachfassung bearbeiten: {{variant}} ({{locale}})",
+      "translationMissing": "Übersetzung fehlt",
+      "translationPresent": "vorhanden",
+      "translationOpen": "Bearbeiten",
+      "translationDelete": "Entfernen",
+      "translationLocaleDe": "Deutsch (Quelle)",
+      "translationLocaleEn": "Englisch"
     },
     "negotiations": {
       "title": "Verhandlungen",

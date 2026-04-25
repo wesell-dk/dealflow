@@ -216,8 +216,19 @@ export const approvalReadiness: PromptDefinition<
     "Entscheidungsempfehlung (approve / approve_with_conditions / request_info / " +
     "reject), nennst fehlende Informationen und Schlüssel-Abweichungen. " +
     SAFE_GERMAN_HINT,
-  buildUser: (ctx) =>
-    `Bewerte die Entscheidungsreife dieses Approval-Falls. Kontext (JSON):\n${JSON.stringify(ctx)}`,
+  buildUser: (ctx) => {
+    const missingHints: string[] = [];
+    if (ctx.missingTranslations && ctx.missingTranslations.length > 0) {
+      const locale = ctx.contract?.language ?? 'en';
+      const families = Array.from(new Set(ctx.missingTranslations.map((m) => m.family))).sort();
+      missingHints.push(
+        `Übersetzungen für Vertragssprache "${locale}" fehlen für Klauselfamilien: ${families.join(', ')}. ` +
+        `Bitte explizit in missingInformation aufnehmen ("Übersetzung [${locale}] fehlt: <Familie>").`,
+      );
+    }
+    const hintsBlock = missingHints.length > 0 ? `\nDeterministische Hinweise:\n- ${missingHints.join('\n- ')}\n` : '';
+    return `Bewerte die Entscheidungsreife dieses Approval-Falls.${hintsBlock}Kontext (JSON):\n${JSON.stringify(ctx)}`;
+  },
   outputSchema: ApprovalReadinessOutput,
   toolDescription:
     "Liefert decisionReady, recommendation, rationale, missingInformation, " +

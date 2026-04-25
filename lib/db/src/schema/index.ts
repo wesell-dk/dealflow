@@ -30,6 +30,9 @@ export const tenantsTable = pgTable("tenants", {
     }>()
     .default({})
     .notNull(),
+  // Tenant-weiter Default für Vertragssprache (de/en). Wird genutzt, wenn weder
+  // Brand noch der explizite Body-Wert eine Sprache vorgeben.
+  defaultLanguage: text("default_language").notNull().default("de"),
   createdAt: ts("created_at"),
 });
 
@@ -58,6 +61,8 @@ export const brandsTable = pgTable("brands", {
   tone: text("tone"),
   legalEntityName: text("legal_entity_name"),
   addressLine: text("address_line"),
+  // Default-Vertragssprache für diese Brand (de/en). Wenn null → Tenant-Default.
+  defaultLanguage: text("default_language"),
 });
 
 export const usersTable = pgTable("users", {
@@ -196,6 +201,9 @@ export const quotesTable = pgTable("quotes", {
   currentVersion: integer("current_version").notNull().default(1),
   currency: text("currency").notNull(),
   validUntil: date("valid_until").notNull(),
+  // Sprachfassung des Angebots (de/en). NULL → wird beim Lesen aus
+  // Brand-/Tenant-Default abgeleitet.
+  language: text("language"),
   createdAt: ts("created_at"),
 });
 
@@ -562,6 +570,32 @@ export const clauseVariantsTable = pgTable("clause_variants", {
     ownerRole?: string;
   }>>(),
 });
+
+// Pro Klausel-Variante existieren ein oder mehrere Sprachfassungen (de/en/…).
+// Die Basis-Felder name/summary/body in clauseVariantsTable gelten als
+// "Quell-Sprache" (typischerweise DE) und werden hier durch zusätzliche Locales
+// ergänzt. Wenn eine Sprachfassung fehlt, fällt die Vertrags-Materialisierung
+// auf die Basis-Variante zurück und markiert sie als translationMissing.
+export const clauseVariantTranslationsTable = pgTable("clause_variant_translations", {
+  id: id(),
+  variantId: text("variant_id").notNull(),
+  // ISO 639-1 Sprach-Code (de | en). Der Tenant unterstützt aktuell nur de/en.
+  locale: text("locale").notNull(),
+  name: text("name").notNull(),
+  summary: text("summary").notNull(),
+  body: text("body").notNull().default(""),
+  // Optionaler Quell-/Lizenz-Hinweis pro Sprachfassung
+  // (z. B. "bonterms-mutual-2024", "CC-BY-4.0", "Internal").
+  source: text("source"),
+  license: text("license"),
+  sourceUrl: text("source_url"),
+  metadata: jsonb("metadata").$type<Record<string, unknown>>(),
+  createdAt: ts("created_at"),
+  updatedAt: ts("updated_at"),
+}, (t) => ({
+  byVariantLocale: uniqueIndex("clause_variant_translations_variant_locale_uq").on(t.variantId, t.locale),
+  byLocale: index("clause_variant_translations_locale_idx").on(t.locale),
+}));
 
 // Brand-spezifische Overrides einer System-Klausel-Variante (Tonalität, Text, Severity).
 // Wenn vorhanden, wird beim Materialisieren eines Vertrags der Brand-Override verwendet.

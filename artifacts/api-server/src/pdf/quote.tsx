@@ -58,10 +58,72 @@ export interface QuotePdfData {
   brand: QuotePdfBrand | null;
   sections?: QuotePdfSection[];
   attachments?: QuotePdfAttachment[];
+  language?: 'de' | 'en';
 }
 
-const fmt = (n: number, cur: string) =>
-  new Intl.NumberFormat('de-DE', { style: 'currency', currency: cur }).format(n);
+const QUOTE_LABELS = {
+  de: {
+    docTitle: 'Angebot',
+    coverEyebrow: 'Kommerzielles Angebot',
+    coverFor: 'Für:',
+    version: 'Version',
+    validUntil: 'Gültig bis',
+    grandTotal: 'Gesamtsumme',
+    toc: 'Inhaltsverzeichnis',
+    page: 'Seite',
+    quoteAndPositions: 'Angebot & Positionen',
+    introDefault: 'Einleitung',
+    scopeDefault: 'Leistungsumfang',
+    termsDefault: 'Konditionen',
+    appendixDefault: 'Anhang',
+    attachments: 'Anlagen',
+    quoteNumber: 'Angebotsnummer',
+    deal: 'Deal',
+    status: 'Status',
+    margin: 'Marge',
+    positions: 'Positionen',
+    name: 'Bezeichnung',
+    qty: 'Menge',
+    listPrice: 'Listenpreis',
+    discount: 'Rabatt',
+    sum: 'Summe',
+    subtotal: 'Zwischensumme',
+    total: 'Gesamt',
+    notes: 'Hinweise',
+  },
+  en: {
+    docTitle: 'Quote',
+    coverEyebrow: 'Commercial Quote',
+    coverFor: 'For:',
+    version: 'Version',
+    validUntil: 'Valid until',
+    grandTotal: 'Grand total',
+    toc: 'Table of contents',
+    page: 'Page',
+    quoteAndPositions: 'Quote & line items',
+    introDefault: 'Introduction',
+    scopeDefault: 'Scope of work',
+    termsDefault: 'Terms',
+    appendixDefault: 'Appendix',
+    attachments: 'Attachments',
+    quoteNumber: 'Quote number',
+    deal: 'Deal',
+    status: 'Status',
+    margin: 'Margin',
+    positions: 'Line items',
+    name: 'Item',
+    qty: 'Qty',
+    listPrice: 'List price',
+    discount: 'Discount',
+    sum: 'Total',
+    subtotal: 'Subtotal',
+    total: 'Total',
+    notes: 'Notes',
+  },
+} as const;
+
+const fmt = (n: number, cur: string, locale: 'de' | 'en' = 'de') =>
+  new Intl.NumberFormat(locale === 'en' ? 'en-US' : 'de-DE', { style: 'currency', currency: cur }).format(n);
 
 const formatBytes = (n: number) => {
   if (n < 1024) return `${n} B`;
@@ -72,6 +134,8 @@ const formatBytes = (n: number) => {
 export function QuoteDocument({ data }: { data: QuotePdfData }) {
   const primary = data.brand?.primaryColor || '#0b5fff';
   const secondary = data.brand?.secondaryColor || '#1f2937';
+  const lang: 'de' | 'en' = data.language === 'en' ? 'en' : 'de';
+  const L = QUOTE_LABELS[lang];
 
   const styles = StyleSheet.create({
     page: { padding: 36, fontSize: 10, fontFamily: 'Helvetica', color: '#111827' },
@@ -208,16 +272,16 @@ export function QuoteDocument({ data }: { data: QuotePdfData }) {
   // and are not statically computable here (sections may wrap), so we
   // omit page labels and just list the entries.
   const toc: { title: string }[] = [];
-  toc.push({ title: 'Angebot & Positionen' });
-  if (intro) toc.push({ title: intro.title || 'Einleitung' });
-  if (scopeSection) toc.push({ title: scopeSection.title || 'Leistungsumfang' });
-  if (termsSection) toc.push({ title: termsSection.title || 'Konditionen' });
+  toc.push({ title: L.quoteAndPositions });
+  if (intro) toc.push({ title: intro.title || L.introDefault });
+  if (scopeSection) toc.push({ title: scopeSection.title || L.scopeDefault });
+  if (termsSection) toc.push({ title: termsSection.title || L.termsDefault });
   for (const s of customSections) toc.push({ title: s.title });
-  if (appendixSection) toc.push({ title: appendixSection.title || 'Anhang' });
-  if (attachments.length > 0) toc.push({ title: `Anlagen (${attachments.length})` });
+  if (appendixSection) toc.push({ title: appendixSection.title || L.appendixDefault });
+  if (attachments.length > 0) toc.push({ title: `${L.attachments} (${attachments.length})` });
 
   return (
-    <Document title={`Angebot ${data.number}`}>
+    <Document title={`${L.docTitle} ${data.number}`}>
       {cover ? (
         <Page size="A4" style={styles.coverPage}>
           <View style={styles.coverTop}>
@@ -236,9 +300,9 @@ export function QuoteDocument({ data }: { data: QuotePdfData }) {
           </View>
 
           <View style={styles.coverHeroBlock}>
-            <Text style={styles.coverEyebrow}>{cover.title || 'Kommerzielles Angebot'}</Text>
-            <Text style={styles.coverTitle}>Angebot {data.number}</Text>
-            <Text style={styles.coverFor}>Für: {data.dealName}</Text>
+            <Text style={styles.coverEyebrow}>{cover.title || L.coverEyebrow}</Text>
+            <Text style={styles.coverTitle}>{L.docTitle} {data.number}</Text>
+            <Text style={styles.coverFor}>{L.coverFor} {data.dealName}</Text>
           </View>
 
           {cover.body ? (
@@ -249,16 +313,16 @@ export function QuoteDocument({ data }: { data: QuotePdfData }) {
 
           <View style={styles.coverBlocks}>
             <View style={styles.coverBlock}>
-              <Text style={styles.coverBlockLabel}>Version</Text>
+              <Text style={styles.coverBlockLabel}>{L.version}</Text>
               <Text style={styles.coverBlockValue}>v{data.version}</Text>
             </View>
             <View style={styles.coverBlock}>
-              <Text style={styles.coverBlockLabel}>Gültig bis</Text>
+              <Text style={styles.coverBlockLabel}>{L.validUntil}</Text>
               <Text style={styles.coverBlockValue}>{data.validUntil}</Text>
             </View>
             <View style={styles.coverBlock}>
-              <Text style={styles.coverBlockLabel}>Gesamtsumme</Text>
-              <Text style={styles.coverBlockValue}>{fmt(data.totalAmount, data.currency)}</Text>
+              <Text style={styles.coverBlockLabel}>{L.grandTotal}</Text>
+              <Text style={styles.coverBlockValue}>{fmt(data.totalAmount, data.currency, lang)}</Text>
             </View>
           </View>
 
@@ -284,7 +348,7 @@ export function QuoteDocument({ data }: { data: QuotePdfData }) {
               <Text style={{ fontSize: 8, color: '#6b7280' }}>{data.brand?.addressLine ?? ''}</Text>
             </View>
           </View>
-          <Text style={styles.h1}>Inhaltsverzeichnis</Text>
+          <Text style={styles.h1}>{L.toc}</Text>
           <View style={{ marginTop: 12 }}>
             {toc.map((t, i) => (
               <View
@@ -300,14 +364,14 @@ export function QuoteDocument({ data }: { data: QuotePdfData }) {
                 <Text style={{ fontSize: 11, color: '#111827' }}>{t.title}</Text>
                 <Text
                   style={{ fontSize: 10, color: '#6b7280' }}
-                  render={({ pageNumber }) => `Seite ${pageNumber + 1}`}
+                  render={({ pageNumber }) => `${L.page} ${pageNumber + 1}`}
                   fixed
                 />
               </View>
             ))}
           </View>
           <Text style={styles.footer} fixed>
-            {data.brand?.legalEntityName ?? 'DealFlow One'} · Angebot {data.number} · v{data.version}
+            {data.brand?.legalEntityName ?? 'DealFlow One'} · {L.docTitle} {data.number} · v{data.version}
           </Text>
         </Page>
       ) : null}
@@ -330,49 +394,49 @@ export function QuoteDocument({ data }: { data: QuotePdfData }) {
           </View>
         </View>
 
-        <Text style={styles.h1}>Angebot</Text>
+        <Text style={styles.h1}>{L.docTitle}</Text>
         <View style={styles.meta}>
           <View style={styles.metaCol}>
-            <Text style={styles.metaLabel}>Angebotsnummer</Text>
+            <Text style={styles.metaLabel}>{L.quoteNumber}</Text>
             <Text style={styles.metaValue}>{data.number}</Text>
-            <Text style={styles.metaLabel}>Deal</Text>
+            <Text style={styles.metaLabel}>{L.deal}</Text>
             <Text style={styles.metaValue}>{data.dealName}</Text>
           </View>
           <View style={styles.metaCol}>
-            <Text style={styles.metaLabel}>Version</Text>
+            <Text style={styles.metaLabel}>{L.version}</Text>
             <Text style={styles.metaValue}>v{data.version}</Text>
-            <Text style={styles.metaLabel}>Gültig bis</Text>
+            <Text style={styles.metaLabel}>{L.validUntil}</Text>
             <Text style={styles.metaValue}>{data.validUntil}</Text>
           </View>
           <View style={styles.metaCol}>
-            <Text style={styles.metaLabel}>Status</Text>
+            <Text style={styles.metaLabel}>{L.status}</Text>
             <Text style={styles.metaValue}>{data.status}</Text>
-            <Text style={styles.metaLabel}>Marge</Text>
+            <Text style={styles.metaLabel}>{L.margin}</Text>
             <Text style={styles.metaValue}>{data.marginPct.toFixed(1)}%</Text>
           </View>
         </View>
 
         {intro ? (
           <View wrap={false}>
-            <Text style={styles.h2}>{intro.title || 'Einleitung'}</Text>
+            <Text style={styles.h2}>{intro.title || L.introDefault}</Text>
             <Text style={styles.sectionBody}>{intro.body}</Text>
           </View>
         ) : null}
 
         {scopeSection ? (
           <View wrap={false}>
-            <Text style={styles.h2}>{scopeSection.title || 'Leistungsumfang'}</Text>
+            <Text style={styles.h2}>{scopeSection.title || L.scopeDefault}</Text>
             <Text style={styles.sectionBody}>{scopeSection.body}</Text>
           </View>
         ) : null}
 
-        <Text style={styles.h2}>Positionen</Text>
+        <Text style={styles.h2}>{L.positions}</Text>
         <View style={styles.tableHeader}>
-          <Text style={styles.colName}>Bezeichnung</Text>
-          <Text style={styles.colQty}>Menge</Text>
-          <Text style={styles.colPrice}>Listenpreis</Text>
-          <Text style={styles.colDisc}>Rabatt</Text>
-          <Text style={styles.colTotal}>Summe</Text>
+          <Text style={styles.colName}>{L.name}</Text>
+          <Text style={styles.colQty}>{L.qty}</Text>
+          <Text style={styles.colPrice}>{L.listPrice}</Text>
+          <Text style={styles.colDisc}>{L.discount}</Text>
+          <Text style={styles.colTotal}>{L.sum}</Text>
         </View>
         {data.lines.map((l, i) => (
           <View key={i} style={styles.tr} wrap={false}>
@@ -383,32 +447,32 @@ export function QuoteDocument({ data }: { data: QuotePdfData }) {
               ) : null}
             </View>
             <Text style={styles.colQty}>{l.quantity}</Text>
-            <Text style={styles.colPrice}>{fmt(l.listPrice, data.currency)}</Text>
+            <Text style={styles.colPrice}>{fmt(l.listPrice, data.currency, lang)}</Text>
             <Text style={styles.colDisc}>{l.discountPct.toFixed(1)}%</Text>
-            <Text style={styles.colTotal}>{fmt(l.total, data.currency)}</Text>
+            <Text style={styles.colTotal}>{fmt(l.total, data.currency, lang)}</Text>
           </View>
         ))}
 
         <View style={styles.totalsRow}>
           <View style={styles.totalsBox}>
             <View style={styles.totalsLine}>
-              <Text>Zwischensumme</Text>
-              <Text>{fmt(subtotal, data.currency)}</Text>
+              <Text>{L.subtotal}</Text>
+              <Text>{fmt(subtotal, data.currency, lang)}</Text>
             </View>
             <View style={styles.totalsLine}>
-              <Text>Rabatt ({data.discountPct.toFixed(1)}%)</Text>
-              <Text>-{fmt(Math.max(0, discount), data.currency)}</Text>
+              <Text>{L.discount} ({data.discountPct.toFixed(1)}%)</Text>
+              <Text>-{fmt(Math.max(0, discount), data.currency, lang)}</Text>
             </View>
             <View style={styles.grandTotal}>
-              <Text>Gesamt</Text>
-              <Text>{fmt(data.totalAmount, data.currency)}</Text>
+              <Text>{L.total}</Text>
+              <Text>{fmt(data.totalAmount, data.currency, lang)}</Text>
             </View>
           </View>
         </View>
 
         {termsSection ? (
           <View wrap={false}>
-            <Text style={styles.h2}>{termsSection.title || 'Konditionen'}</Text>
+            <Text style={styles.h2}>{termsSection.title || L.termsDefault}</Text>
             <Text style={styles.sectionBody}>{termsSection.body}</Text>
           </View>
         ) : null}
@@ -422,14 +486,14 @@ export function QuoteDocument({ data }: { data: QuotePdfData }) {
 
         {appendixSection ? (
           <View wrap={false}>
-            <Text style={styles.h2}>{appendixSection.title || 'Anhang'}</Text>
+            <Text style={styles.h2}>{appendixSection.title || L.appendixDefault}</Text>
             <Text style={styles.sectionBody}>{appendixSection.body}</Text>
           </View>
         ) : null}
 
         {attachments.length > 0 ? (
           <View wrap={false}>
-            <Text style={styles.h2}>Anlagen</Text>
+            <Text style={styles.h2}>{L.attachments}</Text>
             {attachments.map((a, i) => (
               <View key={`att-${i}`} style={styles.attachmentRow}>
                 <View>
@@ -448,14 +512,14 @@ export function QuoteDocument({ data }: { data: QuotePdfData }) {
 
         {data.notes ? (
           <View style={styles.notes} wrap={false}>
-            <Text style={{ fontWeight: 'bold', marginBottom: 2 }}>Hinweise</Text>
+            <Text style={{ fontWeight: 'bold', marginBottom: 2 }}>{L.notes}</Text>
             <Text>{data.notes}</Text>
           </View>
         ) : null}
 
         <Text style={styles.footer} fixed>
           {data.brand?.legalEntityName ?? 'DealFlow One'} · {data.brand?.addressLine ?? ''}
-          {'  '}· Angebot {data.number} · v{data.version}
+          {'  '}· {L.docTitle} {data.number} · v{data.version}
         </Text>
       </Page>
     </Document>

@@ -7,8 +7,11 @@ Multi-tenant, multi-company, multi-brand. Deal-centric.
 
  * OpenAPI spec version: 0.1.0
  */
+import type { QuoteInputLanguage } from "./quoteInputLanguage";
 
 export interface QuoteInput {
   dealId: string;
   validUntil?: Date;
+  /** Optionale Sprachfassung. NULL/leer → Brand-/Tenant-Default. */
+  language?: QuoteInputLanguage;
 }

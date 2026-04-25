@@ -8,6 +8,7 @@ Multi-tenant, multi-company, multi-brand. Deal-centric.
  * OpenAPI spec version: 0.1.0
  */
 import type { BrandDefaultClauseVariants } from "./brandDefaultClauseVariants";
+import type { BrandDefaultLanguage } from "./brandDefaultLanguage";
 
 export interface Brand {
   id: string;
@@ -26,4 +27,6 @@ export interface Brand {
   tone?: string | null;
   legalEntityName?: string | null;
   addressLine?: string | null;
+  /** Default-Vertragssprache der Brand. NULL → Tenant-Default. */
+  defaultLanguage?: BrandDefaultLanguage;
 }

@@ -809,6 +809,25 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/QuoteDetail" }
+    patch:
+      operationId: patchQuote
+      tags: [quotes]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/QuotePatchInput" }
+      responses:
+        "200":
+          description: ok
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Quote" }
 
   /quotes/{id}/pdf:
     get:
@@ -1524,6 +1543,25 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/ContractDetail" }
+    patch:
+      operationId: patchContract
+      tags: [contracts]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ContractPatchInput" }
+      responses:
+        "200":
+          description: ok
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Contract" }
 
   /clause-families:
     get:
@@ -1537,6 +1575,68 @@ paths:
               schema:
                 type: array
                 items: { $ref: "#/components/schemas/ClauseFamily" }
+
+  /clause-variants/{variantId}/translations:
+    get:
+      operationId: listClauseVariantTranslations
+      tags: [contracts]
+      parameters:
+        - in: path
+          name: variantId
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: ok
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/ClauseVariantTranslation" }
+
+  /clause-variants/{variantId}/translations/{locale}:
+    put:
+      operationId: upsertClauseVariantTranslation
+      tags: [contracts]
+      parameters:
+        - in: path
+          name: variantId
+          required: true
+          schema: { type: string }
+        - in: path
+          name: locale
+          required: true
+          schema:
+            type: string
+            enum: [de, en]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ClauseVariantTranslationUpsert" }
+      responses:
+        "200":
+          description: ok
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ClauseVariantTranslation" }
+    delete:
+      operationId: deleteClauseVariantTranslation
+      tags: [contracts]
+      parameters:
+        - in: path
+          name: variantId
+          required: true
+          schema: { type: string }
+        - in: path
+          name: locale
+          required: true
+          schema:
+            type: string
+            enum: [de, en]
+      responses:
+        "204":
+          description: deleted
 
   /contracts/{id}/amendments:
     get:
@@ -4111,6 +4211,11 @@ components:
         tone: { type: string, nullable: true, description: "precise | premium | concise | bold" }
         legalEntityName: { type: string, nullable: true }
         addressLine: { type: string, nullable: true }
+        defaultLanguage:
+          type: string
+          nullable: true
+          enum: [de, en]
+          description: "Default-Vertragssprache der Brand. NULL → Tenant-Default."
 
     BrandUpdate:
       type: object
@@ -4125,6 +4230,10 @@ components:
         tone: { type: string, nullable: true }
         legalEntityName: { type: string, nullable: true }
         addressLine: { type: string, nullable: true }
+        defaultLanguage:
+          type: string
+          nullable: true
+          enum: [de, en]
 
     CompanyCreate:
       type: object
@@ -4778,7 +4887,7 @@ components:
       required:
         [
           id, dealId, dealName, number, status, currentVersion, totalAmount,
-          discountPct, marginPct, currency, createdAt, validUntil
+          discountPct, marginPct, currency, createdAt, validUntil, language
         ]
       properties:
         id: { type: string }
@@ -4793,6 +4902,10 @@ components:
         currency: { type: string }
         createdAt: { type: string, format: date-time }
         validUntil: { type: string, format: date }
+        language:
+          type: string
+          enum: [de, en]
+          description: "Sprachfassung des Angebots."
 
     QuoteInput:
       type: object
@@ -4800,6 +4913,17 @@ components:
       properties:
         dealId: { type: string }
         validUntil: { type: string, format: date }
+        language:
+          type: string
+          enum: [de, en]
+          description: "Optionale Sprachfassung. NULL/leer → Brand-/Tenant-Default."
+
+    QuotePatchInput:
+      type: object
+      properties:
+        language:
+          type: string
+          enum: [de, en]
 
     QuoteVersion:
       type: object
@@ -5369,7 +5493,7 @@ components:
       required:
         [
           id, dealId, dealName, title, status, version, riskLevel, createdAt,
-          template
+          template, language
         ]
       properties:
         id: { type: string }
@@ -5385,6 +5509,10 @@ components:
         validUntil:
           type: ["string", "null"]
           format: date
+        language:
+          type: string
+          enum: [de, en]
+          description: "Sprachfassung des Vertrags. Default ergibt sich aus Brand- bzw. Tenant-Default."
 
     ContractInput:
       type: object
@@ -5396,6 +5524,18 @@ components:
         brandId:
           type: string
           description: Optional brand whose default clause variants should be applied on creation.
+        language:
+          type: string
+          enum: [de, en]
+          description: "Optionale Sprachfassung. NULL/leer → Brand-/Tenant-Default."
+
+    ContractPatchInput:
+      type: object
+      properties:
+        language:
+          type: string
+          enum: [de, en]
+          description: "Aktualisiert die aktive Sprachfassung des Vertrags."
 
     ContractDetail:
       allOf:
@@ -5424,6 +5564,39 @@ components:
         summary: { type: string }
         body: { type: string }
         tone: { type: string }
+        translations:
+          type: array
+          description: "Vorhandene Sprachfassungen je Variante (de/en/…)."
+          items: { $ref: "#/components/schemas/ClauseVariantTranslation" }
+
+    ClauseVariantTranslation:
+      type: object
+      required: [id, variantId, locale, name, summary, body, createdAt, updatedAt]
+      properties:
+        id: { type: string }
+        variantId: { type: string }
+        locale:
+          type: string
+          enum: [de, en]
+        name: { type: string }
+        summary: { type: string }
+        body: { type: string }
+        source: { type: string, nullable: true, description: "z. B. bonterms-mutual-2024" }
+        license: { type: string, nullable: true, description: "z. B. CC-BY-4.0" }
+        sourceUrl: { type: string, nullable: true }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+
+    ClauseVariantTranslationUpsert:
+      type: object
+      required: [name, summary, body]
+      properties:
+        name: { type: string, minLength: 1, maxLength: 200 }
+        summary: { type: string, minLength: 1, maxLength: 1000 }
+        body: { type: string, maxLength: 8000 }
+        source: { type: string, nullable: true, maxLength: 200 }
+        license: { type: string, nullable: true, maxLength: 200 }
+        sourceUrl: { type: string, nullable: true, maxLength: 1000 }
 
     ClauseFamily:
       type: object
@@ -5451,6 +5624,13 @@ components:
         severityScore: { type: integer }
         tone: { type: string }
         body: { type: string }
+        translationLocale:
+          type: string
+          enum: [de, en]
+          description: "Locale, in der die Klausel aktuell ausgeliefert wird."
+        translationMissing:
+          type: boolean
+          description: "true, wenn für die Vertragssprache keine Übersetzung gepflegt ist und auf die Quell-Sprache zurückgefallen wurde."
 
     ClauseDiff:
       type: object
