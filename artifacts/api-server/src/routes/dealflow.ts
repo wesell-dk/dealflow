@@ -2159,7 +2159,7 @@ function calcLineTotal(item: { quantity: number; unitPrice: number; discountPct:
 
 const QuoteFromTemplateBody = z.object({
   dealId: z.string().min(1),
-  templateId: z.string().min(1),
+  templateId: z.string().min(1).nullable().optional(),
   validUntil: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
   notes: z.string().max(4000).optional(),
   attachmentLibraryIds: z.array(z.string()).optional(),
@@ -2172,10 +2172,16 @@ router.post('/quotes/from-template', async (req, res) => {
   if (!(await gateDeal(req, res, b.dealId))) return;
   const [d] = await db.select().from(dealsTable).where(eq(dealsTable.id, b.dealId));
   if (!d) { res.status(404).json({ error: 'deal not found' }); return; }
-  const [tpl] = await db.select().from(quoteTemplatesTable).where(eq(quoteTemplatesTable.id, b.templateId));
-  if (!tpl || !(await scopedRowVisibleAsync(req, tpl))) { res.status(404).json({ error: 'template not found' }); return; }
 
-  const validUntil = b.validUntil ?? new Date(Date.now() + tpl.defaultValidityDays * 86400000).toISOString().slice(0, 10);
+  let tpl: typeof quoteTemplatesTable.$inferSelect | undefined;
+  if (b.templateId) {
+    const [row] = await db.select().from(quoteTemplatesTable).where(eq(quoteTemplatesTable.id, b.templateId));
+    if (!row || !(await scopedRowVisibleAsync(req, row))) { res.status(404).json({ error: 'template not found' }); return; }
+    tpl = row;
+  }
+
+  const defaultValidityDays = tpl?.defaultValidityDays ?? 30;
+  const validUntil = b.validUntil ?? new Date(Date.now() + defaultValidityDays * 86400000).toISOString().slice(0, 10);
   const id = `qt_${randomUUID().slice(0, 8)}`;
   const number = `Q-2026-${Math.floor(Math.random() * 9000) + 1000}`;
   await db.insert(quotesTable).values({
@@ -2183,7 +2189,7 @@ router.post('/quotes/from-template', async (req, res) => {
     currency: d.currency, validUntil,
   });
   const qvId = `qv_${randomUUID().slice(0, 8)}`;
-  const tplLines = tpl.defaultLineItems ?? [];
+  const tplLines = tpl?.defaultLineItems ?? [];
   const lineRows = tplLines.map(li => {
     const total = calcLineTotal(li);
     return {
@@ -2195,20 +2201,22 @@ router.post('/quotes/from-template', async (req, res) => {
     };
   });
   const totalAmount = lineRows.reduce((s, l) => s + Number(l.total), 0);
-  const tplSections = await db.select().from(quoteTemplateSectionsTable)
-    .where(eq(quoteTemplateSectionsTable.templateId, tpl.id))
-    .orderBy(asc(quoteTemplateSectionsTable.order));
+  const tplSections = tpl
+    ? await db.select().from(quoteTemplateSectionsTable)
+        .where(eq(quoteTemplateSectionsTable.templateId, tpl.id))
+        .orderBy(asc(quoteTemplateSectionsTable.order))
+    : [];
   const sectionsSnapshot = tplSections.map(s => ({
     kind: s.kind, title: s.title, body: s.body, order: s.order,
   }));
   await db.insert(quoteVersionsTable).values({
     id: qvId, quoteId: id, version: 1,
     totalAmount: String(totalAmount),
-    discountPct: String(tpl.defaultDiscountPct ?? 0),
-    marginPct: String(tpl.defaultMarginPct ?? 30),
+    discountPct: String(tpl?.defaultDiscountPct ?? 0),
+    marginPct: String(tpl?.defaultMarginPct ?? 30),
     status: 'draft',
-    notes: b.notes ?? `Created from template "${tpl.name}"`,
-    templateId: tpl.id,
+    notes: b.notes ?? (tpl ? `Created from template "${tpl.name}"` : 'Blank quote'),
+    templateId: tpl?.id ?? null,
     sectionsSnapshot,
   });
   if (lineRows.length) {
@@ -2217,7 +2225,7 @@ router.post('/quotes/from-template', async (req, res) => {
 
   // Attach library items: combine template defaults + explicit override
   const attIds = Array.from(new Set([
-    ...(tpl.defaultAttachmentLibraryIds ?? []),
+    ...(tpl?.defaultAttachmentLibraryIds ?? []),
     ...(b.attachmentLibraryIds ?? []),
   ]));
   if (attIds.length) {

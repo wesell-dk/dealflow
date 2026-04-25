@@ -1287,7 +1287,7 @@ export const AcceptQuoteResponse = zod.object({
  */
 export const CreateQuoteFromTemplateBody = zod.object({
   dealId: zod.string(),
-  templateId: zod.string(),
+  templateId: zod.string().nullish(),
   validUntil: zod.coerce.date().optional(),
   notes: zod.string().optional(),
   attachmentLibraryIds: zod.array(zod.string()).optional(),

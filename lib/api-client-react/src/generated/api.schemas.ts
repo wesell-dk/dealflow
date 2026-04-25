@@ -1454,7 +1454,7 @@ export interface LineItemInput {
 
 export interface QuoteFromTemplateInput {
   dealId: string;
-  templateId: string;
+  templateId?: string | null;
   validUntil?: string;
   notes?: string;
   attachmentLibraryIds?: string[];

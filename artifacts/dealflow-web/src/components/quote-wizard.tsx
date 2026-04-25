@@ -30,12 +30,17 @@ import {
   Check,
   FileText,
   Filter,
+  Layers,
   Library,
   Loader2,
   Package,
   Paperclip,
+  Percent,
   Plus,
+  Search,
+  Sparkles,
   Trash2,
+  X,
 } from "lucide-react";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { useAuth } from "@/contexts/auth-context";
@@ -69,6 +74,7 @@ type LineItemForm = {
 };
 
 const INDUSTRIES = ["saas", "consulting", "manufacturing", "services", "other"] as const;
+const BLANK_TEMPLATE_ID = "__blank__";
 
 export function QuoteWizard({ open, onOpenChange, initialDealId }: Props) {
   const { t, i18n } = useTranslation();
@@ -81,6 +87,8 @@ export function QuoteWizard({ open, onOpenChange, initialDealId }: Props) {
   const [dealId, setDealId] = useState<string>(initialDealId ?? "");
   const [industry, setIndustry] = useState<string>("");
   const [templateId, setTemplateId] = useState<string>("");
+  const [templateSearch, setTemplateSearch] = useState<string>("");
+  const [showAllIndustries, setShowAllIndustries] = useState<boolean>(false);
   const [items, setItems] = useState<LineItemForm[]>([]);
   const [validityDays, setValidityDays] = useState<number>(30);
   const [notes, setNotes] = useState<string>("");
@@ -112,6 +120,8 @@ export function QuoteWizard({ open, onOpenChange, initialDealId }: Props) {
         setDealId(initialDealId ?? "");
         setIndustry("");
         setTemplateId("");
+        setTemplateSearch("");
+        setShowAllIndustries(false);
         setItems([]);
         setValidityDays(30);
         setNotes("");
@@ -129,21 +139,47 @@ export function QuoteWizard({ open, onOpenChange, initialDealId }: Props) {
     }
   }, [industryProfiles, industry]);
 
+  const suggestedTemplateId = useMemo(() => {
+    if (!industry || !industryProfiles) return undefined;
+    return industryProfiles.find((p) => p.industry === industry)?.suggestedTemplateId ?? undefined;
+  }, [industry, industryProfiles]);
+
   const filteredTemplates = useMemo(() => {
     if (!templates) return [];
-    if (!industry) return templates;
-    return templates.filter(
-      (tpl) => tpl.industry === industry || tpl.industry === "other",
-    );
-  }, [templates, industry]);
+    let list = templates;
+    if (industry && !showAllIndustries) {
+      list = list.filter(
+        (tpl) => tpl.industry === industry || tpl.industry === "other",
+      );
+    }
+    const q = templateSearch.trim().toLowerCase();
+    if (q) {
+      list = list.filter((tpl) => {
+        const hay = `${tpl.name} ${tpl.description ?? ""} ${tpl.industry}`.toLowerCase();
+        return hay.includes(q);
+      });
+    }
+    // Recommended first, then by name
+    return [...list].sort((a, b) => {
+      if (a.id === suggestedTemplateId && b.id !== suggestedTemplateId) return -1;
+      if (b.id === suggestedTemplateId && a.id !== suggestedTemplateId) return 1;
+      return a.name.localeCompare(b.name);
+    });
+  }, [templates, industry, showAllIndustries, templateSearch, suggestedTemplateId]);
 
   const selectedTemplate = useMemo(
     () => templates?.find((t) => t.id === templateId),
     [templates, templateId],
   );
 
-  // Apply template defaults when chosen
+  // Apply template defaults when chosen (or reset for blank)
   useEffect(() => {
+    if (templateId === BLANK_TEMPLATE_ID) {
+      setItems([]);
+      setValidityDays(30);
+      setAttachmentIds([]);
+      return;
+    }
     if (selectedTemplate) {
       setItems(
         selectedTemplate.defaultLineItems.map((li) => ({
@@ -158,7 +194,7 @@ export function QuoteWizard({ open, onOpenChange, initialDealId }: Props) {
       setValidityDays(selectedTemplate.defaultValidityDays);
       setAttachmentIds(selectedTemplate.defaultAttachmentLibraryIds ?? []);
     }
-  }, [selectedTemplate]);
+  }, [selectedTemplate, templateId]);
 
   // Suggest template via industry profile when no manual pick yet
   useEffect(() => {
@@ -195,7 +231,7 @@ export function QuoteWizard({ open, onOpenChange, initialDealId }: Props) {
 
   const canNext = (() => {
     if (step === 0) return !!dealId && !!industry;
-    if (step === 1) return !!templateId;
+    if (step === 1) return !!templateId; // BLANK_TEMPLATE_ID counts as truthy
     if (step === 2) return items.length > 0 && items.every((i) => i.name && i.quantity > 0);
     if (step === 3) return validityDays > 0;
     if (step === 4) return true;
@@ -212,7 +248,7 @@ export function QuoteWizard({ open, onOpenChange, initialDealId }: Props) {
       const created = await createMut.mutateAsync({
         data: {
           dealId,
-          templateId,
+          templateId: templateId === BLANK_TEMPLATE_ID ? undefined : templateId,
           validUntil,
           notes: notes || undefined,
           attachmentLibraryIds: attachmentIds,
@@ -401,54 +437,200 @@ export function QuoteWizard({ open, onOpenChange, initialDealId }: Props) {
           {/* Step 1 — Template */}
           {step === 1 && (
             <div className="grid gap-3">
-              {tplsLoading && <Skeleton className="h-32 w-full" />}
-              {!tplsLoading && filteredTemplates.length === 0 && (
-                <div className="rounded-md border p-4 text-sm text-muted-foreground">
-                  {t("quoteWizard.noTemplates")}
+              {/* Toolbar: search + industry toggle */}
+              <div className="flex flex-wrap items-center gap-2" data-testid="wizard-template-toolbar">
+                <div className="relative flex-1 min-w-[220px]">
+                  <Search className="pointer-events-none absolute left-2 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                  <Input
+                    value={templateSearch}
+                    onChange={(e) => setTemplateSearch(e.target.value)}
+                    placeholder={t("quoteWizard.templateSearchPlaceholder")}
+                    className="pl-8 pr-8"
+                    data-testid="wizard-template-search"
+                  />
+                  {templateSearch && (
+                    <button
+                      type="button"
+                      onClick={() => setTemplateSearch("")}
+                      className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                      aria-label={t("quoteWizard.clearTemplateSearchAria")}
+                      data-testid="wizard-template-search-clear"
+                    >
+                      <X className="h-4 w-4" />
+                    </button>
+                  )}
+                </div>
+                {industry && (
+                  <label className="flex items-center gap-2 text-sm rounded-md border px-2 py-1.5 cursor-pointer hover:bg-muted/50">
+                    <Checkbox
+                      checked={showAllIndustries}
+                      onCheckedChange={(v) => setShowAllIndustries(!!v)}
+                      data-testid="wizard-template-show-all"
+                    />
+                    <Filter className="h-3.5 w-3.5 text-muted-foreground" />
+                    <span>{t("quoteWizard.showAllIndustries")}</span>
+                  </label>
+                )}
+              </div>
+
+              {tplsLoading && (
+                <div className="grid gap-3 md:grid-cols-2">
+                  <Skeleton className="h-40 w-full" />
+                  <Skeleton className="h-40 w-full" />
                 </div>
               )}
-              {filteredTemplates.map((tpl) => {
-                const selected = templateId === tpl.id;
-                return (
+
+              {!tplsLoading && (
+                <div className="grid gap-3 md:grid-cols-2">
+                  {/* Blank quote — always first */}
                   <button
                     type="button"
-                    key={tpl.id}
-                    onClick={() => setTemplateId(tpl.id)}
-                    data-testid={`wizard-template-${tpl.id}`}
-                    className={`text-left rounded-lg border p-4 transition-colors hover:border-primary ${
-                      selected ? "border-primary bg-primary/5" : ""
+                    onClick={() => setTemplateId(BLANK_TEMPLATE_ID)}
+                    data-testid="wizard-template-blank"
+                    className={`text-left rounded-lg border border-dashed p-4 transition-colors hover:border-primary hover:bg-muted/30 ${
+                      templateId === BLANK_TEMPLATE_ID ? "border-primary bg-primary/5" : ""
                     }`}
                   >
                     <div className="flex items-start justify-between gap-3">
                       <div className="flex-1">
-                        <div className="font-semibold">{tpl.name}</div>
-                        <div className="mt-1 text-sm text-muted-foreground">
-                          {tpl.description}
+                        <div className="flex items-center gap-2 font-semibold">
+                          <Plus className="h-4 w-4 text-muted-foreground" />
+                          {t("quoteWizard.blankQuoteTitle")}
                         </div>
-                        <div className="mt-2 flex flex-wrap gap-1">
-                          <Badge variant="secondary" className="text-xs">
-                            {tpl.industry}
-                          </Badge>
-                          {tpl.isSystem && (
-                            <Badge variant="outline" className="text-xs">
-                              {t("quoteWizard.system")}
-                            </Badge>
-                          )}
-                          <Badge variant="outline" className="text-xs">
-                            {tpl.defaultLineItems.length} {t("quoteWizard.positions")}
-                          </Badge>
-                          <Badge variant="outline" className="text-xs">
-                            {t("quoteWizard.validityDays", {
-                              days: tpl.defaultValidityDays,
-                            })}
-                          </Badge>
+                        <div className="mt-1 text-sm text-muted-foreground">
+                          {t("quoteWizard.blankQuoteDescription")}
                         </div>
                       </div>
-                      {selected && <Check className="h-5 w-5 text-primary shrink-0" />}
+                      {templateId === BLANK_TEMPLATE_ID && (
+                        <Check className="h-5 w-5 text-primary shrink-0" />
+                      )}
                     </div>
                   </button>
-                );
-              })}
+
+                  {filteredTemplates.map((tpl) => {
+                    const selected = templateId === tpl.id;
+                    const isRecommended = tpl.id === suggestedTemplateId;
+                    const matchesIndustry = industry && tpl.industry === industry;
+                    const sectionCount = tpl.sections?.length ?? 0;
+                    return (
+                      <button
+                        type="button"
+                        key={tpl.id}
+                        onClick={() => setTemplateId(tpl.id)}
+                        data-testid={`wizard-template-${tpl.id}`}
+                        className={`text-left rounded-lg border p-4 transition-colors hover:border-primary relative ${
+                          selected ? "border-primary bg-primary/5" : ""
+                        }`}
+                      >
+                        {isRecommended && (
+                          <Badge
+                            variant="default"
+                            className="absolute -top-2 left-3 text-[10px] px-1.5 py-0 h-5 gap-1"
+                          >
+                            <Sparkles className="h-3 w-3" />
+                            {t("quoteWizard.recommended")}
+                          </Badge>
+                        )}
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2">
+                              <FileText className="h-4 w-4 text-muted-foreground shrink-0" />
+                              <span className="font-semibold truncate">{tpl.name}</span>
+                            </div>
+                            {tpl.description && (
+                              <div className="mt-1 text-sm text-muted-foreground line-clamp-2">
+                                {tpl.description}
+                              </div>
+                            )}
+
+                            {/* Stats row */}
+                            <div className="mt-3 grid grid-cols-3 gap-2 text-xs">
+                              <div className="flex flex-col">
+                                <span className="flex items-center gap-1 text-muted-foreground">
+                                  <Package className="h-3 w-3" />
+                                  {t("quoteWizard.positions")}
+                                </span>
+                                <span className="font-medium tabular-nums">
+                                  {tpl.defaultLineItems.length}
+                                </span>
+                              </div>
+                              <div className="flex flex-col">
+                                <span className="flex items-center gap-1 text-muted-foreground">
+                                  <Percent className="h-3 w-3" />
+                                  {t("quoteWizard.defaultDiscount")}
+                                </span>
+                                <span className="font-medium tabular-nums">
+                                  {(tpl.defaultDiscountPct ?? 0).toFixed(1)}%
+                                </span>
+                              </div>
+                              <div className="flex flex-col">
+                                <span className="flex items-center gap-1 text-muted-foreground">
+                                  <Layers className="h-3 w-3" />
+                                  {t("quoteWizard.sectionsCount", { count: sectionCount })}
+                                </span>
+                                <span className="font-medium tabular-nums">{sectionCount}</span>
+                              </div>
+                            </div>
+
+                            {/* Tags */}
+                            <div className="mt-3 flex flex-wrap gap-1">
+                              <Badge
+                                variant={matchesIndustry ? "default" : "secondary"}
+                                className="text-xs"
+                                title={matchesIndustry ? t("quoteWizard.industryMatch") : undefined}
+                              >
+                                {tpl.industry}
+                              </Badge>
+                              {tpl.isSystem && (
+                                <Badge variant="outline" className="text-xs">
+                                  {t("quoteWizard.system")}
+                                </Badge>
+                              )}
+                              <Badge variant="outline" className="text-xs">
+                                {t("quoteWizard.validityDays", { days: tpl.defaultValidityDays })}
+                              </Badge>
+                            </div>
+
+                            {/* Inline section outline (keyboard-accessible, no nested interactive) */}
+                            {sectionCount > 0 && (
+                              <div className="mt-3 rounded-md bg-muted/40 px-2.5 py-2">
+                                <div className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground mb-1 flex items-center gap-1">
+                                  <Layers className="h-3 w-3" />
+                                  {t("quoteWizard.sectionPreviewTitle")}
+                                </div>
+                                <ol className="space-y-0.5 text-xs">
+                                  {tpl.sections.slice(0, 3).map((s, idx) => (
+                                    <li key={`${s.kind}-${s.order}-${idx}`} className="flex gap-1.5">
+                                      <span className="text-muted-foreground tabular-nums shrink-0">
+                                        {idx + 1}.
+                                      </span>
+                                      <span className="truncate">{s.title}</span>
+                                    </li>
+                                  ))}
+                                  {sectionCount > 3 && (
+                                    <li className="text-muted-foreground italic">
+                                      {t("quoteWizard.moreSections", { count: sectionCount - 3 })}
+                                    </li>
+                                  )}
+                                </ol>
+                              </div>
+                            )}
+                          </div>
+                          {selected && <Check className="h-5 w-5 text-primary shrink-0" />}
+                        </div>
+                      </button>
+                    );
+                  })}
+
+                  {filteredTemplates.length === 0 && (
+                    <div className="md:col-span-2 rounded-md border border-dashed p-4 text-sm text-muted-foreground">
+                      {templateSearch
+                        ? t("quoteWizard.noTemplateMatches")
+                        : t("quoteWizard.noTemplates")}
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           )}
 

@@ -10,7 +10,7 @@ Multi-tenant, multi-company, multi-brand. Deal-centric.
 
 export interface QuoteFromTemplateInput {
   dealId: string;
-  templateId: string;
+  templateId?: string | null;
   validUntil?: Date;
   notes?: string;
   attachmentLibraryIds?: string[];

@@ -5857,10 +5857,10 @@ components:
 
     QuoteFromTemplateInput:
       type: object
-      required: [dealId, templateId]
+      required: [dealId]
       properties:
         dealId: { type: string }
-        templateId: { type: string }
+        templateId: { type: string, nullable: true }
         validUntil: { type: string, format: date }
         notes: { type: string }
         attachmentLibraryIds:
