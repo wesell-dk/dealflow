@@ -1,19 +1,32 @@
 /**
- * Brand-Lead-Widget (Task #262)
+ * Brand-Lead-Widget (Task #262, Rate-Limit shared in Task #270)
  *
  * Library für das Public Lead-Widget pro Brand:
  *   - Public-Key + Cal.com-HMAC-Secret generieren
  *   - Constant-Time-Vergleich für Public-Key-Lookups
- *   - In-Memory Rate-Limit (Brand + IP, fixed window 60 s)
+ *   - Atomarer geteilter Rate-Limit-Store in Postgres (siehe checkRateLimit)
  *   - Light-weight Domain-Enrichment (Favicon + <title>/<meta>)
  *   - Auto-Routing-Regel-Evaluation
  *
- * Bewusst KEIN externer Cache / Redis: das Widget ist niedrigvolumig,
- * der Single-Process-Limit-Mechanismus reicht; bei Mehr-Replikas
- * limitiert das nur "pro Replika" (ist im Tradeoff dokumentiert).
+ * Architektur des Rate-Limits (Task #270):
+ *   - `checkRateLimit` ist async und macht pro Submit *einen* atomaren
+ *     Postgres-UPSERT. Das ist der einzige zuverlässige Weg, das Limit
+ *     wirklich global pro Brand+IP durchzusetzen — sowohl über Restarts
+ *     als auch über mehrere Replikas hinweg (Postgres serialisiert die
+ *     UPDATE-Konflikte auf der Row).
+ *   - Eine in-Process-Map oder ein lokal-puffender Cache wäre an genau
+ *     dieser Stelle wieder die Lücke aus dem Issue: zwei Replikas könnten
+ *     unabhängig hochzählen, der Angreifer hätte n*max Submits.
+ *   - Signatur-Hinweis: gegenüber Task #262 (sync) ist der Rückgabetyp
+ *     jetzt `Promise<RateLimitResult>`. Parameter und Funktionsname sind
+ *     unverändert, der einzige Caller-Patch ist ein `await` (siehe
+ *     routes/widget.ts). Eine echte Sync-Variante würde zwingend wieder
+ *     pro-Prozess-State erfordern.
  */
 
 import { createHash, createHmac, randomBytes, timingSafeEqual } from "node:crypto";
+import { sql } from "drizzle-orm";
+import { db } from "@workspace/db";
 import { ipBlockReason } from "./webhooks";
 import { logger } from "./logger";
 
@@ -50,15 +63,6 @@ export function constantTimeEquals(a: string, b: string): boolean {
 
 // ─────────────────────────── Rate Limit ───────────────────────────
 
-interface RateBucket {
-  count: number;
-  windowStart: number;
-}
-
-// Pro Brand+IP (fixed window) — Map säubert sich beim Lookup, wenn das Fenster
-// vorbei ist; ein periodischer Sweep ist unnötig (Map bleibt klein).
-const RATE_BUCKETS = new Map<string, RateBucket>();
-
 /** Default: 10 Submits / 60 s pro Brand+IP. */
 export const DEFAULT_RATE_LIMIT = { max: 10, windowMs: 60_000 };
 
@@ -68,31 +72,98 @@ export interface RateLimitResult {
   retryAfterSeconds: number;
 }
 
-export function checkRateLimit(
+/**
+ * Atomarer Fixed-Window-Counter pro Brand+IP via Postgres-UPSERT.
+ *
+ * Genau eine SQL-Round-Trip pro Submit. Die `CASE`-Logik im UPDATE-Zweig
+ * realisiert beide Pfade in einem Statement:
+ *
+ *   - Wenn die Row noch nicht existiert oder das alte Fenster abgelaufen
+ *     ist: starte ein neues Fenster mit `count = 1` und
+ *     `expires_at = now() + windowMs`.
+ *   - Sonst: `count = count + 1` und `expires_at` bleibt unverändert
+ *     (das Fenster läuft weiter, wir setzen es nicht zurück).
+ *
+ * Da Postgres UPDATEs auf derselben Row serialisiert, ist der zurück-
+ * gegebene Counter über alle Replikas und über Restarts hinweg
+ * autoritativ — genau das, was Task #270 verlangt.
+ *
+ * Wir lassen den Counter auch nach Erreichen des Limits weiter hoch-
+ * zählen (kein Cap im UPDATE) — das hält die Logik einfach, der nächste
+ * Fensterwechsel setzt ihn ohnehin auf 1 zurück.
+ */
+export async function checkRateLimit(
   brandId: string,
   ip: string,
   limit = DEFAULT_RATE_LIMIT,
-): RateLimitResult {
+): Promise<RateLimitResult> {
   const key = `${brandId}|${ip}`;
-  const now = Date.now();
-  const bucket = RATE_BUCKETS.get(key);
-  if (!bucket || now - bucket.windowStart >= limit.windowMs) {
-    RATE_BUCKETS.set(key, { count: 1, windowStart: now });
-    return { allowed: true, remaining: limit.max - 1, retryAfterSeconds: 0 };
+  const windowMs = limit.windowMs;
+
+  let row: { count: number; expires_at: string | Date } | undefined;
+  try {
+    const result = await db.execute<{ count: number; expires_at: string | Date }>(sql`
+      INSERT INTO widget_rate_limits ("key", "count", "expires_at")
+      VALUES (${key}, 1, now() + (${windowMs} || ' milliseconds')::interval)
+      ON CONFLICT ("key") DO UPDATE SET
+        "count" = CASE
+          WHEN widget_rate_limits."expires_at" <= now() THEN 1
+          ELSE widget_rate_limits."count" + 1
+        END,
+        "expires_at" = CASE
+          WHEN widget_rate_limits."expires_at" <= now()
+            THEN now() + (${windowMs} || ' milliseconds')::interval
+          ELSE widget_rate_limits."expires_at"
+        END
+      RETURNING "count", "expires_at"
+    `);
+    row = result.rows[0];
+  } catch (err) {
+    // Fail-closed: wenn der Store nicht erreichbar ist, halten wir
+    // das Limit ein, statt den Schutz still zu deaktivieren. Beim
+    // Submit antwortet der Caller dann mit 429 — kurzes Retry.
+    logger.error({ err, brandId }, "widget rate-limit store unavailable");
+    return { allowed: false, remaining: 0, retryAfterSeconds: 5 };
   }
-  if (bucket.count >= limit.max) {
-    const retryAfterSeconds = Math.ceil(
-      (bucket.windowStart + limit.windowMs - now) / 1000,
+
+  if (!row) {
+    logger.error({ brandId }, "widget rate-limit upsert returned no row");
+    return { allowed: false, remaining: 0, retryAfterSeconds: 5 };
+  }
+
+  const count = Number(row.count);
+  const expiresAt = row.expires_at instanceof Date
+    ? row.expires_at
+    : new Date(row.expires_at);
+
+  // Best-effort Housekeeping: dünn gestreute Aufräumläufe verhindern,
+  // dass die Tabelle mit alten Brand+IP-Kombinationen vollläuft.
+  // Async und nicht blockierend.
+  if (Math.random() < 0.02) {
+    void db
+      .execute(sql`DELETE FROM widget_rate_limits WHERE "expires_at" < now() - interval '1 hour'`)
+      .catch((err) => {
+        logger.debug({ err }, "widget rate-limit prune failed");
+      });
+  }
+
+  if (count > limit.max) {
+    const retryAfterSeconds = Math.max(
+      1,
+      Math.ceil((expiresAt.getTime() - Date.now()) / 1000),
     );
     return { allowed: false, remaining: 0, retryAfterSeconds };
   }
-  bucket.count += 1;
-  return { allowed: true, remaining: limit.max - bucket.count, retryAfterSeconds: 0 };
+  return {
+    allowed: true,
+    remaining: Math.max(0, limit.max - count),
+    retryAfterSeconds: 0,
+  };
 }
 
-/** Nur für Tests — Bucket-Map zurücksetzen. */
-export function _resetRateLimit() {
-  RATE_BUCKETS.clear();
+/** Nur für Tests — den geteilten Store leeren. */
+export async function _resetRateLimit(): Promise<void> {
+  await db.execute(sql`DELETE FROM widget_rate_limits`);
 }
 
 /** Stabiler Hash der Client-IP für widgetMeta (kein PII-Speicher der Roh-IP). */

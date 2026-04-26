@@ -156,6 +156,23 @@ export const brandsTable = pgTable("brands", {
   }>>(),
 });
 
+// Shared fixed-window rate-limit store für das Public-Lead-Widget (Task #270).
+// Vorher: in-process Map → ein zweiter Replikat oder ein Restart hat den
+// 10-Submits/60-s-Limit pro Brand+IP unwirksam gemacht. Die Tabelle dient
+// ausschließlich als Counter-Store; Einträge sind kurzlebig (max. ~1
+// Fenster) und werden opportunistisch (siehe lib/widget.ts) gepurged.
+//
+// `key` = "<brandId>|<ip>". Wir speichern bewusst keinen Hash der IP,
+// weil der Eintrag nach dem Fenster sowieso wegfällt (kein PII-Speicher
+// im langfristigen Sinn) und der Constant-Key Lookups vereinfacht.
+export const widgetRateLimitsTable = pgTable("widget_rate_limits", {
+  key: text("key").primaryKey(),
+  count: integer("count").notNull().default(1),
+  expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+}, (t) => [
+  index("widget_rate_limits_expires_idx").on(t.expiresAt),
+]);
+
 export const usersTable = pgTable("users", {
   id: id(),
   name: text("name").notNull(),

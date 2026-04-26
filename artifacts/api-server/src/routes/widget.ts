@@ -8,7 +8,8 @@
  * MUSS widgetEnabled=true haben, sonst 404. Cal.com-Webhook validiert
  * zusätzlich HMAC-SHA256 mit dem Brand-spezifischen widgetCalSecret.
  *
- * Rate-Limit: 10 Submits / 60 s pro Brand+IP (in-memory, single process).
+ * Rate-Limit: 10 Submits / 60 s pro Brand+IP (geteilter Postgres-Counter,
+ * restart-fest und über mehrere Replikas konsistent — siehe lib/widget.ts).
  *
  * NICHT zentralisierte Audit-Wrapper aus dealflow.ts genutzt — diese Datei
  * hat keinen Scope; Audit-Einträge schreiben wir hier direkt mit
@@ -352,7 +353,9 @@ router.post("/external/widget/:publicKey/leads", async (req: Request, res: Respo
     return;
   }
   const ip = clientIp(req);
-  const limit = checkRateLimit(resolved.brand.id, ip);
+  // checkRateLimit ist seit Task #270 async (atomarer Postgres-UPSERT
+  // im geteilten Store) — siehe lib/widget.ts.
+  const limit = await checkRateLimit(resolved.brand.id, ip);
   if (!limit.allowed) {
     res.setHeader("retry-after", String(limit.retryAfterSeconds));
     res.status(429).json({ error: "rate_limited", retryAfterSeconds: limit.retryAfterSeconds });

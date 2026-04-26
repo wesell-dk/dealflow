@@ -27,7 +27,8 @@
     "test:quote-duplicate": "node --import tsx --test --test-reporter=spec tests/quote-duplicate-scope.test.ts",
     "test:deal-brand-company": "node --import tsx --test --test-reporter=spec tests/deal-brand-company-consistency.test.ts",
     "test:email-channels": "node --import tsx --test --test-reporter=spec tests/email-channel-crypto.test.ts",
-    "test": "pnpm run test:risk-score && pnpm run test:isolation && pnpm run test:renewals && pnpm run test:approvals && pnpm run test:external && pnpm run test:clauses && pnpm run test:external-collab && pnpm run test:magic-link-url && pnpm run test:email-log && pnpm run test:airec && pnpm run test:cuad && pnpm run test:contract-lang && pnpm run test:bindings && pnpm run test:clause-import-extract && pnpm run test:clause-import-notes && pnpm run test:storage-request-url && pnpm run test:quote-duplicate && pnpm run test:deal-brand-company && pnpm run test:email-channels"
+    "test:widget-rate-limit": "node --import tsx --test --test-reporter=spec tests/widget-rate-limit.test.ts",
+    "test": "pnpm run test:risk-score && pnpm run test:isolation && pnpm run test:renewals && pnpm run test:approvals && pnpm run test:external && pnpm run test:clauses && pnpm run test:external-collab && pnpm run test:magic-link-url && pnpm run test:email-log && pnpm run test:airec && pnpm run test:cuad && pnpm run test:contract-lang && pnpm run test:bindings && pnpm run test:clause-import-extract && pnpm run test:clause-import-notes && pnpm run test:storage-request-url && pnpm run test:quote-duplicate && pnpm run test:deal-brand-company && pnpm run test:email-channels && pnpm run test:widget-rate-limit"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.90.0",

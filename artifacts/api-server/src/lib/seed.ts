@@ -217,6 +217,20 @@ export async function ensureSchemaColumns(): Promise<void> {
   await db.execute(
     sql`CREATE INDEX IF NOT EXISTS "email_send_log_channel_idx" ON "email_send_log" ("channel_id", "sent_at")`,
   );
+
+  // Task #270 — geteilter Rate-Limit-Store für das Public-Lead-Widget.
+  // Ohne Bootstrap-DDL würde checkRateLimit() auf einer noch-nicht-gepushten
+  // DB beim ersten Submit crashen. Idempotent.
+  await db.execute(sql`
+    CREATE TABLE IF NOT EXISTS "widget_rate_limits" (
+      "key" text PRIMARY KEY,
+      "count" integer NOT NULL DEFAULT 1,
+      "expires_at" timestamp with time zone NOT NULL
+    )
+  `);
+  await db.execute(
+    sql`CREATE INDEX IF NOT EXISTS "widget_rate_limits_expires_idx" ON "widget_rate_limits" ("expires_at")`,
+  );
   // Task #221 — Pricing-Kategorien & Auto-SKU
   await db.execute(
     sql`ALTER TABLE "companies" ADD COLUMN IF NOT EXISTS "code" text`,
