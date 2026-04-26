@@ -7,6 +7,8 @@ Multi-tenant, multi-company, multi-brand. Deal-centric.
 
  * OpenAPI spec version: 0.1.0
  */
+import type { ClauseCreateInputVariantJurisdictionsItem } from "./clauseCreateInputVariantJurisdictionsItem";
+import type { ClauseCreateInputVariantPracticeAreasItem } from "./clauseCreateInputVariantPracticeAreasItem";
 import type { ClauseCreateInputVariantSeverity } from "./clauseCreateInputVariantSeverity";
 
 export type ClauseCreateInputVariant = {
@@ -30,4 +32,6 @@ export type ClauseCreateInputVariant = {
   body?: string;
   /** @maxLength 60 */
   tone?: string;
+  practiceAreas?: ClauseCreateInputVariantPracticeAreasItem[];
+  jurisdictions?: ClauseCreateInputVariantJurisdictionsItem[];
 };

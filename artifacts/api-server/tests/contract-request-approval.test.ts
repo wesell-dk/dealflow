@@ -50,7 +50,9 @@ describe("POST /contracts/:id/request-approval — CUAD-gated approval flow", ()
       title,
       template: "Mutual NDA",
       brandId: world.brandId,
-    });
+      jurisdiction: "DE",
+      practiceArea: "service",
+     });
     assert.equal(created.status, 201, JSON.stringify(created.body));
     const id = (created.body as { id: string }).id;
     seededContractIds.push(id);
@@ -262,7 +264,9 @@ describe("POST /contracts/:id/request-approval — CUAD-gated approval flow", ()
       title: "Generic — fully covered",
       template: "Mutual NDA",
       brandId: world.brandId,
-    });
+      jurisdiction: "DE",
+      practiceArea: "service",
+     });
     const ctrId = (created.body as { id: string }).id;
     seededContractIds.push(ctrId);
     // Leave contractTypeId null so totalExpected = 0.

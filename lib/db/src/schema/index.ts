@@ -804,6 +804,10 @@ export const contractsTable = pgTable("contracts", {
   terminationNoticeDays: integer("termination_notice_days"),
   governingLaw: text("governing_law"),
   jurisdiction: text("jurisdiction"),
+  // Rechtsgebiet (Task #228) — steuert KI-Profile (Drafting/Risk/Redline) und
+  // den Pflicht-Filter im Wissensbasis-Retrieval. Werte siehe `PRACTICE_AREAS`
+  // in lib/ai/profiles.ts (z. B. "it_software", "data_protection", "labor").
+  practiceArea: text("practice_area"),
   riskScore: integer("risk_score"),
   valueAmount: numeric("value_amount", { precision: 18, scale: 2 }),
   valueCurrency: text("value_currency"),
@@ -916,6 +920,12 @@ export const clauseVariantsTable = pgTable("clause_variants", {
   summary: text("summary").notNull(),
   body: text("body").notNull().default(""),
   tone: text("tone").notNull().default("standard"),
+  // Rechtsgebiet- und Jurisdiktions-Tags (Task #228). Eine Klausel kann zu
+  // mehreren Spezialgebieten passen (z. B. "service" + "it_software"); die
+  // Vorschlags-Filter im Drafting/Redline schneiden auf Schnittmenge mit dem
+  // Vertragsprofil. Leeres Array = "passt überall" (Default für Bestand).
+  practiceAreas: jsonb("practice_areas").$type<string[]>().notNull().default([]),
+  jurisdictions: jsonb("jurisdictions").$type<string[]>().notNull().default([]),
   obligationTemplates: jsonb("obligation_templates").$type<Array<{
     type: string;
     description: string;

@@ -203,7 +203,9 @@ describe("clause variants — brand overrides + compatibility", () => {
       title: "Override-test contract",
       template: "Master Services Agreement",
       brandId: worldA.brandId,
-    });
+      jurisdiction: "DE",
+      practiceArea: "service",
+     });
     assert.equal(res.status, 201, JSON.stringify(res.body));
     const ctr = res.body as { id: string };
     seededContractIds.push(ctr.id);
@@ -234,7 +236,9 @@ describe("clause variants — brand overrides + compatibility", () => {
       title: "Override-switch contract",
       template: "Master Services Agreement",
       brandId: worldA.brandId,
-    });
+      jurisdiction: "DE",
+      practiceArea: "service",
+     });
     assert.equal(res.status, 201);
     const ctr = res.body as { id: string };
     seededContractIds.push(ctr.id);
@@ -340,7 +344,9 @@ describe("clause variants — brand overrides + compatibility", () => {
       title: "Compat-conflict contract",
       template: "Master Services Agreement",
       brandId: worldA.brandId,
-    });
+      jurisdiction: "DE",
+      practiceArea: "service",
+     });
     assert.equal(ctrRes.status, 201);
     const ctr = ctrRes.body as { id: string };
     seededContractIds.push(ctr.id);

@@ -7,7 +7,9 @@ Multi-tenant, multi-company, multi-brand. Deal-centric.
 
  * OpenAPI spec version: 0.1.0
  */
+import type { ContractPatchInputJurisdiction } from "./contractPatchInputJurisdiction";
 import type { ContractPatchInputLanguage } from "./contractPatchInputLanguage";
+import type { ContractPatchInputPracticeArea } from "./contractPatchInputPracticeArea";
 
 export interface ContractPatchInput {
   /** Aktualisiert die aktive Sprachfassung des Vertrags. */
@@ -19,4 +21,19 @@ Vertragstyp zu hängen, damit der CUAD-Check greift). `null` löst die Bindung w
    * @nullable
    */
   contractTypeId?: string | null;
+  /**
+   * Setzt/löscht die Jurisdiktion (Task #228).
+   * @nullable
+   */
+  jurisdiction?: ContractPatchInputJurisdiction;
+  /**
+   * Setzt/löscht das Rechtsgebiet (Task #228).
+   * @nullable
+   */
+  practiceArea?: ContractPatchInputPracticeArea;
+  /**
+   * Setzt/löscht das anwendbare Recht (Frei-Text).
+   * @nullable
+   */
+  governingLaw?: string | null;
 }

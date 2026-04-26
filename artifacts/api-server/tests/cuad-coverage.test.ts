@@ -112,7 +112,9 @@ describe("CUAD coverage — deterministic gap-check", () => {
       title: "NDA — coverage test",
       template: "Mutual NDA",
       brandId: world.brandId,
-    });
+      jurisdiction: "DE",
+      practiceArea: "service",
+     });
     assert.equal(created.status, 201, JSON.stringify(created.body));
     const ctrId = (created.body as { id: string }).id;
     seededContractIds.push(ctrId);
@@ -158,7 +160,9 @@ describe("CUAD coverage — deterministic gap-check", () => {
       title: "MSA — coverage test",
       template: "Master Services Agreement",
       brandId: world.brandId,
-    });
+      jurisdiction: "DE",
+      practiceArea: "service",
+     });
     assert.equal(created.status, 201, JSON.stringify(created.body));
     const ctrId = (created.body as { id: string }).id;
     seededContractIds.push(ctrId);
@@ -230,7 +234,9 @@ describe("CUAD coverage — deterministic gap-check", () => {
       title: "MSA — tenant override coverage",
       template: "Master Services Agreement",
       brandId: world.brandId,
-    });
+      jurisdiction: "DE",
+      practiceArea: "service",
+     });
     assert.equal(created.status, 201);
     const ctrId = (created.body as { id: string }).id;
     seededContractIds.push(ctrId);
@@ -276,7 +282,9 @@ describe("CUAD coverage — deterministic gap-check", () => {
       title: "MSA — override-replaces-default",
       template: "Master Services Agreement",
       brandId: world.brandId,
-    });
+      jurisdiction: "DE",
+      practiceArea: "service",
+     });
     assert.equal(created.status, 201);
     const ctrId = (created.body as { id: string }).id;
     seededContractIds.push(ctrId);

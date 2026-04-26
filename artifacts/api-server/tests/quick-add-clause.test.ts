@@ -62,7 +62,9 @@ describe("POST /contracts/:id/clauses — Quick-Add", () => {
       title,
       template: "Master Services Agreement",
       brandId: world.brandId,
-    });
+      jurisdiction: "DE",
+      practiceArea: "service",
+     });
     assert.equal(created.status, 201, JSON.stringify(created.body));
     const id = (created.body as { id: string }).id;
     seededContractIds.push(id);

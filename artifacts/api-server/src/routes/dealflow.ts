@@ -199,6 +199,16 @@ import type {
   RegulatoryApplicabilityInput,
   RegulatoryCheckInput,
 } from '../lib/ai/prompts/dealflow';
+import {
+  PRACTICE_AREAS,
+  JURISDICTIONS,
+  getProfileFragment,
+  practiceAreaToAreaOfLaw,
+  isPracticeArea,
+  isJurisdiction,
+  type PracticeArea,
+  type Jurisdiction,
+} from '../lib/ai/profiles.js';
 import { runContractLint, type ContractLintInput } from '../lib/contractLinter/index.js';
 import {
   searchLegalKnowledge,
@@ -216,6 +226,7 @@ import {
   buildDealContext,
   buildQuoteContext,
   buildContractContext,
+  buildContractContextFromInput,
   buildApprovalContext,
   NotInScopeError,
   type DealContext,
@@ -6401,6 +6412,10 @@ function mapContract(
     predecessorContractId: c.predecessorContractId ?? null,
     sourceOrderConfirmationId: c.sourceOrderConfirmationId ?? null,
     sourceOrderConfirmationNumber: sourceOrderConfirmationNumber ?? null,
+    // Spezialgebiet- und Jurisdiktions-Profil (Task #228).
+    jurisdiction: c.jurisdiction ?? null,
+    governingLaw: c.governingLaw ?? null,
+    practiceArea: c.practiceArea ?? null,
   };
 }
 
@@ -6614,8 +6629,19 @@ router.post('/contracts', async (req, res) => {
     dealId: string; title: string; template: string;
     brandId?: string; language?: 'de' | 'en';
     contractTypeId?: string;
+    jurisdiction: string;
+    practiceArea: string;
   };
   if (!(await gateDeal(req, res, b.dealId))) return;
+  // Pflichtfelder Profile (Task #228): Zod erzwingt sie bereits, aber interne
+  // Aufrufer (Tests, Migrations-Skripte) umgehen validateInline gelegentlich.
+  // Daher hier defensiv gegen die Profile-Listen prüfen.
+  if (!b.jurisdiction || !isJurisdiction(b.jurisdiction)) {
+    res.status(422).json({ error: `jurisdiction must be one of ${JURISDICTIONS.join('|')}` }); return;
+  }
+  if (!b.practiceArea || !isPracticeArea(b.practiceArea)) {
+    res.status(422).json({ error: `practiceArea must be one of ${PRACTICE_AREAS.join('|')}` }); return;
+  }
   // Resolve the deal up-front so we can derive company/brand/account bindings
   // and produce a fully bound contract row (tenantId is required for the CUAD
   // coverage check and for tenant-scoped clause-family overrides to apply).
@@ -6702,6 +6728,9 @@ router.post('/contracts', async (req, res) => {
     valueCurrency: deal.currency ?? null,
     valueAmount: deal.value != null ? String(deal.value) : null,
     currentVersion: 1,
+    // Profil-Felder (Task #228) — vom Anwender oder Klassifikator gesetzt.
+    jurisdiction: b.jurisdiction ?? null,
+    practiceArea: b.practiceArea ?? null,
   });
   // Seed clauses from brand defaults if provided
   if (brandForSeed) {
@@ -6710,22 +6739,81 @@ router.post('/contracts', async (req, res) => {
       const families = await db.select().from(clauseFamiliesTable);
       const variants = await db.select().from(clauseVariantsTable);
       const vById = new Map(variants.map(v => [v.id, v]));
+      const vByFamily = new Map<string, typeof variants>();
+      for (const v of variants) {
+        const arr = vByFamily.get(v.familyId) ?? [];
+        arr.push(v);
+        vByFamily.set(v.familyId, arr);
+      }
       // Lade alle Brand-Overrides einmal
       const overrides = await db.select().from(brandClauseVariantOverridesTable).where(and(
         eq(brandClauseVariantOverridesTable.tenantId, tenantIdForSeed),
         eq(brandClauseVariantOverridesTable.brandId, brand.id),
       ));
       const ovByVariant = new Map(overrides.map(o => [o.baseVariantId, o]));
+      // ── Profil-aware Variant-Auswahl (Task #228) ────────────────────────
+      // Der Brand-Default nennt pro Familie eine Variante. Wenn diese aber
+      // explizite Tag-Filter trägt, die NICHT zum Vertragsprofil passen,
+      // bevorzugen wir innerhalb derselben Familie eine getaggte Alternative
+      // (Treffer auf practiceArea ODER jurisdiction); fallen wir auf eine
+      // ungetaggte Variante (= "passt überall") zurück; ansonsten bleibt der
+      // explizite Brand-Default erhalten, damit das Verhalten ohne passende
+      // Alternativen unverändert ist.
+      const matchesProfile = (
+        v: typeof clauseVariantsTable.$inferSelect,
+      ): { matches: boolean; tagged: boolean } => {
+        const pa = Array.isArray(v.practiceAreas) ? v.practiceAreas : [];
+        const ju = Array.isArray(v.jurisdictions) ? v.jurisdictions : [];
+        const tagged = pa.length > 0 || ju.length > 0;
+        if (!tagged) return { matches: true, tagged: false };
+        const paOk = pa.length === 0 || pa.includes(b.practiceArea);
+        const juOk = ju.length === 0 || ju.includes(b.jurisdiction);
+        return { matches: paOk && juOk, tagged: true };
+      };
+      const pickVariantForFamily = (
+        familyId: string,
+        defaultVariantId: string | undefined,
+      ): typeof clauseVariantsTable.$inferSelect | undefined => {
+        // Wenn der Brand keinen Default für diese Familie hat, materialisieren
+        // wir KEINEN Eintrag — wir wollen die bestehende Mengen-Logik
+        // (nur explizite Defaults werden geseedet) nicht ausweiten.
+        if (!defaultVariantId) return undefined;
+        const def = vById.get(defaultVariantId);
+        if (!def) return undefined;
+        // Default ohne Tag-Konflikt → verwenden.
+        if (matchesProfile(def).matches) return def;
+        // Default trägt Tags, die zum Vertragsprofil im Konflikt stehen →
+        // versuche, in derselben Familie eine bessere Variante zu finden.
+        const candidates = vByFamily.get(familyId) ?? [];
+        // 1. Bevorzugt getaggte Variante mit konkretem Profil-Treffer.
+        const exact = candidates.find(v => {
+          const m = matchesProfile(v);
+          return m.tagged && m.matches;
+        });
+        if (exact) return exact;
+        // 2. Sonst eine "passt überall"-Variante (keine Tags).
+        const fallback = candidates.find(v => !matchesProfile(v).tagged);
+        if (fallback) return fallback;
+        // 3. Letzter Fallback: das, was am Brand definiert ist (auch wenn die
+        // Tags nicht passen — dann wird der Vertrag eben mit Hinweis im
+        // Risk-Check geflaggt).
+        return def;
+      };
       // Lade Übersetzungen für die Vertragssprache, damit der Snapshot
       // (variant/summary) bereits in der richtigen Sprache materialisiert wird.
       const seedVariantIds = families
-        .map(f => (brand.defaultClauseVariants as Record<string, string>)[f.id])
+        .map(f => pickVariantForFamily(
+          f.id,
+          (brand.defaultClauseVariants as Record<string, string>)[f.id],
+        )?.id)
         .filter((v): v is string => Boolean(v));
       const trMap = await loadVariantTranslations(seedVariantIds);
       const rows = families
         .map(f => {
-          const vId = (brand.defaultClauseVariants as Record<string, string>)[f.id];
-          const v = vId ? vById.get(vId) : undefined;
+          const v = pickVariantForFamily(
+            f.id,
+            (brand.defaultClauseVariants as Record<string, string>)[f.id],
+          );
           if (!v) return null;
           const ov = ovByVariant.get(v.id);
           const resolved = applyOverride(v, ov, brand.id);
@@ -6761,7 +6849,13 @@ router.patch('/contracts/:id', async (req, res) => {
   const [c] = await db.select().from(contractsTable).where(eq(contractsTable.id, req.params.id));
   if (!c) { res.status(404).json({ error: 'not found' }); return; }
   if (!(await gateDeal(req, res, c.dealId))) return;
-  const body = (req.body ?? {}) as { language?: unknown; contractTypeId?: unknown };
+  const body = (req.body ?? {}) as {
+    language?: unknown;
+    contractTypeId?: unknown;
+    jurisdiction?: unknown;
+    practiceArea?: unknown;
+    governingLaw?: unknown;
+  };
   const patch: Partial<typeof contractsTable.$inferInsert> = {};
   const auditEntries: Array<{ action: string; summary: string; before: unknown; after: unknown }> = [];
 
@@ -6817,6 +6911,71 @@ router.patch('/contracts/:id', async (req, res) => {
           tenantId: patch.tenantId ?? c.tenantId ?? null,
           playbookId: patch.playbookId !== undefined ? patch.playbookId : (c.playbookId ?? null),
         },
+      });
+    }
+  }
+
+  // Spezialgebiet- und Jurisdiktions-Profil (Task #228). Beide Felder dürfen
+  // explizit auf null gesetzt werden, um eine vorherige (Fehl-) Klassifikation
+  // wieder zu lösen.
+  if (body.jurisdiction !== undefined) {
+    let next: string | null;
+    if (body.jurisdiction === null || body.jurisdiction === '') {
+      next = null;
+    } else if (typeof body.jurisdiction === 'string' && isJurisdiction(body.jurisdiction)) {
+      next = body.jurisdiction;
+    } else {
+      res.status(400).json({ error: `jurisdiction must be one of ${JURISDICTIONS.join('|')} or null` }); return;
+    }
+    if (next !== (c.jurisdiction ?? null)) {
+      patch.jurisdiction = next;
+      auditEntries.push({
+        action: 'jurisdiction_changed',
+        summary: `Jurisdiction: ${c.jurisdiction ?? '∅'} → ${next ?? '∅'}`,
+        before: { jurisdiction: c.jurisdiction ?? null },
+        after: { jurisdiction: next },
+      });
+    }
+  }
+  if (body.practiceArea !== undefined) {
+    let next: string | null;
+    if (body.practiceArea === null || body.practiceArea === '') {
+      next = null;
+    } else if (typeof body.practiceArea === 'string' && isPracticeArea(body.practiceArea)) {
+      next = body.practiceArea;
+    } else {
+      res.status(400).json({ error: `practiceArea must be one of ${PRACTICE_AREAS.join('|')} or null` }); return;
+    }
+    if (next !== (c.practiceArea ?? null)) {
+      patch.practiceArea = next;
+      auditEntries.push({
+        action: 'practice_area_changed',
+        summary: `Practice area: ${c.practiceArea ?? '∅'} → ${next ?? '∅'}`,
+        before: { practiceArea: c.practiceArea ?? null },
+        after: { practiceArea: next },
+      });
+    }
+  }
+  if (body.governingLaw !== undefined) {
+    let next: string | null;
+    if (body.governingLaw === null || body.governingLaw === '') {
+      next = null;
+    } else if (typeof body.governingLaw === 'string') {
+      const trimmed = body.governingLaw.trim();
+      if (trimmed.length > 200) {
+        res.status(400).json({ error: 'governingLaw too long (>200 chars)' }); return;
+      }
+      next = trimmed || null;
+    } else {
+      res.status(400).json({ error: 'governingLaw must be string or null' }); return;
+    }
+    if (next !== (c.governingLaw ?? null)) {
+      patch.governingLaw = next;
+      auditEntries.push({
+        action: 'governing_law_changed',
+        summary: `Governing law: ${c.governingLaw ?? '∅'} → ${next ?? '∅'}`,
+        before: { governingLaw: c.governingLaw ?? null },
+        after: { governingLaw: next },
       });
     }
   }
@@ -9304,6 +9463,32 @@ router.post('/clause-families', async (req, res) => {
     });
   }
   const variantId = `cv_${randomUUID().slice(0, 8)}`;
+  // Tag-Felder (Task #228) optional aus dem Input — wenn nicht gesetzt
+  // bleiben sie leer (= "passt überall"), exakt wie bei Bestandsklauseln.
+  // Defensive Validierung gegen die Enum-Listen, falls der Caller die
+  // generierten Zod-Schemas umgeht.
+  const inputAreas = (b.variant as unknown as { practiceAreas?: unknown }).practiceAreas;
+  const inputJurisdictions = (b.variant as unknown as { jurisdictions?: unknown }).jurisdictions;
+  let practiceAreas: PracticeArea[] = [];
+  let jurisdictions: Jurisdiction[] = [];
+  if (Array.isArray(inputAreas)) {
+    for (const v of inputAreas) {
+      if (!isPracticeArea(v)) {
+        res.status(422).json({ error: `practiceAreas[*] must be one of ${PRACTICE_AREAS.join('|')}` }); return;
+      }
+      practiceAreas.push(v);
+    }
+    practiceAreas = Array.from(new Set(practiceAreas));
+  }
+  if (Array.isArray(inputJurisdictions)) {
+    for (const v of inputJurisdictions) {
+      if (!isJurisdiction(v)) {
+        res.status(422).json({ error: `jurisdictions[*] must be one of ${JURISDICTIONS.join('|')}` }); return;
+      }
+      jurisdictions.push(v);
+    }
+    jurisdictions = Array.from(new Set(jurisdictions));
+  }
   await db.insert(clauseVariantsTable).values({
     id: variantId,
     familyId,
@@ -9313,6 +9498,8 @@ router.post('/clause-families', async (req, res) => {
     summary: b.variant.summary.trim(),
     body: b.variant.body ?? '',
     tone: (b.variant.tone ?? 'standard').trim() || 'standard',
+    practiceAreas,
+    jurisdictions,
   });
   // Optional translations: at most one row per (variantId, locale).
   if (b.translations && b.translations.length > 0) {
@@ -9354,6 +9541,10 @@ router.post('/clause-families', async (req, res) => {
         return {
           id: v.id, name: v.name, severity: v.severity,
           severityScore: v.severityScore, summary: v.summary, body: v.body, tone: v.tone,
+          // Spezialgebiet-/Jurisdiktions-Tags (Task #228). Default leer
+          // bei Bestandsklauseln; das Frontend rendert dann "passt überall".
+          practiceAreas: (v.practiceAreas ?? []) as string[],
+          jurisdictions: (v.jurisdictions ?? []) as string[],
           translations: trs
             ? Array.from(trs.values()).map(t => ({
                 id: t.id, variantId: t.variantId, locale: t.locale,
@@ -9382,6 +9573,8 @@ router.get('/clause-families', async (_req, res) => {
         return {
           id: v.id, name: v.name, severity: v.severity,
           severityScore: v.severityScore, summary: v.summary, body: v.body, tone: v.tone,
+          practiceAreas: (v.practiceAreas ?? []) as string[],
+          jurisdictions: (v.jurisdictions ?? []) as string[],
           translations: trs
             ? Array.from(trs.values()).map(t => ({
                 id: t.id, variantId: t.variantId, locale: t.locale,
@@ -9394,6 +9587,79 @@ router.get('/clause-families', async (_req, res) => {
         };
       }),
   })));
+});
+
+// PATCH /clause-variants/:variantId — Tag-Editor (Task #228).
+// Aktualisiert nur practiceAreas und/oder jurisdictions. Andere Felder
+// (name/severity/body/translations) bleiben über die bestehenden Endpoints
+// (POST /clause-families, /clause-variants/:variantId/translations) änderbar,
+// damit dieser Endpoint klein und auditierbar bleibt.
+router.patch('/clause-variants/:variantId', async (req, res) => {
+  if (!requireAdmin(req, res)) return;
+  const variantId = req.params.variantId;
+  const [v] = await db.select().from(clauseVariantsTable).where(eq(clauseVariantsTable.id, variantId));
+  if (!v) { res.status(404).json({ error: 'variant not found' }); return; }
+  const body = (req.body ?? {}) as { practiceAreas?: unknown; jurisdictions?: unknown };
+  const patch: Partial<typeof clauseVariantsTable.$inferInsert> = {};
+  let nextAreas = (v.practiceAreas ?? []) as string[];
+  let nextJurisdictions = (v.jurisdictions ?? []) as string[];
+
+  if (body.practiceAreas !== undefined) {
+    if (!Array.isArray(body.practiceAreas)) {
+      res.status(422).json({ error: 'practiceAreas must be an array' }); return;
+    }
+    const out: PracticeArea[] = [];
+    for (const x of body.practiceAreas) {
+      if (!isPracticeArea(x)) {
+        res.status(422).json({ error: `practiceAreas[*] must be one of ${PRACTICE_AREAS.join('|')}` }); return;
+      }
+      out.push(x);
+    }
+    nextAreas = Array.from(new Set(out));
+    patch.practiceAreas = nextAreas;
+  }
+  if (body.jurisdictions !== undefined) {
+    if (!Array.isArray(body.jurisdictions)) {
+      res.status(422).json({ error: 'jurisdictions must be an array' }); return;
+    }
+    const out: Jurisdiction[] = [];
+    for (const x of body.jurisdictions) {
+      if (!isJurisdiction(x)) {
+        res.status(422).json({ error: `jurisdictions[*] must be one of ${JURISDICTIONS.join('|')}` }); return;
+      }
+      out.push(x);
+    }
+    nextJurisdictions = Array.from(new Set(out));
+    patch.jurisdictions = nextJurisdictions;
+  }
+  if (Object.keys(patch).length > 0) {
+    await db.update(clauseVariantsTable).set(patch).where(eq(clauseVariantsTable.id, variantId));
+    await writeAuditFromReq(req, {
+      entityType: 'clause_variant', entityId: variantId, action: 'tags_updated',
+      summary: `Tags aktualisiert: ${nextAreas.length} Rechtsgebiete, ${nextJurisdictions.length} Jurisdiktionen`,
+      before: { practiceAreas: v.practiceAreas ?? [], jurisdictions: v.jurisdictions ?? [] },
+      after: { practiceAreas: nextAreas, jurisdictions: nextJurisdictions },
+    });
+  }
+  const [updated] = await db.select().from(clauseVariantsTable).where(eq(clauseVariantsTable.id, variantId));
+  const trMap = await loadVariantTranslations([variantId]);
+  const trs = trMap.get(variantId);
+  res.json({
+    id: updated!.id, name: updated!.name, severity: updated!.severity,
+    severityScore: updated!.severityScore, summary: updated!.summary,
+    body: updated!.body, tone: updated!.tone,
+    practiceAreas: (updated!.practiceAreas ?? []) as string[],
+    jurisdictions: (updated!.jurisdictions ?? []) as string[],
+    translations: trs
+      ? Array.from(trs.values()).map(t => ({
+          id: t.id, variantId: t.variantId, locale: t.locale,
+          name: t.name, summary: t.summary, body: t.body,
+          source: t.source ?? null, license: t.license ?? null,
+          sourceUrl: t.sourceUrl ?? null,
+          createdAt: iso(t.createdAt)!, updatedAt: iso(t.updatedAt)!,
+        }))
+      : [],
+  });
 });
 
 // ── CLAUSE-VARIANT TRANSLATIONS ──
@@ -14097,18 +14363,27 @@ router.post('/copilot/contract-risk/:contractId', async (req, res) => {
     ctx.contract.title,
     ...ctx.clauses.map((c) => `${c.family} ${c.summary}`),
   ].join(' ');
-  // Bewusst KEIN harter Jurisdiktions-Filter — der Risk-Report braucht
-  // sowohl deutsches Vertragsrecht (BGB/HGB/UWG) als auch EU-Normen
-  // (DSGVO Art. 6/28/32), je nachdem welche Klauseln im Vertrag stehen.
-  // Token-Overlap im Retrieval entscheidet relevanzbasiert.
+  // Wenn der Vertrag eine Jurisdiktion bzw. ein Rechtsgebiet trägt (Task #228),
+  // schneiden wir die Retrieval-Treffer hart darauf — sonst überfluten wir die
+  // Auswertung mit Quellen aus fremden Rechtsordnungen oder fachfremden
+  // Themen. Ohne Profil bleibt es bei "alles erlaubt", damit der Risk-Report
+  // weiterhin auf Altdaten ohne Klassifikation funktioniert.
+  const areaOfLaw = practiceAreaToAreaOfLaw(ctx.contract.practiceArea);
   const knowledge = await searchLegalKnowledge({
     tenantId: scope.tenantId,
     query: knowledgeQuery,
-    filters: { jurisdiction: null, areaOfLaw: null },
+    filters: {
+      jurisdiction: ctx.contract.jurisdiction ?? null,
+      areaOfLaw,
+    },
     limitSources: 5,
     limitPrecedents: 4,
   });
   const knowledgeBlock = formatLegalKnowledgeForPrompt(knowledge);
+  const profileFragment = getProfileFragment({
+    jurisdiction: ctx.contract.jurisdiction,
+    practiceArea: ctx.contract.practiceArea,
+  });
   // Lookup-Tabelle für die Anreicherung der Citations im Output.
   const knowledgeIndex = new Map<string, NormHit | PrecedentHit>();
   for (const s of knowledge.sources) knowledgeIndex.set(s.id, s);
@@ -14116,14 +14391,14 @@ router.post('/copilot/contract-risk/:contractId', async (req, res) => {
   try {
     const result = await runStructuredWithSecondOpinion<ContractRiskInput, {
       overallRisk: string; overallScore: number; summary: string;
-      riskSignals: Array<{ clause: string; severity: string; finding: string; recommendation: string }>;
+      riskSignals: Array<{ clause: string; severity: string; finding: string; recommendation: string; area?: string }>;
       approvalRelevant: boolean; recommendedAction: string;
       relatedSources: Array<{ kind: 'norm' | 'precedent'; id: string; ref: string; note?: string }>;
       confidence: 'low' | 'medium' | 'high';
       confidenceReason: string;
     }>({
       promptKey: 'contract.risk',
-      input: { contract: ctx, knowledgeBlock },
+      input: { contract: ctx, knowledgeBlock, profileFragment },
       scope,
       entityRef: { entityType: 'contract', entityId: contractId },
       comparePoints: SECOND_OPINION_COMPARE_POINTS['contract.risk']!,
@@ -14371,6 +14646,112 @@ router.post('/copilot/contract-negotiation/:contractId', async (req, res) => {
   } catch (err) {
     if (err instanceof AIOrchestrationError) {
       mapAiOrchestrationErrorToHttp(err, res, 'contract-negotiation');
+      return;
+    }
+    throw err;
+  }
+});
+
+// ── 5. Contract Classification (Task #228) ──
+// Schlägt practiceArea + jurisdiction für einen Vertrag vor. Persistiert
+// bewusst NICHT — der Anwender entscheidet per PATCH /contracts/:id, ob er
+// den Vorschlag übernimmt. So bleibt eine Fehl-Klassifikation reversibel,
+// ohne dass im Hintergrund schon Folge-Empfehlungen mit falschen Filtern
+// gerechnet wurden.
+router.post('/copilot/contract-classify/:contractId', async (req, res) => {
+  const scope = getScope(req);
+  if (!isAIConfigured()) {
+    res.status(503).json({ ok: false, error: 'AI provider not configured', code: 'config_error' });
+    return;
+  }
+  const contractId = req.params['contractId'] ?? '';
+  let ctx: ContractContext;
+  try {
+    ctx = await buildContractContext(req, contractId);
+  } catch (e) {
+    if (handleScopeError(e, res)) return;
+    throw e;
+  }
+  try {
+    const result = await runStructured<ContractContext, {
+      practiceArea: PracticeArea;
+      jurisdiction: Jurisdiction;
+      rationale: string;
+      confidence: 'low' | 'medium' | 'high';
+      confidenceReason: string;
+    }>({
+      promptKey: 'contract.classify',
+      input: ctx,
+      scope,
+      entityRef: { entityType: 'contract', entityId: contractId },
+    });
+    res.json({
+      ok: true,
+      result: result.output,
+      invocationId: result.invocationId,
+      model: result.model,
+      latencyMs: result.latencyMs,
+    });
+  } catch (err) {
+    if (err instanceof AIOrchestrationError) {
+      mapAiOrchestrationErrorToHttp(err, res, 'contract-classify');
+      return;
+    }
+    throw err;
+  }
+});
+
+// ── Task #228: Pre-classification (no contract row yet) ──
+// Wird aus dem Vertrags-Erstellungs-Dialog aufgerufen, damit der Anwender
+// jurisdiction + practiceArea bereits aus Deal-/Brand-Kontext vorgeschlagen
+// bekommt, BEVOR der Vertrag persistiert wird. Persistiert nichts; identische
+// Antwortform wie /copilot/contract-classify/{contractId}.
+router.post('/copilot/contract-classify-context', async (req, res) => {
+  if (!validateInline(req, res, { body: Z.RunContractClassifyContextBody })) return;
+  const scope = getScope(req);
+  if (!isAIConfigured()) {
+    res.status(503).json({ ok: false, error: 'AI provider not configured', code: 'config_error' });
+    return;
+  }
+  const b = req.body as { dealId: string; title: string; template: string; brandId?: string };
+  if (!(await gateDeal(req, res, b.dealId))) return;
+  let ctx: ContractContext;
+  try {
+    ctx = await buildContractContextFromInput({
+      dealId: b.dealId,
+      title: b.title,
+      template: b.template,
+      brandId: b.brandId ?? null,
+    });
+  } catch (e) {
+    if (handleScopeError(e, res)) return;
+    throw e;
+  }
+  try {
+    const result = await runStructured<ContractContext, {
+      practiceArea: PracticeArea;
+      jurisdiction: Jurisdiction;
+      rationale: string;
+      confidence: 'low' | 'medium' | 'high';
+      confidenceReason: string;
+    }>({
+      promptKey: 'contract.classify',
+      input: ctx,
+      scope,
+      // Kein Vertrag vorhanden → wir referenzieren stattdessen den Deal,
+      // damit der Insight-Speicher trotzdem eine valide Bindung hat.
+      entityRef: { entityType: 'deal', entityId: b.dealId },
+    });
+    res.json({
+      ok: true,
+      result: result.output,
+      invocationId: result.invocationId,
+      model: result.model,
+      latencyMs: result.latencyMs,
+    });
+  } catch (err) {
+    if (err instanceof AIOrchestrationError) {
+      mapAiOrchestrationErrorToHttp(err, res, 'contract-classify');
       return;
     }
     throw err;

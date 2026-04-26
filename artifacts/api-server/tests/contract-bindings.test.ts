@@ -71,7 +71,9 @@ describe("Contract bindings — POST/PATCH set tenantId + contractTypeId", () =>
       title: "MSA via heuristic",
       template: "Master Services Agreement",
       brandId: world.brandId,
-    });
+      jurisdiction: "DE",
+      practiceArea: "service",
+     });
     assert.equal(created.status, 201, JSON.stringify(created.body));
     const body = created.body as ContractResponse;
     seededContractIds.push(body.id);
@@ -94,7 +96,9 @@ describe("Contract bindings — POST/PATCH set tenantId + contractTypeId", () =>
       template: "Some random template name",
       brandId: world.brandId,
       contractTypeId: "ct_nda",
-    });
+      jurisdiction: "DE",
+      practiceArea: "service",
+     });
     assert.equal(created.status, 201, JSON.stringify(created.body));
     const body = created.body as ContractResponse;
     seededContractIds.push(body.id);
@@ -107,7 +111,9 @@ describe("Contract bindings — POST/PATCH set tenantId + contractTypeId", () =>
       template: "Mutual NDA",
       brandId: world.brandId,
       contractTypeId: "ct_does_not_exist",
-    });
+      jurisdiction: "DE",
+      practiceArea: "service",
+     });
     assert.equal(bad.status, 422, JSON.stringify(bad.body));
   });
 
@@ -117,7 +123,9 @@ describe("Contract bindings — POST/PATCH set tenantId + contractTypeId", () =>
       title: "Unknown template",
       template: "Some Bespoke Agreement With No Keywords",
       brandId: world.brandId,
-    });
+      jurisdiction: "DE",
+      practiceArea: "service",
+     });
     assert.equal(res.status, 422, JSON.stringify(res.body));
     const body = res.body as { error: string; details?: string };
     assert.match(body.error, /contractTypeId/i);
@@ -177,7 +185,9 @@ describe("Contract bindings — POST/PATCH set tenantId + contractTypeId", () =>
         title: "Brand-default wins over heuristic",
         template: "Mutual NDA",
         brandId: world.brandId,
-      });
+        jurisdiction: "DE",
+        practiceArea: "service",
+       });
       assert.equal(created.status, 201, JSON.stringify(created.body));
       const body = created.body as ContractResponse;
       seededContractIds.push(body.id);
@@ -190,7 +200,9 @@ describe("Contract bindings — POST/PATCH set tenantId + contractTypeId", () =>
         template: "Mutual NDA",
         brandId: world.brandId,
         contractTypeId: "ct_nda",
-      });
+        jurisdiction: "DE",
+        practiceArea: "service",
+       });
       assert.equal(explicit.status, 201);
       const eb = explicit.body as ContractResponse;
       seededContractIds.push(eb.id);
@@ -204,7 +216,9 @@ describe("Contract bindings — POST/PATCH set tenantId + contractTypeId", () =>
           title: "Falls back to heuristic when brand default is inactive",
           template: "Mutual NDA",
           brandId: world.brandId,
-        });
+          jurisdiction: "DE",
+          practiceArea: "service",
+         });
         assert.equal(fallback.status, 201, JSON.stringify(fallback.body));
         const fb = fallback.body as ContractResponse;
         seededContractIds.push(fb.id);
@@ -260,7 +274,9 @@ describe("Contract bindings — POST/PATCH set tenantId + contractTypeId", () =>
       title: "For tenant scope check",
       template: "Mutual NDA",
       brandId: world.brandId,
-    });
+      jurisdiction: "DE",
+      practiceArea: "service",
+     });
     assert.equal(created.status, 201);
     const ctrId = (created.body as ContractResponse).id;
     seededContractIds.push(ctrId);

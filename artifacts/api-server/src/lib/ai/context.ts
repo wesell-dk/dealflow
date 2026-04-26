@@ -207,6 +207,12 @@ export interface ContractContext {
     riskLevel: string;
     template: string;
     validUntil: string | null;
+    /** Jurisdiktion (Task #228) — DE/AT/CH/EN/US/OTHER. */
+    jurisdiction: string | null;
+    /** Anwendbares Recht (Free-Text z. B. "German law", "Swiss OR"). */
+    governingLaw: string | null;
+    /** Rechtsgebiet (Task #228) — siehe lib/ai/profiles.ts PRACTICE_AREAS. */
+    practiceArea: string | null;
   };
   clauses: ContractClauseSummary[];
   deal: DealRef;
@@ -649,6 +655,9 @@ export async function buildContractContext(
       riskLevel: c.riskLevel,
       template: c.template,
       validUntil: c.validUntil ? String(c.validUntil) : null,
+      jurisdiction: c.jurisdiction ?? null,
+      governingLaw: c.governingLaw ?? null,
+      practiceArea: c.practiceArea ?? null,
     },
     clauses,
     deal,
@@ -656,6 +665,49 @@ export async function buildContractContext(
     brand,
     relatedQuote,
     openApprovals: apprRows.map(approvalSummary),
+  };
+}
+
+// ── Task #228: Pre-classification context (no contract row yet) ──
+// Wird vom Vertrags-Erstellungs-Dialog genutzt, damit der Klassifikator
+// jurisdiction + practiceArea aus Deal/Brand/Account + Titel/Template
+// vorschlagen kann, BEVOR der Vertrag persistiert wird. Der Aufrufer hat
+// bereits gateDeal() bestanden — diese Funktion macht keine Scope-Checks
+// (sie ist privat zur Route, der Caller muss vorher prüfen).
+export async function buildContractContextFromInput(input: {
+  dealId: string;
+  title: string;
+  template: string;
+  brandId?: string | null;
+}): Promise<ContractContext> {
+  const [d] = await db.select().from(dealsTable).where(eq(dealsTable.id, input.dealId));
+  if (!d) throw new NotInScopeError("missing", "deal", input.dealId);
+  const deal = await loadDealRef(input.dealId);
+  if (!deal) throw new NotInScopeError("missing", "deal", input.dealId);
+  const account = await loadAccount(d.accountId);
+  if (!account) throw new NotInScopeError("missing", "deal", input.dealId);
+  const effectiveBrandId = input.brandId ?? d.brandId;
+  const brand = effectiveBrandId ? await loadBrand(effectiveBrandId) : null;
+  if (!brand) throw new NotInScopeError("missing", "deal", input.dealId);
+  return {
+    contract: {
+      id: "ctr_pending",
+      title: input.title,
+      status: "drafting",
+      version: 0,
+      riskLevel: "low",
+      template: input.template,
+      validUntil: null,
+      jurisdiction: null,
+      governingLaw: null,
+      practiceArea: null,
+    },
+    clauses: [],
+    deal,
+    account,
+    brand,
+    relatedQuote: null,
+    openApprovals: [],
   };
 }
 

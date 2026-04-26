@@ -25,6 +25,11 @@ import {
   getGetContractTypeCuadExpectationsQueryKey,
   getGetClauseFamilyCuadCategoriesQueryKey,
   useGetClauseSuggestionStats,
+  useUpdateClauseVariantTags,
+  ContractInputJurisdiction,
+  ContractInputPracticeArea,
+  ClauseVariantTagsPatchPracticeAreasItem,
+  ClauseVariantTagsPatchJurisdictionsItem,
 } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/contexts/auth-context";
@@ -272,6 +277,13 @@ export default function Clauses() {
                             {v.body}
                           </p>
                         )}
+                        <ClauseVariantTags
+                          variantId={v.id}
+                          variantName={v.name}
+                          practiceAreas={v.practiceAreas ?? []}
+                          jurisdictions={v.jurisdictions ?? []}
+                          canEdit={isTenantAdmin}
+                        />
                       </div>
                     ))}
                   </div>
@@ -1201,3 +1213,151 @@ function SuggestionsTile() {
   );
 }
 
+
+/**
+ * ClauseVariantTags — zeigt die Spezialgebiet-/Jurisdiktions-Tags einer
+ * Klausel-Variante (Task #228) und erlaubt Tenant-Admins die Pflege.
+ *
+ * Die Tags steuern das Matching im KI-Profil (siehe ai/profiles.ts) und
+ * werden serverseitig validiert (PATCH /clause-variants/:id), damit
+ * fehlerhafte Eingaben nicht silently durchrutschen. Wir rendern eine
+ * leere Variante als "passt überall", damit Bestandsklauseln sichtbar
+ * unsortiert bleiben und nicht für eine bestimmte Domain "verschluckt"
+ * werden.
+ */
+function ClauseVariantTags({
+  variantId,
+  variantName,
+  practiceAreas,
+  jurisdictions,
+  canEdit,
+}: {
+  variantId: string;
+  variantName: string;
+  practiceAreas: string[];
+  jurisdictions: string[];
+  canEdit: boolean;
+}) {
+  const { t } = useTranslation();
+  const { toast } = useToast();
+  const qc = useQueryClient();
+  const update = useUpdateClauseVariantTags();
+  const [open, setOpen] = useState(false);
+  const [areas, setAreas] = useState<string[]>(practiceAreas);
+  const [juris, setJuris] = useState<string[]>(jurisdictions);
+
+  function toggle(list: string[], value: string): string[] {
+    return list.includes(value) ? list.filter(x => x !== value) : [...list, value];
+  }
+
+  async function handleSave() {
+    // Verwende die generierten Enum-Item-Typen, damit Server-Schema und
+    // Client-Payload automatisch synchron bleiben (Task #228).
+    const allowedAreas = new Set<string>(Object.values(ClauseVariantTagsPatchPracticeAreasItem));
+    const allowedJuris = new Set<string>(Object.values(ClauseVariantTagsPatchJurisdictionsItem));
+    const safeAreas = areas.filter((a): a is ClauseVariantTagsPatchPracticeAreasItem =>
+      allowedAreas.has(a),
+    );
+    const safeJuris = juris.filter((j): j is ClauseVariantTagsPatchJurisdictionsItem =>
+      allowedJuris.has(j),
+    );
+    try {
+      await update.mutateAsync({
+        variantId,
+        data: { practiceAreas: safeAreas, jurisdictions: safeJuris },
+      });
+      await qc.invalidateQueries({ queryKey: getListClauseFamiliesQueryKey() });
+      setOpen(false);
+      toast({ description: t("pages.clauses.tagsSaved") });
+    } catch (e) {
+      toast({ title: "Error", description: String(e), variant: "destructive" });
+    }
+  }
+
+  const empty = practiceAreas.length === 0 && jurisdictions.length === 0;
+
+  return (
+    <div className="flex items-center gap-1 flex-wrap pt-1 border-t mt-1" data-testid={`variant-tags-${variantId}`}>
+      {empty && (
+        <span className="text-[10px] text-muted-foreground italic">{t("pages.clauses.tagsAny")}</span>
+      )}
+      {practiceAreas.map(a => (
+        <Badge key={`a-${a}`} variant="outline" className="text-[10px] bg-violet-500/10 text-violet-700 border-violet-500/30">
+          {t(`pages.contracts.practiceArea.${a}`, a)}
+        </Badge>
+      ))}
+      {jurisdictions.map(j => (
+        <Badge key={`j-${j}`} variant="outline" className="text-[10px] bg-sky-500/10 text-sky-700 border-sky-500/30">
+          {j}
+        </Badge>
+      ))}
+      {canEdit && (
+        <Dialog
+          open={open}
+          onOpenChange={(o) => {
+            setOpen(o);
+            // Beim Öffnen aus aktuellen Props initialisieren — sonst zeigen
+            // wir nach erstem Save die alten lokalen State-Werte.
+            if (o) { setAreas(practiceAreas); setJuris(jurisdictions); }
+          }}
+        >
+          <DialogTrigger asChild>
+            <Button size="sm" variant="ghost" className="h-5 px-1 ml-auto text-[10px]" data-testid={`variant-tags-edit-${variantId}`}>
+              <Pencil className="h-3 w-3" />
+            </Button>
+          </DialogTrigger>
+          <DialogContent className="max-w-md">
+            <DialogHeader>
+              <DialogTitle>{t("pages.clauses.tagsTitle")}: {variantName}</DialogTitle>
+            </DialogHeader>
+            <div className="space-y-4 py-2">
+              <div>
+                <Label className="text-xs">{t("pages.clauses.tagsPracticeAreas")}</Label>
+                <div className="flex flex-wrap gap-1 mt-1">
+                  {Object.values(ContractInputPracticeArea).map(a => (
+                    <Button
+                      key={a}
+                      size="sm"
+                      variant={areas.includes(a) ? "default" : "outline"}
+                      className="h-6 text-[10px] px-2"
+                      onClick={() => setAreas(prev => toggle(prev, a))}
+                      data-testid={`tag-area-${a}`}
+                    >
+                      {t(`pages.contracts.practiceArea.${a}`, a)}
+                    </Button>
+                  ))}
+                </div>
+              </div>
+              <div>
+                <Label className="text-xs">{t("pages.clauses.tagsJurisdictions")}</Label>
+                <div className="flex flex-wrap gap-1 mt-1">
+                  {Object.values(ContractInputJurisdiction).map(j => (
+                    <Button
+                      key={j}
+                      size="sm"
+                      variant={juris.includes(j) ? "default" : "outline"}
+                      className="h-6 text-[10px] px-2"
+                      onClick={() => setJuris(prev => toggle(prev, j))}
+                      data-testid={`tag-juris-${j}`}
+                    >
+                      {j}
+                    </Button>
+                  ))}
+                </div>
+              </div>
+              <p className="text-[11px] text-muted-foreground">
+                {t("pages.clauses.tagsHint")}
+              </p>
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setOpen(false)}>{t("common.cancel")}</Button>
+              <Button onClick={handleSave} disabled={update.isPending} data-testid="variant-tags-save">
+                {update.isPending ? t("common.saving") : t("common.save")}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      )}
+    </div>
+  );
+}

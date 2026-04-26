@@ -4,6 +4,7 @@ import { useTranslation } from "react-i18next";
 import {
   useGetContract,
   usePatchContract,
+  useRunContractClassify,
   useListClauseFamilies,
   useListContractClauses,
   usePatchContractClause,
@@ -45,6 +46,8 @@ import {
   type ExternalCollaboratorCreate,
   type ExternalCollaboratorEvent,
   type CuadCoverage,
+  ContractInputJurisdiction,
+  ContractInputPracticeArea,
 } from "@workspace/api-client-react";
 import { useAuth } from "@/contexts/auth-context";
 import { useQueryClient } from "@tanstack/react-query";
@@ -348,6 +351,7 @@ export default function Contract() {
               </p>
             </CardContent>
           </Card>
+          <ContractProfileCard contractId={id} contract={contract} />
           <AiPromptPanel mode="contract.risk" entityId={id} />
           <EffectiveStateSection contractId={id} contractStatus={contract.status} />
           <CuadCoverageSection contractId={id} />
@@ -907,6 +911,178 @@ function amendmentStatusClass(status: string): string {
     case "rejected": return "bg-rose-500/10 text-rose-600 border-rose-500/30";
     default: return "bg-muted text-muted-foreground";
   }
+}
+
+/**
+ * ContractProfileCard — Editor für Jurisdiktion + Rechtsgebiet (Task #228).
+ *
+ * Diese beiden Felder steuern, welche Domain-spezifischen Hinweise die KI in
+ * Drafting/Risk/Redline einblendet und welche Wissensbasis-Treffer (areaOfLaw)
+ * gefiltert werden. Statt die User raten zu lassen, bietet "Klassifizieren"
+ * eine KI-Vorschau an, die per Klick übernommen werden kann; wir persistieren
+ * erst auf "Speichern", damit das Klassifizieren keinen unsichtbaren Audit-Eintrag
+ * erzeugt und reversibel bleibt.
+ */
+function ContractProfileCard({
+  contractId,
+  contract,
+}: {
+  contractId: string;
+  contract: { jurisdiction?: string | null; practiceArea?: string | null; governingLaw?: string | null };
+}) {
+  const { t } = useTranslation();
+  const { toast } = useToast();
+  const qc = useQueryClient();
+  const patch = usePatchContract();
+  const classify = useRunContractClassify();
+
+  // "none" steht für NULL — das Select-Widget unterstützt keinen leeren value.
+  const NONE = "__none__";
+  const [jurisdiction, setJurisdiction] = useState<string>(contract.jurisdiction ?? NONE);
+  const [practiceArea, setPracticeArea] = useState<string>(contract.practiceArea ?? NONE);
+  const [governingLaw, setGoverningLaw] = useState<string>(contract.governingLaw ?? "");
+  const [suggestion, setSuggestion] = useState<{
+    practiceArea: string; jurisdiction: string; rationale: string; confidence: string; confidenceReason: string;
+  } | null>(null);
+
+  // Wenn der Vertrag (z. B. nach Speichern oder externer Änderung) frische
+  // Werte vom Server liefert, gleichen wir die lokalen Editor-Felder an —
+  // andernfalls würde der Editor "stale" bleiben und Edits überschreiben.
+  useEffect(() => {
+    setJurisdiction(contract.jurisdiction ?? NONE);
+    setPracticeArea(contract.practiceArea ?? NONE);
+    setGoverningLaw(contract.governingLaw ?? "");
+  }, [contract.jurisdiction, contract.practiceArea, contract.governingLaw]);
+
+  const dirty =
+    (jurisdiction === NONE ? null : jurisdiction) !== (contract.jurisdiction ?? null)
+    || (practiceArea === NONE ? null : practiceArea) !== (contract.practiceArea ?? null)
+    || (governingLaw.trim() || null) !== (contract.governingLaw ?? null);
+
+  async function handleSave() {
+    try {
+      await patch.mutateAsync({
+        id: contractId,
+        data: {
+          jurisdiction: (jurisdiction === NONE ? null : jurisdiction) as ContractInputJurisdiction | null,
+          practiceArea: (practiceArea === NONE ? null : practiceArea) as ContractInputPracticeArea | null,
+          governingLaw: governingLaw.trim() === "" ? null : governingLaw.trim(),
+        },
+      });
+      await qc.invalidateQueries({ queryKey: getGetContractQueryKey(contractId) });
+      toast({ description: t("pages.contracts.profileSaved") });
+    } catch (e) {
+      toast({ title: "Error", description: String(e), variant: "destructive" });
+    }
+  }
+
+  async function handleClassify() {
+    try {
+      const r = await classify.mutateAsync({ contractId });
+      const data = r.result;
+      if (data) setSuggestion({
+        practiceArea: data.practiceArea ?? "",
+        jurisdiction: data.jurisdiction ?? "",
+        rationale: data.rationale ?? "",
+        confidence: data.confidence ?? "",
+        confidenceReason: data.confidenceReason ?? "",
+      });
+    } catch (e) {
+      toast({ title: "Error", description: String(e), variant: "destructive" });
+    }
+  }
+
+  function applySuggestion() {
+    if (!suggestion) return;
+    setJurisdiction(suggestion.jurisdiction);
+    setPracticeArea(suggestion.practiceArea);
+    setSuggestion(null);
+  }
+
+  return (
+    <Card data-testid="contract-profile-card">
+      <CardHeader className="pb-3">
+        <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
+          <Sparkles className="h-4 w-4" /> {t("pages.contracts.profileTitle")}
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        <div className="grid gap-4 md:grid-cols-3">
+          <div className="space-y-1">
+            <Label className="text-xs">{t("pages.contracts.profileJurisdiction")}</Label>
+            <Select value={jurisdiction} onValueChange={setJurisdiction}>
+              <SelectTrigger data-testid="profile-jurisdiction-select"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value={NONE}>{t("pages.contracts.profileNone")}</SelectItem>
+                {Object.values(ContractInputJurisdiction).map(v => (
+                  <SelectItem key={v} value={v}>{v}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="space-y-1">
+            <Label className="text-xs">{t("pages.contracts.profilePracticeArea")}</Label>
+            <Select value={practiceArea} onValueChange={setPracticeArea}>
+              <SelectTrigger data-testid="profile-practice-area-select"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value={NONE}>{t("pages.contracts.profileNone")}</SelectItem>
+                {Object.values(ContractInputPracticeArea).map(v => (
+                  <SelectItem key={v} value={v}>{t(`pages.contracts.practiceArea.${v}`, v)}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="space-y-1">
+            <Label className="text-xs">{t("pages.contracts.profileGoverningLaw")}</Label>
+            <Input
+              value={governingLaw}
+              onChange={(e) => setGoverningLaw(e.target.value)}
+              placeholder="German law"
+              data-testid="profile-governing-law-input"
+            />
+          </div>
+        </div>
+
+        {suggestion && (
+          <div className="rounded border bg-muted/30 p-3 space-y-2 text-sm" data-testid="profile-suggestion">
+            <div className="flex items-center justify-between">
+              <div className="font-medium">
+                {t("pages.contracts.profileSuggestion")}: <span className="font-mono">{suggestion.jurisdiction} / {suggestion.practiceArea}</span>
+                <span className="ml-2 text-xs text-muted-foreground">({suggestion.confidence})</span>
+              </div>
+              <div className="flex gap-2">
+                <Button size="sm" variant="outline" onClick={() => setSuggestion(null)}>{t("common.cancel")}</Button>
+                <Button size="sm" onClick={applySuggestion} data-testid="profile-suggestion-apply">{t("pages.contracts.profileApply")}</Button>
+              </div>
+            </div>
+            {suggestion.rationale && <p className="text-xs text-muted-foreground">{suggestion.rationale}</p>}
+            {suggestion.confidenceReason && <p className="text-xs text-muted-foreground italic">{suggestion.confidenceReason}</p>}
+          </div>
+        )}
+
+        <div className="flex items-center gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleClassify}
+            disabled={classify.isPending}
+            data-testid="profile-classify-btn"
+          >
+            <Sparkles className="h-4 w-4 mr-2" />
+            {classify.isPending ? t("common.loading") : t("pages.contracts.profileClassify")}
+          </Button>
+          <Button
+            size="sm"
+            onClick={handleSave}
+            disabled={!dirty || patch.isPending}
+            data-testid="profile-save-btn"
+          >
+            {patch.isPending ? t("common.saving") : t("common.save")}
+          </Button>
+        </div>
+      </CardContent>
+    </Card>
+  );
 }
 
 function EffectiveStateSection({ contractId, contractStatus }: { contractId: string; contractStatus: string }) {

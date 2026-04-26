@@ -8,6 +8,7 @@ Multi-tenant, multi-company, multi-brand. Deal-centric.
  * OpenAPI spec version: 0.1.0
  */
 import type { ContractLanguage } from "./contractLanguage";
+import type { ContractPracticeArea } from "./contractPracticeArea";
 
 export interface Contract {
   id: string;
@@ -50,4 +51,19 @@ export interface Contract {
    * @nullable
    */
   sourceOrderConfirmationNumber?: string | null;
+  /**
+   * Jurisdiktion (DE/AT/CH/EN/US/OTHER) für KI-Profil und Retrieval.
+   * @nullable
+   */
+  jurisdiction?: string | null;
+  /**
+   * Anwendbares Recht als Frei-Text (z. B. "German law", "Swiss OR").
+   * @nullable
+   */
+  governingLaw?: string | null;
+  /**
+   * Rechtsgebiet (KI-Profil-Schlüssel). Siehe lib/ai/profiles.ts.
+   * @nullable
+   */
+  practiceArea?: ContractPracticeArea;
 }

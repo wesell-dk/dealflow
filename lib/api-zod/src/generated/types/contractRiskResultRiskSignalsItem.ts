@@ -14,4 +14,6 @@ export type ContractRiskResultRiskSignalsItem = {
   severity: ContractRiskResultRiskSignalsItemSeverity;
   finding: string;
   recommendation: string;
+  /** Spezialgebiet zur Gruppierung der Befunde (z. B. "Datenschutz", "AGB-Kontrolle"). */
+  area?: string;
 };

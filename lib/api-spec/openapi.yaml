@@ -3735,6 +3735,81 @@ paths:
         "403": { description: Caller lacks scope on this contract. }
         "404": { description: Contract or strategy not found. }
 
+  /copilot/contract-classify/{contractId}:
+    post:
+      operationId: runContractClassify
+      tags: [copilot]
+      summary: |
+        Classify a contract by practice area and jurisdiction (Task #228).
+        Returns a suggestion with rationale + confidence; does NOT persist —
+        the caller decides whether to PATCH the contract.
+      parameters:
+        - in: path
+          name: contractId
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Suggestion returned.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ContractClassifyEnvelope" }
+        "403": { description: Caller lacks scope on this contract. }
+        "404": { description: Contract does not exist for this tenant. }
+        "502": { description: AI provider failed or returned invalid output. }
+        "503": { description: AI provider not configured. }
+
+  /copilot/contract-classify-context:
+    post:
+      operationId: runContractClassifyContext
+      tags: [copilot]
+      summary: |
+        Pre-classify (Task #228) without an existing contract — used by the
+        creation dialog to suggest jurisdiction + practice area from
+        deal/account/brand/title/template context. Does not persist anything.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ContractClassifyContextInput" }
+      responses:
+        "200":
+          description: Suggestion returned.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ContractClassifyEnvelope" }
+        "403": { description: Caller lacks scope on the referenced deal. }
+        "404": { description: dealId does not exist for this tenant. }
+        "422": { description: validation error }
+        "502": { description: AI provider failed or returned invalid output. }
+        "503": { description: AI provider not configured. }
+
+  /clause-variants/{variantId}:
+    patch:
+      operationId: updateClauseVariantTags
+      tags: [contracts]
+      summary: |
+        Update the practice-area and jurisdiction tags of a clause variant
+        (Task #228). Other fields are immutable through this endpoint.
+      parameters:
+        - in: path
+          name: variantId
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ClauseVariantTagsPatch" }
+      responses:
+        "200":
+          description: ok
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ClauseVariant" }
+        "404": { description: not found }
+        "422": { description: validation }
+
   /activity:
     get:
       operationId: listRecentActivity
@@ -8896,10 +8971,36 @@ components:
           description: >-
             Lesefreundliche Nummer der Quell-Auftragsbestätigung (gespiegelt
             für UI-Anzeige; nicht persistiert).
+        # Spezialgebiets- und Jurisdiktions-Profil (Task #228). Steuert die KI-
+        # Empfehlungen (Drafting/Risiko/Redline) und filtert das Wissensbasis-
+        # Retrieval. Werte sind nullable: vor der Klassifikation oder bei
+        # Altdaten leer; per /copilot/contract-classify oder PATCH gesetzt.
+        jurisdiction:
+          type: ["string", "null"]
+          description: "Jurisdiktion (DE/AT/CH/EN/US/OTHER) für KI-Profil und Retrieval."
+        governingLaw:
+          type: ["string", "null"]
+          description: "Anwendbares Recht als Frei-Text (z. B. \"German law\", \"Swiss OR\")."
+        practiceArea:
+          type: ["string", "null"]
+          enum:
+            - it_software
+            - service
+            - supply_purchase
+            - labor
+            - data_protection
+            - license
+            - m_a
+            - nda
+            - framework
+            - agb_relevant
+            - other
+            - null
+          description: "Rechtsgebiet (KI-Profil-Schlüssel). Siehe lib/ai/profiles.ts."
 
     ContractInput:
       type: object
-      required: [dealId, title, template]
+      required: [dealId, title, template, jurisdiction, practiceArea]
       properties:
         dealId: { type: string }
         title: { type: string }
@@ -8917,6 +9018,31 @@ components:
             Vertragstyp-Bindung. Wenn nicht gesetzt, leitet der Server eine Default-Heuristik aus
             `template` ab (z. B. "Master Services Agreement" → MSA). Schlägt die Heuristik fehl,
             antwortet die API mit 422 — der Aufrufer muss dann explizit einen Vertragstyp wählen.
+        jurisdiction:
+          type: string
+          enum: [DE, AT, CH, EN, US, OTHER]
+          description: |
+            Pflichtfeld (Task #228). Steuert KI-Profil und Wissensbasis-Filter.
+            Bei neuen Verträgen wird per /copilot/contract-classify-context ein
+            Vorschlag aus Deal/Brand/Account abgeleitet, den die UI vor dem
+            Anlegen anzeigen kann.
+        practiceArea:
+          type: string
+          enum:
+            - it_software
+            - service
+            - supply_purchase
+            - labor
+            - data_protection
+            - license
+            - m_a
+            - nda
+            - framework
+            - agb_relevant
+            - other
+          description: |
+            Pflichtfeld Rechtsgebiet (Task #228). KI-Profil-Schlüssel, der
+            Drafting/Risk/Redline und die Wissensbasis-Filter steuert.
 
     ContractPatchInput:
       type: object
@@ -8930,6 +9056,29 @@ components:
           description: |
             Setzt oder ersetzt die Vertragstyp-Bindung (z. B. um Altverträge nachträglich an einen
             Vertragstyp zu hängen, damit der CUAD-Check greift). `null` löst die Bindung wieder.
+        jurisdiction:
+          type: ["string", "null"]
+          enum: [DE, AT, CH, EN, US, OTHER, null]
+          description: "Setzt/löscht die Jurisdiktion (Task #228)."
+        practiceArea:
+          type: ["string", "null"]
+          enum:
+            - it_software
+            - service
+            - supply_purchase
+            - labor
+            - data_protection
+            - license
+            - m_a
+            - nda
+            - framework
+            - agb_relevant
+            - other
+            - null
+          description: "Setzt/löscht das Rechtsgebiet (Task #228)."
+        governingLaw:
+          type: ["string", "null"]
+          description: "Setzt/löscht das anwendbare Recht (Frei-Text)."
 
     ContractDetail:
       allOf:
@@ -9125,7 +9274,7 @@ components:
 
     ClauseVariant:
       type: object
-      required: [id, name, severity, severityScore, summary, body, tone]
+      required: [id, name, severity, severityScore, summary, body, tone, practiceAreas, jurisdictions]
       properties:
         id: { type: string }
         name: { type: string }
@@ -9134,6 +9283,31 @@ components:
         summary: { type: string }
         body: { type: string }
         tone: { type: string }
+        # Spezialgebiet- und Jurisdiktions-Tags (Task #228). Leeres Array
+        # bedeutet "passt überall" und ist Default für Bestandsklauseln.
+        practiceAreas:
+          type: array
+          items:
+            type: string
+            enum:
+              - it_software
+              - service
+              - supply_purchase
+              - labor
+              - data_protection
+              - license
+              - m_a
+              - nda
+              - framework
+              - agb_relevant
+              - other
+          description: "Rechtsgebiete, für die diese Klausel-Variante geeignet ist."
+        jurisdictions:
+          type: array
+          items:
+            type: string
+            enum: [DE, AT, CH, EN, US, OTHER]
+          description: "Jurisdiktionen, für die diese Klausel-Variante geeignet ist."
         translations:
           type: array
           description: "Vorhandene Sprachfassungen je Variante (de/en/…)."
@@ -9213,6 +9387,28 @@ components:
             summary: { type: string, minLength: 1, maxLength: 1000 }
             body: { type: string, maxLength: 8000 }
             tone: { type: string, maxLength: 60 }
+            # Optionale Spezialgebiet-/Jurisdiktions-Tags (Task #228).
+            practiceAreas:
+              type: array
+              items:
+                type: string
+                enum:
+                  - it_software
+                  - service
+                  - supply_purchase
+                  - labor
+                  - data_protection
+                  - license
+                  - m_a
+                  - nda
+                  - framework
+                  - agb_relevant
+                  - other
+            jurisdictions:
+              type: array
+              items:
+                type: string
+                enum: [DE, AT, CH, EN, US, OTHER]
         translations:
           type: array
           items:
@@ -10411,6 +10607,11 @@ components:
               severity: { type: string, enum: [info, low, medium, high, critical] }
               finding: { type: string }
               recommendation: { type: string }
+              # Spezialgebiet (Task #228) — frei-Text auf Deutsch (z. B.
+              # "Datenschutz", "AGB-Kontrolle"), für UI-Gruppierung.
+              area:
+                type: string
+                description: "Spezialgebiet zur Gruppierung der Befunde (z. B. \"Datenschutz\", \"AGB-Kontrolle\")."
         approvalRelevant: { type: boolean }
         recommendedAction:
           type: string
@@ -10532,6 +10733,87 @@ components:
             ok: { type: boolean, enum: [true] }
             result: { $ref: "#/components/schemas/ContractNegotiationStrategyResult" }
             secondOpinion: { $ref: "#/components/schemas/SecondOpinionEnvelope" }
+
+    # ── Task #228: Contract Classification ──
+    ContractClassifyResult:
+      type: object
+      required: [practiceArea, jurisdiction, rationale, confidence, confidenceReason]
+      properties:
+        practiceArea:
+          type: string
+          enum:
+            - it_software
+            - service
+            - supply_purchase
+            - labor
+            - data_protection
+            - license
+            - m_a
+            - nda
+            - framework
+            - agb_relevant
+            - other
+        jurisdiction:
+          type: string
+          enum: [DE, AT, CH, EN, US, OTHER]
+        rationale: { type: string }
+        confidence: { type: string, enum: [low, medium, high] }
+        confidenceReason: { type: string }
+
+    ContractClassifyEnvelope:
+      type: object
+      required: [ok, result, invocationId, model, latencyMs]
+      properties:
+        ok: { type: boolean, enum: [true] }
+        result: { $ref: "#/components/schemas/ContractClassifyResult" }
+        invocationId: { type: string }
+        model: { type: string }
+        latencyMs: { type: integer }
+
+    ContractClassifyContextInput:
+      type: object
+      required: [dealId, title, template]
+      description: |
+        Pre-classification input (Task #228). Liefert dem Klassifikator den
+        gleichen Kontext, den eine Vertrags-Erstellung sehen würde — Deal,
+        Brand, Account und Template-/Titel-Bezeichnung — damit das KI-Profil
+        bereits VOR dem Anlegen vorgeschlagen werden kann.
+      properties:
+        dealId: { type: string }
+        title: { type: string }
+        template: { type: string }
+        brandId:
+          type: string
+          description: Optional brand context (default clauses come from here).
+
+    ClauseVariantTagsPatch:
+      type: object
+      description: |
+        Update the practice-area and jurisdiction tags of a clause variant
+        (Task #228). Both fields are optional — only provided fields are
+        updated. An empty array clears the tags (means "passt überall").
+      properties:
+        practiceAreas:
+          type: array
+          items:
+            type: string
+            enum:
+              - it_software
+              - service
+              - supply_purchase
+              - labor
+              - data_protection
+              - license
+              - m_a
+              - nda
+              - framework
+              - agb_relevant
+              - other
+        jurisdictions:
+          type: array
+          items:
+            type: string
+            enum: [DE, AT, CH, EN, US, OTHER]
 
     # ── Task #232: Admin-Konfiguration für KI-Zweitmeinung ──
     AiSecondOpinionPromptConfig:

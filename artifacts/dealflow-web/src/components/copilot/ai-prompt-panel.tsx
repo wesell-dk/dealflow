@@ -260,14 +260,50 @@ function ResultBody<M extends Mode>({
         {r.riskSignals && r.riskSignals.length > 0 && (
           <div>
             <div className="text-xs font-medium mb-1">{t("pages.copilot.aiPanelRiskSignals")}</div>
-            <ul className="text-xs text-muted-foreground list-disc pl-4 space-y-0.5">
-              {r.riskSignals.map((s, i) => (
-                <li key={i}>
-                  <span className="uppercase mr-1">[{s.severity}]</span>
-                  <span className="font-medium">{s.clause}:</span> {s.finding} — <em>{s.recommendation}</em>
-                </li>
-              ))}
-            </ul>
+            {/* Findings nach Domain-Area gruppieren (Task #228), wenn die KI
+                das Feld liefert. Findings ohne `area` landen in einer
+                "Allgemein"-Gruppe, damit Bestands-Empfehlungen ohne Profil
+                weiterhin sichtbar bleiben. */}
+            {(() => {
+              const groups = new Map<string, typeof r.riskSignals>();
+              for (const s of r.riskSignals!) {
+                const key = (s as { area?: string }).area || "_general";
+                if (!groups.has(key)) groups.set(key, [] as typeof r.riskSignals);
+                groups.get(key)!.push(s);
+              }
+              const hasArea = Array.from(groups.keys()).some(k => k !== "_general");
+              if (!hasArea) {
+                return (
+                  <ul className="text-xs text-muted-foreground list-disc pl-4 space-y-0.5">
+                    {r.riskSignals!.map((s, i) => (
+                      <li key={i}>
+                        <span className="uppercase mr-1">[{s.severity}]</span>
+                        <span className="font-medium">{s.clause}:</span> {s.finding} — <em>{s.recommendation}</em>
+                      </li>
+                    ))}
+                  </ul>
+                );
+              }
+              return (
+                <div className="space-y-2">
+                  {Array.from(groups.entries()).map(([area, items]) => (
+                    <div key={area} data-testid={`risk-area-group-${area}`}>
+                      <div className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground/80 mb-0.5">
+                        {area === "_general" ? t("pages.copilot.aiPanelAreaGeneral") : t(`pages.contracts.practiceArea.${area}`, area)}
+                      </div>
+                      <ul className="text-xs text-muted-foreground list-disc pl-4 space-y-0.5">
+                        {items!.map((s, i) => (
+                          <li key={i}>
+                            <span className="uppercase mr-1">[{s.severity}]</span>
+                            <span className="font-medium">{s.clause}:</span> {s.finding} — <em>{s.recommendation}</em>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  ))}
+                </div>
+              );
+            })()}
           </div>
         )}
         {/* Quellenangaben aus der juristischen Wissensbasis (Task #227).

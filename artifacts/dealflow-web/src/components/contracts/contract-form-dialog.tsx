@@ -5,9 +5,12 @@ import {
   useCreateContract,
   useListDeals,
   useListContractTypes,
+  useRunContractClassifyContext,
   getListContractsQueryKey,
   getGetDealQueryKey,
   type ContractType,
+  ContractInputJurisdiction,
+  ContractInputPracticeArea,
 } from "@workspace/api-client-react";
 import { useLocation } from "wouter";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
@@ -16,7 +19,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
-import { Loader2 } from "lucide-react";
+import { Loader2, Wand2 } from "lucide-react";
 
 type Props = {
   open: boolean;
@@ -32,6 +35,29 @@ const TEMPLATE_OPTIONS: Array<{ value: string; label: string; suggestedCode: str
   { value: "Statement of Work", label: "Statement of Work", suggestedCode: "SOW" },
 ];
 
+const JURISDICTION_OPTIONS: ContractInputJurisdiction[] = [
+  ContractInputJurisdiction.DE,
+  ContractInputJurisdiction.AT,
+  ContractInputJurisdiction.CH,
+  ContractInputJurisdiction.EN,
+  ContractInputJurisdiction.US,
+  ContractInputJurisdiction.OTHER,
+];
+
+const PRACTICE_AREA_OPTIONS: ContractInputPracticeArea[] = [
+  ContractInputPracticeArea.it_software,
+  ContractInputPracticeArea.service,
+  ContractInputPracticeArea.supply_purchase,
+  ContractInputPracticeArea.labor,
+  ContractInputPracticeArea.data_protection,
+  ContractInputPracticeArea.license,
+  ContractInputPracticeArea.m_a,
+  ContractInputPracticeArea.nda,
+  ContractInputPracticeArea.framework,
+  ContractInputPracticeArea.agb_relevant,
+  ContractInputPracticeArea.other,
+];
+
 function suggestContractTypeId(template: string, types: ContractType[]): string {
   const tpl = template.toLowerCase();
   const match = TEMPLATE_OPTIONS.find(t => tpl.includes(t.value.toLowerCase()))?.suggestedCode;
@@ -45,6 +71,7 @@ export function ContractFormDialog({ open, onOpenChange, defaultDealId }: Props)
   const qc = useQueryClient();
   const [, setLocation] = useLocation();
   const create = useCreateContract();
+  const classify = useRunContractClassifyContext();
 
   const { data: deals } = useListDeals();
   const { data: contractTypes } = useListContractTypes();
@@ -54,6 +81,9 @@ export function ContractFormDialog({ open, onOpenChange, defaultDealId }: Props)
   const [template, setTemplate] = useState(TEMPLATE_OPTIONS[1].value);
   const [contractTypeId, setContractTypeId] = useState("");
   const [contractTypeTouched, setContractTypeTouched] = useState(false);
+  const [jurisdiction, setJurisdiction] = useState<ContractInputJurisdiction | "">("");
+  const [practiceArea, setPracticeArea] = useState<ContractInputPracticeArea | "">("");
+  const [classifyRationale, setClassifyRationale] = useState<string | null>(null);
 
   // Reset form whenever the dialog opens; pre-pick deal/title sensibly.
   useEffect(() => {
@@ -62,6 +92,9 @@ export function ContractFormDialog({ open, onOpenChange, defaultDealId }: Props)
     setTitle("");
     setTemplate(TEMPLATE_OPTIONS[1].value);
     setContractTypeTouched(false);
+    setJurisdiction("");
+    setPracticeArea("");
+    setClassifyRationale(null);
   }, [open, defaultDealId]);
 
   // Auto-suggest contract type from template name unless the user has
@@ -94,12 +127,35 @@ export function ContractFormDialog({ open, onOpenChange, defaultDealId }: Props)
     [contractTypes, collator],
   );
 
+  const canClassify =
+    dealId.trim() !== "" &&
+    title.trim() !== "" &&
+    template.trim() !== "" &&
+    !classify.isPending;
+
   const canSubmit =
     dealId.trim() !== "" &&
     title.trim() !== "" &&
     template.trim() !== "" &&
     contractTypeId.trim() !== "" &&
+    jurisdiction !== "" &&
+    practiceArea !== "" &&
     !create.isPending;
+
+  async function handleClassify() {
+    if (!canClassify) return;
+    try {
+      const out = await classify.mutateAsync({
+        data: { dealId, title: title.trim(), template },
+      });
+      setJurisdiction(out.result.jurisdiction as ContractInputJurisdiction);
+      setPracticeArea(out.result.practiceArea as ContractInputPracticeArea);
+      setClassifyRationale(out.result.rationale ?? null);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : t("common.tryAgain");
+      toast({ title: t("pages.contracts.profileClassify"), description: msg, variant: "destructive" });
+    }
+  }
 
   async function handleSubmit() {
     if (!canSubmit) return;
@@ -110,6 +166,8 @@ export function ContractFormDialog({ open, onOpenChange, defaultDealId }: Props)
           title: title.trim(),
           template,
           contractTypeId,
+          jurisdiction: jurisdiction as ContractInputJurisdiction,
+          practiceArea: practiceArea as ContractInputPracticeArea,
         },
       });
       toast({ title: t("pages.contracts.createDialog.created"), description: created.title });
@@ -194,6 +252,73 @@ export function ContractFormDialog({ open, onOpenChange, defaultDealId }: Props)
             <p className="text-xs text-muted-foreground">
               {t("pages.contracts.createDialog.contractTypeHint")}
             </p>
+          </div>
+
+          {/* ── Task #228: Pflicht-Profil (Jurisdiktion + Rechtsgebiet) ── */}
+          <div className="grid gap-2 rounded-md border p-3">
+            <div className="flex items-center justify-between">
+              <Label className="text-sm font-medium">
+                {t("pages.contracts.profileTitle")} <span className="text-destructive">*</span>
+              </Label>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                onClick={handleClassify}
+                disabled={!canClassify}
+                data-testid="button-classify-context"
+              >
+                {classify.isPending
+                  ? <Loader2 className="mr-2 h-3 w-3 animate-spin" />
+                  : <Wand2 className="mr-2 h-3 w-3" />}
+                {t("pages.contracts.profileClassify")}
+              </Button>
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              <div className="grid gap-1">
+                <Label htmlFor="contract-jurisdiction" className="text-xs text-muted-foreground">
+                  {t("pages.contracts.profileJurisdiction")}
+                </Label>
+                <Select
+                  value={jurisdiction}
+                  onValueChange={(v) => setJurisdiction(v as ContractInputJurisdiction)}
+                >
+                  <SelectTrigger id="contract-jurisdiction" data-testid="select-jurisdiction">
+                    <SelectValue placeholder={t("pages.contracts.profileNone")} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {JURISDICTION_OPTIONS.map(j => (
+                      <SelectItem key={j} value={j}>{j}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="grid gap-1">
+                <Label htmlFor="contract-practice-area" className="text-xs text-muted-foreground">
+                  {t("pages.contracts.profilePracticeArea")}
+                </Label>
+                <Select
+                  value={practiceArea}
+                  onValueChange={(v) => setPracticeArea(v as ContractInputPracticeArea)}
+                >
+                  <SelectTrigger id="contract-practice-area" data-testid="select-practice-area">
+                    <SelectValue placeholder={t("pages.contracts.profileNone")} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {PRACTICE_AREA_OPTIONS.map(p => (
+                      <SelectItem key={p} value={p}>
+                        {t(`pages.contracts.practiceArea.${p}`)}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+            {classifyRationale && (
+              <p className="text-xs text-muted-foreground" data-testid="text-classify-rationale">
+                {t("pages.contracts.profileSuggestion")}: {classifyRationale}
+              </p>
+            )}
           </div>
         </div>
 

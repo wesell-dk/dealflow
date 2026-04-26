@@ -89,6 +89,8 @@ import type {
   ClauseSuggestionDetail,
   ClauseSuggestionInput,
   ClauseSuggestionStats,
+  ClauseVariant,
+  ClauseVariantTagsPatch,
   ClauseVariantTranslation,
   ClauseVariantTranslationUpsert,
   Company,
@@ -103,6 +105,8 @@ import type {
   Contract,
   ContractAmendment,
   ContractAmendmentDetail,
+  ContractClassifyContextInput,
+  ContractClassifyEnvelope,
   ContractClause,
   ContractClausePatchInput,
   ContractComment,
@@ -15700,6 +15704,287 @@ export function useGetNegotiationPlaybookPdf<
 
   return { ...query, queryKey: queryOptions.queryKey };
 }
+
+/**
+ * @summary Classify a contract by practice area and jurisdiction (Task #228).
+Returns a suggestion with rationale + confidence; does NOT persist —
+the caller decides whether to PATCH the contract.
+
+ */
+export const getRunContractClassifyUrl = (contractId: string) => {
+  return `/api/v1/copilot/contract-classify/${contractId}`;
+};
+
+export const runContractClassify = async (
+  contractId: string,
+  options?: RequestInit,
+): Promise<ContractClassifyEnvelope> => {
+  return customFetch<ContractClassifyEnvelope>(
+    getRunContractClassifyUrl(contractId),
+    {
+      ...options,
+      method: "POST",
+    },
+  );
+};
+
+export const getRunContractClassifyMutationOptions = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof runContractClassify>>,
+    TError,
+    { contractId: string },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof runContractClassify>>,
+  TError,
+  { contractId: string },
+  TContext
+> => {
+  const mutationKey = ["runContractClassify"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof runContractClassify>>,
+    { contractId: string }
+  > = (props) => {
+    const { contractId } = props ?? {};
+
+    return runContractClassify(contractId, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type RunContractClassifyMutationResult = NonNullable<
+  Awaited<ReturnType<typeof runContractClassify>>
+>;
+
+export type RunContractClassifyMutationError = ErrorType<void>;
+
+/**
+ * @summary Classify a contract by practice area and jurisdiction (Task #228).
+Returns a suggestion with rationale + confidence; does NOT persist —
+the caller decides whether to PATCH the contract.
+
+ */
+export const useRunContractClassify = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof runContractClassify>>,
+    TError,
+    { contractId: string },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof runContractClassify>>,
+  TError,
+  { contractId: string },
+  TContext
+> => {
+  return useMutation(getRunContractClassifyMutationOptions(options));
+};
+
+/**
+ * @summary Pre-classify (Task #228) without an existing contract — used by the
+creation dialog to suggest jurisdiction + practice area from
+deal/account/brand/title/template context. Does not persist anything.
+
+ */
+export const getRunContractClassifyContextUrl = () => {
+  return `/api/v1/copilot/contract-classify-context`;
+};
+
+export const runContractClassifyContext = async (
+  contractClassifyContextInput: ContractClassifyContextInput,
+  options?: RequestInit,
+): Promise<ContractClassifyEnvelope> => {
+  return customFetch<ContractClassifyEnvelope>(
+    getRunContractClassifyContextUrl(),
+    {
+      ...options,
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...options?.headers },
+      body: JSON.stringify(contractClassifyContextInput),
+    },
+  );
+};
+
+export const getRunContractClassifyContextMutationOptions = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof runContractClassifyContext>>,
+    TError,
+    { data: BodyType<ContractClassifyContextInput> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof runContractClassifyContext>>,
+  TError,
+  { data: BodyType<ContractClassifyContextInput> },
+  TContext
+> => {
+  const mutationKey = ["runContractClassifyContext"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof runContractClassifyContext>>,
+    { data: BodyType<ContractClassifyContextInput> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return runContractClassifyContext(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type RunContractClassifyContextMutationResult = NonNullable<
+  Awaited<ReturnType<typeof runContractClassifyContext>>
+>;
+export type RunContractClassifyContextMutationBody =
+  BodyType<ContractClassifyContextInput>;
+export type RunContractClassifyContextMutationError = ErrorType<void>;
+
+/**
+ * @summary Pre-classify (Task #228) without an existing contract — used by the
+creation dialog to suggest jurisdiction + practice area from
+deal/account/brand/title/template context. Does not persist anything.
+
+ */
+export const useRunContractClassifyContext = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof runContractClassifyContext>>,
+    TError,
+    { data: BodyType<ContractClassifyContextInput> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof runContractClassifyContext>>,
+  TError,
+  { data: BodyType<ContractClassifyContextInput> },
+  TContext
+> => {
+  return useMutation(getRunContractClassifyContextMutationOptions(options));
+};
+
+/**
+ * @summary Update the practice-area and jurisdiction tags of a clause variant
+(Task #228). Other fields are immutable through this endpoint.
+
+ */
+export const getUpdateClauseVariantTagsUrl = (variantId: string) => {
+  return `/api/v1/clause-variants/${variantId}`;
+};
+
+export const updateClauseVariantTags = async (
+  variantId: string,
+  clauseVariantTagsPatch: ClauseVariantTagsPatch,
+  options?: RequestInit,
+): Promise<ClauseVariant> => {
+  return customFetch<ClauseVariant>(getUpdateClauseVariantTagsUrl(variantId), {
+    ...options,
+    method: "PATCH",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(clauseVariantTagsPatch),
+  });
+};
+
+export const getUpdateClauseVariantTagsMutationOptions = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof updateClauseVariantTags>>,
+    TError,
+    { variantId: string; data: BodyType<ClauseVariantTagsPatch> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof updateClauseVariantTags>>,
+  TError,
+  { variantId: string; data: BodyType<ClauseVariantTagsPatch> },
+  TContext
+> => {
+  const mutationKey = ["updateClauseVariantTags"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof updateClauseVariantTags>>,
+    { variantId: string; data: BodyType<ClauseVariantTagsPatch> }
+  > = (props) => {
+    const { variantId, data } = props ?? {};
+
+    return updateClauseVariantTags(variantId, data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type UpdateClauseVariantTagsMutationResult = NonNullable<
+  Awaited<ReturnType<typeof updateClauseVariantTags>>
+>;
+export type UpdateClauseVariantTagsMutationBody =
+  BodyType<ClauseVariantTagsPatch>;
+export type UpdateClauseVariantTagsMutationError = ErrorType<void>;
+
+/**
+ * @summary Update the practice-area and jurisdiction tags of a clause variant
+(Task #228). Other fields are immutable through this endpoint.
+
+ */
+export const useUpdateClauseVariantTags = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof updateClauseVariantTags>>,
+    TError,
+    { variantId: string; data: BodyType<ClauseVariantTagsPatch> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof updateClauseVariantTags>>,
+  TError,
+  { variantId: string; data: BodyType<ClauseVariantTagsPatch> },
+  TContext
+> => {
+  return useMutation(getUpdateClauseVariantTagsMutationOptions(options));
+};
 
 /**
  * @summary Cross-domain recent activity feed

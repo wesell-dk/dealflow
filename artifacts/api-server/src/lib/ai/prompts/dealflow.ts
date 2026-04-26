@@ -314,10 +314,21 @@ const ContractDraftOutput = z.object({
 
 // Wrapper-Input: Drafting darf optional einen vorab retrieved'en
 // juristischen Wissensblock erhalten (siehe legalKnowledge.ts), den das
-// Modell über `relatedSources` zitiert.
+// Modell über `relatedSources` zitiert. Ergänzend (Task #228) ein
+// Domänen-Profil-Fragment, das je nach (Rechtsgebiet × Jurisdiktion) die
+// Schwerpunkte der Bewertung steuert.
+//
+// Status (Task #228): Die `profileFragment`-Pipeline ist hier (contract.draft)
+// und unten (contract.redline) bereits vollständig verdrahtet — sobald ein
+// Route-Caller (POST /copilot/contract-draft / -redline) ergänzt wird,
+// funktioniert die Domain-Spezialisierung ohne weitere Änderungen am Prompt.
+// Aktuell triggert nur contract.risk (siehe POST /copilot/contract-risk) das
+// Fragment, weil contract.draft / contract.redline aktuell keinen Endpoint
+// haben — die Drafting/Redline-Routen existieren noch nicht in dealflow.ts.
 export interface ContractDraftInput {
   deal: DealContext;
   knowledgeBlock?: string;
+  profileFragment?: string;
 }
 
 export const contractDrafting: PromptDefinition<
@@ -335,6 +346,7 @@ export const contractDrafting: PromptDefinition<
     SAFE_GERMAN_HINT,
   buildUser: (input) =>
     `Propose a contract draft for this deal. Context (JSON):\n${JSON.stringify(input.deal)}` +
+    (input.profileFragment ? `\n\n${input.profileFragment}` : "") +
     (input.knowledgeBlock ? `\n${input.knowledgeBlock}` : ""),
   outputSchema: ContractDraftOutput,
   toolDescription:
@@ -357,6 +369,11 @@ const ContractRiskOutput = z.object({
         severity: PRIORITY,
         finding: z.string().min(2).max(600),
         recommendation: z.string().min(2).max(600),
+        // Spezialgebiet (Task #228) für UI-Gruppierung.
+        // Beispiele: "IT-Recht", "Datenschutz", "AGB-Kontrolle",
+        // "Arbeitsrecht", "Haftung". Frei-Text auf Deutsch, weil die UI
+        // direkt rendert.
+        area: z.string().min(2).max(80).optional(),
       }),
     )
     .max(15),
@@ -369,10 +386,12 @@ const ContractRiskOutput = z.object({
 
 // Erweiterter Input-Wrapper: Risk-Bewertung darf optional eine vorab
 // retrieved'e juristische Wissensbasis erhalten (siehe legalKnowledge.ts).
-// Das Modell zitiert daraus über `relatedSources` im Output.
+// Das Modell zitiert daraus über `relatedSources` im Output. Plus optionales
+// Domänen-Profil-Fragment (Task #228), das die Bewertungsschwerpunkte steuert.
 export interface ContractRiskInput {
   contract: ContractContext;
   knowledgeBlock?: string;
+  profileFragment?: string;
 }
 
 export const contractRisk: PromptDefinition<
@@ -391,6 +410,7 @@ export const contractRisk: PromptDefinition<
   buildUser: (input) =>
     `Assess the contract risk for the following contract.\n` +
     `Context (JSON):\n${JSON.stringify(input.contract)}` +
+    (input.profileFragment ? `\n\n${input.profileFragment}` : "") +
     (input.knowledgeBlock ? `\n${input.knowledgeBlock}` : ""),
   outputSchema: ContractRiskOutput,
   toolDescription:
@@ -567,11 +587,13 @@ const RedlineOutput = z.object({
 
 // External-Paper-Input ist absichtlich anders strukturiert: rohtext +
 // Vertrags-/Deal-Bezug (für Scope-Anker). Optional zusätzlich ein
-// vorab retrieved'er juristischer Wissensblock (Task #227).
+// vorab retrieved'er juristischer Wissensblock (Task #227) und ein
+// Domänen-Profil-Fragment (Task #228).
 export interface RedlineInput {
   contract: ContractContext;
   externalText: string;
   knowledgeBlock?: string;
+  profileFragment?: string;
 }
 
 export const contractRedline: PromptDefinition<
@@ -591,6 +613,7 @@ export const contractRedline: PromptDefinition<
     `Compare the following external document with our contract state.\n\n` +
     `Internal context (JSON):\n${JSON.stringify(input.contract)}\n\n` +
     `External document (raw text):\n"""${input.externalText}"""` +
+    (input.profileFragment ? `\n\n${input.profileFragment}` : "") +
     (input.knowledgeBlock ? `\n${input.knowledgeBlock}` : ""),
   outputSchema: RedlineOutput,
   toolDescription:
@@ -1423,6 +1446,67 @@ export const contractRegulatoryCheck: PromptDefinition<
   toolName: "report_regulatory_check",
 };
 
+// ───────────────────────── 15. Contract Classification (Task #228) ─────────
+
+// Spezialgebiet & Jurisdiktion klassifizieren. Wird vom Endpoint
+// /copilot/contract-classify aufgerufen, um dem Anwender einen Vorschlag zu
+// machen — die Persistenz übernimmt der Anwender per PATCH (kein
+// automatisches Schreiben in die DB, weil falsche Klassifikation alle
+// Folge-Empfehlungen verzerrt).
+const ContractClassifyOutput = z.object({
+  practiceArea: z.union([
+    z.literal("it_software"),
+    z.literal("service"),
+    z.literal("supply_purchase"),
+    z.literal("labor"),
+    z.literal("data_protection"),
+    z.literal("license"),
+    z.literal("m_a"),
+    z.literal("nda"),
+    z.literal("framework"),
+    z.literal("agb_relevant"),
+    z.literal("other"),
+  ]),
+  jurisdiction: z.union([
+    z.literal("DE"),
+    z.literal("AT"),
+    z.literal("CH"),
+    z.literal("EN"),
+    z.literal("US"),
+    z.literal("OTHER"),
+  ]),
+  rationale: z.string().min(8).max(800),
+  confidence: CONFIDENCE_LEVEL,
+  confidenceReason: CONFIDENCE_REASON,
+});
+
+export const contractClassify: PromptDefinition<
+  ContractContext,
+  z.infer<typeof ContractClassifyOutput>
+> = {
+  key: "contract.classify",
+  model: "claude-haiku-4-5",
+  system:
+    "You are the DealFlow Copilot in Contract Classification mode. Based on " +
+    "title, template, governing-law field, and clause titles you classify " +
+    "the contract into exactly one practice area and one jurisdiction. " +
+    "Be conservative: if the signal is weak, choose 'other' / 'OTHER' and " +
+    "lower confidence. Treat clear data-processing clauses (Art. 28 DSGVO) " +
+    "as 'data_protection' even if the title is generic. Treat AGB language " +
+    "or 'Allgemeine Geschäftsbedingungen' as 'agb_relevant'. " +
+    SAFE_GERMAN_HINT,
+  buildUser: (ctx) =>
+    `Classify the following contract by practice area and jurisdiction.\n` +
+    `Context (JSON):\n${JSON.stringify(ctx)}`,
+  outputSchema: ContractClassifyOutput,
+  toolDescription:
+    "Returns practiceArea (it_software | service | supply_purchase | labor | " +
+    "data_protection | license | m_a | nda | framework | agb_relevant | other), " +
+    "jurisdiction (DE | AT | CH | EN | US | OTHER), rationale, confidence, " +
+    "and confidenceReason.",
+  toolName: "report_contract_classification",
+};
+
 // ───────────────────────── Bundle ─────────────────────────
 
 export const DEALFLOW_PROMPTS = {
@@ -1444,4 +1528,5 @@ export const DEALFLOW_PROMPTS = {
   [leadWidgetSummary.key]: leadWidgetSummary,
   [contractRegulatoryApplicability.key]: contractRegulatoryApplicability,
   [contractRegulatoryCheck.key]: contractRegulatoryCheck,
+  [contractClassify.key]: contractClassify,
 } as const;

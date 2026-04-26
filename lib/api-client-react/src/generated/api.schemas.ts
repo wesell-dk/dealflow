@@ -1879,6 +1879,28 @@ export const ContractLanguage = {
   en: "en",
 } as const;
 
+/**
+ * Rechtsgebiet (KI-Profil-Schlüssel). Siehe lib/ai/profiles.ts.
+ * @nullable
+ */
+export type ContractPracticeArea =
+  | (typeof ContractPracticeArea)[keyof typeof ContractPracticeArea]
+  | null;
+
+export const ContractPracticeArea = {
+  it_software: "it_software",
+  service: "service",
+  supply_purchase: "supply_purchase",
+  labor: "labor",
+  data_protection: "data_protection",
+  license: "license",
+  m_a: "m_a",
+  nda: "nda",
+  framework: "framework",
+  agb_relevant: "agb_relevant",
+  other: "other",
+} as const;
+
 export interface Contract {
   id: string;
   dealId: string;
@@ -1920,6 +1942,21 @@ export interface Contract {
    * @nullable
    */
   sourceOrderConfirmationNumber?: string | null;
+  /**
+   * Jurisdiktion (DE/AT/CH/EN/US/OTHER) für KI-Profil und Retrieval.
+   * @nullable
+   */
+  jurisdiction?: string | null;
+  /**
+   * Anwendbares Recht als Frei-Text (z. B. "German law", "Swiss OR").
+   * @nullable
+   */
+  governingLaw?: string | null;
+  /**
+   * Rechtsgebiet (KI-Profil-Schlüssel). Siehe lib/ai/profiles.ts.
+   * @nullable
+   */
+  practiceArea?: ContractPracticeArea;
 }
 
 export type ApprovalStageStatus =
@@ -2814,6 +2851,47 @@ export const ContractInputLanguage = {
   en: "en",
 } as const;
 
+/**
+ * Pflichtfeld (Task #228). Steuert KI-Profil und Wissensbasis-Filter.
+Bei neuen Verträgen wird per /copilot/contract-classify-context ein
+Vorschlag aus Deal/Brand/Account abgeleitet, den die UI vor dem
+Anlegen anzeigen kann.
+
+ */
+export type ContractInputJurisdiction =
+  (typeof ContractInputJurisdiction)[keyof typeof ContractInputJurisdiction];
+
+export const ContractInputJurisdiction = {
+  DE: "DE",
+  AT: "AT",
+  CH: "CH",
+  EN: "EN",
+  US: "US",
+  OTHER: "OTHER",
+} as const;
+
+/**
+ * Pflichtfeld Rechtsgebiet (Task #228). KI-Profil-Schlüssel, der
+Drafting/Risk/Redline und die Wissensbasis-Filter steuert.
+
+ */
+export type ContractInputPracticeArea =
+  (typeof ContractInputPracticeArea)[keyof typeof ContractInputPracticeArea];
+
+export const ContractInputPracticeArea = {
+  it_software: "it_software",
+  service: "service",
+  supply_purchase: "supply_purchase",
+  labor: "labor",
+  data_protection: "data_protection",
+  license: "license",
+  m_a: "m_a",
+  nda: "nda",
+  framework: "framework",
+  agb_relevant: "agb_relevant",
+  other: "other",
+} as const;
+
 export interface ContractInput {
   dealId: string;
   title: string;
@@ -2827,6 +2905,16 @@ export interface ContractInput {
 antwortet die API mit 422 — der Aufrufer muss dann explizit einen Vertragstyp wählen.
  */
   contractTypeId?: string;
+  /** Pflichtfeld (Task #228). Steuert KI-Profil und Wissensbasis-Filter.
+Bei neuen Verträgen wird per /copilot/contract-classify-context ein
+Vorschlag aus Deal/Brand/Account abgeleitet, den die UI vor dem
+Anlegen anzeigen kann.
+ */
+  jurisdiction: ContractInputJurisdiction;
+  /** Pflichtfeld Rechtsgebiet (Task #228). KI-Profil-Schlüssel, der
+Drafting/Risk/Redline und die Wissensbasis-Filter steuert.
+ */
+  practiceArea: ContractInputPracticeArea;
 }
 
 /**
@@ -2840,6 +2928,45 @@ export const ContractPatchInputLanguage = {
   en: "en",
 } as const;
 
+/**
+ * Setzt/löscht die Jurisdiktion (Task #228).
+ * @nullable
+ */
+export type ContractPatchInputJurisdiction =
+  | (typeof ContractPatchInputJurisdiction)[keyof typeof ContractPatchInputJurisdiction]
+  | null;
+
+export const ContractPatchInputJurisdiction = {
+  DE: "DE",
+  AT: "AT",
+  CH: "CH",
+  EN: "EN",
+  US: "US",
+  OTHER: "OTHER",
+} as const;
+
+/**
+ * Setzt/löscht das Rechtsgebiet (Task #228).
+ * @nullable
+ */
+export type ContractPatchInputPracticeArea =
+  | (typeof ContractPatchInputPracticeArea)[keyof typeof ContractPatchInputPracticeArea]
+  | null;
+
+export const ContractPatchInputPracticeArea = {
+  it_software: "it_software",
+  service: "service",
+  supply_purchase: "supply_purchase",
+  labor: "labor",
+  data_protection: "data_protection",
+  license: "license",
+  m_a: "m_a",
+  nda: "nda",
+  framework: "framework",
+  agb_relevant: "agb_relevant",
+  other: "other",
+} as const;
+
 export interface ContractPatchInput {
   /** Aktualisiert die aktive Sprachfassung des Vertrags. */
   language?: ContractPatchInputLanguage;
@@ -2850,6 +2977,21 @@ Vertragstyp zu hängen, damit der CUAD-Check greift). `null` löst die Bindung w
    * @nullable
    */
   contractTypeId?: string | null;
+  /**
+   * Setzt/löscht die Jurisdiktion (Task #228).
+   * @nullable
+   */
+  jurisdiction?: ContractPatchInputJurisdiction;
+  /**
+   * Setzt/löscht das Rechtsgebiet (Task #228).
+   * @nullable
+   */
+  practiceArea?: ContractPatchInputPracticeArea;
+  /**
+   * Setzt/löscht das anwendbare Recht (Frei-Text).
+   * @nullable
+   */
+  governingLaw?: string | null;
 }
 
 /**
@@ -3038,6 +3180,35 @@ export interface ClauseSuggestion {
   createdVariantId?: string | null;
 }
 
+export type ClauseVariantPracticeAreasItem =
+  (typeof ClauseVariantPracticeAreasItem)[keyof typeof ClauseVariantPracticeAreasItem];
+
+export const ClauseVariantPracticeAreasItem = {
+  it_software: "it_software",
+  service: "service",
+  supply_purchase: "supply_purchase",
+  labor: "labor",
+  data_protection: "data_protection",
+  license: "license",
+  m_a: "m_a",
+  nda: "nda",
+  framework: "framework",
+  agb_relevant: "agb_relevant",
+  other: "other",
+} as const;
+
+export type ClauseVariantJurisdictionsItem =
+  (typeof ClauseVariantJurisdictionsItem)[keyof typeof ClauseVariantJurisdictionsItem];
+
+export const ClauseVariantJurisdictionsItem = {
+  DE: "DE",
+  AT: "AT",
+  CH: "CH",
+  EN: "EN",
+  US: "US",
+  OTHER: "OTHER",
+} as const;
+
 export type ClauseVariantTranslationLocale =
   (typeof ClauseVariantTranslationLocale)[keyof typeof ClauseVariantTranslationLocale];
 
@@ -3070,6 +3241,10 @@ export interface ClauseVariant {
   summary: string;
   body: string;
   tone: string;
+  /** Rechtsgebiete, für die diese Klausel-Variante geeignet ist. */
+  practiceAreas: ClauseVariantPracticeAreasItem[];
+  /** Jurisdiktionen, für die diese Klausel-Variante geeignet ist. */
+  jurisdictions: ClauseVariantJurisdictionsItem[];
   /** Vorhandene Sprachfassungen je Variante (de/en/…). */
   translations?: ClauseVariantTranslation[];
 }
@@ -3243,6 +3418,35 @@ export const ClauseCreateInputVariantSeverity = {
   high: "high",
 } as const;
 
+export type ClauseCreateInputVariantPracticeAreasItem =
+  (typeof ClauseCreateInputVariantPracticeAreasItem)[keyof typeof ClauseCreateInputVariantPracticeAreasItem];
+
+export const ClauseCreateInputVariantPracticeAreasItem = {
+  it_software: "it_software",
+  service: "service",
+  supply_purchase: "supply_purchase",
+  labor: "labor",
+  data_protection: "data_protection",
+  license: "license",
+  m_a: "m_a",
+  nda: "nda",
+  framework: "framework",
+  agb_relevant: "agb_relevant",
+  other: "other",
+} as const;
+
+export type ClauseCreateInputVariantJurisdictionsItem =
+  (typeof ClauseCreateInputVariantJurisdictionsItem)[keyof typeof ClauseCreateInputVariantJurisdictionsItem];
+
+export const ClauseCreateInputVariantJurisdictionsItem = {
+  DE: "DE",
+  AT: "AT",
+  CH: "CH",
+  EN: "EN",
+  US: "US",
+  OTHER: "OTHER",
+} as const;
+
 export type ClauseCreateInputVariant = {
   /**
    * @minLength 1
@@ -3264,6 +3468,8 @@ export type ClauseCreateInputVariant = {
   body?: string;
   /** @maxLength 60 */
   tone?: string;
+  practiceAreas?: ClauseCreateInputVariantPracticeAreasItem[];
+  jurisdictions?: ClauseCreateInputVariantJurisdictionsItem[];
 };
 
 export type ClauseCreateInputTranslationsItemLocale =
@@ -4384,6 +4590,8 @@ export type ContractRiskResultRiskSignalsItem = {
   severity: ContractRiskResultRiskSignalsItemSeverity;
   finding: string;
   recommendation: string;
+  /** Spezialgebiet zur Gruppierung der Befunde (z. B. "Datenschutz", "AGB-Kontrolle"). */
+  area?: string;
 };
 
 export type ContractRiskResultRecommendedAction =
@@ -4492,6 +4700,115 @@ export type ContractNegotiationStrategyEnvelope = CopilotAiInsightRef &
     result: ContractNegotiationStrategyResult;
     secondOpinion: SecondOpinionEnvelope;
   };
+
+export type ContractClassifyResultPracticeArea =
+  (typeof ContractClassifyResultPracticeArea)[keyof typeof ContractClassifyResultPracticeArea];
+
+export const ContractClassifyResultPracticeArea = {
+  it_software: "it_software",
+  service: "service",
+  supply_purchase: "supply_purchase",
+  labor: "labor",
+  data_protection: "data_protection",
+  license: "license",
+  m_a: "m_a",
+  nda: "nda",
+  framework: "framework",
+  agb_relevant: "agb_relevant",
+  other: "other",
+} as const;
+
+export type ContractClassifyResultJurisdiction =
+  (typeof ContractClassifyResultJurisdiction)[keyof typeof ContractClassifyResultJurisdiction];
+
+export const ContractClassifyResultJurisdiction = {
+  DE: "DE",
+  AT: "AT",
+  CH: "CH",
+  EN: "EN",
+  US: "US",
+  OTHER: "OTHER",
+} as const;
+
+export type ContractClassifyResultConfidence =
+  (typeof ContractClassifyResultConfidence)[keyof typeof ContractClassifyResultConfidence];
+
+export const ContractClassifyResultConfidence = {
+  low: "low",
+  medium: "medium",
+  high: "high",
+} as const;
+
+export interface ContractClassifyResult {
+  practiceArea: ContractClassifyResultPracticeArea;
+  jurisdiction: ContractClassifyResultJurisdiction;
+  rationale: string;
+  confidence: ContractClassifyResultConfidence;
+  confidenceReason: string;
+}
+
+export interface ContractClassifyEnvelope {
+  ok: boolean;
+  result: ContractClassifyResult;
+  invocationId: string;
+  model: string;
+  latencyMs: number;
+}
+
+/**
+ * Pre-classification input (Task #228). Liefert dem Klassifikator den
+gleichen Kontext, den eine Vertrags-Erstellung sehen würde — Deal,
+Brand, Account und Template-/Titel-Bezeichnung — damit das KI-Profil
+bereits VOR dem Anlegen vorgeschlagen werden kann.
+
+ */
+export interface ContractClassifyContextInput {
+  dealId: string;
+  title: string;
+  template: string;
+  /** Optional brand context (default clauses come from here). */
+  brandId?: string;
+}
+
+export type ClauseVariantTagsPatchPracticeAreasItem =
+  (typeof ClauseVariantTagsPatchPracticeAreasItem)[keyof typeof ClauseVariantTagsPatchPracticeAreasItem];
+
+export const ClauseVariantTagsPatchPracticeAreasItem = {
+  it_software: "it_software",
+  service: "service",
+  supply_purchase: "supply_purchase",
+  labor: "labor",
+  data_protection: "data_protection",
+  license: "license",
+  m_a: "m_a",
+  nda: "nda",
+  framework: "framework",
+  agb_relevant: "agb_relevant",
+  other: "other",
+} as const;
+
+export type ClauseVariantTagsPatchJurisdictionsItem =
+  (typeof ClauseVariantTagsPatchJurisdictionsItem)[keyof typeof ClauseVariantTagsPatchJurisdictionsItem];
+
+export const ClauseVariantTagsPatchJurisdictionsItem = {
+  DE: "DE",
+  AT: "AT",
+  CH: "CH",
+  EN: "EN",
+  US: "US",
+  OTHER: "OTHER",
+} as const;
+
+/**
+ * Update the practice-area and jurisdiction tags of a clause variant
+(Task #228). Both fields are optional — only provided fields are
+updated. An empty array clears the tags (means "passt überall").
+
+ */
+export interface ClauseVariantTagsPatch {
+  practiceAreas?: ClauseVariantTagsPatchPracticeAreasItem[];
+  jurisdictions?: ClauseVariantTagsPatchJurisdictionsItem[];
+}
 
 export type AiSecondOpinionPromptConfigMode =
   (typeof AiSecondOpinionPromptConfigMode)[keyof typeof AiSecondOpinionPromptConfigMode];

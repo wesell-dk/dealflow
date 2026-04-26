@@ -2457,6 +2457,37 @@ export const GetDealResponse = zod
             .describe(
               "Lesefreundliche Nummer der Quell-Auftragsbestätigung (gespiegelt für UI-Anzeige; nicht persistiert).",
             ),
+          jurisdiction: zod
+            .string()
+            .nullish()
+            .describe(
+              "Jurisdiktion (DE\/AT\/CH\/EN\/US\/OTHER) für KI-Profil und Retrieval.",
+            ),
+          governingLaw: zod
+            .string()
+            .nullish()
+            .describe(
+              'Anwendbares Recht als Frei-Text (z. B. \"German law\", \"Swiss OR\").',
+            ),
+          practiceArea: zod
+            .union([
+              zod.literal("it_software"),
+              zod.literal("service"),
+              zod.literal("supply_purchase"),
+              zod.literal("labor"),
+              zod.literal("data_protection"),
+              zod.literal("license"),
+              zod.literal("m_a"),
+              zod.literal("nda"),
+              zod.literal("framework"),
+              zod.literal("agb_relevant"),
+              zod.literal("other"),
+              zod.literal(null),
+            ])
+            .nullish()
+            .describe(
+              "Rechtsgebiet (KI-Profil-Schlüssel). Siehe lib\/ai\/profiles.ts.",
+            ),
         }),
       ),
       approvals: zod.array(
@@ -4291,6 +4322,37 @@ export const ListContractsResponseItem = zod.object({
     .describe(
       "Lesefreundliche Nummer der Quell-Auftragsbestätigung (gespiegelt für UI-Anzeige; nicht persistiert).",
     ),
+  jurisdiction: zod
+    .string()
+    .nullish()
+    .describe(
+      "Jurisdiktion (DE\/AT\/CH\/EN\/US\/OTHER) für KI-Profil und Retrieval.",
+    ),
+  governingLaw: zod
+    .string()
+    .nullish()
+    .describe(
+      'Anwendbares Recht als Frei-Text (z. B. \"German law\", \"Swiss OR\").',
+    ),
+  practiceArea: zod
+    .union([
+      zod.literal("it_software"),
+      zod.literal("service"),
+      zod.literal("supply_purchase"),
+      zod.literal("labor"),
+      zod.literal("data_protection"),
+      zod.literal("license"),
+      zod.literal("m_a"),
+      zod.literal("nda"),
+      zod.literal("framework"),
+      zod.literal("agb_relevant"),
+      zod.literal("other"),
+      zod.literal(null),
+    ])
+    .nullish()
+    .describe(
+      "Rechtsgebiet (KI-Profil-Schlüssel). Siehe lib\/ai\/profiles.ts.",
+    ),
 });
 export const ListContractsResponse = zod.array(ListContractsResponseItem);
 
@@ -4313,6 +4375,28 @@ export const CreateContractBody = zod.object({
     .optional()
     .describe(
       'Vertragstyp-Bindung. Wenn nicht gesetzt, leitet der Server eine Default-Heuristik aus\n`template` ab (z. B. \"Master Services Agreement\" → MSA). Schlägt die Heuristik fehl,\nantwortet die API mit 422 — der Aufrufer muss dann explizit einen Vertragstyp wählen.\n',
+    ),
+  jurisdiction: zod
+    .enum(["DE", "AT", "CH", "EN", "US", "OTHER"])
+    .describe(
+      "Pflichtfeld (Task #228). Steuert KI-Profil und Wissensbasis-Filter.\nBei neuen Verträgen wird per \/copilot\/contract-classify-context ein\nVorschlag aus Deal\/Brand\/Account abgeleitet, den die UI vor dem\nAnlegen anzeigen kann.\n",
+    ),
+  practiceArea: zod
+    .enum([
+      "it_software",
+      "service",
+      "supply_purchase",
+      "labor",
+      "data_protection",
+      "license",
+      "m_a",
+      "nda",
+      "framework",
+      "agb_relevant",
+      "other",
+    ])
+    .describe(
+      "Pflichtfeld Rechtsgebiet (Task #228). KI-Profil-Schlüssel, der\nDrafting\/Risk\/Redline und die Wissensbasis-Filter steuert.\n",
     ),
 });
 
@@ -4375,6 +4459,37 @@ export const GetContractResponse = zod
       .describe(
         "Lesefreundliche Nummer der Quell-Auftragsbestätigung (gespiegelt für UI-Anzeige; nicht persistiert).",
       ),
+    jurisdiction: zod
+      .string()
+      .nullish()
+      .describe(
+        "Jurisdiktion (DE\/AT\/CH\/EN\/US\/OTHER) für KI-Profil und Retrieval.",
+      ),
+    governingLaw: zod
+      .string()
+      .nullish()
+      .describe(
+        'Anwendbares Recht als Frei-Text (z. B. \"German law\", \"Swiss OR\").',
+      ),
+    practiceArea: zod
+      .union([
+        zod.literal("it_software"),
+        zod.literal("service"),
+        zod.literal("supply_purchase"),
+        zod.literal("labor"),
+        zod.literal("data_protection"),
+        zod.literal("license"),
+        zod.literal("m_a"),
+        zod.literal("nda"),
+        zod.literal("framework"),
+        zod.literal("agb_relevant"),
+        zod.literal("other"),
+        zod.literal(null),
+      ])
+      .nullish()
+      .describe(
+        "Rechtsgebiet (KI-Profil-Schlüssel). Siehe lib\/ai\/profiles.ts.",
+      ),
   })
   .and(
     zod.object({
@@ -4435,6 +4550,39 @@ export const PatchContractBody = zod.object({
     .describe(
       "Setzt oder ersetzt die Vertragstyp-Bindung (z. B. um Altverträge nachträglich an einen\nVertragstyp zu hängen, damit der CUAD-Check greift). `null` löst die Bindung wieder.\n",
     ),
+  jurisdiction: zod
+    .union([
+      zod.literal("DE"),
+      zod.literal("AT"),
+      zod.literal("CH"),
+      zod.literal("EN"),
+      zod.literal("US"),
+      zod.literal("OTHER"),
+      zod.literal(null),
+    ])
+    .nullish()
+    .describe("Setzt\/löscht die Jurisdiktion (Task #228)."),
+  practiceArea: zod
+    .union([
+      zod.literal("it_software"),
+      zod.literal("service"),
+      zod.literal("supply_purchase"),
+      zod.literal("labor"),
+      zod.literal("data_protection"),
+      zod.literal("license"),
+      zod.literal("m_a"),
+      zod.literal("nda"),
+      zod.literal("framework"),
+      zod.literal("agb_relevant"),
+      zod.literal("other"),
+      zod.literal(null),
+    ])
+    .nullish()
+    .describe("Setzt\/löscht das Rechtsgebiet (Task #228)."),
+  governingLaw: zod
+    .string()
+    .nullish()
+    .describe("Setzt\/löscht das anwendbare Recht (Frei-Text)."),
 });
 
 export const PatchContractResponse = zod.object({
@@ -4487,6 +4635,37 @@ export const PatchContractResponse = zod.object({
     .describe(
       "Lesefreundliche Nummer der Quell-Auftragsbestätigung (gespiegelt für UI-Anzeige; nicht persistiert).",
     ),
+  jurisdiction: zod
+    .string()
+    .nullish()
+    .describe(
+      "Jurisdiktion (DE\/AT\/CH\/EN\/US\/OTHER) für KI-Profil und Retrieval.",
+    ),
+  governingLaw: zod
+    .string()
+    .nullish()
+    .describe(
+      'Anwendbares Recht als Frei-Text (z. B. \"German law\", \"Swiss OR\").',
+    ),
+  practiceArea: zod
+    .union([
+      zod.literal("it_software"),
+      zod.literal("service"),
+      zod.literal("supply_purchase"),
+      zod.literal("labor"),
+      zod.literal("data_protection"),
+      zod.literal("license"),
+      zod.literal("m_a"),
+      zod.literal("nda"),
+      zod.literal("framework"),
+      zod.literal("agb_relevant"),
+      zod.literal("other"),
+      zod.literal(null),
+    ])
+    .nullish()
+    .describe(
+      "Rechtsgebiet (KI-Profil-Schlüssel). Siehe lib\/ai\/profiles.ts.",
+    ),
 });
 
 export const ListClauseFamiliesResponseItem = zod.object({
@@ -4502,6 +4681,30 @@ export const ListClauseFamiliesResponseItem = zod.object({
       summary: zod.string(),
       body: zod.string(),
       tone: zod.string(),
+      practiceAreas: zod
+        .array(
+          zod.enum([
+            "it_software",
+            "service",
+            "supply_purchase",
+            "labor",
+            "data_protection",
+            "license",
+            "m_a",
+            "nda",
+            "framework",
+            "agb_relevant",
+            "other",
+          ]),
+        )
+        .describe(
+          "Rechtsgebiete, für die diese Klausel-Variante geeignet ist.",
+        ),
+      jurisdictions: zod
+        .array(zod.enum(["DE", "AT", "CH", "EN", "US", "OTHER"]))
+        .describe(
+          "Jurisdiktionen, für die diese Klausel-Variante geeignet ist.",
+        ),
       translations: zod
         .array(
           zod.object({
@@ -4592,6 +4795,26 @@ export const CreateClauseBody = zod
       summary: zod.string().min(1).max(createClauseBodyVariantSummaryMax),
       body: zod.string().max(createClauseBodyVariantBodyMax).optional(),
       tone: zod.string().max(createClauseBodyVariantToneMax).optional(),
+      practiceAreas: zod
+        .array(
+          zod.enum([
+            "it_software",
+            "service",
+            "supply_purchase",
+            "labor",
+            "data_protection",
+            "license",
+            "m_a",
+            "nda",
+            "framework",
+            "agb_relevant",
+            "other",
+          ]),
+        )
+        .optional(),
+      jurisdictions: zod
+        .array(zod.enum(["DE", "AT", "CH", "EN", "US", "OTHER"]))
+        .optional(),
     }),
     translations: zod
       .array(
@@ -5575,6 +5798,30 @@ export const GetClauseSuggestionResponse = zod
             summary: zod.string(),
             body: zod.string(),
             tone: zod.string(),
+            practiceAreas: zod
+              .array(
+                zod.enum([
+                  "it_software",
+                  "service",
+                  "supply_purchase",
+                  "labor",
+                  "data_protection",
+                  "license",
+                  "m_a",
+                  "nda",
+                  "framework",
+                  "agb_relevant",
+                  "other",
+                ]),
+              )
+              .describe(
+                "Rechtsgebiete, für die diese Klausel-Variante geeignet ist.",
+              ),
+            jurisdictions: zod
+              .array(zod.enum(["DE", "AT", "CH", "EN", "US", "OTHER"]))
+              .describe(
+                "Jurisdiktionen, für die diese Klausel-Variante geeignet ist.",
+              ),
             translations: zod
               .array(
                 zod.object({
@@ -5739,6 +5986,26 @@ export const GetClauseDiffResponse = zod.object({
     summary: zod.string(),
     body: zod.string(),
     tone: zod.string(),
+    practiceAreas: zod
+      .array(
+        zod.enum([
+          "it_software",
+          "service",
+          "supply_purchase",
+          "labor",
+          "data_protection",
+          "license",
+          "m_a",
+          "nda",
+          "framework",
+          "agb_relevant",
+          "other",
+        ]),
+      )
+      .describe("Rechtsgebiete, für die diese Klausel-Variante geeignet ist."),
+    jurisdictions: zod
+      .array(zod.enum(["DE", "AT", "CH", "EN", "US", "OTHER"]))
+      .describe("Jurisdiktionen, für die diese Klausel-Variante geeignet ist."),
     translations: zod
       .array(
         zod.object({
@@ -5766,6 +6033,26 @@ export const GetClauseDiffResponse = zod.object({
     summary: zod.string(),
     body: zod.string(),
     tone: zod.string(),
+    practiceAreas: zod
+      .array(
+        zod.enum([
+          "it_software",
+          "service",
+          "supply_purchase",
+          "labor",
+          "data_protection",
+          "license",
+          "m_a",
+          "nda",
+          "framework",
+          "agb_relevant",
+          "other",
+        ]),
+      )
+      .describe("Rechtsgebiete, für die diese Klausel-Variante geeignet ist."),
+    jurisdictions: zod
+      .array(zod.enum(["DE", "AT", "CH", "EN", "US", "OTHER"]))
+      .describe("Jurisdiktionen, für die diese Klausel-Variante geeignet ist."),
     translations: zod
       .array(
         zod.object({
@@ -7228,6 +7515,12 @@ export const RunContractRiskResponse = zod
             severity: zod.enum(["info", "low", "medium", "high", "critical"]),
             finding: zod.string(),
             recommendation: zod.string(),
+            area: zod
+              .string()
+              .optional()
+              .describe(
+                'Spezialgebiet zur Gruppierung der Befunde (z. B. \"Datenschutz\", \"AGB-Kontrolle\").',
+              ),
           }),
         ),
         approvalRelevant: zod.boolean(),
@@ -7452,6 +7745,172 @@ was generated yet.
  */
 export const GetNegotiationPlaybookPdfParams = zod.object({
   id: zod.coerce.string(),
+});
+
+/**
+ * @summary Classify a contract by practice area and jurisdiction (Task #228).
+Returns a suggestion with rationale + confidence; does NOT persist —
+the caller decides whether to PATCH the contract.
+
+ */
+export const RunContractClassifyParams = zod.object({
+  contractId: zod.coerce.string(),
+});
+
+export const RunContractClassifyResponse = zod.object({
+  ok: zod.literal(true),
+  result: zod.object({
+    practiceArea: zod.enum([
+      "it_software",
+      "service",
+      "supply_purchase",
+      "labor",
+      "data_protection",
+      "license",
+      "m_a",
+      "nda",
+      "framework",
+      "agb_relevant",
+      "other",
+    ]),
+    jurisdiction: zod.enum(["DE", "AT", "CH", "EN", "US", "OTHER"]),
+    rationale: zod.string(),
+    confidence: zod.enum(["low", "medium", "high"]),
+    confidenceReason: zod.string(),
+  }),
+  invocationId: zod.string(),
+  model: zod.string(),
+  latencyMs: zod.number(),
+});
+
+/**
+ * @summary Pre-classify (Task #228) without an existing contract — used by the
+creation dialog to suggest jurisdiction + practice area from
+deal/account/brand/title/template context. Does not persist anything.
+
+ */
+export const RunContractClassifyContextBody = zod
+  .object({
+    dealId: zod.string(),
+    title: zod.string(),
+    template: zod.string(),
+    brandId: zod
+      .string()
+      .optional()
+      .describe("Optional brand context (default clauses come from here)."),
+  })
+  .describe(
+    "Pre-classification input (Task #228). Liefert dem Klassifikator den\ngleichen Kontext, den eine Vertrags-Erstellung sehen würde — Deal,\nBrand, Account und Template-\/Titel-Bezeichnung — damit das KI-Profil\nbereits VOR dem Anlegen vorgeschlagen werden kann.\n",
+  );
+
+export const RunContractClassifyContextResponse = zod.object({
+  ok: zod.literal(true),
+  result: zod.object({
+    practiceArea: zod.enum([
+      "it_software",
+      "service",
+      "supply_purchase",
+      "labor",
+      "data_protection",
+      "license",
+      "m_a",
+      "nda",
+      "framework",
+      "agb_relevant",
+      "other",
+    ]),
+    jurisdiction: zod.enum(["DE", "AT", "CH", "EN", "US", "OTHER"]),
+    rationale: zod.string(),
+    confidence: zod.enum(["low", "medium", "high"]),
+    confidenceReason: zod.string(),
+  }),
+  invocationId: zod.string(),
+  model: zod.string(),
+  latencyMs: zod.number(),
+});
+
+/**
+ * @summary Update the practice-area and jurisdiction tags of a clause variant
+(Task #228). Other fields are immutable through this endpoint.
+
+ */
+export const UpdateClauseVariantTagsParams = zod.object({
+  variantId: zod.coerce.string(),
+});
+
+export const UpdateClauseVariantTagsBody = zod
+  .object({
+    practiceAreas: zod
+      .array(
+        zod.enum([
+          "it_software",
+          "service",
+          "supply_purchase",
+          "labor",
+          "data_protection",
+          "license",
+          "m_a",
+          "nda",
+          "framework",
+          "agb_relevant",
+          "other",
+        ]),
+      )
+      .optional(),
+    jurisdictions: zod
+      .array(zod.enum(["DE", "AT", "CH", "EN", "US", "OTHER"]))
+      .optional(),
+  })
+  .describe(
+    'Update the practice-area and jurisdiction tags of a clause variant\n(Task #228). Both fields are optional — only provided fields are\nupdated. An empty array clears the tags (means \"passt überall\").\n',
+  );
+
+export const UpdateClauseVariantTagsResponse = zod.object({
+  id: zod.string(),
+  name: zod.string(),
+  severity: zod.string(),
+  severityScore: zod.number(),
+  summary: zod.string(),
+  body: zod.string(),
+  tone: zod.string(),
+  practiceAreas: zod
+    .array(
+      zod.enum([
+        "it_software",
+        "service",
+        "supply_purchase",
+        "labor",
+        "data_protection",
+        "license",
+        "m_a",
+        "nda",
+        "framework",
+        "agb_relevant",
+        "other",
+      ]),
+    )
+    .describe("Rechtsgebiete, für die diese Klausel-Variante geeignet ist."),
+  jurisdictions: zod
+    .array(zod.enum(["DE", "AT", "CH", "EN", "US", "OTHER"]))
+    .describe("Jurisdiktionen, für die diese Klausel-Variante geeignet ist."),
+  translations: zod
+    .array(
+      zod.object({
+        id: zod.string(),
+        variantId: zod.string(),
+        locale: zod.enum(["de", "en"]),
+        name: zod.string(),
+        summary: zod.string(),
+        body: zod.string(),
+        source: zod.string().nullish().describe("z. B. bonterms-mutual-2024"),
+        license: zod.string().nullish().describe("z. B. CC-BY-4.0"),
+        sourceUrl: zod.string().nullish(),
+        createdAt: zod.coerce.date(),
+        updatedAt: zod.coerce.date(),
+      }),
+    )
+    .optional()
+    .describe("Vorhandene Sprachfassungen je Variante (de\/en\/…)."),
 });
 
 /**

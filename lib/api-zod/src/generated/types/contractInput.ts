@@ -7,7 +7,9 @@ Multi-tenant, multi-company, multi-brand. Deal-centric.
 
  * OpenAPI spec version: 0.1.0
  */
+import type { ContractInputJurisdiction } from "./contractInputJurisdiction";
 import type { ContractInputLanguage } from "./contractInputLanguage";
+import type { ContractInputPracticeArea } from "./contractInputPracticeArea";
 
 export interface ContractInput {
   dealId: string;
@@ -22,4 +24,14 @@ export interface ContractInput {
 antwortet die API mit 422 — der Aufrufer muss dann explizit einen Vertragstyp wählen.
  */
   contractTypeId?: string;
+  /** Pflichtfeld (Task #228). Steuert KI-Profil und Wissensbasis-Filter.
+Bei neuen Verträgen wird per /copilot/contract-classify-context ein
+Vorschlag aus Deal/Brand/Account abgeleitet, den die UI vor dem
+Anlegen anzeigen kann.
+ */
+  jurisdiction: ContractInputJurisdiction;
+  /** Pflichtfeld Rechtsgebiet (Task #228). KI-Profil-Schlüssel, der
+Drafting/Risk/Redline und die Wissensbasis-Filter steuert.
+ */
+  practiceArea: ContractInputPracticeArea;
 }
