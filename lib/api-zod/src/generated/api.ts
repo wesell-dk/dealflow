@@ -5258,6 +5258,10 @@ export const patchContractClauseBodyEditedBodyMax = 8000;
 
 export const patchContractClauseBodyEditedReasonMax = 500;
 
+export const patchContractClauseBodyAiRecommendationIdMax = 80;
+
+export const patchContractClauseBodyAiCounterFamilyMax = 120;
+
 export const PatchContractClauseBody = zod.object({
   variantId: zod.string().optional(),
   editedName: zod
@@ -5288,6 +5292,24 @@ export const PatchContractClauseBody = zod.object({
     .describe(
       "Setzt vorhandene editedBody\/editedName\/editedSummary zurück (Variante wird wieder Quelle der Wahrheit).",
     ),
+  aiRecommendationId: zod
+    .string()
+    .max(patchContractClauseBodyAiRecommendationIdMax)
+    .nullish()
+    .describe(
+      "Optionaler Verweis auf ai_recommendations.id. Erzeugt einen Lerneffekt-Datensatz für den AI-Negotiation-Counter.",
+    ),
+  aiCounterFamily: zod
+    .string()
+    .max(patchContractClauseBodyAiCounterFamilyMax)
+    .nullish()
+    .describe(
+      "Klauselfamilie des akzeptierten AI-Counters (z. B. 'liability_cap'). Wird nur in Verbindung mit aiRecommendationId gewertet.",
+    ),
+  aiCounterLocale: zod
+    .union([zod.literal("de"), zod.literal("en"), zod.literal(null)])
+    .nullish()
+    .describe("Sprache des akzeptierten Counters ('de' oder 'en')."),
 });
 
 export const PatchContractClauseResponse = zod.object({
@@ -12516,6 +12538,58 @@ export const GetAiRecommendationMetricsResponseItem = zod.object({
 });
 export const GetAiRecommendationMetricsResponse = zod.array(
   GetAiRecommendationMetricsResponseItem,
+);
+
+/**
+ * Aggregiert pro Klauselfamilie, wie oft das Frontend einen vom Verhandlungs-Copilot generierten Counter-Text mit "Counter übernehmen" akzeptiert hat. Bezugsmenge ist die Anzahl der Klauseln, für die überhaupt ein Counter generiert wurde (über alle ai_recommendations des Tenants mit promptKey=contract.negotiation).
+
+ * @summary Acceptance-Rate des AI-Negotiation-Counters pro Klauselfamilie
+ */
+export const getNegotiationAcceptanceStatsResponseRecommendedCountMin = 0;
+
+export const getNegotiationAcceptanceStatsResponseAcceptedCountMin = 0;
+
+export const getNegotiationAcceptanceStatsResponseAcceptanceRateMin = 0;
+export const getNegotiationAcceptanceStatsResponseAcceptanceRateMax = 1;
+
+export const getNegotiationAcceptanceStatsResponseAcceptedDeMin = 0;
+
+export const getNegotiationAcceptanceStatsResponseAcceptedEnMin = 0;
+
+export const GetNegotiationAcceptanceStatsResponseItem = zod.object({
+  family: zod.string().describe('Klauselfamilie (z. B. \"liability_cap\").'),
+  recommendedCount: zod
+    .number()
+    .min(getNegotiationAcceptanceStatsResponseRecommendedCountMin)
+    .describe(
+      "Anzahl der Klauseln dieser Familie, für die der Copilot insgesamt einen Counter generiert hat (Summe über alle Negotiation-Runs des Tenants).\n",
+    ),
+  acceptedCount: zod
+    .number()
+    .min(getNegotiationAcceptanceStatsResponseAcceptedCountMin)
+    .describe(
+      'Anzahl der \"Counter übernehmen\"-Klicks für diese Familie. Mehrfach- Akzeptierungen derselben Klausel zählen einmal pro Klick.\n',
+    ),
+  acceptanceRate: zod
+    .number()
+    .min(getNegotiationAcceptanceStatsResponseAcceptanceRateMin)
+    .max(getNegotiationAcceptanceStatsResponseAcceptanceRateMax)
+    .nullable()
+    .describe(
+      "acceptedCount \/ recommendedCount, null wenn recommendedCount=0.",
+    ),
+  acceptedDe: zod
+    .number()
+    .min(getNegotiationAcceptanceStatsResponseAcceptedDeMin)
+    .describe("Akzeptierte deutsche Counter (Teilmenge von acceptedCount)."),
+  acceptedEn: zod
+    .number()
+    .min(getNegotiationAcceptanceStatsResponseAcceptedEnMin)
+    .describe("Akzeptierte englische Counter (Teilmenge von acceptedCount)."),
+  lastAcceptedAt: zod.coerce.date().nullish(),
+});
+export const GetNegotiationAcceptanceStatsResponse = zod.array(
+  GetNegotiationAcceptanceStatsResponseItem,
 );
 
 /**

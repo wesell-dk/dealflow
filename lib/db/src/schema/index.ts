@@ -1944,10 +1944,17 @@ export const aiFeedbackTable = pgTable("ai_feedback", {
   // Soft-Link auf ai_recommendations.id (kein FK, weil ai_recommendations
   // nach Aufbewahrungsfrist geloescht werden darf, ai_feedback bleibt).
   recommendationId: text("recommendation_id"),
+  // Optionale, anonymisierte Zusatzmerkmale fuer feinere Auswertungen
+  // (Task #279): z. B. fuer den per-clause-Negotiation-Counter speichern wir
+  //   { kind: "negotiation_counter", family, locale, contractClauseId }
+  // Schluessel sind frei waehlbar pro promptKey; das Feld bleibt
+  // tenant-scoped und enthaelt KEINEN Klausel-Volltext.
+  metadata: jsonb("metadata").$type<Record<string, unknown>>(),
   createdAt: ts("created_at"),
 }, (t) => [
   index("ai_feedback_tenant_prompt_idx").on(t.tenantId, t.promptKey, t.createdAt),
   index("ai_feedback_tenant_outcome_idx").on(t.tenantId, t.outcome),
+  index("ai_feedback_recommendation_idx").on(t.tenantId, t.recommendationId),
 ]);
 
 /* ─────────────────────────────────────────────────────────────────────────────

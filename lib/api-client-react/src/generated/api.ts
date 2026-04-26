@@ -241,6 +241,7 @@ import type {
   ListSignaturePackagesParams,
   MeUser,
   Negotiation,
+  NegotiationAcceptanceStat,
   NegotiationDetail,
   NegotiationImpactResponse,
   Obligation,
@@ -27094,6 +27095,88 @@ export function useGetAiRecommendationMetrics<
     params,
     options,
   );
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * Aggregiert pro Klauselfamilie, wie oft das Frontend einen vom Verhandlungs-Copilot generierten Counter-Text mit "Counter übernehmen" akzeptiert hat. Bezugsmenge ist die Anzahl der Klauseln, für die überhaupt ein Counter generiert wurde (über alle ai_recommendations des Tenants mit promptKey=contract.negotiation).
+
+ * @summary Acceptance-Rate des AI-Negotiation-Counters pro Klauselfamilie
+ */
+export const getGetNegotiationAcceptanceStatsUrl = () => {
+  return `/api/v1/ai-recommendations/_negotiation-acceptance`;
+};
+
+export const getNegotiationAcceptanceStats = async (
+  options?: RequestInit,
+): Promise<NegotiationAcceptanceStat[]> => {
+  return customFetch<NegotiationAcceptanceStat[]>(
+    getGetNegotiationAcceptanceStatsUrl(),
+    {
+      ...options,
+      method: "GET",
+    },
+  );
+};
+
+export const getGetNegotiationAcceptanceStatsQueryKey = () => {
+  return [`/api/v1/ai-recommendations/_negotiation-acceptance`] as const;
+};
+
+export const getGetNegotiationAcceptanceStatsQueryOptions = <
+  TData = Awaited<ReturnType<typeof getNegotiationAcceptanceStats>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getNegotiationAcceptanceStats>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey =
+    queryOptions?.queryKey ?? getGetNegotiationAcceptanceStatsQueryKey();
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof getNegotiationAcceptanceStats>>
+  > = ({ signal }) =>
+    getNegotiationAcceptanceStats({ signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getNegotiationAcceptanceStats>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetNegotiationAcceptanceStatsQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getNegotiationAcceptanceStats>>
+>;
+export type GetNegotiationAcceptanceStatsQueryError = ErrorType<unknown>;
+
+/**
+ * @summary Acceptance-Rate des AI-Negotiation-Counters pro Klauselfamilie
+ */
+
+export function useGetNegotiationAcceptanceStats<
+  TData = Awaited<ReturnType<typeof getNegotiationAcceptanceStats>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getNegotiationAcceptanceStats>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetNegotiationAcceptanceStatsQueryOptions(options);
 
   const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
     queryKey: QueryKey;

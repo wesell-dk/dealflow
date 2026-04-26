@@ -3,11 +3,14 @@ import { useTranslation } from "react-i18next";
 import {
   useRunContractNegotiation,
   usePatchContractClause,
+  useGetNegotiationAcceptanceStats,
   getListContractClausesQueryKey,
+  getGetNegotiationAcceptanceStatsQueryKey,
   getGetNegotiationPlaybookPdfUrl,
   type ContractNegotiationStrategyEnvelope,
   type ClauseNegotiationStrategy,
   type ContractClause,
+  type NegotiationAcceptanceStat,
 } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -87,10 +90,19 @@ export function NegotiationStrategyTab({
         data: {
           editedBody: body,
           editedReason: `AI Negotiation Copilot · ${locale.toUpperCase()} Counter`,
+          // Lerneffekt-Tracking (Task #279): Verknüpft die Akzeptanz mit der
+          // ursprünglichen ai_recommendations-Zeile, damit der Server die
+          // Acceptance-Rate pro Klauselfamilie auswerten kann.
+          aiRecommendationId: envelope?.recommendationId ?? null,
+          aiCounterFamily: strategy.family,
+          aiCounterLocale: locale,
         },
       });
       await qc.invalidateQueries({
         queryKey: getListContractClausesQueryKey(contractId),
+      });
+      await qc.invalidateQueries({
+        queryKey: getGetNegotiationAcceptanceStatsQueryKey(),
       });
       toast({ description: t("pages.contracts.negotiation.acceptCountered") });
     } catch (e) {
@@ -104,6 +116,21 @@ export function NegotiationStrategyTab({
 
   const isPending = runMut.isPending;
   const result = envelope?.result;
+
+  // Acceptance-Rate pro Klauselfamilie (Task #279). Wir holen die Stats nur,
+  // sobald die UI eine Strategie anzeigt, damit der Tab vor dem Run keine
+  // unnötigen Requests feuert.
+  const { data: acceptanceStats } = useGetNegotiationAcceptanceStats({
+    query: {
+      queryKey: getGetNegotiationAcceptanceStatsQueryKey(),
+      enabled: Boolean(envelope?.result),
+    },
+  });
+  const familyAcceptance = useMemo(() => {
+    const m = new Map<string, NegotiationAcceptanceStat>();
+    for (const s of acceptanceStats ?? []) m.set(s.family, s);
+    return m;
+  }, [acceptanceStats]);
 
   return (
     <Card data-testid="contract-negotiation-tab">
@@ -187,10 +214,18 @@ export function NegotiationStrategyTab({
                     clause={clause}
                     busy={patchClause.isPending}
                     onAccept={acceptCounter}
+                    familyStat={familyAcceptance.get(strategy.family)}
                   />
                 );
               })}
             </Accordion>
+
+            {(acceptanceStats?.length ?? 0) > 0 && (
+              <NegotiationAcceptanceSummary
+                stats={acceptanceStats ?? []}
+                familiesInRun={result.clauseStrategies.map((s) => s.family)}
+              />
+            )}
 
             <div className="flex flex-wrap items-center gap-2 pt-2 border-t">
               <AIConfidenceBadge
@@ -270,15 +305,21 @@ function ClauseStrategyRow({
   clause,
   busy,
   onAccept,
+  familyStat,
 }: {
   strategy: ClauseNegotiationStrategy;
   clause: ContractClause | undefined;
   busy: boolean;
   onAccept: (s: ClauseNegotiationStrategy, locale: "de" | "en") => void;
+  familyStat?: NegotiationAcceptanceStat;
 }) {
   const { t } = useTranslation();
   const currentBody = clause?.body ?? "";
   const isLow = strategy.perClauseConfidence === "low";
+  const ratePct =
+    familyStat && familyStat.acceptanceRate !== null
+      ? Math.round(familyStat.acceptanceRate * 100)
+      : null;
 
   return (
     <AccordionItem
@@ -295,11 +336,29 @@ function ClauseStrategyRow({
               {clause?.summary ?? clause?.variant ?? strategy.family}
             </span>
           </div>
-          <AIConfidenceBadge
-            level={strategy.perClauseConfidence}
-            reason={strategy.perClauseConfidenceReason}
-            testId={`contract-negotiation-clause-conf-${strategy.contractClauseId}`}
-          />
+          <div className="flex items-center gap-2 shrink-0">
+            {familyStat && familyStat.recommendedCount > 0 && (
+              <span
+                className="text-[10px] text-muted-foreground tabular-nums"
+                title={t("pages.contracts.negotiation.familyAcceptanceTooltip", {
+                  defaultValue:
+                    "AI Counter für {{family}}: {{accepted}} von {{recommended}} akzeptiert",
+                  family: strategy.family,
+                  accepted: familyStat.acceptedCount,
+                  recommended: familyStat.recommendedCount,
+                })}
+                data-testid={`contract-negotiation-family-accept-${strategy.contractClauseId}`}
+              >
+                {ratePct !== null ? `${ratePct}%` : "—"} ·{" "}
+                {familyStat.acceptedCount}/{familyStat.recommendedCount}
+              </span>
+            )}
+            <AIConfidenceBadge
+              level={strategy.perClauseConfidence}
+              reason={strategy.perClauseConfidenceReason}
+              testId={`contract-negotiation-clause-conf-${strategy.contractClauseId}`}
+            />
+          </div>
         </div>
       </AccordionTrigger>
       <AccordionContent className="space-y-4">
@@ -495,6 +554,100 @@ function CounterBlock({
         </details>
       )}
     </div>
+  );
+}
+
+/**
+ * Tenant-weite Acceptance-Übersicht für AI-Negotiation-Counter (Task #279).
+ * Zeigt eine kompakte Tabelle pro Klauselfamilie: wie oft hat der Copilot
+ * im Tenant einen Counter generiert vs. wie oft wurde er übernommen?
+ *
+ * Die im aktuellen Run verwendeten Familien werden zuerst angezeigt, sodass
+ * Verhandler*innen die Acceptance-Signal-Stärke für genau "ihre" Klauseln
+ * sofort sehen.
+ */
+function NegotiationAcceptanceSummary({
+  stats,
+  familiesInRun,
+}: {
+  stats: ReadonlyArray<NegotiationAcceptanceStat>;
+  familiesInRun: ReadonlyArray<string>;
+}) {
+  const { t } = useTranslation();
+  const inRun = new Set(familiesInRun);
+  const sorted = [...stats].sort((a, b) => {
+    const aIn = inRun.has(a.family) ? 0 : 1;
+    const bIn = inRun.has(b.family) ? 0 : 1;
+    if (aIn !== bIn) return aIn - bIn;
+    return b.recommendedCount - a.recommendedCount;
+  });
+  return (
+    <details
+      className="rounded-md border bg-muted/20 p-2 text-xs"
+      data-testid="contract-negotiation-acceptance-summary"
+    >
+      <summary className="cursor-pointer text-muted-foreground">
+        {t("pages.contracts.negotiation.acceptanceSummaryTitle", {
+          defaultValue:
+            "AI-Counter-Akzeptanz pro Klauselfamilie (alle Verträge dieses Tenants)",
+        })}
+      </summary>
+      <table className="mt-2 w-full">
+        <thead>
+          <tr className="text-left text-muted-foreground">
+            <th className="py-1 pr-2 font-medium">
+              {t("pages.contracts.negotiation.acceptanceCol.family", {
+                defaultValue: "Familie",
+              })}
+            </th>
+            <th className="py-1 pr-2 font-medium text-right">
+              {t("pages.contracts.negotiation.acceptanceCol.recommended", {
+                defaultValue: "Vorgeschlagen",
+              })}
+            </th>
+            <th className="py-1 pr-2 font-medium text-right">
+              {t("pages.contracts.negotiation.acceptanceCol.accepted", {
+                defaultValue: "Übernommen",
+              })}
+            </th>
+            <th className="py-1 pr-2 font-medium text-right">
+              {t("pages.contracts.negotiation.acceptanceCol.rate", {
+                defaultValue: "Rate",
+              })}
+            </th>
+            <th className="py-1 pr-2 font-medium text-right">DE / EN</th>
+          </tr>
+        </thead>
+        <tbody>
+          {sorted.map((s) => {
+            const ratePct =
+              s.acceptanceRate !== null ? Math.round(s.acceptanceRate * 100) : null;
+            const highlight = inRun.has(s.family);
+            return (
+              <tr
+                key={s.family}
+                className={`border-t ${highlight ? "font-medium" : ""}`}
+                data-testid={`contract-negotiation-acceptance-row-${s.family}`}
+              >
+                <td className="py-1 pr-2 font-mono">{s.family}</td>
+                <td className="py-1 pr-2 text-right tabular-nums">
+                  {s.recommendedCount}
+                </td>
+                <td className="py-1 pr-2 text-right tabular-nums">
+                  {s.acceptedCount}
+                </td>
+                <td className="py-1 pr-2 text-right tabular-nums">
+                  {ratePct !== null ? `${ratePct}%` : "—"}
+                </td>
+                <td className="py-1 pr-2 text-right tabular-nums text-muted-foreground">
+                  {s.acceptedDe} / {s.acceptedEn}
+                </td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+    </details>
   );
 }
 

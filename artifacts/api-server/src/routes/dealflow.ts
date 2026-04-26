@@ -9658,6 +9658,9 @@ router.patch('/contract-clauses/:id', async (req, res) => {
     editedBody?: string | null;
     editedReason?: string | null;
     clearEdits?: boolean;
+    aiRecommendationId?: string | null;
+    aiCounterFamily?: string | null;
+    aiCounterLocale?: 'de' | 'en' | null;
   };
   const { variantId } = body;
   const hasEdits = body.editedName != null || body.editedSummary != null || body.editedBody != null || body.editedReason != null;
@@ -9672,6 +9675,98 @@ router.patch('/contract-clauses/:id', async (req, res) => {
   const [ctr] = await db.select().from(contractsTable).where(eq(contractsTable.id, cl.contractId));
   if (!ctr) { res.status(404).json({ error: 'contract not found' }); return; }
   if (!(await gateDeal(req, res, ctr.dealId))) return;
+  // AI-Counter-Akzeptanz fuer Negotiation-Copilot (Task #279). Wir erfassen das
+  // hier als Closure-helper, damit beide Patch-Pfade (Edit-only und
+  // Variantenwechsel) es nach erfolgreicher Persistenz aufrufen koennen.
+  // Schweigend ueberspringen wir, wenn aiRecommendationId fehlt, der Body
+  // leer ist (clearEdits-Pfad) oder die Recommendation nicht existiert /
+  // einem fremden Tenant gehoert. So koennen wir die Frontend-Felder
+  // optional senden, ohne die Patch-Semantik fuer Nicht-AI-Edits zu brechen.
+  async function recordAiCounterAcceptanceIfApplicable(): Promise<void> {
+    const recId = (body.aiRecommendationId ?? '').trim();
+    if (!recId) return;
+    const acceptedBody = (body.editedBody ?? '').trim();
+    if (!acceptedBody) return;
+    const family = (body.aiCounterFamily ?? '').trim() || null;
+    const locale = body.aiCounterLocale === 'de' || body.aiCounterLocale === 'en'
+      ? body.aiCounterLocale
+      : null;
+    const scope = getScope(req);
+    const [rec] = await db.select().from(aiRecommendationsTable)
+      .where(and(
+        eq(aiRecommendationsTable.id, recId),
+        eq(aiRecommendationsTable.tenantId, scope.tenantId),
+      ));
+    if (!rec || rec.promptKey !== 'contract.negotiation') return;
+    // Linkage-Guard: die Recommendation muss zum gleichen Vertrag gehoeren
+    // wie die patchierte Klausel. Sonst koennte ein Tenant-eigener, aber
+    // unzusammenhaengender Recommendation-Identifier die Acceptance-Stats
+    // anderer Vertraege verzerren.
+    if (rec.entityType === 'contract' && rec.entityId && rec.entityId !== cl.contractId) {
+      return;
+    }
+    // Idempotenz pro (recommendation, clause, locale): wer zweimal auf
+    // "Counter uebernehmen" klickt, soll die Familien-Acceptance-Rate
+    // nicht ueber 100 % treiben. Wir pruefen die metadata-JSON gezielt.
+    const dupQuery = await db.select({ id: aiFeedbackTable.id })
+      .from(aiFeedbackTable)
+      .where(and(
+        eq(aiFeedbackTable.tenantId, scope.tenantId),
+        eq(aiFeedbackTable.recommendationId, rec.id),
+        sql`${aiFeedbackTable.metadata}->>'kind' = 'negotiation_counter'`,
+        sql`${aiFeedbackTable.metadata}->>'contractClauseId' = ${cl.id}`,
+        sql`${aiFeedbackTable.metadata}->>'locale' = ${locale}`,
+      ));
+    if (dupQuery.length > 0) return;
+    let modelName: string | null = null;
+    if (rec.aiInvocationId) {
+      const [inv] = await db.select({ model: aiInvocationsTable.model })
+        .from(aiInvocationsTable)
+        .where(and(
+          eq(aiInvocationsTable.id, rec.aiInvocationId),
+          eq(aiInvocationsTable.tenantId, scope.tenantId),
+        ));
+      modelName = inv?.model ?? null;
+    }
+    await db.insert(aiFeedbackTable).values({
+      id: `aifb_${randomUUID().slice(0, 12)}`,
+      tenantId: scope.tenantId,
+      promptKey: rec.promptKey,
+      modelName,
+      outcome: 'accepted',
+      confidence: rec.confidence !== null && rec.confidence !== undefined
+        ? String(rec.confidence)
+        : null,
+      hasFeedbackText: false,
+      recommendationId: rec.id,
+      metadata: {
+        kind: 'negotiation_counter',
+        family,
+        locale,
+        contractClauseId: cl.id,
+      },
+    });
+    // Recommendation nur einmal als "accepted" markieren — ein Envelope kann
+    // mehrere Klausel-Counter enthalten, jede Akzeptierung schreibt ihre
+    // eigene ai_feedback-Zeile, aber der Status wandert nur beim ersten
+    // Klick aus "pending" heraus, damit das Acceptance-Counting der
+    // bestehenden _metrics-Aggregation konsistent bleibt.
+    if (rec.status === 'pending') {
+      await db.update(aiRecommendationsTable)
+        .set({
+          status: 'accepted',
+          decidedBy: scope.user.id,
+          decidedAt: new Date(),
+        })
+        .where(eq(aiRecommendationsTable.id, rec.id));
+    }
+    await writeAuditFromReq(req, {
+      entityType: 'ai_recommendation', entityId: rec.id,
+      action: 'ai_negotiation_counter_accepted',
+      summary: `AI-Negotiation Counter (${locale ?? '?'}) übernommen für Klausel-Familie ${family ?? '—'}`,
+      after: { contractClauseId: cl.id, family, locale },
+    });
+  }
 
   // Pfad A: nur Edits ohne Variantenwechsel ── snapshot an contract_clause speichern
   // und bei ausreichendem Diff einen Klausel-Vorschlag queuen.
@@ -9759,6 +9854,7 @@ router.patch('/contract-clauses/:id', async (req, res) => {
       after: { name: newName, summary: newSummary, body: newBody, suggestionId: queuedSuggestionId },
     });
     const [updated] = await db.select().from(contractClausesTable).where(eq(contractClausesTable.id, cl.id));
+    await recordAiCounterAcceptanceIfApplicable();
     res.json({
       clause: {
         id: updated!.id, contractId: updated!.contractId, family: updated!.family,
@@ -21161,6 +21257,87 @@ router.patch('/ai-recommendations/:id', async (req, res) => {
     after: { status: newStatus, hasFeedback: Boolean(feedback) },
   });
   res.json(mapRecommendation(updated!));
+});
+
+/**
+ * Acceptance-Rate fuer den AI-Negotiation-Counter pro Klauselfamilie
+ * (Task #279).
+ *
+ * Aggregiert ueber den Tenant alle Recommendations mit
+ * promptKey='contract.negotiation' und zaehlt:
+ *   - recommendedCount = Summe aller Klausel-Counter im Envelope-suggestion
+ *     (suggestion.clauseStrategies[].family). Mehrfach-Vorschlaege fuer
+ *     dieselbe Familie aus verschiedenen Negotiation-Runs zaehlen jeweils.
+ *   - acceptedCount    = Anzahl ai_feedback-Zeilen mit
+ *     metadata.kind='negotiation_counter' und passender family.
+ *
+ * acceptanceRate = acceptedCount / recommendedCount (null bei 0).
+ * acceptedDe/acceptedEn schluesseln nach metadata.locale auf.
+ */
+router.get('/ai-recommendations/_negotiation-acceptance', async (req, res) => {
+  const scope = getScope(req);
+  // Recommended-Side: alle Negotiation-Envelopes des Tenants.
+  const recRows = await db.select({
+    id: aiRecommendationsTable.id,
+    suggestion: aiRecommendationsTable.suggestion,
+  })
+    .from(aiRecommendationsTable)
+    .where(and(
+      eq(aiRecommendationsTable.tenantId, scope.tenantId),
+      eq(aiRecommendationsTable.promptKey, 'contract.negotiation'),
+    ));
+  const recommendedByFamily = new Map<string, number>();
+  for (const r of recRows) {
+    const sugg = (r.suggestion ?? null) as { clauseStrategies?: Array<{ family?: unknown }> } | null;
+    const strategies = Array.isArray(sugg?.clauseStrategies) ? sugg!.clauseStrategies : [];
+    for (const s of strategies) {
+      const fam = typeof s?.family === 'string' && s.family.trim() ? s.family.trim() : 'unknown';
+      recommendedByFamily.set(fam, (recommendedByFamily.get(fam) ?? 0) + 1);
+    }
+  }
+  // Accepted-Side: alle Counter-Akzeptanzen.
+  const fbRows = await db.select({
+    metadata: aiFeedbackTable.metadata,
+    createdAt: aiFeedbackTable.createdAt,
+  })
+    .from(aiFeedbackTable)
+    .where(and(
+      eq(aiFeedbackTable.tenantId, scope.tenantId),
+      eq(aiFeedbackTable.promptKey, 'contract.negotiation'),
+      eq(aiFeedbackTable.outcome, 'accepted'),
+    ));
+  type AcceptAgg = { accepted: number; de: number; en: number; lastAt: Date | null };
+  const acceptedByFamily = new Map<string, AcceptAgg>();
+  for (const f of fbRows) {
+    const md = (f.metadata ?? null) as { kind?: unknown; family?: unknown; locale?: unknown } | null;
+    if (!md || md.kind !== 'negotiation_counter') continue;
+    const fam = typeof md.family === 'string' && md.family.trim() ? md.family.trim() : 'unknown';
+    const cur = acceptedByFamily.get(fam) ?? { accepted: 0, de: 0, en: 0, lastAt: null };
+    cur.accepted += 1;
+    if (md.locale === 'de') cur.de += 1;
+    else if (md.locale === 'en') cur.en += 1;
+    if (!cur.lastAt || (f.createdAt && f.createdAt > cur.lastAt)) cur.lastAt = f.createdAt ?? cur.lastAt;
+    acceptedByFamily.set(fam, cur);
+  }
+  // Merge: jede Familie, die irgendwo auftaucht, bekommt eine Zeile.
+  const families = new Set<string>([...recommendedByFamily.keys(), ...acceptedByFamily.keys()]);
+  const out = [...families].map((family) => {
+    const recommendedCount = recommendedByFamily.get(family) ?? 0;
+    const agg = acceptedByFamily.get(family) ?? { accepted: 0, de: 0, en: 0, lastAt: null };
+    const acceptanceRate = recommendedCount > 0 ? agg.accepted / recommendedCount : null;
+    return {
+      family,
+      recommendedCount,
+      acceptedCount: agg.accepted,
+      acceptanceRate,
+      acceptedDe: agg.de,
+      acceptedEn: agg.en,
+      lastAcceptedAt: agg.lastAt ? agg.lastAt.toISOString() : null,
+    };
+  });
+  // Sortierung: meiste Empfehlungen zuerst, alphabetisch als Tiebreaker.
+  out.sort((a, b) => (b.recommendedCount - a.recommendedCount) || a.family.localeCompare(b.family));
+  res.json(out);
 });
 
 /**

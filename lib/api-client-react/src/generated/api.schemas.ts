@@ -2898,6 +2898,19 @@ export type ContractDetail = Contract & {
   clauses: ContractClause[];
 };
 
+/**
+ * Sprache des akzeptierten Counters ('de' oder 'en').
+ * @nullable
+ */
+export type ContractClausePatchInputAiCounterLocale =
+  | (typeof ContractClausePatchInputAiCounterLocale)[keyof typeof ContractClausePatchInputAiCounterLocale]
+  | null;
+
+export const ContractClausePatchInputAiCounterLocale = {
+  de: "de",
+  en: "en",
+} as const;
+
 export interface ContractClausePatchInput {
   variantId?: string;
   /**
@@ -2924,6 +2937,23 @@ export interface ContractClausePatchInput {
   editedReason?: string | null;
   /** Setzt vorhandene editedBody/editedName/editedSummary zurück (Variante wird wieder Quelle der Wahrheit). */
   clearEdits?: boolean;
+  /**
+   * Optionaler Verweis auf ai_recommendations.id. Erzeugt einen Lerneffekt-Datensatz für den AI-Negotiation-Counter.
+   * @maxLength 80
+   * @nullable
+   */
+  aiRecommendationId?: string | null;
+  /**
+   * Klauselfamilie des akzeptierten AI-Counters (z. B. 'liability_cap'). Wird nur in Verbindung mit aiRecommendationId gewertet.
+   * @maxLength 120
+   * @nullable
+   */
+  aiCounterFamily?: string | null;
+  /**
+   * Sprache des akzeptierten Counters ('de' oder 'en').
+   * @nullable
+   */
+  aiCounterLocale?: ContractClausePatchInputAiCounterLocale;
 }
 
 export type ClauseSuggestionStatus =
@@ -6396,6 +6426,42 @@ export interface AiRecommendationCalibrationBucket {
    * @nullable
    */
   acceptanceRate: number | null;
+}
+
+export interface NegotiationAcceptanceStat {
+  /** Klauselfamilie (z. B. "liability_cap"). */
+  family: string;
+  /**
+   * Anzahl der Klauseln dieser Familie, für die der Copilot insgesamt einen Counter generiert hat (Summe über alle Negotiation-Runs des Tenants).
+
+   * @minimum 0
+   */
+  recommendedCount: number;
+  /**
+   * Anzahl der "Counter übernehmen"-Klicks für diese Familie. Mehrfach- Akzeptierungen derselben Klausel zählen einmal pro Klick.
+
+   * @minimum 0
+   */
+  acceptedCount: number;
+  /**
+   * acceptedCount / recommendedCount, null wenn recommendedCount=0.
+   * @minimum 0
+   * @maximum 1
+   * @nullable
+   */
+  acceptanceRate: number | null;
+  /**
+   * Akzeptierte deutsche Counter (Teilmenge von acceptedCount).
+   * @minimum 0
+   */
+  acceptedDe: number;
+  /**
+   * Akzeptierte englische Counter (Teilmenge von acceptedCount).
+   * @minimum 0
+   */
+  acceptedEn: number;
+  /** @nullable */
+  lastAcceptedAt?: string | null;
 }
 
 export interface AiRecommendationTrendPoint {

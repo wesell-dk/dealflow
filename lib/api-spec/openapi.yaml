@@ -6292,6 +6292,26 @@ paths:
                 type: array
                 items: { $ref: "#/components/schemas/AiRecommendationMetric" }
 
+  /ai-recommendations/_negotiation-acceptance:
+    get:
+      operationId: getNegotiationAcceptanceStats
+      tags: [ai-recommendations]
+      summary: Acceptance-Rate des AI-Negotiation-Counters pro Klauselfamilie
+      description: >
+        Aggregiert pro Klauselfamilie, wie oft das Frontend einen vom
+        Verhandlungs-Copilot generierten Counter-Text mit "Counter übernehmen"
+        akzeptiert hat. Bezugsmenge ist die Anzahl der Klauseln, für die
+        überhaupt ein Counter generiert wurde (über alle ai_recommendations
+        des Tenants mit promptKey=contract.negotiation).
+      responses:
+        "200":
+          description: ok
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/NegotiationAcceptanceStat" }
+
   /ai-recommendations/{id}:
     patch:
       operationId: patchAiRecommendation
@@ -8942,6 +8962,23 @@ components:
         clearEdits:
           type: boolean
           description: "Setzt vorhandene editedBody/editedName/editedSummary zurück (Variante wird wieder Quelle der Wahrheit)."
+        # Wenn der editedBody aus dem AI-Negotiation-Counter stammt, sendet die UI
+        # diese drei Felder mit. Der Server schreibt dann eine ai_feedback-Zeile
+        # (outcome=accepted) und markiert die ai_recommendations-Zeile als
+        # akzeptiert. Damit lässt sich die Acceptance-Rate pro Klauselfamilie
+        # auswerten (Task #279).
+        aiRecommendationId:
+          type: ["string", "null"]
+          maxLength: 80
+          description: "Optionaler Verweis auf ai_recommendations.id. Erzeugt einen Lerneffekt-Datensatz für den AI-Negotiation-Counter."
+        aiCounterFamily:
+          type: ["string", "null"]
+          maxLength: 120
+          description: "Klauselfamilie des akzeptierten AI-Counters (z. B. 'liability_cap'). Wird nur in Verbindung mit aiRecommendationId gewertet."
+        aiCounterLocale:
+          type: ["string", "null"]
+          enum: ["de", "en", null]
+          description: "Sprache des akzeptierten Counters ('de' oder 'en')."
 
     # ── Klausel-Vorschläge (Lernen aus Vertragsarbeit, Task #77) ──
     ClauseSuggestion:
@@ -12151,6 +12188,45 @@ components:
           type: ["number", "null"]
           minimum: 0
           maximum: 1
+
+    NegotiationAcceptanceStat:
+      type: object
+      required:
+        [ family, recommendedCount, acceptedCount, acceptanceRate,
+          acceptedDe, acceptedEn ]
+      properties:
+        family:
+          type: string
+          description: Klauselfamilie (z. B. "liability_cap").
+        recommendedCount:
+          type: integer
+          minimum: 0
+          description: >
+            Anzahl der Klauseln dieser Familie, für die der Copilot insgesamt
+            einen Counter generiert hat (Summe über alle Negotiation-Runs des
+            Tenants).
+        acceptedCount:
+          type: integer
+          minimum: 0
+          description: >
+            Anzahl der "Counter übernehmen"-Klicks für diese Familie. Mehrfach-
+            Akzeptierungen derselben Klausel zählen einmal pro Klick.
+        acceptanceRate:
+          type: ["number", "null"]
+          minimum: 0
+          maximum: 1
+          description: acceptedCount / recommendedCount, null wenn recommendedCount=0.
+        acceptedDe:
+          type: integer
+          minimum: 0
+          description: Akzeptierte deutsche Counter (Teilmenge von acceptedCount).
+        acceptedEn:
+          type: integer
+          minimum: 0
+          description: Akzeptierte englische Counter (Teilmenge von acceptedCount).
+        lastAcceptedAt:
+          type: ["string", "null"]
+          format: date-time
 
     AiRecommendationMetric:
       type: object

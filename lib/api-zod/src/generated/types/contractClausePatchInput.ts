@@ -7,6 +7,7 @@ Multi-tenant, multi-company, multi-brand. Deal-centric.
 
  * OpenAPI spec version: 0.1.0
  */
+import type { ContractClausePatchInputAiCounterLocale } from "./contractClausePatchInputAiCounterLocale";
 
 export interface ContractClausePatchInput {
   variantId?: string;
@@ -34,4 +35,21 @@ export interface ContractClausePatchInput {
   editedReason?: string | null;
   /** Setzt vorhandene editedBody/editedName/editedSummary zurück (Variante wird wieder Quelle der Wahrheit). */
   clearEdits?: boolean;
+  /**
+   * Optionaler Verweis auf ai_recommendations.id. Erzeugt einen Lerneffekt-Datensatz für den AI-Negotiation-Counter.
+   * @maxLength 80
+   * @nullable
+   */
+  aiRecommendationId?: string | null;
+  /**
+   * Klauselfamilie des akzeptierten AI-Counters (z. B. 'liability_cap'). Wird nur in Verbindung mit aiRecommendationId gewertet.
+   * @maxLength 120
+   * @nullable
+   */
+  aiCounterFamily?: string | null;
+  /**
+   * Sprache des akzeptierten Counters ('de' oder 'en').
+   * @nullable
+   */
+  aiCounterLocale?: ContractClausePatchInputAiCounterLocale;
 }
