@@ -1301,8 +1301,16 @@ const RegulatoryFinding = z.object({
   note: z.string().min(2).max(500),
   // Empfehlung, was zu tun ist (oder null wenn met).
   suggestion: z.string().min(2).max(600).nullable(),
-  // Optional: ID der Vertragsklausel, in der die Anforderung belegt ist.
+  // Optional: ID der primären Vertragsklausel, in der die Anforderung belegt
+  // ist (für Rückwärtskompatibilität — neue Pipelines verwenden
+  // evidenceClauseIds).
   contractClauseId: z.string().max(80).nullable(),
+  // IDs ALLER Vertragsklauseln, die diesen Befund stützen oder ausgelöst
+  // haben. Das Frontend rendert sie als klickbare Chips, die zur Klausel
+  // im Vertrag scrollen. Bei status='missing' darf die Liste leer bleiben
+  // oder ganz fehlen. Maximal 10 Chips pro Befund — mehr ist UI-seitig
+  // nicht sinnvoll.
+  evidenceClauseIds: z.array(z.string().min(2).max(80)).max(10).optional(),
   // Optional: kurzer Auszug aus der Klausel als Beleg.
   snippet: z.string().max(400).nullable(),
 });
@@ -1366,10 +1374,18 @@ export const contractRegulatoryCheck: PromptDefinition<
     "Klauseln des zu prüfenden Vertrags. Pro Anforderung entscheidest du: " +
     "met (klar abgedeckt), partial (teilweise abgedeckt — wesentliche Aspekte " +
     "fehlen), missing (nicht erkennbar). Bei partial/missing lieferst du eine " +
-    "konkrete, umsetzbare Empfehlung in Vertragssprache (suggestion). Wenn " +
-    "eine Klausel als Beleg dient, gibst du contractClauseId UND snippet (max. " +
-    "200 Zeichen) an. Wähle requirementId NUR aus der gelieferten Liste; " +
-    "erfinde keine. Liefere overallStatus aggregiert: 'compliant' = alle " +
+    "konkrete, umsetzbare Empfehlung in Vertragssprache (suggestion). " +
+    "QUELLEN-VERLINKUNG (PFLICHT für Audit-Tauglichkeit): Pro Befund listest " +
+    "du in evidenceClauseIds ALLE Klausel-IDs auf, die den Befund stützen " +
+    "oder ausgelöst haben — bei met sind das die abdeckenden Klauseln, bei " +
+    "partial die teilabdeckenden Klauseln, bei missing kann die Liste leer " +
+    "bleiben oder nahegelegene Klauseln nennen, in denen die Anforderung " +
+    "stehen müsste. Verwende AUSSCHLIESSLICH IDs aus der gelieferten " +
+    "Klauselliste (in eckigen Klammern); erfinde keine IDs und nimm keine " +
+    "requirement-IDs. Setze contractClauseId zusätzlich auf die wichtigste " +
+    "(erste) Beleg-Klausel und snippet auf einen Auszug daraus (max. 200 " +
+    "Zeichen). Wähle requirementId NUR aus der gelieferten Liste; erfinde " +
+    "keine. Liefere overallStatus aggregiert: 'compliant' = alle " +
     "Anforderungen met; 'partial' = ein/mehrere partial/missing aber kein " +
     "kritisches must-missing; 'non_compliant' = mindestens eine must-" +
     "Anforderung missing. Schreibe im Stil eines Senior-Vertragsanwalts: " +
@@ -1400,7 +1416,8 @@ export const contractRegulatoryCheck: PromptDefinition<
   outputSchema: RegulatoryCheckOutput,
   toolDescription:
     "Liefert pro Pflicht-Anforderung der Regulierung einen Status (met/" +
-    "partial/missing) mit Notiz, optionaler suggestion, contractClauseId und " +
+    "partial/missing) mit Notiz, optionaler suggestion, contractClauseId, " +
+    "evidenceClauseIds (alle Beleg-Klausel-IDs für Audit-Drilldown) und " +
     "snippet. Plus aggregierter overallStatus (compliant/partial/non_compliant), " +
     "summary, confidence und confidenceReason.",
   toolName: "report_regulatory_check",

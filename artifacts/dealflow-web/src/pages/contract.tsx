@@ -374,7 +374,8 @@ export default function Contract() {
               return (
                 <Card
                   key={clause.id}
-                  className="border-l-4"
+                  id={`clause-${clause.id}`}
+                  className="border-l-4 scroll-mt-24 transition-shadow"
                   style={{
                     borderLeftColor:
                       clause.severity === 'high' ? 'hsl(var(--destructive))'
@@ -561,7 +562,26 @@ export default function Contract() {
         </TabsContent>
 
         <TabsContent value="regulatory" className="mt-4 space-y-6" data-testid="contract-tabpanel-regulatory">
-          <RegulatorySection contractId={id} />
+          <RegulatorySection
+            contractId={id}
+            onJumpToClause={(clauseId) => {
+              // Switch to clauses tab, then scroll to the anchor on the next
+              // frame so the DOM has time to mount.
+              setTab("clauses");
+              window.requestAnimationFrame(() => {
+                window.setTimeout(() => {
+                  const el = document.getElementById(`clause-${clauseId}`);
+                  if (el) {
+                    el.scrollIntoView({ behavior: "smooth", block: "center" });
+                    el.classList.add("ring-2", "ring-primary");
+                    window.setTimeout(() => {
+                      el.classList.remove("ring-2", "ring-primary");
+                    }, 1600);
+                  }
+                }, 80);
+              });
+            }}
+          />
         </TabsContent>
       </Tabs>
 

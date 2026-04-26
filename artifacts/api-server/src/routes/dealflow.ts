@@ -22450,6 +22450,7 @@ router.post('/contracts/:contractId/regulations/check', async (req, res) => {
       note: string;
       suggestion: string | null;
       contractClauseId: string | null;
+      evidenceClauseIds: string[];
       snippet: string | null;
     }> = [];
     let overallStatus: 'compliant' | 'partial' | 'non_compliant' | 'not_evaluated' = 'not_evaluated';
@@ -22465,6 +22466,9 @@ router.post('/contracts/:contractId/regulations/check', async (req, res) => {
             note: string;
             suggestion: string | null;
             contractClauseId: string | null;
+            // Optional: KI darf das Feld weglassen — wir normalisieren in
+            // `findings.map` unten auf ein Array.
+            evidenceClauseIds?: string[];
             snippet: string | null;
           }>;
           overallStatus: 'compliant' | 'partial' | 'non_compliant';
@@ -22498,7 +22502,42 @@ router.post('/contracts/:contractId/regulations/check', async (req, res) => {
           entityRef: { entityType: 'contract', entityId: contractId },
         });
         const validIds = new Set(fw.requirements.map((r) => r.id));
-        findings = (result.output.findings ?? []).filter((f) => validIds.has(f.requirementId));
+        // Erlaubte Klausel-IDs für Quellen-Verlinkung — alles andere ist
+        // Halluzination und wird verworfen, damit das Frontend keine
+        // toten Chips rendert.
+        const validClauseIds = new Set(promptClauses.map((c) => c.id));
+        findings = (result.output.findings ?? [])
+          .filter((f) => validIds.has(f.requirementId))
+          .map((f) => {
+            const evidence = Array.from(
+              new Set(
+                (f.evidenceClauseIds ?? []).filter((cid) => validClauseIds.has(cid)),
+              ),
+            );
+            // Wenn die KI nur die Single-Spalte gefüllt hat, übernimm sie als
+            // Fallback in evidenceClauseIds, damit ältere Prompts trotzdem
+            // klickbare Chips erzeugen.
+            if (
+              evidence.length === 0
+              && f.contractClauseId
+              && validClauseIds.has(f.contractClauseId)
+            ) {
+              evidence.push(f.contractClauseId);
+            }
+            // Wenn die KI nur evidenceClauseIds liefert, contractClauseId
+            // aber leer lässt, mit dem ersten Eintrag synchronisieren —
+            // einige Down-Stream-Konsumenten (Snippet-Anzeige, Audit) lesen
+            // weiterhin die Single-Spalte.
+            const single =
+              f.contractClauseId && validClauseIds.has(f.contractClauseId)
+                ? f.contractClauseId
+                : evidence[0] ?? null;
+            return {
+              ...f,
+              contractClauseId: single,
+              evidenceClauseIds: evidence,
+            };
+          });
         // Aggregat ggf. neu berechnen (KI kann inkonsistent sein).
         overallStatus = aggregateOverallStatus(findings, fw.requirements);
         aiInvocationId = result.invocationId;

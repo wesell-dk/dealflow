@@ -2,6 +2,7 @@ import { useMemo, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   useListContractRegulatoryAssessments,
+  useListContractClauses,
   useRunContractRegulatoryCheck,
   useAddContractRegulatoryFramework,
   useRemoveContractRegulatoryFramework,
@@ -9,6 +10,7 @@ import {
   type ContractRegulatoryAssessment,
   type RegulatoryFramework,
   type RegulatoryFinding,
+  type ContractClause,
 } from "@workspace/api-client-react";
 import { useToast } from "@/hooks/use-toast";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -27,7 +29,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import {
   ShieldCheck, RefreshCw, Plus, X, CheckCircle2, AlertTriangle,
-  XCircle, HelpCircle, Loader2, ExternalLink,
+  XCircle, HelpCircle, Loader2, ExternalLink, Link2,
 } from "lucide-react";
 
 function statusBadge(status: string) {
@@ -78,15 +80,44 @@ function applicabilityBadge(value: string) {
   }
 }
 
-export function RegulatorySection(props: { contractId: string }) {
-  const { contractId } = props;
+export function RegulatorySection(props: {
+  contractId: string;
+  // Optional callback so the parent (contract page) can switch to the
+  // clauses tab and scroll to a specific clause when the user clicks an
+  // evidence chip. If unset, we fall back to scrolling within the current
+  // page (works on layouts that render the clauses inline).
+  onJumpToClause?: (clauseId: string) => void;
+}) {
+  const { contractId, onJumpToClause } = props;
   const { toast } = useToast();
   const qc = useQueryClient();
   const { data, isLoading } = useListContractRegulatoryAssessments(contractId);
+  const { data: clauses } = useListContractClauses(contractId);
   const [removeId, setRemoveId] = useState<string | null>(null);
 
   const assessments = data?.assessments ?? [];
   const frameworks = data?.frameworks ?? [];
+
+  const clauseById = useMemo(
+    () => new Map((clauses ?? []).map((c) => [c.id, c])),
+    [clauses],
+  );
+
+  const jumpToClause = (clauseId: string) => {
+    if (onJumpToClause) {
+      onJumpToClause(clauseId);
+      return;
+    }
+    // Fallback: scroll directly to the clause anchor if it is mounted.
+    const el = document.getElementById(`clause-${clauseId}`);
+    if (el) {
+      el.scrollIntoView({ behavior: "smooth", block: "center" });
+      el.classList.add("ring-2", "ring-primary");
+      window.setTimeout(() => {
+        el.classList.remove("ring-2", "ring-primary");
+      }, 1600);
+    }
+  };
 
   const invalidate = () => {
     qc.invalidateQueries({
@@ -266,6 +297,8 @@ export function RegulatorySection(props: { contractId: string }) {
                       key={a.id}
                       assessment={a}
                       framework={fw}
+                      clauseById={clauseById}
+                      onJumpToClause={jumpToClause}
                       onRemove={() => setRemoveId(a.frameworkId)}
                     />
                   );
@@ -330,9 +363,11 @@ export function RegulatorySection(props: { contractId: string }) {
 function AssessmentItem(props: {
   assessment: ContractRegulatoryAssessment;
   framework: RegulatoryFramework;
+  clauseById: Map<string, ContractClause>;
+  onJumpToClause: (clauseId: string) => void;
   onRemove: () => void;
 }) {
-  const { assessment, framework, onRemove } = props;
+  const { assessment, framework, clauseById, onJumpToClause, onRemove } = props;
   const reqById = new Map(framework.requirements.map((r) => [r.id, r]));
   const findings = (assessment.findings ?? []) as RegulatoryFinding[];
 
@@ -374,6 +409,16 @@ function AssessmentItem(props: {
             findings.map((f, idx) => {
               const req = reqById.get(f.requirementId);
               if (!req) return null;
+              // evidenceClauseIds (Task #277): bevorzugte Quelle. Falls die KI
+              // nur die historische Single-Spalte gefüllt hat, fallen wir auf
+              // contractClauseId zurück, damit ältere Bewertungen weiterhin
+              // klickbar bleiben.
+              const evidenceIds = (f.evidenceClauseIds && f.evidenceClauseIds.length > 0
+                ? f.evidenceClauseIds
+                : f.contractClauseId
+                  ? [f.contractClauseId]
+                  : []
+              ).filter((cid): cid is string => typeof cid === "string" && cid.length > 0);
               return (
                 <div
                   key={`${f.requirementId}-${idx}`}
@@ -391,6 +436,44 @@ function AssessmentItem(props: {
                         <span className="text-xs text-muted-foreground">{req.normRef}</span>
                       </div>
                       <p className="text-sm text-muted-foreground mt-1">{f.note}</p>
+                      {evidenceIds.length > 0 && (
+                        <div
+                          className="flex items-center gap-1.5 flex-wrap mt-2"
+                          data-testid={`finding-evidence-${f.requirementId}`}
+                        >
+                          <Link2 className="h-3 w-3 text-muted-foreground" />
+                          <span className="text-[11px] text-muted-foreground mr-1">
+                            Belege:
+                          </span>
+                          {evidenceIds.map((cid) => {
+                            const cl = clauseById.get(cid);
+                            const label = cl
+                              ? cl.family || cid
+                              : `Klausel #${cid.slice(0, 6)}`;
+                            const known = !!cl;
+                            return (
+                              <Badge
+                                key={cid}
+                                variant={known ? "secondary" : "outline"}
+                                className={
+                                  known
+                                    ? "text-[11px] cursor-pointer hover:bg-secondary/80"
+                                    : "text-[11px] text-muted-foreground"
+                                }
+                                onClick={known ? () => onJumpToClause(cid) : undefined}
+                                title={
+                                  known
+                                    ? `Zur Klausel „${label}" springen`
+                                    : "Klausel wurde inzwischen entfernt"
+                                }
+                                data-testid={`finding-evidence-chip-${f.requirementId}-${cid}`}
+                              >
+                                {label}
+                              </Badge>
+                            );
+                          })}
+                        </div>
+                      )}
                       {f.snippet && (
                         <blockquote className="text-xs italic border-l-2 pl-2 mt-2 text-muted-foreground">
                           „{f.snippet}"

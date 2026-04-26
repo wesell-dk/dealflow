@@ -2230,13 +2230,17 @@ export const contractRegulatoryAssessmentsTable = pgTable("contract_regulatory_a
   applicabilityReason: text("applicability_reason"),
   // Compliance-Status pro Anforderung — Liste, weil im UI eingebettet
   // dargestellt: [{requirementId, status: 'met'|'partial'|'missing', note,
-  // suggestion, contractClauseId?}]
+  // suggestion, contractClauseId?, evidenceClauseIds?}].
+  // `contractClauseId` ist die historische Single-Anker-Spalte; neue Daten
+  // füllen zusätzlich `evidenceClauseIds` mit allen Belegklauseln, die das
+  // Frontend als klickbare Chips an die Klausel im Vertrag verlinkt.
   findings: jsonb("findings").$type<Array<{
     requirementId: string;
     status: "met" | "partial" | "missing";
     note: string;
     suggestion: string | null;
     contractClauseId: string | null;
+    evidenceClauseIds?: string[];
     snippet: string | null;
   }>>().notNull().default([]),
   // Aggregierter Status: compliant | partial | non_compliant | not_evaluated.

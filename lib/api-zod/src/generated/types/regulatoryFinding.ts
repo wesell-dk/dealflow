@@ -14,6 +14,11 @@ export interface RegulatoryFinding {
   status: RegulatoryFindingStatus;
   note: string;
   suggestion?: string | null;
+  /** Deprecated single-clause anchor kept for backwards compatibility. Prefer evidenceClauseIds, which supports multiple source clauses.
+   */
   contractClauseId?: string | null;
+  /** IDs of contract clauses that support / triggered this finding. Rendered as clickable chips in the regulatory panel that scroll to the referenced clause in the contract. May be empty when the requirement is missing entirely or no specific clause supplies the evidence.
+   */
+  evidenceClauseIds?: string[];
   snippet?: string | null;
 }

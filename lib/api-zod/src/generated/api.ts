@@ -8380,7 +8380,18 @@ export const ListContractRegulatoryAssessmentsResponse = zod.object({
           status: zod.enum(["met", "partial", "missing"]),
           note: zod.string(),
           suggestion: zod.union([zod.string(), zod.null()]).optional(),
-          contractClauseId: zod.union([zod.string(), zod.null()]).optional(),
+          contractClauseId: zod
+            .union([zod.string(), zod.null()])
+            .optional()
+            .describe(
+              "Deprecated single-clause anchor kept for backwards compatibility. Prefer evidenceClauseIds, which supports multiple source clauses.\n",
+            ),
+          evidenceClauseIds: zod
+            .array(zod.string())
+            .optional()
+            .describe(
+              "IDs of contract clauses that support \/ triggered this finding. Rendered as clickable chips in the regulatory panel that scroll to the referenced clause in the contract. May be empty when the requirement is missing entirely or no specific clause supplies the evidence.\n",
+            ),
           snippet: zod.union([zod.string(), zod.null()]).optional(),
         }),
       ),
@@ -8486,7 +8497,18 @@ export const RunContractRegulatoryCheckResponse = zod.object({
           status: zod.enum(["met", "partial", "missing"]),
           note: zod.string(),
           suggestion: zod.union([zod.string(), zod.null()]).optional(),
-          contractClauseId: zod.union([zod.string(), zod.null()]).optional(),
+          contractClauseId: zod
+            .union([zod.string(), zod.null()])
+            .optional()
+            .describe(
+              "Deprecated single-clause anchor kept for backwards compatibility. Prefer evidenceClauseIds, which supports multiple source clauses.\n",
+            ),
+          evidenceClauseIds: zod
+            .array(zod.string())
+            .optional()
+            .describe(
+              "IDs of contract clauses that support \/ triggered this finding. Rendered as clickable chips in the regulatory panel that scroll to the referenced clause in the contract. May be empty when the requirement is missing entirely or no specific clause supplies the evidence.\n",
+            ),
           snippet: zod.union([zod.string(), zod.null()]).optional(),
         }),
       ),
