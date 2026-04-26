@@ -2650,6 +2650,30 @@ paths:
               schema:
                 type: array
                 items: { $ref: "#/components/schemas/Negotiation" }
+    post:
+      operationId: createNegotiation
+      tags: [negotiations]
+      description: >
+        Idempotent. Wenn für den Deal bereits eine aktive Verhandlung
+        existiert, wird diese zurückgegeben (HTTP 200). Sonst wird eine
+        neue Verhandlung mit `status='active'`, `round=1`,
+        `riskLevel='low'` angelegt (HTTP 201).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CreateNegotiationInput" }
+      responses:
+        "200":
+          description: existing active negotiation returned
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Negotiation" }
+        "201":
+          description: created
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Negotiation" }
 
   /negotiations/{id}:
     get:
@@ -2750,6 +2774,32 @@ paths:
                   reactionId: { type: string }
                   quoteVersionId: { type: string }
                   version: { type: integer }
+
+  /negotiations/{id}/conclude:
+    post:
+      operationId: concludeNegotiation
+      tags: [negotiations]
+      description: >
+        Setzt eine Verhandlung manuell auf `concluded` und vermerkt
+        optional ein Outcome (z. B. nachdem eine neue Angebotsversion
+        akzeptiert wurde). Mehrfaches Aufrufen ist erlaubt — der jüngste
+        Outcome gewinnt.
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ConcludeNegotiationInput" }
+      responses:
+        "200":
+          description: ok
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Negotiation" }
 
   /negotiations/{id}/reactions/{reactionId}/request-approval:
     post:
@@ -8044,6 +8094,27 @@ components:
         lastReactionType: { type: string }
         updatedAt: { type: string, format: date-time }
         riskLevel: { type: string }
+        outcome:
+          type: ["string", "null"]
+          description: >
+            Optionales Outcome für abgeschlossene Verhandlungen
+            (`accepted`, `rejected`, `withdrawn`).
+        concludedAt:
+          type: ["string", "null"]
+          format: date-time
+
+    CreateNegotiationInput:
+      type: object
+      required: [dealId]
+      properties:
+        dealId: { type: string }
+
+    ConcludeNegotiationInput:
+      type: object
+      properties:
+        outcome:
+          type: string
+          enum: [accepted, rejected, withdrawn]
 
     NegotiationDetail:
       allOf:
@@ -8064,6 +8135,59 @@ components:
               oneOf:
                 - $ref: "#/components/schemas/NegotiationBaseline"
                 - type: "null"
+            quote:
+              description: >
+                Aktuelles, der Verhandlung zugeordnetes Angebot. NULL,
+                wenn der Deal noch kein Angebot hat.
+              oneOf:
+                - $ref: "#/components/schemas/NegotiationLinkedQuote"
+                - type: "null"
+            lineItems:
+              type: array
+              description: >
+                Line-Items der aktuellen Angebotsversion. Werden vom
+                Workspace für den Position-Picker benutzt.
+              items: { $ref: "#/components/schemas/NegotiationLineItem" }
+
+    NegotiationLinkedQuote:
+      type: object
+      required: [id, number, status, currentVersion, totalAmount, discountPct, marginPct, currency]
+      properties:
+        id: { type: string }
+        number: { type: string }
+        status: { type: string }
+        currentVersion: { type: integer }
+        totalAmount: { type: number }
+        discountPct: { type: number }
+        marginPct: { type: number }
+        currency: { type: string }
+
+    NegotiationLineItem:
+      type: object
+      required: [id, name, kind, sortOrder, quantity, unitPrice, listPrice, discountPct, total]
+      properties:
+        id: { type: string }
+        name: { type: string }
+        description: { type: ["string", "null"] }
+        kind: { type: string, enum: [item, heading] }
+        sortOrder: { type: integer }
+        quantity: { type: number }
+        unitPrice: { type: number }
+        listPrice: { type: number }
+        discountPct: { type: number }
+        total: { type: number }
+
+    AffectedLineItem:
+      type: object
+      required: [lineItemId, action]
+      properties:
+        lineItemId: { type: string }
+        action:
+          type: string
+          enum: [price, qty, discount, remove]
+        newPrice: { type: number }
+        newQty: { type: number }
+        discountPct: { type: number }
 
     CustomerReaction:
       type: object
@@ -8084,6 +8208,9 @@ components:
         requestedClauseVariantId: { type: ["string", "null"] }
         linkedQuoteVersionId: { type: ["string", "null"] }
         linkedApprovalId: { type: ["string", "null"] }
+        affectedLineItems:
+          type: array
+          items: { $ref: "#/components/schemas/AffectedLineItem" }
 
     ReactionInput:
       type: object
@@ -8099,6 +8226,9 @@ components:
         termMonthsDelta: { type: integer }
         paymentTermsDeltaDays: { type: integer }
         requestedClauseVariantId: { type: string }
+        affectedLineItems:
+          type: array
+          items: { $ref: "#/components/schemas/AffectedLineItem" }
 
     ApprovalFromReactionInput:
       type: object
@@ -8142,6 +8272,9 @@ components:
         termMonthsDelta: { type: integer }
         paymentTermsDeltaDays: { type: integer }
         requestedClauseVariantId: { type: string }
+        affectedLineItems:
+          type: array
+          items: { $ref: "#/components/schemas/AffectedLineItem" }
         createNewVersion: { type: boolean }
 
     NegotiationImpact:
@@ -8159,6 +8292,11 @@ components:
         requestedClauseVariantId: { type: ["string", "null"] }
         linkedQuoteVersionId: { type: ["string", "null"] }
         linkedApprovalId: { type: ["string", "null"] }
+        affectedLineItemsCount:
+          type: integer
+          description: >
+            Anzahl der von dieser Reaktion modifizierten Line-Items.
+            0 → Reaktion adressiert das Angebot als Ganzes (Quote-weit).
         followUps:
           type: array
           items: { type: string }

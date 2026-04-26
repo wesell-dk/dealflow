@@ -11,6 +11,8 @@ import type { CustomerReaction } from "./customerReaction";
 import type { Negotiation } from "./negotiation";
 import type { NegotiationBaseline } from "./negotiationBaseline";
 import type { NegotiationImpact } from "./negotiationImpact";
+import type { NegotiationLineItem } from "./negotiationLineItem";
+import type { NegotiationLinkedQuote } from "./negotiationLinkedQuote";
 import type { TimelineEvent } from "./timelineEvent";
 
 export type NegotiationDetail = Negotiation & {
@@ -18,4 +20,10 @@ export type NegotiationDetail = Negotiation & {
   timeline: TimelineEvent[];
   impacts: NegotiationImpact[];
   baseline?: NegotiationBaseline | null;
+  /** Aktuelles, der Verhandlung zugeordnetes Angebot. NULL, wenn der Deal noch kein Angebot hat.
+   */
+  quote?: NegotiationLinkedQuote | null;
+  /** Line-Items der aktuellen Angebotsversion. Werden vom Workspace für den Position-Picker benutzt.
+   */
+  lineItems?: NegotiationLineItem[];
 };

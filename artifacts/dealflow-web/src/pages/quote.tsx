@@ -7,9 +7,12 @@ import {
   usePatchQuote,
   useConvertQuoteToOrder,
   useTransitionQuote,
+  useListNegotiations,
+  useCreateNegotiation,
   getGetQuoteQueryKey,
   getListQuotesQueryKey,
   getListOrderConfirmationsQueryKey,
+  getListNegotiationsQueryKey,
 } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -53,6 +56,7 @@ import {
   XCircle,
   ChevronDown,
   History,
+  Handshake,
 } from "lucide-react";
 import { QuoteDuplicateButton } from "@/components/quotes/quote-duplicate-button";
 import { SendQuoteDialog } from "@/components/quotes/send-quote-dialog";
@@ -63,7 +67,7 @@ import { useTabState } from "@/hooks/use-tab-state";
 import { AiPromptPanel } from "@/components/copilot/ai-prompt-panel";
 import { ActivityTimeline } from "@/components/patterns/activity-timeline";
 import { Breadcrumbs } from "@/components/patterns/breadcrumbs";
-import { QuoteStatusBadge } from "@/components/patterns/status-badges";
+import { QuoteStatusBadge, NegotiationReactionBadge, RiskBadge } from "@/components/patterns/status-badges";
 
 type TransitionTarget = "sent" | "accepted" | "rejected";
 
@@ -75,6 +79,13 @@ export default function Quote() {
   const [, navigate] = useLocation();
   const id = params.id as string;
   const { data: quote, isLoading } = useGetQuote(id);
+  const dealId = quote?.dealId ?? "";
+  const { data: dealNegotiations } = useListNegotiations(
+    { dealId },
+    { query: { enabled: !!dealId, queryKey: ["dealNegotiations", dealId] } },
+  );
+  const activeNegotiation = (dealNegotiations ?? []).find(n => n.status === "active");
+  const createNegotiation = useCreateNegotiation();
   const versionId = quote?.versions?.[0]?.id ?? "";
   const { data: attachments } = useListQuoteAttachments(versionId, {
     query: { enabled: !!versionId, queryKey: ["quoteAttachments", versionId] },
@@ -165,6 +176,23 @@ export default function Quote() {
     await runTransition("rejected", reason || undefined);
   }
 
+  async function startNegotiation() {
+    if (!dealId) return;
+    if (activeNegotiation) {
+      navigate(`/negotiations/${activeNegotiation.id}`);
+      return;
+    }
+    try {
+      const n = await createNegotiation.mutateAsync({ data: { dealId } });
+      await qc.invalidateQueries({ queryKey: getListNegotiationsQueryKey() });
+      await qc.invalidateQueries({ queryKey: ["dealNegotiations", dealId] });
+      toast({ description: t("pages.quote.negotiation.startedToast") });
+      navigate(`/negotiations/${n.id}`);
+    } catch (e) {
+      toast({ title: "Error", description: e instanceof Error ? e.message : String(e), variant: "destructive" });
+    }
+  }
+
   if (isLoading) return <div className="p-8"><Skeleton className="h-64 w-full" /></div>;
   if (!quote) return <div className="p-8">Quote not found</div>;
 
@@ -236,6 +264,44 @@ export default function Quote() {
               language={quote.language === "en" ? "en" : "de"}
             />
             <QuoteDuplicateButton quoteId={quote.id} quoteNumber={quote.number} />
+            {activeNegotiation ? (
+              <div
+                className="flex items-center gap-1.5"
+                data-testid="quote-active-negotiation-badge"
+              >
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => navigate(`/negotiations/${activeNegotiation.id}`)}
+                  data-testid="quote-open-negotiation-btn"
+                >
+                  <Handshake className="h-4 w-4 mr-2" />
+                  {t("pages.quote.negotiation.openActive")}
+                  <Badge variant="secondary" className="ml-2 h-5">
+                    {t("pages.negotiations.round", { n: activeNegotiation.round })}
+                  </Badge>
+                </Button>
+                <NegotiationReactionBadge
+                  type={activeNegotiation.lastReactionType}
+                  testId="quote-negotiation-last-reaction"
+                />
+                <RiskBadge
+                  risk={activeNegotiation.riskLevel}
+                  testId="quote-negotiation-risk"
+                />
+              </div>
+            ) : (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={startNegotiation}
+                disabled={createNegotiation.isPending}
+                data-testid="quote-start-negotiation-btn"
+              >
+                <Handshake className="h-4 w-4 mr-2" />
+                {t("pages.quote.negotiation.start")}
+              </Button>
+            )}
             {canConvert && (
               <Button
                 size="sm"

@@ -2037,6 +2037,13 @@ export const GetDealResponse = zod
           lastReactionType: zod.string(),
           updatedAt: zod.coerce.date(),
           riskLevel: zod.string(),
+          outcome: zod
+            .string()
+            .nullish()
+            .describe(
+              "Optionales Outcome für abgeschlossene Verhandlungen (`accepted`, `rejected`, `withdrawn`).\n",
+            ),
+          concludedAt: zod.coerce.date().nullish(),
         }),
       ),
     }),
@@ -4862,8 +4869,41 @@ export const ListNegotiationsResponseItem = zod.object({
   lastReactionType: zod.string(),
   updatedAt: zod.coerce.date(),
   riskLevel: zod.string(),
+  outcome: zod
+    .string()
+    .nullish()
+    .describe(
+      "Optionales Outcome für abgeschlossene Verhandlungen (`accepted`, `rejected`, `withdrawn`).\n",
+    ),
+  concludedAt: zod.coerce.date().nullish(),
 });
 export const ListNegotiationsResponse = zod.array(ListNegotiationsResponseItem);
+
+/**
+ * Idempotent. Wenn für den Deal bereits eine aktive Verhandlung existiert, wird diese zurückgegeben (HTTP 200). Sonst wird eine neue Verhandlung mit `status='active'`, `round=1`, `riskLevel='low'` angelegt (HTTP 201).
+
+ */
+export const CreateNegotiationBody = zod.object({
+  dealId: zod.string(),
+});
+
+export const CreateNegotiationResponse = zod.object({
+  id: zod.string(),
+  dealId: zod.string(),
+  dealName: zod.string(),
+  status: zod.string(),
+  round: zod.number(),
+  lastReactionType: zod.string(),
+  updatedAt: zod.coerce.date(),
+  riskLevel: zod.string(),
+  outcome: zod
+    .string()
+    .nullish()
+    .describe(
+      "Optionales Outcome für abgeschlossene Verhandlungen (`accepted`, `rejected`, `withdrawn`).\n",
+    ),
+  concludedAt: zod.coerce.date().nullish(),
+});
 
 export const GetNegotiationParams = zod.object({
   id: zod.coerce.string(),
@@ -4879,6 +4919,13 @@ export const GetNegotiationResponse = zod
     lastReactionType: zod.string(),
     updatedAt: zod.coerce.date(),
     riskLevel: zod.string(),
+    outcome: zod
+      .string()
+      .nullish()
+      .describe(
+        "Optionales Outcome für abgeschlossene Verhandlungen (`accepted`, `rejected`, `withdrawn`).\n",
+      ),
+    concludedAt: zod.coerce.date().nullish(),
   })
   .and(
     zod.object({
@@ -4899,6 +4946,17 @@ export const GetNegotiationResponse = zod
           requestedClauseVariantId: zod.string().nullish(),
           linkedQuoteVersionId: zod.string().nullish(),
           linkedApprovalId: zod.string().nullish(),
+          affectedLineItems: zod
+            .array(
+              zod.object({
+                lineItemId: zod.string(),
+                action: zod.enum(["price", "qty", "discount", "remove"]),
+                newPrice: zod.number().optional(),
+                newQty: zod.number().optional(),
+                discountPct: zod.number().optional(),
+              }),
+            )
+            .optional(),
         }),
       ),
       timeline: zod.array(
@@ -4926,6 +4984,12 @@ export const GetNegotiationResponse = zod
           requestedClauseVariantId: zod.string().nullish(),
           linkedQuoteVersionId: zod.string().nullish(),
           linkedApprovalId: zod.string().nullish(),
+          affectedLineItemsCount: zod
+            .number()
+            .optional()
+            .describe(
+              "Anzahl der von dieser Reaktion modifizierten Line-Items. 0 → Reaktion adressiert das Angebot als Ganzes (Quote-weit).\n",
+            ),
           followUps: zod.array(zod.string()),
           approvalsTriggered: zod.array(
             zod.object({
@@ -4946,6 +5010,43 @@ export const GetNegotiationResponse = zod
           zod.null(),
         ])
         .optional(),
+      quote: zod
+        .union([
+          zod.object({
+            id: zod.string(),
+            number: zod.string(),
+            status: zod.string(),
+            currentVersion: zod.number(),
+            totalAmount: zod.number(),
+            discountPct: zod.number(),
+            marginPct: zod.number(),
+            currency: zod.string(),
+          }),
+          zod.null(),
+        ])
+        .optional()
+        .describe(
+          "Aktuelles, der Verhandlung zugeordnetes Angebot. NULL, wenn der Deal noch kein Angebot hat.\n",
+        ),
+      lineItems: zod
+        .array(
+          zod.object({
+            id: zod.string(),
+            name: zod.string(),
+            description: zod.string().nullish(),
+            kind: zod.enum(["item", "heading"]),
+            sortOrder: zod.number(),
+            quantity: zod.number(),
+            unitPrice: zod.number(),
+            listPrice: zod.number(),
+            discountPct: zod.number(),
+            total: zod.number(),
+          }),
+        )
+        .optional()
+        .describe(
+          "Line-Items der aktuellen Angebotsversion. Werden vom Workspace für den Position-Picker benutzt.\n",
+        ),
     }),
   );
 
@@ -4964,6 +5065,17 @@ export const AddCustomerReactionBody = zod.object({
   termMonthsDelta: zod.number().optional(),
   paymentTermsDeltaDays: zod.number().optional(),
   requestedClauseVariantId: zod.string().optional(),
+  affectedLineItems: zod
+    .array(
+      zod.object({
+        lineItemId: zod.string(),
+        action: zod.enum(["price", "qty", "discount", "remove"]),
+        newPrice: zod.number().optional(),
+        newQty: zod.number().optional(),
+        discountPct: zod.number().optional(),
+      }),
+    )
+    .optional(),
 });
 
 export const GetNegotiationImpactParams = zod.object({
@@ -4996,6 +5108,12 @@ export const GetNegotiationImpactResponse = zod.object({
       requestedClauseVariantId: zod.string().nullish(),
       linkedQuoteVersionId: zod.string().nullish(),
       linkedApprovalId: zod.string().nullish(),
+      affectedLineItemsCount: zod
+        .number()
+        .optional()
+        .describe(
+          "Anzahl der von dieser Reaktion modifizierten Line-Items. 0 → Reaktion adressiert das Angebot als Ganzes (Quote-weit).\n",
+        ),
       followUps: zod.array(zod.string()),
       approvalsTriggered: zod.array(
         zod.object({
@@ -5021,12 +5139,53 @@ export const CreateCounterproposalBody = zod.object({
   termMonthsDelta: zod.number().optional(),
   paymentTermsDeltaDays: zod.number().optional(),
   requestedClauseVariantId: zod.string().optional(),
+  affectedLineItems: zod
+    .array(
+      zod.object({
+        lineItemId: zod.string(),
+        action: zod.enum(["price", "qty", "discount", "remove"]),
+        newPrice: zod.number().optional(),
+        newQty: zod.number().optional(),
+        discountPct: zod.number().optional(),
+      }),
+    )
+    .optional(),
   createNewVersion: zod.boolean().optional(),
 });
 
 export const CreateVersionFromReactionParams = zod.object({
   id: zod.coerce.string(),
   reactionId: zod.coerce.string(),
+});
+
+/**
+ * Setzt eine Verhandlung manuell auf `concluded` und vermerkt optional ein Outcome (z. B. nachdem eine neue Angebotsversion akzeptiert wurde). Mehrfaches Aufrufen ist erlaubt — der jüngste Outcome gewinnt.
+
+ */
+export const ConcludeNegotiationParams = zod.object({
+  id: zod.coerce.string(),
+});
+
+export const ConcludeNegotiationBody = zod.object({
+  outcome: zod.enum(["accepted", "rejected", "withdrawn"]).optional(),
+});
+
+export const ConcludeNegotiationResponse = zod.object({
+  id: zod.string(),
+  dealId: zod.string(),
+  dealName: zod.string(),
+  status: zod.string(),
+  round: zod.number(),
+  lastReactionType: zod.string(),
+  updatedAt: zod.coerce.date(),
+  riskLevel: zod.string(),
+  outcome: zod
+    .string()
+    .nullish()
+    .describe(
+      "Optionales Outcome für abgeschlossene Verhandlungen (`accepted`, `rejected`, `withdrawn`).\n",
+    ),
+  concludedAt: zod.coerce.date().nullish(),
 });
 
 export const RequestApprovalFromReactionParams = zod.object({

@@ -126,6 +126,8 @@
     "company_one": "Gesellschaft",
     "brand_one": "Brand",
     "search": "Suchen",
+    "add": "Hinzufügen",
+    "none": "Keine",
     "bulk": {
       "selectAllOnPage": "Alle auf dieser Seite auswählen",
       "selectRow": "{{name}} auswählen"
@@ -503,7 +505,12 @@
         "rejected": "Angebot abgelehnt"
       },
       "edit": "Bearbeiten",
-      "backToOverview": "Zur Übersicht"
+      "backToOverview": "Zur Übersicht",
+      "negotiation": {
+        "start": "Verhandlung starten",
+        "openActive": "Verhandlung öffnen",
+        "startedToast": "Verhandlung gestartet"
+      }
     },
     "quotesNew": {
       "title": "Neues Angebot",
@@ -927,6 +934,134 @@
       "errorAiFailed": "KI-Segmentierung fehlgeschlagen.",
       "errorGeneric": "Ein Fehler ist aufgetreten."
     },
+    "deal": {
+      "negotiation": {
+        "start": "Verhandlung starten",
+        "openActive": "Verhandlung öffnen",
+        "startedToast": "Verhandlung gestartet"
+      }
+    },
+    "negotiation": {
+      "notFound": "Verhandlung nicht gefunden",
+      "statusActive": "Aktiv",
+      "risk": "Risiko: {{level}}",
+      "baseline": "Basis: {{total}} · Rabatt {{discount}}% · Marge {{margin}}%",
+      "timeline": "Timeline",
+      "noEvents": "Keine Events.",
+      "reactions": "Kundenreaktionen & Impact",
+      "empty": "Noch keine Reaktionen erfasst.",
+      "impact": "Impact-Analyse",
+      "riskTrend": "Risiko {{dir}}",
+      "affectedItems": "{{count}} betroffene Position(en)",
+      "affectedItemsShort": "{{count}} Pos.",
+      "actions": {
+        "title": "Schnellaktionen",
+        "objection": {
+          "title": "Position bemängeln",
+          "hint": "Position(en) auswählen und Kritikpunkt erfassen.",
+          "description": "Erfasse, welche Positionen vom Kunden bemängelt wurden."
+        },
+        "counterproposal": {
+          "title": "Gegenvorschlag",
+          "hint": "Strukturierte Forderung mit Preis-/Laufzeit-Δ.",
+          "description": "Strukturierter Gegenvorschlag des Kunden mit konkreten Δ-Werten."
+        },
+        "question": {
+          "title": "Frage / Einwand",
+          "hint": "Offene Frage oder allgemeiner Einwand.",
+          "description": "Allgemeine Frage oder Einwand ohne konkrete Forderung."
+        },
+        "acceptance": {
+          "title": "Akzeptanz",
+          "hint": "Kunde akzeptiert (ggf. mit Bedingungen).",
+          "description": "Akzeptanz des Angebots – ggf. mit Auflagen."
+        }
+      },
+      "fields": {
+        "topic": "Thema",
+        "summary": "Zusammenfassung",
+        "source": "Quelle",
+        "priority": "Priorität",
+        "structured": "Strukturierte Forderung",
+        "priceDelta": "Preis Δ %",
+        "termDelta": "Laufzeit Δ (Mon.)",
+        "paymentDelta": "Zahlungsziel Δ (Tage)",
+        "createNewVersion": "Neue Angebotsversion direkt erstellen",
+        "clauseVariant": "Klausel-Variante",
+        "pickClause": "Variante wählen…",
+        "affectedItems": "Betroffene Positionen",
+        "pickItem": "Position wählen…",
+        "noItems": "Keine Positionen verfügbar",
+        "price": "Preis",
+        "newDiscount": "Neuer Rabatt",
+        "margin": "Marge",
+        "term": "Laufzeit",
+        "paymentTerms": "Zahlungsziel",
+        "clauseSwap": "Klausel-Wechsel",
+        "scope": "Umfang",
+        "aggregateImpact": "Auswirkung auf das Angebot"
+      },
+      "priority": {
+        "low": "Niedrig",
+        "medium": "Mittel",
+        "high": "Hoch"
+      },
+      "lineItem": {
+        "actions": {
+          "price": "Preis ändern",
+          "qty": "Menge ändern",
+          "discount": "Rabatt ändern",
+          "remove": "Entfernen"
+        },
+        "alt": "Alt",
+        "neu": "Neu",
+        "removeNote": "Position wird entfernt"
+      },
+      "units": {
+        "months": "Mon.",
+        "days": "Tage"
+      },
+      "cta": {
+        "newVersion": "Neue Angebotsversion",
+        "versionLinked": "Version {{id}}",
+        "requestApproval": "Approval anfordern",
+        "approvalLinked": "Approval {{id}}",
+        "saveAndCreateVersion": "Speichern & neue Version"
+      },
+      "quote": {
+        "total": "Volumen",
+        "discount": "Rabatt",
+        "margin": "Marge"
+      },
+      "conclude": {
+        "button": "Abschließen",
+        "title": "Verhandlung abschließen",
+        "description": "Wähle das Ergebnis – die Verhandlung wird geschlossen.",
+        "outcomes": {
+          "accepted": "Akzeptiert",
+          "rejected": "Abgelehnt",
+          "withdrawn": "Zurückgezogen"
+        },
+        "toasts": {
+          "accepted": "Verhandlung als akzeptiert geschlossen.",
+          "rejected": "Verhandlung als abgelehnt geschlossen.",
+          "withdrawn": "Verhandlung pausiert.",
+          "error": "Abschluss fehlgeschlagen"
+        }
+      },
+      "toasts": {
+        "reactionSaved": "Reaktion erfasst",
+        "reactionWithVersion": "Reaktion erfasst – neue Angebotsversion erstellt",
+        "counterSaved": "Gegenvorschlag erfasst",
+        "counterWithVersion": "Gegenvorschlag + neue Version erstellt",
+        "saveError": "Fehler beim Speichern",
+        "newVersion": "Neue Angebotsversion erstellt",
+        "newVersionError": "Version konnte nicht erstellt werden",
+        "approvalRequested": "Approval angefordert",
+        "approvalError": "Approval konnte nicht angefordert werden",
+        "redirecting": "Weiterleitung zur Approval-Hub…"
+      }
+    },
     "negotiations": {
       "title": "Verhandlungen",
       "subtitle": "Aktive Verhandlungen und Kundenreaktionen verwalten.",
@@ -935,6 +1070,17 @@
       "tabConcluded": "Abgeschlossen",
       "tabAll": "Alle",
       "round": "Runde {{n}}",
+      "startFromQuote": "Verhandlung aus Angebot starten",
+      "startedToast": "Verhandlung gestartet",
+      "startDialog": {
+        "title": "Verhandlung aus Angebot starten",
+        "description": "Wähle ein offenes Angebot – wir öffnen eine neue Verhandlung dafür.",
+        "searchPlaceholder": "Deal oder Angebotsnummer suchen…",
+        "noQuotes": "Keine offenen Angebote (Entwurf oder versendet) vorhanden.",
+        "alreadyActive": "bereits aktiv",
+        "openExisting": "Bestehende öffnen",
+        "confirm": "Verhandlung öffnen"
+      },
       "emptyTitle": "Keine Verhandlungen",
       "emptyBody": "Verhandlungen entstehen, sobald ein Kunde auf ein Angebot mit Einwand oder Gegenvorschlag reagiert.",
       "emptyHint": "Tipp: Wechsle den Filter auf „Alle“, um auch abgeschlossene Verhandlungen zu sehen.",

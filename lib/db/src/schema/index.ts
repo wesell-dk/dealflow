@@ -991,8 +991,25 @@ export const negotiationsTable = pgTable("negotiations", {
   round: integer("round").notNull().default(1),
   lastReactionType: text("last_reaction_type").notNull(),
   riskLevel: text("risk_level").notNull(),
+  // Optional outcome when status='concluded'
+  outcome: text("outcome"),
+  concludedAt: timestamp("concluded_at", { withTimezone: true }),
   updatedAt: ts("updated_at"),
 });
+
+// Strukturierte Beschreibung welche Line-Items eine Reaktion betrifft.
+// `action` beschreibt was der Kunde mit der Position machen will:
+//   - 'price'    → newPrice setzt einen neuen Einzelpreis
+//   - 'qty'      → newQty setzt eine neue Menge
+//   - 'discount' → discountPct setzt einen Positions-Rabatt in %
+//   - 'remove'   → Position vollständig entfernen
+export type AffectedLineItem = {
+  lineItemId: string;
+  action: "price" | "qty" | "discount" | "remove";
+  newPrice?: number;
+  newQty?: number;
+  discountPct?: number;
+};
 
 export const customerReactionsTable = pgTable("customer_reactions", {
   id: id(),
@@ -1009,6 +1026,7 @@ export const customerReactionsTable = pgTable("customer_reactions", {
   requestedClauseVariantId: text("requested_clause_variant_id"),
   linkedQuoteVersionId: text("linked_quote_version_id"),
   linkedApprovalId: text("linked_approval_id"),
+  affectedLineItems: jsonb("affected_line_items").$type<AffectedLineItem[]>(),
   createdAt: ts("created_at"),
 });
 

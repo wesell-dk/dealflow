@@ -126,6 +126,8 @@
     "company_one": "Company",
     "brand_one": "Brand",
     "search": "Search",
+    "add": "Add",
+    "none": "None",
     "bulk": {
       "selectAllOnPage": "Select all on this page",
       "selectRow": "Select {{name}}"
@@ -503,7 +505,12 @@
         "rejected": "Quote rejected"
       },
       "edit": "Edit",
-      "backToOverview": "Back to overview"
+      "backToOverview": "Back to overview",
+      "negotiation": {
+        "start": "Start negotiation",
+        "openActive": "Open negotiation",
+        "startedToast": "Negotiation started"
+      }
     },
     "quotesNew": {
       "title": "New Quote",
@@ -917,6 +924,134 @@
         "createFailed": "Create failed"
       }
     },
+    "deal": {
+      "negotiation": {
+        "start": "Start negotiation",
+        "openActive": "Open negotiation",
+        "startedToast": "Negotiation started"
+      }
+    },
+    "negotiation": {
+      "notFound": "Negotiation not found",
+      "statusActive": "Active",
+      "risk": "Risk: {{level}}",
+      "baseline": "Baseline: {{total}} · discount {{discount}}% · margin {{margin}}%",
+      "timeline": "Timeline",
+      "noEvents": "No events.",
+      "reactions": "Customer reactions & impact",
+      "empty": "No reactions captured yet.",
+      "impact": "Impact analysis",
+      "riskTrend": "Risk {{dir}}",
+      "affectedItems": "{{count}} affected line item(s)",
+      "affectedItemsShort": "{{count}} item(s)",
+      "actions": {
+        "title": "Quick actions",
+        "objection": {
+          "title": "Object to line item",
+          "hint": "Pick line item(s) and capture the objection.",
+          "description": "Capture which line items the customer pushed back on."
+        },
+        "counterproposal": {
+          "title": "Counter-proposal",
+          "hint": "Structured demand with price/term deltas.",
+          "description": "Customer's structured counter-proposal with concrete deltas."
+        },
+        "question": {
+          "title": "Question / objection",
+          "hint": "Open question or general objection.",
+          "description": "General question or objection without a concrete demand."
+        },
+        "acceptance": {
+          "title": "Acceptance",
+          "hint": "Customer accepts (possibly conditional).",
+          "description": "Acceptance of the quote – optionally with conditions."
+        }
+      },
+      "fields": {
+        "topic": "Topic",
+        "summary": "Summary",
+        "source": "Source",
+        "priority": "Priority",
+        "structured": "Structured demand",
+        "priceDelta": "Price Δ %",
+        "termDelta": "Term Δ (months)",
+        "paymentDelta": "Payment terms Δ (days)",
+        "createNewVersion": "Create new quote version directly",
+        "clauseVariant": "Clause variant",
+        "pickClause": "Pick variant…",
+        "affectedItems": "Affected line items",
+        "pickItem": "Pick line item…",
+        "noItems": "No line items available",
+        "price": "Price",
+        "newDiscount": "New discount",
+        "margin": "Margin",
+        "term": "Term",
+        "paymentTerms": "Payment terms",
+        "clauseSwap": "Clause swap",
+        "scope": "Scope",
+        "aggregateImpact": "Impact on the quote"
+      },
+      "priority": {
+        "low": "Low",
+        "medium": "Medium",
+        "high": "High"
+      },
+      "lineItem": {
+        "actions": {
+          "price": "Change price",
+          "qty": "Change quantity",
+          "discount": "Change discount",
+          "remove": "Remove"
+        },
+        "alt": "Old",
+        "neu": "New",
+        "removeNote": "Item will be removed"
+      },
+      "units": {
+        "months": "mo.",
+        "days": "days"
+      },
+      "cta": {
+        "newVersion": "New quote version",
+        "versionLinked": "Version {{id}}",
+        "requestApproval": "Request approval",
+        "approvalLinked": "Approval {{id}}",
+        "saveAndCreateVersion": "Save & create version"
+      },
+      "quote": {
+        "total": "Total",
+        "discount": "Discount",
+        "margin": "Margin"
+      },
+      "conclude": {
+        "button": "Conclude",
+        "title": "Conclude negotiation",
+        "description": "Pick the outcome – the negotiation will be closed.",
+        "outcomes": {
+          "accepted": "Accepted",
+          "rejected": "Rejected",
+          "withdrawn": "Withdrawn"
+        },
+        "toasts": {
+          "accepted": "Negotiation closed as accepted.",
+          "rejected": "Negotiation closed as rejected.",
+          "withdrawn": "Negotiation paused.",
+          "error": "Conclude failed"
+        }
+      },
+      "toasts": {
+        "reactionSaved": "Reaction captured",
+        "reactionWithVersion": "Reaction captured – new quote version created",
+        "counterSaved": "Counter-proposal captured",
+        "counterWithVersion": "Counter-proposal + new version created",
+        "saveError": "Save failed",
+        "newVersion": "New quote version created",
+        "newVersionError": "Could not create version",
+        "approvalRequested": "Approval requested",
+        "approvalError": "Could not request approval",
+        "redirecting": "Redirecting to approval hub…"
+      }
+    },
     "negotiations": {
       "title": "Negotiations",
       "subtitle": "Manage active deal negotiations and customer reactions.",
@@ -925,6 +1060,17 @@
       "tabConcluded": "Concluded",
       "tabAll": "All",
       "round": "Round {{n}}",
+      "startFromQuote": "Start negotiation from quote",
+      "startedToast": "Negotiation started",
+      "startDialog": {
+        "title": "Start negotiation from quote",
+        "description": "Pick an open quote – we'll open a new negotiation for it.",
+        "searchPlaceholder": "Search deal or quote number…",
+        "noQuotes": "No open quotes (draft or sent) available.",
+        "alreadyActive": "already active",
+        "openExisting": "Open existing",
+        "confirm": "Open negotiation"
+      },
       "emptyTitle": "No negotiations",
       "emptyBody": "Negotiations appear once a customer responds to a quote with an objection or counter-proposal.",
       "emptyHint": "Tip: switch the filter to “All” to also see concluded negotiations.",

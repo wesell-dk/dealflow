@@ -1,14 +1,16 @@
 import { useState } from "react";
-import { useParams } from "wouter";
+import { useLocation, useParams } from "wouter";
 import { useTranslation } from "react-i18next";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   useGetDeal,
   useUpdateDeal,
   useGetDealPipeline,
+  useCreateNegotiation,
   getGetDealQueryKey,
   getListDealsQueryKey,
   getGetDealPipelineQueryKey,
+  getListNegotiationsQueryKey,
   type DealPatch,
 } from "@workspace/api-client-react";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -16,7 +18,7 @@ import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Plus } from "lucide-react";
+import { Plus, Handshake } from "lucide-react";
 import { QuoteWizard } from "@/components/quote-wizard";
 import { InlineEditField } from "@/components/patterns/inline-edit-field";
 import { ActivityTimeline } from "@/components/patterns/activity-timeline";
@@ -24,6 +26,7 @@ import { useTrackRecent } from "@/hooks/use-recents";
 import { useToast } from "@/hooks/use-toast";
 import { AiPromptPanel } from "@/components/copilot/ai-prompt-panel";
 import { Breadcrumbs } from "@/components/patterns/breadcrumbs";
+import { NegotiationReactionBadge, RiskBadge } from "@/components/patterns/status-badges";
 
 export default function Deal() {
   const { t } = useTranslation();
@@ -31,9 +34,11 @@ export default function Deal() {
   const id = params.id as string;
   const qc = useQueryClient();
   const { toast } = useToast();
+  const [, navigate] = useLocation();
   const { data: deal, isLoading } = useGetDeal(id);
   const { data: pipeline } = useGetDealPipeline();
   const updateDeal = useUpdateDeal();
+  const createNegotiation = useCreateNegotiation();
   const [wizardOpen, setWizardOpen] = useState(false);
 
   useTrackRecent(deal ? { kind: "deal", id: deal.id, label: deal.name, href: `/deals/${deal.id}` } : null);
@@ -59,6 +64,27 @@ export default function Deal() {
     }
   }
 
+  const activeNegotiation = (deal?.negotiations ?? []).find(n => n.status === "active");
+
+  async function startNegotiation() {
+    if (!deal) return;
+    if (activeNegotiation) {
+      navigate(`/negotiations/${activeNegotiation.id}`);
+      return;
+    }
+    try {
+      const n = await createNegotiation.mutateAsync({ data: { dealId: deal.id } });
+      await Promise.all([
+        qc.invalidateQueries({ queryKey: getGetDealQueryKey(id) }),
+        qc.invalidateQueries({ queryKey: getListNegotiationsQueryKey() }),
+      ]);
+      toast({ description: t("pages.deal.negotiation.startedToast") });
+      navigate(`/negotiations/${n.id}`);
+    } catch (e) {
+      toast({ title: "Fehler", description: e instanceof Error ? e.message : "", variant: "destructive" });
+    }
+  }
+
   return (
     <div className="flex flex-col gap-6">
       <Breadcrumbs
@@ -79,6 +105,42 @@ export default function Deal() {
             />
           </h1>
           <div className="flex items-center gap-2">
+            {activeNegotiation ? (
+              <div
+                className="flex items-center gap-1.5"
+                data-testid="deal-active-negotiation-badge"
+              >
+                <Button
+                  variant="outline"
+                  onClick={() => navigate(`/negotiations/${activeNegotiation.id}`)}
+                  data-testid="deal-open-negotiation-btn"
+                >
+                  <Handshake className="h-4 w-4 mr-1" />
+                  {t("pages.deal.negotiation.openActive")}
+                  <Badge variant="secondary" className="ml-2 h-5">
+                    {t("pages.negotiations.round", { n: activeNegotiation.round })}
+                  </Badge>
+                </Button>
+                <NegotiationReactionBadge
+                  type={activeNegotiation.lastReactionType}
+                  testId="deal-negotiation-last-reaction"
+                />
+                <RiskBadge
+                  risk={activeNegotiation.riskLevel}
+                  testId="deal-negotiation-risk"
+                />
+              </div>
+            ) : (
+              <Button
+                variant="outline"
+                onClick={startNegotiation}
+                disabled={createNegotiation.isPending}
+                data-testid="deal-start-negotiation-btn"
+              >
+                <Handshake className="h-4 w-4 mr-1" />
+                {t("pages.deal.negotiation.start")}
+              </Button>
+            )}
             <Button onClick={() => setWizardOpen(true)} data-testid="deal-new-quote-button">
               <Plus className="h-4 w-4 mr-1" /> Neues Quote
             </Button>

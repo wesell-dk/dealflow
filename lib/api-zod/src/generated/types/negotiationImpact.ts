@@ -32,6 +32,9 @@ export interface NegotiationImpact {
   linkedQuoteVersionId?: string | null;
   /** @nullable */
   linkedApprovalId?: string | null;
+  /** Anzahl der von dieser Reaktion modifizierten Line-Items. 0 → Reaktion adressiert das Angebot als Ganzes (Quote-weit).
+   */
+  affectedLineItemsCount?: number;
   followUps: string[];
   approvalsTriggered: NegotiationImpactApprovalsTriggeredItem[];
   riskTrend: NegotiationImpactRiskTrend;

@@ -1849,6 +1849,14 @@ export interface Negotiation {
   lastReactionType: string;
   updatedAt: string;
   riskLevel: string;
+  /**
+   * Optionales Outcome für abgeschlossene Verhandlungen (`accepted`, `rejected`, `withdrawn`).
+
+   * @nullable
+   */
+  outcome?: string | null;
+  /** @nullable */
+  concludedAt?: string | null;
 }
 
 export type DealDetail = Deal & {
@@ -3052,6 +3060,41 @@ export interface EffectiveContractState {
   appliedAmendments: ContractAmendment[];
 }
 
+export interface CreateNegotiationInput {
+  dealId: string;
+}
+
+export type ConcludeNegotiationInputOutcome =
+  (typeof ConcludeNegotiationInputOutcome)[keyof typeof ConcludeNegotiationInputOutcome];
+
+export const ConcludeNegotiationInputOutcome = {
+  accepted: "accepted",
+  rejected: "rejected",
+  withdrawn: "withdrawn",
+} as const;
+
+export interface ConcludeNegotiationInput {
+  outcome?: ConcludeNegotiationInputOutcome;
+}
+
+export type AffectedLineItemAction =
+  (typeof AffectedLineItemAction)[keyof typeof AffectedLineItemAction];
+
+export const AffectedLineItemAction = {
+  price: "price",
+  qty: "qty",
+  discount: "discount",
+  remove: "remove",
+} as const;
+
+export interface AffectedLineItem {
+  lineItemId: string;
+  action: AffectedLineItemAction;
+  newPrice?: number;
+  newQty?: number;
+  discountPct?: number;
+}
+
 export interface CustomerReaction {
   id: string;
   negotiationId: string;
@@ -3075,6 +3118,7 @@ export interface CustomerReaction {
   linkedQuoteVersionId?: string | null;
   /** @nullable */
   linkedApprovalId?: string | null;
+  affectedLineItems?: AffectedLineItem[];
 }
 
 export type NegotiationImpactRiskTrend =
@@ -3113,6 +3157,9 @@ export interface NegotiationImpact {
   linkedQuoteVersionId?: string | null;
   /** @nullable */
   linkedApprovalId?: string | null;
+  /** Anzahl der von dieser Reaktion modifizierten Line-Items. 0 → Reaktion adressiert das Angebot als Ganzes (Quote-weit).
+   */
+  affectedLineItemsCount?: number;
   followUps: string[];
   approvalsTriggered: NegotiationImpactApprovalsTriggeredItem[];
   riskTrend: NegotiationImpactRiskTrend;
@@ -3124,11 +3171,50 @@ export interface NegotiationBaseline {
   marginPct: number;
 }
 
+export interface NegotiationLinkedQuote {
+  id: string;
+  number: string;
+  status: string;
+  currentVersion: number;
+  totalAmount: number;
+  discountPct: number;
+  marginPct: number;
+  currency: string;
+}
+
+export type NegotiationLineItemKind =
+  (typeof NegotiationLineItemKind)[keyof typeof NegotiationLineItemKind];
+
+export const NegotiationLineItemKind = {
+  item: "item",
+  heading: "heading",
+} as const;
+
+export interface NegotiationLineItem {
+  id: string;
+  name: string;
+  /** @nullable */
+  description?: string | null;
+  kind: NegotiationLineItemKind;
+  sortOrder: number;
+  quantity: number;
+  unitPrice: number;
+  listPrice: number;
+  discountPct: number;
+  total: number;
+}
+
 export type NegotiationDetail = Negotiation & {
   reactions: CustomerReaction[];
   timeline: TimelineEvent[];
   impacts: NegotiationImpact[];
   baseline?: NegotiationBaseline | null;
+  /** Aktuelles, der Verhandlung zugeordnetes Angebot. NULL, wenn der Deal noch kein Angebot hat.
+   */
+  quote?: NegotiationLinkedQuote | null;
+  /** Line-Items der aktuellen Angebotsversion. Werden vom Workspace für den Position-Picker benutzt.
+   */
+  lineItems?: NegotiationLineItem[];
 };
 
 export interface ReactionInput {
@@ -3142,6 +3228,7 @@ export interface ReactionInput {
   termMonthsDelta?: number;
   paymentTermsDeltaDays?: number;
   requestedClauseVariantId?: string;
+  affectedLineItems?: AffectedLineItem[];
 }
 
 export interface ApprovalFromReactionInput {
@@ -3184,6 +3271,7 @@ export interface CounterproposalInput {
   termMonthsDelta?: number;
   paymentTermsDeltaDays?: number;
   requestedClauseVariantId?: string;
+  affectedLineItems?: AffectedLineItem[];
   createNewVersion?: boolean;
 }
 

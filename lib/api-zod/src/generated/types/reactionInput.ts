@@ -7,6 +7,7 @@ Multi-tenant, multi-company, multi-brand. Deal-centric.
 
  * OpenAPI spec version: 0.1.0
  */
+import type { AffectedLineItem } from "./affectedLineItem";
 
 export interface ReactionInput {
   type: string;
@@ -19,4 +20,5 @@ export interface ReactionInput {
   termMonthsDelta?: number;
   paymentTermsDeltaDays?: number;
   requestedClauseVariantId?: string;
+  affectedLineItems?: AffectedLineItem[];
 }

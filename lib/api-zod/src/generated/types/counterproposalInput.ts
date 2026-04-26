@@ -7,6 +7,7 @@ Multi-tenant, multi-company, multi-brand. Deal-centric.
 
  * OpenAPI spec version: 0.1.0
  */
+import type { AffectedLineItem } from "./affectedLineItem";
 
 export interface CounterproposalInput {
   topic: string;
@@ -17,5 +18,6 @@ export interface CounterproposalInput {
   termMonthsDelta?: number;
   paymentTermsDeltaDays?: number;
   requestedClauseVariantId?: string;
+  affectedLineItems?: AffectedLineItem[];
   createNewVersion?: boolean;
 }

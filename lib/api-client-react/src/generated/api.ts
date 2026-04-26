@@ -88,6 +88,7 @@ import type {
   Company,
   CompanyCreate,
   CompanyUpdate,
+  ConcludeNegotiationInput,
   Contact,
   ContactInput,
   ContactPatch,
@@ -121,6 +122,7 @@ import type {
   CopilotThreadInput,
   CounterproposalInput,
   CreateAmendmentInput,
+  CreateNegotiationInput,
   CreateVersionFromReaction201,
   CuadCategory,
   CuadCoverage,
@@ -11464,6 +11466,90 @@ export function useListNegotiations<
   return { ...query, queryKey: queryOptions.queryKey };
 }
 
+/**
+ * Idempotent. Wenn für den Deal bereits eine aktive Verhandlung existiert, wird diese zurückgegeben (HTTP 200). Sonst wird eine neue Verhandlung mit `status='active'`, `round=1`, `riskLevel='low'` angelegt (HTTP 201).
+
+ */
+export const getCreateNegotiationUrl = () => {
+  return `/api/v1/negotiations`;
+};
+
+export const createNegotiation = async (
+  createNegotiationInput: CreateNegotiationInput,
+  options?: RequestInit,
+): Promise<Negotiation> => {
+  return customFetch<Negotiation>(getCreateNegotiationUrl(), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(createNegotiationInput),
+  });
+};
+
+export const getCreateNegotiationMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof createNegotiation>>,
+    TError,
+    { data: BodyType<CreateNegotiationInput> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof createNegotiation>>,
+  TError,
+  { data: BodyType<CreateNegotiationInput> },
+  TContext
+> => {
+  const mutationKey = ["createNegotiation"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof createNegotiation>>,
+    { data: BodyType<CreateNegotiationInput> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return createNegotiation(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type CreateNegotiationMutationResult = NonNullable<
+  Awaited<ReturnType<typeof createNegotiation>>
+>;
+export type CreateNegotiationMutationBody = BodyType<CreateNegotiationInput>;
+export type CreateNegotiationMutationError = ErrorType<unknown>;
+
+export const useCreateNegotiation = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof createNegotiation>>,
+    TError,
+    { data: BodyType<CreateNegotiationInput> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof createNegotiation>>,
+  TError,
+  { data: BodyType<CreateNegotiationInput> },
+  TContext
+> => {
+  return useMutation(getCreateNegotiationMutationOptions(options));
+};
+
 export const getGetNegotiationUrl = (id: string) => {
   return `/api/v1/negotiations/${id}`;
 };
@@ -11873,6 +11959,92 @@ export const useCreateVersionFromReaction = <
   TContext
 > => {
   return useMutation(getCreateVersionFromReactionMutationOptions(options));
+};
+
+/**
+ * Setzt eine Verhandlung manuell auf `concluded` und vermerkt optional ein Outcome (z. B. nachdem eine neue Angebotsversion akzeptiert wurde). Mehrfaches Aufrufen ist erlaubt — der jüngste Outcome gewinnt.
+
+ */
+export const getConcludeNegotiationUrl = (id: string) => {
+  return `/api/v1/negotiations/${id}/conclude`;
+};
+
+export const concludeNegotiation = async (
+  id: string,
+  concludeNegotiationInput?: ConcludeNegotiationInput,
+  options?: RequestInit,
+): Promise<Negotiation> => {
+  return customFetch<Negotiation>(getConcludeNegotiationUrl(id), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(concludeNegotiationInput),
+  });
+};
+
+export const getConcludeNegotiationMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof concludeNegotiation>>,
+    TError,
+    { id: string; data: BodyType<ConcludeNegotiationInput> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof concludeNegotiation>>,
+  TError,
+  { id: string; data: BodyType<ConcludeNegotiationInput> },
+  TContext
+> => {
+  const mutationKey = ["concludeNegotiation"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof concludeNegotiation>>,
+    { id: string; data: BodyType<ConcludeNegotiationInput> }
+  > = (props) => {
+    const { id, data } = props ?? {};
+
+    return concludeNegotiation(id, data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type ConcludeNegotiationMutationResult = NonNullable<
+  Awaited<ReturnType<typeof concludeNegotiation>>
+>;
+export type ConcludeNegotiationMutationBody =
+  BodyType<ConcludeNegotiationInput>;
+export type ConcludeNegotiationMutationError = ErrorType<unknown>;
+
+export const useConcludeNegotiation = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof concludeNegotiation>>,
+    TError,
+    { id: string; data: BodyType<ConcludeNegotiationInput> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof concludeNegotiation>>,
+  TError,
+  { id: string; data: BodyType<ConcludeNegotiationInput> },
+  TContext
+> => {
+  return useMutation(getConcludeNegotiationMutationOptions(options));
 };
 
 export const getRequestApprovalFromReactionUrl = (

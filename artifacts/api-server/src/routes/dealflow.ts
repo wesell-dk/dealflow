@@ -9150,6 +9150,8 @@ function mapNegotiation(n: typeof negotiationsTable.$inferSelect, dealName: stri
   return {
     id: n.id, dealId: n.dealId, dealName, status: n.status, round: n.round,
     lastReactionType: n.lastReactionType, riskLevel: n.riskLevel,
+    outcome: n.outcome ?? null,
+    concludedAt: iso(n.concludedAt) ?? null,
     updatedAt: iso(n.updatedAt)!,
   };
 }
@@ -9168,6 +9170,51 @@ router.get('/negotiations', async (req, res) => {
   res.json(rows.map(n => mapNegotiation(n, dealMap.get(n.dealId)?.name ?? 'Unknown')));
 });
 
+// POST /negotiations — idempotent. Returns existing active negotiation for
+// the deal if one exists (HTTP 200), or creates a new one (HTTP 201).
+router.post('/negotiations', async (req, res) => {
+  if (!validateInline(req, res, { body: Z.CreateNegotiationBody })) return;
+  const dealId = String(req.body.dealId);
+  if (!(await gateDeal(req, res, dealId))) return;
+  const existing = await db.select().from(negotiationsTable)
+    .where(and(
+      eq(negotiationsTable.dealId, dealId),
+      eq(negotiationsTable.status, 'active'),
+    ))
+    .orderBy(desc(negotiationsTable.updatedAt))
+    .limit(1);
+  const dealMap = await getDealMap();
+  const dealName = dealMap.get(dealId)?.name ?? 'Unknown';
+  if (existing.length > 0) {
+    res.status(200).json(mapNegotiation(existing[0]!, dealName));
+    return;
+  }
+  const id = `neg_${randomUUID().slice(0, 8)}`;
+  await db.insert(negotiationsTable).values({
+    id,
+    dealId,
+    status: 'active',
+    round: 1,
+    lastReactionType: 'created',
+    riskLevel: 'low',
+  });
+  const [n] = await db.select().from(negotiationsTable).where(eq(negotiationsTable.id, id));
+  // Timeline event so the deal/quote pages reflect that negotiation started.
+  const scope = getScope(req);
+  if (scope) {
+    await db.insert(timelineEventsTable).values({
+      id: `tl_${randomUUID().slice(0, 8)}`,
+      tenantId: scope.tenantId,
+      type: 'negotiation',
+      title: 'Verhandlung gestartet',
+      description: `Verhandlung ${id} für Deal ${dealName} eröffnet.`,
+      actor: scope.user.id,
+      dealId,
+    });
+  }
+  res.status(201).json(mapNegotiation(n!, dealName));
+});
+
 function mapReaction(r: typeof customerReactionsTable.$inferSelect) {
   return {
     id: r.id, negotiationId: r.negotiationId, type: r.type, topic: r.topic,
@@ -9179,6 +9226,7 @@ function mapReaction(r: typeof customerReactionsTable.$inferSelect) {
     requestedClauseVariantId: r.requestedClauseVariantId ?? null,
     linkedQuoteVersionId: r.linkedQuoteVersionId ?? null,
     linkedApprovalId: r.linkedApprovalId ?? null,
+    affectedLineItems: Array.isArray(r.affectedLineItems) ? r.affectedLineItems : [],
     createdAt: iso(r.createdAt)!,
   };
 }
@@ -9195,18 +9243,131 @@ async function loadLatestQuoteVersion(dealId: string) {
   return v ? { quote: q, version: v } : null;
 }
 
+async function loadLatestQuoteWithItems(dealId: string) {
+  const latest = await loadLatestQuoteVersion(dealId);
+  if (!latest) return null;
+  const items = await db.select().from(lineItemsTable)
+    .where(eq(lineItemsTable.quoteVersionId, latest.version.id))
+    .orderBy(asc(lineItemsTable.sortOrder));
+  return { ...latest, lineItems: items };
+}
+
+type AffectedItem = {
+  lineItemId: string;
+  action: 'price' | 'qty' | 'discount' | 'remove';
+  newPrice?: number;
+  newQty?: number;
+  discountPct?: number;
+};
+
+// Apply per-line-item changes to a snapshot of line items and return the
+// modified items + summary numbers (total, discountPct, marginPct).
+// `baselineDiscountPct`/`baselineMarginPct` are kept for items that did not
+// participate in the reaction (we approximate by scaling discount/margin
+// proportional to the new total — same naive 1:1 model as the existing
+// quote-wide path).
+function applyAffectedLineItems(
+  items: Array<typeof lineItemsTable.$inferSelect>,
+  affected: AffectedItem[] | null | undefined,
+  baseline: { totalAmount: number; discountPct: number; marginPct: number },
+): {
+  items: Array<{
+    id: string; kind: string; sortOrder: number; name: string;
+    description: string | null; quantity: string; unitPrice: string;
+    listPrice: string; discountPct: string; total: string;
+    taxRatePct: string | null;
+    removed: boolean;
+  }>;
+  newTotal: number;
+  newDiscountPct: number;
+  newMarginPct: number;
+  modifiedCount: number;
+} {
+  const map = new Map(affected?.map(a => [a.lineItemId, a]) ?? []);
+  let modifiedCount = 0;
+  const next = items.map(it => {
+    const a = map.get(it.id);
+    let qty = num(it.quantity);
+    let unitPrice = num(it.unitPrice);
+    const listPrice = num(it.listPrice);
+    let posDiscountPct = num(it.discountPct);
+    let removed = false;
+    if (a) {
+      modifiedCount++;
+      if (a.action === 'remove') {
+        removed = true;
+      } else if (a.action === 'price' && a.newPrice != null) {
+        unitPrice = Number(a.newPrice);
+        posDiscountPct = listPrice > 0
+          ? Math.max(0, Math.round((1 - unitPrice / listPrice) * 10000) / 100)
+          : 0;
+      } else if (a.action === 'qty' && a.newQty != null) {
+        qty = Number(a.newQty);
+      } else if (a.action === 'discount' && a.discountPct != null) {
+        posDiscountPct = Math.max(0, Number(a.discountPct));
+        unitPrice = Math.round(listPrice * (1 - posDiscountPct / 100) * 100) / 100;
+      }
+    }
+    const total = removed ? 0 : Math.round(qty * unitPrice * 100) / 100;
+    return {
+      id: it.id, kind: it.kind, sortOrder: it.sortOrder, name: it.name,
+      description: it.description ?? null,
+      quantity: String(qty), unitPrice: String(unitPrice),
+      listPrice: String(listPrice), discountPct: String(posDiscountPct),
+      total: String(total),
+      taxRatePct: it.taxRatePct ?? null,
+      removed,
+    };
+  });
+  const newTotal = Math.round(next
+    .filter(x => !x.removed && x.kind !== 'heading')
+    .reduce((s, x) => s + num(x.total), 0) * 100) / 100;
+  // Derive discount % from the relative drop in total.
+  const totalDelta = baseline.totalAmount > 0
+    ? (newTotal - baseline.totalAmount) / baseline.totalAmount
+    : 0;
+  const priceDeltaPct = Math.round(totalDelta * 10000) / 100; // signed pct
+  const newDiscountPct = Math.round(Math.max(0, baseline.discountPct - priceDeltaPct) * 100) / 100;
+  const newMarginPct = Math.round((baseline.marginPct + priceDeltaPct) * 100) / 100;
+  return { items: next, newTotal, newDiscountPct, newMarginPct, modifiedCount };
+}
+
 function computeImpactForReaction(
   r: typeof customerReactionsTable.$inferSelect,
   baseline: { totalAmount: number; discountPct: number; marginPct: number } | null,
+  baselineLineItems: Array<typeof lineItemsTable.$inferSelect> | null,
 ) {
-  const priceDelta = r.priceDeltaPct != null ? Number(r.priceDeltaPct) : null;
-  let newDiscountPct: number | null = null;
-  let newTotalAmount: number | null = null;
-  let newMarginPct: number | null = null;
   const followUps: string[] = [];
   const approvalsTriggered: Array<{ type: string; reason: string }> = [];
 
-  if (priceDelta != null && baseline) {
+  let priceDelta = r.priceDeltaPct != null ? Number(r.priceDeltaPct) : null;
+  let newDiscountPct: number | null = null;
+  let newTotalAmount: number | null = null;
+  let newMarginPct: number | null = null;
+  let affectedCount = 0;
+
+  const hasAffected = Array.isArray(r.affectedLineItems) && r.affectedLineItems.length > 0;
+
+  if (hasAffected && baseline && baselineLineItems) {
+    const result = applyAffectedLineItems(baselineLineItems, r.affectedLineItems as AffectedItem[], baseline);
+    affectedCount = result.modifiedCount;
+    newTotalAmount = result.newTotal;
+    newDiscountPct = result.newDiscountPct;
+    newMarginPct = result.newMarginPct;
+    // Derive the effective price delta from line-item math so approval
+    // gating + risk trend keep working uniformly with the quote-wide path.
+    priceDelta = baseline.totalAmount > 0
+      ? Math.round(((newTotalAmount - baseline.totalAmount) / baseline.totalAmount) * 10000) / 100
+      : 0;
+    followUps.push('new_quote_version');
+    if (newDiscountPct > DISCOUNT_APPROVAL_THRESHOLD_PCT && !r.linkedApprovalId) {
+      approvalsTriggered.push({
+        type: 'discount',
+        reason: `Discount ${newDiscountPct.toFixed(1)}% exceeds ${DISCOUNT_APPROVAL_THRESHOLD_PCT}% threshold`,
+      });
+      followUps.push('discount_approval');
+    }
+  } else if (priceDelta != null && baseline) {
     newDiscountPct = Math.max(0, baseline.discountPct - priceDelta);
     newTotalAmount = Math.round(baseline.totalAmount * (1 + priceDelta / 100) * 100) / 100;
     // Naive margin model: margin absorbs price change 1:1 in percentage points.
@@ -9250,6 +9411,7 @@ function computeImpactForReaction(
     termMonthsDelta: r.termMonthsDelta ?? null,
     paymentTermsDeltaDays: r.paymentTermsDeltaDays ?? null,
     requestedClauseVariantId: r.requestedClauseVariantId ?? null,
+    affectedLineItemsCount: affectedCount,
     followUps: Array.from(new Set(followUps)),
     approvalsTriggered,
     riskTrend,
@@ -9270,17 +9432,43 @@ router.get('/negotiations/:id', async (req, res) => {
   const tlRows = await db.select().from(timelineEventsTable)
     .where(eq(timelineEventsTable.dealId, n.dealId))
     .orderBy(desc(timelineEventsTable.at));
-  const latest = await loadLatestQuoteVersion(n.dealId);
+  const latest = await loadLatestQuoteWithItems(n.dealId);
   const baseline = latest ? {
     totalAmount: num(latest.version.totalAmount),
     discountPct: num(latest.version.discountPct),
     marginPct: num(latest.version.marginPct),
   } : null;
+  const quoteBlock = latest ? {
+    id: latest.quote.id,
+    number: latest.quote.number,
+    status: latest.version.status,
+    currentVersion: latest.version.version,
+    totalAmount: num(latest.version.totalAmount),
+    discountPct: num(latest.version.discountPct),
+    marginPct: num(latest.version.marginPct),
+    currency: latest.quote.currency,
+  } : null;
+  const lineItems = latest ? latest.lineItems
+    .filter(it => it.kind !== 'heading')
+    .map(it => ({
+      id: it.id,
+      kind: it.kind,
+      sortOrder: it.sortOrder,
+      name: it.name,
+      description: it.description ?? null,
+      quantity: num(it.quantity),
+      unitPrice: num(it.unitPrice),
+      listPrice: num(it.listPrice),
+      discountPct: num(it.discountPct),
+      total: num(it.total),
+    })) : [];
   res.json({
     ...mapNegotiation(n, dealMap.get(n.dealId)?.name ?? 'Unknown'),
     baseline,
+    quote: quoteBlock,
+    lineItems,
     reactions: reactions.map(mapReaction),
-    impacts: reactions.map(r => computeImpactForReaction(r, baseline)),
+    impacts: reactions.map(r => computeImpactForReaction(r, baseline, latest?.lineItems ?? null)),
     timeline: tlRows.map(t => ({
       id: t.id, type: t.type, title: t.title, description: t.description,
       actor: t.actor, dealId: t.dealId,
@@ -9298,7 +9486,7 @@ router.get('/negotiations/:id/impact', async (req, res) => {
   const reactions = await db.select().from(customerReactionsTable)
     .where(eq(customerReactionsTable.negotiationId, n.id))
     .orderBy(desc(customerReactionsTable.createdAt));
-  const latest = await loadLatestQuoteVersion(n.dealId);
+  const latest = await loadLatestQuoteWithItems(n.dealId);
   const baseline = latest ? {
     totalAmount: num(latest.version.totalAmount),
     discountPct: num(latest.version.discountPct),
@@ -9308,7 +9496,7 @@ router.get('/negotiations/:id/impact', async (req, res) => {
     negotiationId: n.id,
     baseline,
     approvalThresholdPct: DISCOUNT_APPROVAL_THRESHOLD_PCT,
-    impacts: reactions.map(r => computeImpactForReaction(r, baseline)),
+    impacts: reactions.map(r => computeImpactForReaction(r, baseline, latest?.lineItems ?? null)),
   });
 });
 
@@ -9319,6 +9507,7 @@ router.post('/negotiations/:id/reactions', async (req, res) => {
   if (!(await gateDeal(req, res, n0.dealId))) return;
   const b = req.body;
   const id = `cr_${randomUUID().slice(0, 8)}`;
+  const affected = Array.isArray(b.affectedLineItems) ? b.affectedLineItems : null;
   await db.insert(customerReactionsTable).values({
     id, negotiationId: req.params.id, type: b.type, topic: b.topic,
     summary: b.summary, source: b.source, priority: b.priority,
@@ -9327,6 +9516,7 @@ router.post('/negotiations/:id/reactions', async (req, res) => {
     termMonthsDelta: b.termMonthsDelta ?? null,
     paymentTermsDeltaDays: b.paymentTermsDeltaDays ?? null,
     requestedClauseVariantId: b.requestedClauseVariantId ?? null,
+    affectedLineItems: affected ?? undefined,
   });
   await db.update(negotiationsTable).set({
     lastReactionType: b.type, updatedAt: new Date(),
@@ -9337,6 +9527,89 @@ router.post('/negotiations/:id/reactions', async (req, res) => {
   res.status(201).json(mapReaction(r!));
 });
 
+// Copy line items from a base quote version to a new one, optionally
+// applying per-item modifications. Returns the new totals.
+async function createNextQuoteVersion(opts: {
+  base: { quote: typeof quotesTable.$inferSelect; version: typeof quoteVersionsTable.$inferSelect };
+  affected: AffectedItem[] | null;
+  fallbackPriceDeltaPct: number | null;
+  notes: string;
+}): Promise<{ versionId: string; version: number; totalAmount: number; discountPct: number; marginPct: number }> {
+  const { base, affected, fallbackPriceDeltaPct, notes } = opts;
+  const items = await db.select().from(lineItemsTable)
+    .where(eq(lineItemsTable.quoteVersionId, base.version.id))
+    .orderBy(asc(lineItemsTable.sortOrder));
+  const baseline = {
+    totalAmount: num(base.version.totalAmount),
+    discountPct: num(base.version.discountPct),
+    marginPct: num(base.version.marginPct),
+  };
+  const vId = `qv_${randomUUID().slice(0, 8)}`;
+  const nextVersion = base.version.version + 1;
+
+  let newTotal: number;
+  let newDiscount: number;
+  let newMargin: number;
+  let newItems: Array<{
+    id: string; kind: string; sortOrder: number; name: string;
+    description: string | null; quantity: string; unitPrice: string;
+    listPrice: string; discountPct: string; total: string;
+    taxRatePct: string | null; removed: boolean;
+  }>;
+
+  if (affected && affected.length > 0) {
+    const r = applyAffectedLineItems(items, affected, baseline);
+    newItems = r.items;
+    newTotal = r.newTotal;
+    newDiscount = r.newDiscountPct;
+    newMargin = r.newMarginPct;
+  } else {
+    const delta = fallbackPriceDeltaPct ?? 0;
+    newTotal = Math.round(baseline.totalAmount * (1 + delta / 100) * 100) / 100;
+    newDiscount = Math.round(Math.max(0, baseline.discountPct - delta) * 100) / 100;
+    newMargin = Math.round((baseline.marginPct + delta) * 100) / 100;
+    // Keep items 1:1 — no per-item changes.
+    newItems = items.map(it => ({
+      id: it.id, kind: it.kind, sortOrder: it.sortOrder, name: it.name,
+      description: it.description ?? null,
+      quantity: String(num(it.quantity)), unitPrice: String(num(it.unitPrice)),
+      listPrice: String(num(it.listPrice)), discountPct: String(num(it.discountPct)),
+      total: String(num(it.total)),
+      taxRatePct: it.taxRatePct ?? null, removed: false,
+    }));
+  }
+
+  await db.insert(quoteVersionsTable).values({
+    id: vId, quoteId: base.quote.id, version: nextVersion,
+    totalAmount: String(newTotal),
+    discountPct: String(newDiscount),
+    marginPct: String(newMargin),
+    status: 'draft',
+    notes,
+  });
+  // Copy line items into the new version (skipping items marked removed).
+  for (const it of newItems) {
+    if (it.removed) continue;
+    await db.insert(lineItemsTable).values({
+      id: `li_${randomUUID().slice(0, 8)}`,
+      quoteVersionId: vId,
+      kind: it.kind,
+      sortOrder: it.sortOrder,
+      name: it.name,
+      description: it.description ?? undefined,
+      quantity: it.quantity,
+      unitPrice: it.unitPrice,
+      listPrice: it.listPrice,
+      discountPct: it.discountPct,
+      total: it.total,
+      taxRatePct: it.taxRatePct ?? undefined,
+    });
+  }
+  await db.update(quotesTable).set({ currentVersion: nextVersion })
+    .where(eq(quotesTable.id, base.quote.id));
+  return { versionId: vId, version: nextVersion, totalAmount: newTotal, discountPct: newDiscount, marginPct: newMargin };
+}
+
 router.post('/negotiations/:id/counterproposal', async (req, res) => {
   if (!validateInline(req, res, { params: Z.CreateCounterproposalParams, body: Z.CreateCounterproposalBody })) return;
   const [n0] = await db.select().from(negotiationsTable).where(eq(negotiationsTable.id, req.params.id));
@@ -9344,29 +9617,20 @@ router.post('/negotiations/:id/counterproposal', async (req, res) => {
   if (!(await gateDeal(req, res, n0.dealId))) return;
   const b = req.body;
   const id = `cr_${randomUUID().slice(0, 8)}`;
+  const affected = Array.isArray(b.affectedLineItems) ? (b.affectedLineItems as AffectedItem[]) : null;
 
-  // Optionally create new quote version if createNewVersion=true and price delta given
+  // Optionally create new quote version if createNewVersion=true.
   let linkedQuoteVersionId: string | null = null;
-  if (b.createNewVersion && b.priceDeltaPct != null) {
+  if (b.createNewVersion && (b.priceDeltaPct != null || (affected && affected.length > 0))) {
     const latest = await loadLatestQuoteVersion(n0.dealId);
     if (latest) {
-      const newTotal = num(latest.version.totalAmount) * (1 + b.priceDeltaPct / 100);
-      const newDiscount = Math.max(0, num(latest.version.discountPct) - b.priceDeltaPct);
-      const newMargin = num(latest.version.marginPct) + b.priceDeltaPct;
-      const vId = `qv_${randomUUID().slice(0, 8)}`;
-      await db.insert(quoteVersionsTable).values({
-        id: vId,
-        quoteId: latest.quote.id,
-        version: latest.version.version + 1,
-        totalAmount: String(Math.round(newTotal * 100) / 100),
-        discountPct: String(Math.round(newDiscount * 100) / 100),
-        marginPct: String(Math.round(newMargin * 100) / 100),
-        status: 'draft',
+      const result = await createNextQuoteVersion({
+        base: latest,
+        affected,
+        fallbackPriceDeltaPct: b.priceDeltaPct ?? null,
         notes: `Counterproposal: ${b.topic}`,
       });
-      await db.update(quotesTable).set({ currentVersion: latest.version.version + 1 })
-        .where(eq(quotesTable.id, latest.quote.id));
-      linkedQuoteVersionId = vId;
+      linkedQuoteVersionId = result.versionId;
     }
   }
 
@@ -9383,6 +9647,7 @@ router.post('/negotiations/:id/counterproposal', async (req, res) => {
     paymentTermsDeltaDays: b.paymentTermsDeltaDays ?? null,
     requestedClauseVariantId: b.requestedClauseVariantId ?? null,
     linkedQuoteVersionId,
+    affectedLineItems: affected ?? undefined,
   });
   await db.update(negotiationsTable).set({
     lastReactionType: 'counterproposal', updatedAt: new Date(),
@@ -9405,26 +9670,19 @@ router.post('/negotiations/:id/reactions/:reactionId/create-version', async (req
     res.status(409).json({ error: 'already linked to quote version', linkedQuoteVersionId: r.linkedQuoteVersionId });
     return;
   }
-  const priceDelta = r.priceDeltaPct != null ? Number(r.priceDeltaPct) : 0;
   const latest = await loadLatestQuoteVersion(n0.dealId);
   if (!latest) { res.status(400).json({ error: 'no existing quote to version from' }); return; }
-  const newTotal = num(latest.version.totalAmount) * (1 + priceDelta / 100);
-  const newDiscount = Math.max(0, num(latest.version.discountPct) - priceDelta);
-  const newMargin = num(latest.version.marginPct) + priceDelta;
-  const vId = `qv_${randomUUID().slice(0, 8)}`;
-  await db.insert(quoteVersionsTable).values({
-    id: vId, quoteId: latest.quote.id, version: latest.version.version + 1,
-    totalAmount: String(Math.round(newTotal * 100) / 100),
-    discountPct: String(Math.round(newDiscount * 100) / 100),
-    marginPct: String(Math.round(newMargin * 100) / 100),
-    status: 'draft',
+  const affected = Array.isArray(r.affectedLineItems) ? (r.affectedLineItems as AffectedItem[]) : null;
+  const priceDelta = r.priceDeltaPct != null ? Number(r.priceDeltaPct) : null;
+  const result = await createNextQuoteVersion({
+    base: latest,
+    affected,
+    fallbackPriceDeltaPct: priceDelta,
     notes: `From reaction ${r.id}: ${r.topic}`,
   });
-  await db.update(quotesTable).set({ currentVersion: latest.version.version + 1 })
-    .where(eq(quotesTable.id, latest.quote.id));
-  await db.update(customerReactionsTable).set({ linkedQuoteVersionId: vId })
+  await db.update(customerReactionsTable).set({ linkedQuoteVersionId: result.versionId })
     .where(eq(customerReactionsTable.id, r.id));
-  res.status(201).json({ reactionId: r.id, quoteVersionId: vId, version: latest.version.version + 1 });
+  res.status(201).json({ reactionId: r.id, quoteVersionId: result.versionId, version: result.version });
 });
 
 router.post('/negotiations/:id/reactions/:reactionId/request-approval', async (req, res) => {
@@ -9466,6 +9724,47 @@ router.post('/negotiations/:id/reactions/:reactionId/request-approval', async (r
     .where(eq(customerReactionsTable.id, r.id));
   await generateHighDiscountForApproval(aId);
   res.status(201).json({ reactionId: r.id, approvalId: aId });
+});
+
+// POST /negotiations/:id/conclude — close out an active negotiation with
+// an outcome (accepted / rejected / withdrawn). Idempotent on already-concluded.
+router.post('/negotiations/:id/conclude', async (req, res) => {
+  if (!validateInline(req, res, { params: Z.ConcludeNegotiationParams, body: Z.ConcludeNegotiationBody })) return;
+  const [n] = await db.select().from(negotiationsTable).where(eq(negotiationsTable.id, req.params.id));
+  if (!n) { res.status(404).json({ error: 'not found' }); return; }
+  if (!(await gateDeal(req, res, n.dealId))) return;
+  const outcome = (req.body?.outcome ?? 'accepted') as 'accepted' | 'rejected' | 'withdrawn';
+  const newStatus = outcome === 'withdrawn' ? 'paused' : 'closed';
+  if (n.status === 'closed' || n.status === 'paused') {
+    const dealMap = await getDealMap();
+    res.status(200).json(mapNegotiation(n, dealMap.get(n.dealId)?.name ?? 'Unknown'));
+    return;
+  }
+  await db.update(negotiationsTable).set({
+    status: newStatus,
+    outcome,
+    concludedAt: new Date(),
+    updatedAt: new Date(),
+  }).where(eq(negotiationsTable.id, n.id));
+  const scope = getScope(req);
+  const dealMap = await getDealMap();
+  const dealName = dealMap.get(n.dealId)?.name ?? 'Unknown';
+  if (scope) {
+    const outcomeLabel = outcome === 'accepted' ? 'akzeptiert'
+      : outcome === 'rejected' ? 'abgelehnt'
+      : 'zurückgezogen';
+    await db.insert(timelineEventsTable).values({
+      id: `tl_${randomUUID().slice(0, 8)}`,
+      tenantId: scope.tenantId,
+      type: 'negotiation',
+      title: `Verhandlung ${outcomeLabel}`,
+      description: `Verhandlung ${n.id} abgeschlossen (${outcomeLabel}).`,
+      actor: scope.user.id,
+      dealId: n.dealId,
+    });
+  }
+  const [updated] = await db.select().from(negotiationsTable).where(eq(negotiationsTable.id, n.id));
+  res.status(200).json(mapNegotiation(updated!, dealName));
 });
 
 // ── SIGNATURES ──

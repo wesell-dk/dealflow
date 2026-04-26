@@ -17,4 +17,12 @@ export interface Negotiation {
   lastReactionType: string;
   updatedAt: Date;
   riskLevel: string;
+  /**
+   * Optionales Outcome für abgeschlossene Verhandlungen (`accepted`, `rejected`, `withdrawn`).
+
+   * @nullable
+   */
+  outcome?: string | null;
+  /** @nullable */
+  concludedAt?: Date | null;
 }

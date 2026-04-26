@@ -7,6 +7,7 @@ Multi-tenant, multi-company, multi-brand. Deal-centric.
 
  * OpenAPI spec version: 0.1.0
  */
+import type { AffectedLineItem } from "./affectedLineItem";
 
 export interface CustomerReaction {
   id: string;
@@ -31,4 +32,5 @@ export interface CustomerReaction {
   linkedQuoteVersionId?: string | null;
   /** @nullable */
   linkedApprovalId?: string | null;
+  affectedLineItems?: AffectedLineItem[];
 }
