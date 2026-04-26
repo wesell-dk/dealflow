@@ -4294,6 +4294,30 @@ paths:
         "403": { description: system framework — read-only }
         "404": { description: not found }
 
+  /admin/regulatory-frameworks/{id}/versions:
+    get:
+      operationId: listRegulatoryFrameworkVersions
+      tags: [regulatory]
+      summary: |
+        Versions-/Änderungs-Historie eines Frameworks. Jede mutating Operation
+        am Framework oder an einer seiner Anforderungen erzeugt einen
+        Snapshot. Für Compliance-Audits dokumentiert dies, in welcher Fassung
+        das Framework zu welchem Zeitpunkt galt.
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: ok
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/RegulatoryFrameworkVersion" }
+        "404": { description: not found }
+
   /regulatory-frameworks:
     get:
       operationId: listActiveRegulatoryFrameworks
@@ -13087,6 +13111,101 @@ components:
             - { type: string }
             - { type: "null" }
 
+    RegulatoryFrameworkVersionSnapshot:
+      type: object
+      required: [framework, requirements]
+      properties:
+        framework:
+          type: object
+          required:
+            - id
+            - tenantId
+            - code
+            - title
+            - shortLabel
+            - jurisdiction
+            - summary
+            - version
+            - applicabilityRules
+            - active
+            - sortOrder
+          properties:
+            id: { type: string }
+            tenantId:
+              oneOf:
+                - { type: string }
+                - { type: "null" }
+            code: { type: string }
+            title: { type: string }
+            shortLabel: { type: string }
+            jurisdiction: { type: string }
+            summary: { type: string }
+            url:
+              oneOf:
+                - { type: string }
+                - { type: "null" }
+            version: { type: string }
+            applicabilityRules:
+              type: array
+              items: { $ref: "#/components/schemas/RegulatoryApplicabilityRule" }
+            active: { type: boolean }
+            sortOrder: { type: integer }
+        requirements:
+          type: array
+          items:
+            type: object
+            required: [id, code, title, description, normRef, severity, sortOrder]
+            properties:
+              id: { type: string }
+              code: { type: string }
+              title: { type: string }
+              description: { type: string }
+              normRef: { type: string }
+              recommendedClauseFamily:
+                oneOf:
+                  - { type: string }
+                  - { type: "null" }
+              recommendedClauseText:
+                oneOf:
+                  - { type: string }
+                  - { type: "null" }
+              severity: { type: string }
+              sortOrder: { type: integer }
+
+    RegulatoryFrameworkVersion:
+      type: object
+      required:
+        - id
+        - frameworkId
+        - versionNumber
+        - versionLabel
+        - changeAction
+        - changeSummary
+        - actor
+        - snapshot
+        - createdAt
+      properties:
+        id: { type: string }
+        frameworkId: { type: string }
+        tenantId:
+          oneOf:
+            - { type: string }
+            - { type: "null" }
+        versionNumber: { type: integer }
+        versionLabel: { type: string }
+        changeAction:
+          type: string
+          enum:
+            - framework_created
+            - framework_updated
+            - requirement_created
+            - requirement_updated
+            - requirement_deleted
+        changeSummary: { type: string }
+        actor: { type: string }
+        snapshot: { $ref: "#/components/schemas/RegulatoryFrameworkVersionSnapshot" }
+        createdAt: { type: string, format: date-time }
+
     ContractRegulatoryAssessment:
       type: object
       required:
@@ -13104,6 +13223,10 @@ components:
         tenantId: { type: string }
         contractId: { type: string }
         frameworkId: { type: string }
+        frameworkVersionId:
+          oneOf:
+            - { type: string }
+            - { type: "null" }
         applicability:
           type: string
           enum: [auto_applicable, auto_not_applicable, manual_added, manual_removed]

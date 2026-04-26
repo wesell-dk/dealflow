@@ -2227,11 +2227,75 @@ export const regulatoryRequirementsTable = pgTable("regulatory_requirements", {
   index("regulatory_requirements_framework_idx").on(t.frameworkId),
 ]);
 
+// Snapshot pro Änderung eines Frameworks (oder einer seiner Anforderungen).
+// Für Compliance-Audits muss nachvollziehbar sein, welche Regulatorik in
+// welcher Fassung galt, als ein Vertrag bewertet wurde. Jede mutating
+// Operation (Framework-Patch, Requirement-Create/Patch/Delete) erzeugt einen
+// neuen Snapshot mit fortlaufender `versionNumber`.
+export const regulatoryFrameworkVersionsTable = pgTable("regulatory_framework_versions", {
+  id: id(),
+  frameworkId: text("framework_id").notNull(),
+  // Tenant-Kopie zur Mehrmandanten-Isolation. NULL für System-Frameworks
+  // (deren Snapshots sind global lesbar).
+  tenantId: text("tenant_id"),
+  // Fortlaufend pro Framework, beginnend bei 1.
+  versionNumber: integer("version_number").notNull(),
+  // Manuell gepflegtes Versions-Label (Freitext) zum Zeitpunkt des Snapshots.
+  versionLabel: text("version_label").notNull(),
+  // framework_created | framework_updated | requirement_created |
+  // requirement_updated | requirement_deleted
+  changeAction: text("change_action").notNull(),
+  // Kurzbeschreibung der Änderung — wird im UI als Eintrag der Historie
+  // angezeigt.
+  changeSummary: text("change_summary").notNull(),
+  // Wer hat die Änderung ausgelöst. `system` für Seed/Migrationen.
+  actor: text("actor").notNull(),
+  // Vollständiger Snapshot des Frameworks inkl. aller Anforderungen zum
+  // Zeitpunkt der Änderung. Damit kann eine Bewertung auch dann auf den
+  // damaligen Stand bezogen werden, wenn die Bibliothek inzwischen weiter-
+  // entwickelt wurde.
+  snapshot: jsonb("snapshot").$type<{
+    framework: {
+      id: string;
+      tenantId: string | null;
+      code: string;
+      title: string;
+      shortLabel: string;
+      jurisdiction: string;
+      summary: string;
+      url: string | null;
+      version: string;
+      applicabilityRules: Array<{ kind: string; values?: string[]; note?: string }>;
+      active: boolean;
+      sortOrder: number;
+    };
+    requirements: Array<{
+      id: string;
+      code: string;
+      title: string;
+      description: string;
+      normRef: string;
+      recommendedClauseFamily: string | null;
+      recommendedClauseText: string | null;
+      severity: string;
+      sortOrder: number;
+    }>;
+  }>().notNull(),
+  createdAt: ts("created_at"),
+}, (t) => [
+  uniqueIndex("regulatory_framework_versions_uq").on(t.frameworkId, t.versionNumber),
+  index("regulatory_framework_versions_fw_idx").on(t.frameworkId),
+]);
+
 export const contractRegulatoryAssessmentsTable = pgTable("contract_regulatory_assessments", {
   id: id(),
   tenantId: text("tenant_id").notNull(),
   contractId: text("contract_id").notNull(),
   frameworkId: text("framework_id").notNull(),
+  // Snapshot-Version des Frameworks, gegen die die Bewertung erstellt wurde.
+  // NULL bei manuell hinzugefügten/entfernten Einträgen ohne KI-Check oder
+  // bei Bestandsdaten vor Einführung der Versionierung.
+  frameworkVersionId: text("framework_version_id"),
   // Anwendbar / nicht-anwendbar / manuell hinzugefügt / manuell entfernt.
   // "manual_added" und "manual_removed" sind harte User-Overrides; sie werden
   // beim Re-Run respektiert.

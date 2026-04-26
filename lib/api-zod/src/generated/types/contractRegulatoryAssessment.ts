@@ -16,6 +16,7 @@ export interface ContractRegulatoryAssessment {
   tenantId: string;
   contractId: string;
   frameworkId: string;
+  frameworkVersionId?: string | null;
   applicability: ContractRegulatoryAssessmentApplicability;
   applicabilityReason?: string | null;
   findings: RegulatoryFinding[];

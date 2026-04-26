@@ -2,7 +2,7 @@
 
 ## Overview
 
-DealFlow One is a Commercial Execution Platform for B2B companies, designed to streamline commercial operations by integrating CRM, CPQ, document management, and automation into a deal-centric UI. Its purpose is to provide a central source of truth for managing deals, quotes, contracts, and approvals with AI-driven orchestration, ultimately enhancing efficiency and strategic oversight through intelligent automation and AI assistance. The platform aims to improve decision-making and accelerate commercial closing processes, fostering a unified operational view.
+DealFlow One is a Commercial Execution Platform for B2B companies, designed to streamline commercial operations by integrating CRM, CPQ, document management, and automation into a deal-centric UI. Its purpose is to create an intelligent Commercial Flow, providing a central source of truth for commercial operations to enhance efficiency and strategic oversight in B2B sales by managing deals, quotes, contracts, and approvals with AI-driven orchestration. The platform aims to streamline commercial closing, offer a unified operational view, and improve decision-making through intelligent automation and AI assistance.
 
 ## User Preferences
 
@@ -38,16 +38,15 @@ DealFlow One is a Commercial Execution Platform for B2B companies, designed to s
 
 **Platform Administration & Core Features:**
 - **Platform-Admin**: Manages tenants.
-- **Quote Management**: Features include quote duplication and a best-in-class inline quote editor with live PDF preview, tax rate selection, inline validation, and keyboard shortcuts.
+- **Quote Management**: Features include quote duplication, a best-in-class inline quote editor with live PDF preview, tax rate selection, inline validation, and keyboard shortcuts. The Quote Detail UI includes a brand-styled HTML live preview.
 - **Price Position Bundles**: Manages bundled price positions with tenant and brand/company scope validation.
-- **Contract Management**: Includes schema for contract types, playbooks, clause deviations, and obligations. Features include brand-specific clause variants, a bilingual clause library with language switcher, AI-driven learning clauses from active contract work, and a robust consistency linter with quick-fix options and hard-stop gates for approval/signature based on lint errors.
+- **Contract Management**: Includes schema for contract types, playbooks, clause deviations, and obligations. Features include brand-specific clause variants, a bilingual clause library with language switcher, AI-driven learning clauses from active contract work, and a robust consistency linter with quick-fix options and hard-stop gates for approval/signature based on lint errors. CUAD-Gate implements a "Coverage, Understanding, Adoption, and Design" check before contract approval requests.
 - **Magic-Link Invitations**: Sends branded invitation emails and provides time-limited access for external collaborators with additional security layers.
-- **Account Management**: Features include WZ-2008 industry codes, multi-location support, and soft-delete/archiving.
+- **Account Management**: Features include WZ-2008 industry codes, multi-location support with `account_addresses` table, and soft-delete/archiving.
 - **Renewal Engine**: Introduces renewal opportunities with risk scoring and status tracking, supporting renewal triggering, filtering, and reporting via trend charts with action capabilities.
 - **Lead Management**: Provides an inbox for lead qualification, conversion to accounts/deals, and tracking.
-- **Customer Contacts & Website Suggestions**: CRUD for contacts and web scraping to suggest contacts from company websites.
+- **Customer Contacts & Website Suggestions**: CRUD for contacts and web scraping to suggest contacts from company websites, including email/phone extraction and deduplication.
 - **External Existing Contracts with AI Capture**: Supports uploading external contracts, AI-extraction of data, and integration into the renewal engine.
-- **CUAD-Gate for Contract Approval**: Implements a "Coverage, Understanding, Adoption, and Design" check before contract approval requests, with override options for tenant administrators.
 - **Pricing Workspace**: Localized pricing UI with categories, subcategories, and auto-generated SKUs.
 - **Regulatorik-Compliance**: Configurable regulatory library (DSGVO/AVV, EU AI Act, DSA, NIS2, LkSG, plus tenant-specific) with AI-driven applicability detection, compliance checks against clauses, manual overrides, and tenant-wide compliance overview.
 

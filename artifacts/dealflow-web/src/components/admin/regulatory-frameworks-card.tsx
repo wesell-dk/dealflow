@@ -8,9 +8,12 @@ import {
   useCreateRegulatoryRequirement,
   useUpdateRegulatoryRequirement,
   useDeleteRegulatoryRequirement,
+  useListRegulatoryFrameworkVersions,
   getListRegulatoryFrameworksQueryKey,
+  getListRegulatoryFrameworkVersionsQueryKey,
   type RegulatoryFramework,
   type RegulatoryFrameworkInput,
+  type RegulatoryFrameworkVersion,
   type RegulatoryApplicabilityRule,
   type RegulatoryRequirement,
   type RegulatoryRequirementInput,
@@ -41,7 +44,9 @@ import {
 import {
   Accordion, AccordionContent, AccordionItem, AccordionTrigger,
 } from "@/components/ui/accordion";
-import { ShieldCheck, Plus, Pencil, Trash2, Lock, ExternalLink } from "lucide-react";
+import { ShieldCheck, Plus, Pencil, Trash2, Lock, ExternalLink, History } from "lucide-react";
+import { format, formatDistanceToNow } from "date-fns";
+import { de } from "date-fns/locale";
 
 const APPLICABILITY_KINDS: Array<{ value: string; label: string }> = [
   { value: "data_processing", label: "Datenverarbeitung (AVV/DPA)" },
@@ -76,6 +81,17 @@ export function RegulatoryFrameworksCard() {
 
   const invalidate = () => {
     qc.invalidateQueries({ queryKey: getListRegulatoryFrameworksQueryKey() });
+    qc.invalidateQueries({
+      predicate: (query) => {
+        const k = query.queryKey;
+        return (
+          Array.isArray(k) &&
+          typeof k[0] === "string" &&
+          k[0].includes("/admin/regulatory-frameworks/") &&
+          k[0].endsWith("/versions")
+        );
+      },
+    });
   };
 
   const deleteMut = useDeleteRegulatoryFramework({
@@ -200,6 +216,7 @@ export function RegulatoryFrameworksCard() {
                     </Button>
                   </div>
                   <RequirementsTable framework={fw} onChanged={invalidate} />
+                  <FrameworkVersionHistory frameworkId={fw.id} />
                 </AccordionContent>
               </AccordionItem>
             ))}
@@ -847,5 +864,147 @@ function RequirementFormDialog(props: {
         </DialogFooter>
       </DialogContent>
     </Dialog>
+  );
+}
+
+
+const CHANGE_ACTION_LABELS: Record<string, string> = {
+  framework_created: "Regulatorik angelegt",
+  framework_updated: "Regulatorik bearbeitet",
+  requirement_created: "Anforderung angelegt",
+  requirement_updated: "Anforderung bearbeitet",
+  requirement_deleted: "Anforderung gelöscht",
+};
+
+function changeActionBadge(action: string) {
+  if (action === "framework_created") return <Badge variant="default">Neu</Badge>;
+  if (action === "requirement_deleted") return <Badge variant="destructive">Gelöscht</Badge>;
+  if (action === "requirement_created") return <Badge variant="secondary">+ Anforderung</Badge>;
+  return <Badge variant="outline">Update</Badge>;
+}
+
+function FrameworkVersionHistory(props: { frameworkId: string }) {
+  const { frameworkId } = props;
+  const { data, isLoading } = useListRegulatoryFrameworkVersions(frameworkId);
+  const [expandedId, setExpandedId] = useState<string | null>(null);
+
+  return (
+    <div className="space-y-2 pt-2 border-t">
+      <h4
+        className="text-sm font-medium flex items-center gap-2"
+        data-testid={`heading-versions-${frameworkId}`}
+      >
+        <History className="h-4 w-4 text-muted-foreground" />
+        Änderungs-Historie
+      </h4>
+      {isLoading ? (
+        <Skeleton className="h-16 w-full" />
+      ) : !data || data.length === 0 ? (
+        <p className="text-xs text-muted-foreground py-2">
+          Noch keine Änderungen erfasst. Sobald die Regulatorik oder eine
+          Anforderung bearbeitet wird, erscheint hier ein Snapshot der
+          Fassung.
+        </p>
+      ) : (
+        <ol
+          className="space-y-1.5"
+          data-testid={`list-versions-${frameworkId}`}
+        >
+          {data.map((v: RegulatoryFrameworkVersion) => {
+            const isExpanded = expandedId === v.id;
+            return (
+              <li
+                key={v.id}
+                className="border rounded-md text-xs"
+                data-testid={`row-version-${v.id}`}
+              >
+                <button
+                  type="button"
+                  onClick={() => setExpandedId(isExpanded ? null : v.id)}
+                  className="w-full text-left p-2 hover:bg-muted/50 transition flex items-start gap-2"
+                  data-testid={`button-toggle-version-${v.id}`}
+                >
+                  <Badge
+                    variant="outline"
+                    className="font-mono text-[10px] shrink-0"
+                  >
+                    v{v.versionNumber}
+                  </Badge>
+                  <Badge
+                    variant="secondary"
+                    className="font-mono text-[10px] shrink-0"
+                  >
+                    {v.versionLabel}
+                  </Badge>
+                  {changeActionBadge(v.changeAction)}
+                  <div className="flex-1 min-w-0">
+                    <div className="font-medium truncate">
+                      {v.changeSummary}
+                    </div>
+                    <div className="text-muted-foreground mt-0.5">
+                      {format(new Date(v.createdAt), "dd.MM.yyyy HH:mm", { locale: de })}
+                      {" · vor "}
+                      {formatDistanceToNow(new Date(v.createdAt), { locale: de })}
+                      {" · "}
+                      {v.actor}
+                    </div>
+                  </div>
+                </button>
+                {isExpanded && (
+                  <div
+                    className="border-t bg-muted/30 p-2 space-y-1.5"
+                    data-testid={`details-version-${v.id}`}
+                  >
+                    <div className="grid grid-cols-2 gap-x-3 gap-y-1">
+                      <div>
+                        <span className="text-muted-foreground">Aktion: </span>
+                        <span className="font-medium">
+                          {CHANGE_ACTION_LABELS[v.changeAction] ?? v.changeAction}
+                        </span>
+                      </div>
+                      <div>
+                        <span className="text-muted-foreground">Anforderungen: </span>
+                        <span>{v.snapshot.requirements.length}</span>
+                      </div>
+                      <div>
+                        <span className="text-muted-foreground">Aktiv: </span>
+                        <span>{v.snapshot.framework.active ? "Ja" : "Nein"}</span>
+                      </div>
+                      <div>
+                        <span className="text-muted-foreground">Sortierung: </span>
+                        <span>{v.snapshot.framework.sortOrder}</span>
+                      </div>
+                    </div>
+                    <div>
+                      <span className="text-muted-foreground">Zusammenfassung: </span>
+                      <span>{v.snapshot.framework.summary}</span>
+                    </div>
+                    {v.snapshot.requirements.length > 0 && (
+                      <details className="mt-1">
+                        <summary className="cursor-pointer text-muted-foreground hover:text-foreground">
+                          Anforderungen in dieser Fassung anzeigen
+                        </summary>
+                        <ul className="mt-1 ml-4 list-disc space-y-0.5">
+                          {v.snapshot.requirements.map((r) => (
+                            <li key={r.id}>
+                              <span className="font-mono">{r.code}</span>
+                              {" · "}
+                              <span>{r.title}</span>
+                              <span className="text-muted-foreground">
+                                {" ("}{r.normRef}{")"}
+                              </span>
+                            </li>
+                          ))}
+                        </ul>
+                      </details>
+                    )}
+                  </div>
+                )}
+              </li>
+            );
+          })}
+        </ol>
+      )}
+    </div>
   );
 }

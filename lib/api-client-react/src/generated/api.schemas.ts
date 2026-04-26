@@ -7225,6 +7225,62 @@ export interface RegulatoryFinding {
   snippet?: string | null;
 }
 
+export type RegulatoryFrameworkVersionSnapshotFramework = {
+  id: string;
+  tenantId: string | null;
+  code: string;
+  title: string;
+  shortLabel: string;
+  jurisdiction: string;
+  summary: string;
+  url?: string | null;
+  version: string;
+  applicabilityRules: RegulatoryApplicabilityRule[];
+  active: boolean;
+  sortOrder: number;
+};
+
+export type RegulatoryFrameworkVersionSnapshotRequirementsItem = {
+  id: string;
+  code: string;
+  title: string;
+  description: string;
+  normRef: string;
+  recommendedClauseFamily?: string | null;
+  recommendedClauseText?: string | null;
+  severity: string;
+  sortOrder: number;
+};
+
+export interface RegulatoryFrameworkVersionSnapshot {
+  framework: RegulatoryFrameworkVersionSnapshotFramework;
+  requirements: RegulatoryFrameworkVersionSnapshotRequirementsItem[];
+}
+
+export type RegulatoryFrameworkVersionChangeAction =
+  (typeof RegulatoryFrameworkVersionChangeAction)[keyof typeof RegulatoryFrameworkVersionChangeAction];
+
+export const RegulatoryFrameworkVersionChangeAction = {
+  framework_created: "framework_created",
+  framework_updated: "framework_updated",
+  requirement_created: "requirement_created",
+  requirement_updated: "requirement_updated",
+  requirement_deleted: "requirement_deleted",
+} as const;
+
+export interface RegulatoryFrameworkVersion {
+  id: string;
+  frameworkId: string;
+  tenantId?: string | null;
+  versionNumber: number;
+  versionLabel: string;
+  changeAction: RegulatoryFrameworkVersionChangeAction;
+  changeSummary: string;
+  actor: string;
+  snapshot: RegulatoryFrameworkVersionSnapshot;
+  createdAt: string;
+}
+
 export type ContractRegulatoryAssessmentApplicability =
   (typeof ContractRegulatoryAssessmentApplicability)[keyof typeof ContractRegulatoryAssessmentApplicability];
 
@@ -7250,6 +7306,7 @@ export interface ContractRegulatoryAssessment {
   tenantId: string;
   contractId: string;
   frameworkId: string;
+  frameworkVersionId?: string | null;
   applicability: ContractRegulatoryAssessmentApplicability;
   applicabilityReason?: string | null;
   findings: RegulatoryFinding[];

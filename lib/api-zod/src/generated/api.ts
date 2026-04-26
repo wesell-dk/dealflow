@@ -8754,6 +8754,84 @@ export const DeleteRegulatoryRequirementParams = zod.object({
 });
 
 /**
+ * @summary Versions-/Änderungs-Historie eines Frameworks. Jede mutating Operation
+am Framework oder an einer seiner Anforderungen erzeugt einen
+Snapshot. Für Compliance-Audits dokumentiert dies, in welcher Fassung
+das Framework zu welchem Zeitpunkt galt.
+
+ */
+export const ListRegulatoryFrameworkVersionsParams = zod.object({
+  id: zod.coerce.string(),
+});
+
+export const ListRegulatoryFrameworkVersionsResponseItem = zod.object({
+  id: zod.string(),
+  frameworkId: zod.string(),
+  tenantId: zod.union([zod.string(), zod.null()]).optional(),
+  versionNumber: zod.number(),
+  versionLabel: zod.string(),
+  changeAction: zod.enum([
+    "framework_created",
+    "framework_updated",
+    "requirement_created",
+    "requirement_updated",
+    "requirement_deleted",
+  ]),
+  changeSummary: zod.string(),
+  actor: zod.string(),
+  snapshot: zod.object({
+    framework: zod.object({
+      id: zod.string(),
+      tenantId: zod.union([zod.string(), zod.null()]),
+      code: zod.string(),
+      title: zod.string(),
+      shortLabel: zod.string(),
+      jurisdiction: zod.string(),
+      summary: zod.string(),
+      url: zod.union([zod.string(), zod.null()]).optional(),
+      version: zod.string(),
+      applicabilityRules: zod.array(
+        zod.object({
+          kind: zod.enum([
+            "data_processing",
+            "ai_usage",
+            "service_type",
+            "jurisdiction",
+            "industry",
+            "size_bracket",
+            "contract_type",
+            "always",
+          ]),
+          values: zod.array(zod.string()).optional(),
+          note: zod.string().optional(),
+        }),
+      ),
+      active: zod.boolean(),
+      sortOrder: zod.number(),
+    }),
+    requirements: zod.array(
+      zod.object({
+        id: zod.string(),
+        code: zod.string(),
+        title: zod.string(),
+        description: zod.string(),
+        normRef: zod.string(),
+        recommendedClauseFamily: zod
+          .union([zod.string(), zod.null()])
+          .optional(),
+        recommendedClauseText: zod.union([zod.string(), zod.null()]).optional(),
+        severity: zod.string(),
+        sortOrder: zod.number(),
+      }),
+    ),
+  }),
+  createdAt: zod.coerce.date(),
+});
+export const ListRegulatoryFrameworkVersionsResponse = zod.array(
+  ListRegulatoryFrameworkVersionsResponseItem,
+);
+
+/**
  * @summary Read-only list of active regulatory frameworks visible to the user
 (system + tenant), including their requirements. Used by the contract
 Regulatorik panel to populate the manual-add menu.
@@ -8826,6 +8904,7 @@ export const ListContractRegulatoryAssessmentsResponse = zod.object({
       tenantId: zod.string(),
       contractId: zod.string(),
       frameworkId: zod.string(),
+      frameworkVersionId: zod.union([zod.string(), zod.null()]).optional(),
       applicability: zod.enum([
         "auto_applicable",
         "auto_not_applicable",
@@ -8943,6 +9022,7 @@ export const RunContractRegulatoryCheckResponse = zod.object({
       tenantId: zod.string(),
       contractId: zod.string(),
       frameworkId: zod.string(),
+      frameworkVersionId: zod.union([zod.string(), zod.null()]).optional(),
       applicability: zod.enum([
         "auto_applicable",
         "auto_not_applicable",

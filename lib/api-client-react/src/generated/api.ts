@@ -310,6 +310,7 @@ import type {
   RegulatoryFramework,
   RegulatoryFrameworkInput,
   RegulatoryFrameworkPatch,
+  RegulatoryFrameworkVersion,
   RegulatoryRequirement,
   RegulatoryRequirementInput,
   RegulatoryRequirementPatch,
@@ -18114,6 +18115,109 @@ export const useDeleteRegulatoryRequirement = <
 > => {
   return useMutation(getDeleteRegulatoryRequirementMutationOptions(options));
 };
+
+/**
+ * @summary Versions-/Änderungs-Historie eines Frameworks. Jede mutating Operation
+am Framework oder an einer seiner Anforderungen erzeugt einen
+Snapshot. Für Compliance-Audits dokumentiert dies, in welcher Fassung
+das Framework zu welchem Zeitpunkt galt.
+
+ */
+export const getListRegulatoryFrameworkVersionsUrl = (id: string) => {
+  return `/api/v1/admin/regulatory-frameworks/${id}/versions`;
+};
+
+export const listRegulatoryFrameworkVersions = async (
+  id: string,
+  options?: RequestInit,
+): Promise<RegulatoryFrameworkVersion[]> => {
+  return customFetch<RegulatoryFrameworkVersion[]>(
+    getListRegulatoryFrameworkVersionsUrl(id),
+    {
+      ...options,
+      method: "GET",
+    },
+  );
+};
+
+export const getListRegulatoryFrameworkVersionsQueryKey = (id: string) => {
+  return [`/api/v1/admin/regulatory-frameworks/${id}/versions`] as const;
+};
+
+export const getListRegulatoryFrameworkVersionsQueryOptions = <
+  TData = Awaited<ReturnType<typeof listRegulatoryFrameworkVersions>>,
+  TError = ErrorType<void>,
+>(
+  id: string,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof listRegulatoryFrameworkVersions>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey =
+    queryOptions?.queryKey ?? getListRegulatoryFrameworkVersionsQueryKey(id);
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof listRegulatoryFrameworkVersions>>
+  > = ({ signal }) =>
+    listRegulatoryFrameworkVersions(id, { signal, ...requestOptions });
+
+  return {
+    queryKey,
+    queryFn,
+    enabled: !!id,
+    ...queryOptions,
+  } as UseQueryOptions<
+    Awaited<ReturnType<typeof listRegulatoryFrameworkVersions>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type ListRegulatoryFrameworkVersionsQueryResult = NonNullable<
+  Awaited<ReturnType<typeof listRegulatoryFrameworkVersions>>
+>;
+export type ListRegulatoryFrameworkVersionsQueryError = ErrorType<void>;
+
+/**
+ * @summary Versions-/Änderungs-Historie eines Frameworks. Jede mutating Operation
+am Framework oder an einer seiner Anforderungen erzeugt einen
+Snapshot. Für Compliance-Audits dokumentiert dies, in welcher Fassung
+das Framework zu welchem Zeitpunkt galt.
+
+ */
+
+export function useListRegulatoryFrameworkVersions<
+  TData = Awaited<ReturnType<typeof listRegulatoryFrameworkVersions>>,
+  TError = ErrorType<void>,
+>(
+  id: string,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof listRegulatoryFrameworkVersions>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getListRegulatoryFrameworkVersionsQueryOptions(
+    id,
+    options,
+  );
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
 
 /**
  * @summary Read-only list of active regulatory frameworks visible to the user

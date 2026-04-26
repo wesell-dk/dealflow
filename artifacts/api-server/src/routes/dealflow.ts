@@ -151,6 +151,7 @@ import {
   legalPrecedentsTable,
   regulatoryFrameworksTable,
   regulatoryRequirementsTable,
+  regulatoryFrameworkVersionsTable,
   contractRegulatoryAssessmentsTable,
 } from '@workspace/db';
 import { createHash } from 'node:crypto';
@@ -22341,6 +22342,7 @@ function mapAssessment(
     tenantId: row.tenantId,
     contractId: row.contractId,
     frameworkId: row.frameworkId,
+    frameworkVersionId: row.frameworkVersionId,
     applicability: row.applicability,
     applicabilityReason: row.applicabilityReason,
     findings: row.findings ?? [],
@@ -22380,6 +22382,119 @@ async function loadFrameworksWithRequirements(tenantId: string, opts: { includeI
     byFw.set(r.frameworkId, arr);
   }
   return fwRows.map((f) => mapRegulatoryFramework(f, byFw.get(f.id) ?? []));
+}
+
+// ── Versionierung: Snapshot eines Frameworks erstellen ──────────────────
+//
+// Wird nach jeder mutating Operation (Framework-Patch, Requirement-Create/
+// Patch/Delete) aufgerufen. Erstellt einen vollständigen Snapshot des
+// aktuellen Stands inklusive aller Anforderungen und einer fortlaufenden
+// versionNumber pro Framework. So lässt sich später nachvollziehen, gegen
+// welche Fassung ein Vertrag bewertet wurde — auch wenn die Bibliothek
+// inzwischen weiterentwickelt wurde.
+async function snapshotRegulatoryFrameworkVersion(args: {
+  frameworkId: string;
+  changeAction:
+    | 'framework_created'
+    | 'framework_updated'
+    | 'requirement_created'
+    | 'requirement_updated'
+    | 'requirement_deleted';
+  changeSummary: string;
+  actor: string;
+}): Promise<typeof regulatoryFrameworkVersionsTable.$inferSelect | null> {
+  const { frameworkId, changeAction, changeSummary, actor } = args;
+  const [fw] = await db
+    .select()
+    .from(regulatoryFrameworksTable)
+    .where(eq(regulatoryFrameworksTable.id, frameworkId));
+  if (!fw) return null;
+  const reqs = await db
+    .select()
+    .from(regulatoryRequirementsTable)
+    .where(eq(regulatoryRequirementsTable.frameworkId, frameworkId))
+    .orderBy(asc(regulatoryRequirementsTable.sortOrder), asc(regulatoryRequirementsTable.code));
+  // Nächste versionNumber bestimmen.
+  const [latest] = await db
+    .select({ versionNumber: regulatoryFrameworkVersionsTable.versionNumber })
+    .from(regulatoryFrameworkVersionsTable)
+    .where(eq(regulatoryFrameworkVersionsTable.frameworkId, frameworkId))
+    .orderBy(desc(regulatoryFrameworkVersionsTable.versionNumber))
+    .limit(1);
+  const nextVersion = (latest?.versionNumber ?? 0) + 1;
+  const id = `rfv_${randomBytes(6).toString('hex')}`;
+  const snapshot = {
+    framework: {
+      id: fw.id,
+      tenantId: fw.tenantId,
+      code: fw.code,
+      title: fw.title,
+      shortLabel: fw.shortLabel,
+      jurisdiction: fw.jurisdiction,
+      summary: fw.summary,
+      url: fw.url,
+      version: fw.version,
+      applicabilityRules: fw.applicabilityRules ?? [],
+      active: fw.active,
+      sortOrder: fw.sortOrder,
+    },
+    requirements: reqs.map((r) => ({
+      id: r.id,
+      code: r.code,
+      title: r.title,
+      description: r.description,
+      normRef: r.normRef,
+      recommendedClauseFamily: r.recommendedClauseFamily,
+      recommendedClauseText: r.recommendedClauseText,
+      severity: r.severity,
+      sortOrder: r.sortOrder,
+    })),
+  };
+  const inserted = await db
+    .insert(regulatoryFrameworkVersionsTable)
+    .values({
+      id,
+      frameworkId,
+      tenantId: fw.tenantId,
+      versionNumber: nextVersion,
+      versionLabel: fw.version,
+      changeAction,
+      changeSummary,
+      actor,
+      snapshot,
+    })
+    .returning();
+  return inserted[0] ?? null;
+}
+
+// Liefert die ID der aktuellsten Snapshot-Version für ein Framework.
+// Wird beim Compliance-Check genutzt, um die Bewertung mit der konkreten
+// Framework-Fassung zu verknüpfen.
+async function getLatestFrameworkVersionId(frameworkId: string): Promise<string | null> {
+  const [row] = await db
+    .select({ id: regulatoryFrameworkVersionsTable.id })
+    .from(regulatoryFrameworkVersionsTable)
+    .where(eq(regulatoryFrameworkVersionsTable.frameworkId, frameworkId))
+    .orderBy(desc(regulatoryFrameworkVersionsTable.versionNumber))
+    .limit(1);
+  return row?.id ?? null;
+}
+
+function mapRegulatoryFrameworkVersion(
+  row: typeof regulatoryFrameworkVersionsTable.$inferSelect,
+) {
+  return {
+    id: row.id,
+    frameworkId: row.frameworkId,
+    tenantId: row.tenantId,
+    versionNumber: row.versionNumber,
+    versionLabel: row.versionLabel,
+    changeAction: row.changeAction,
+    changeSummary: row.changeSummary,
+    actor: row.actor,
+    snapshot: row.snapshot,
+    createdAt: iso(row.createdAt)!,
+  };
 }
 
 // ── Heuristik: Service-/Vertrags-Signale aus Vertrags-Kontext ableiten ──
@@ -22515,6 +22630,12 @@ router.post('/admin/regulatory-frameworks', async (req, res) => {
     summary: `Regulatorik angelegt: ${row.code}`,
     before: null, after: saved,
   });
+  await snapshotRegulatoryFrameworkVersion({
+    frameworkId: newId,
+    changeAction: 'framework_created',
+    changeSummary: `Regulatorik angelegt: ${row.code} – ${row.title} (Version ${row.version})`,
+    actor: scope.user.name ?? scope.user.id,
+  });
   res.status(201).json(mapRegulatoryFramework(saved!, []));
 });
 
@@ -22551,6 +22672,16 @@ router.patch('/admin/regulatory-frameworks/:id', async (req, res) => {
     entityType: 'regulatory_framework', entityId: id, action: 'update',
     summary: `Regulatorik bearbeitet: ${saved!.code}`,
     before: existing, after: saved,
+  });
+  // Geänderte Felder kompakt zusammenfassen für die Versions-Historie.
+  const changedKeys = Object.keys(patch).filter((k) => k !== 'updatedAt');
+  await snapshotRegulatoryFrameworkVersion({
+    frameworkId: id,
+    changeAction: 'framework_updated',
+    changeSummary: changedKeys.length
+      ? `Regulatorik bearbeitet: ${saved!.code} (Felder: ${changedKeys.join(', ')})`
+      : `Regulatorik bearbeitet: ${saved!.code}`,
+    actor: scope.user.name ?? scope.user.id,
   });
   const reqs = await db
     .select()
@@ -22633,6 +22764,12 @@ router.post('/admin/regulatory-frameworks/:id/requirements', async (req, res) =>
     summary: `Regulatorik-Anforderung angelegt: ${saved!.code} (${fw.code})`,
     before: null, after: saved,
   });
+  await snapshotRegulatoryFrameworkVersion({
+    frameworkId: fwId,
+    changeAction: 'requirement_created',
+    changeSummary: `Anforderung angelegt: ${saved!.code} – ${saved!.title}`,
+    actor: scope.user.name ?? scope.user.id,
+  });
   res.status(201).json(mapRegulatoryRequirement(saved!));
 });
 
@@ -22676,6 +22813,15 @@ router.patch('/admin/regulatory-frameworks/:id/requirements/:reqId', async (req,
     summary: `Regulatorik-Anforderung bearbeitet: ${saved!.code}`,
     before: existing, after: saved,
   });
+  const changedKeys = Object.keys(patch).filter((k) => k !== 'updatedAt');
+  await snapshotRegulatoryFrameworkVersion({
+    frameworkId: fwId,
+    changeAction: 'requirement_updated',
+    changeSummary: changedKeys.length
+      ? `Anforderung bearbeitet: ${saved!.code} (Felder: ${changedKeys.join(', ')})`
+      : `Anforderung bearbeitet: ${saved!.code}`,
+    actor: scope.user.name ?? scope.user.id,
+  });
   res.json(mapRegulatoryRequirement(saved!));
 });
 
@@ -22704,6 +22850,12 @@ router.delete('/admin/regulatory-frameworks/:id/requirements/:reqId', async (req
     summary: `Regulatorik-Anforderung gelöscht: ${existing.code}`,
     before: existing, after: null,
   });
+  await snapshotRegulatoryFrameworkVersion({
+    frameworkId: fwId,
+    changeAction: 'requirement_deleted',
+    changeSummary: `Anforderung gelöscht: ${existing.code} – ${existing.title}`,
+    actor: scope.user.name ?? scope.user.id,
+  });
   res.status(204).end();
 });
 
@@ -22712,6 +22864,28 @@ router.get('/regulatory-frameworks', async (req, res) => {
   const scope = getScope(req);
   const list = await loadFrameworksWithRequirements(scope.tenantId);
   res.json(list);
+});
+
+// ── Admin: Framework — Versions-Historie ────────────────────────────────
+//
+// Liefert alle Snapshots eines Frameworks in absteigender Reihenfolge.
+// Für System-Frameworks ist die Historie global lesbar; für Tenant-
+// Frameworks nur für den Eigen-Tenant.
+router.get('/admin/regulatory-frameworks/:id/versions', async (req, res) => {
+  if (!requireAdmin(req, res)) return;
+  const scope = getScope(req);
+  const id = String(req.params['id'] ?? '');
+  const [fw] = await db.select().from(regulatoryFrameworksTable).where(eq(regulatoryFrameworksTable.id, id));
+  if (!fw) { res.status(404).json({ error: 'not_found' }); return; }
+  if (fw.tenantId !== null && fw.tenantId !== scope.tenantId) {
+    res.status(404).json({ error: 'not_found' }); return;
+  }
+  const rows = await db
+    .select()
+    .from(regulatoryFrameworkVersionsTable)
+    .where(eq(regulatoryFrameworkVersionsTable.frameworkId, id))
+    .orderBy(desc(regulatoryFrameworkVersionsTable.versionNumber));
+  res.json(rows.map(mapRegulatoryFrameworkVersion));
 });
 
 // ── Contract: list assessments + framework details ─────────────────────
@@ -22989,6 +23163,25 @@ router.post('/contracts/:contractId/regulations/check', async (req, res) => {
       }
     }
 
+    // Bewertete Frameworks an die aktuell gültige Snapshot-Version binden,
+    // damit später nachvollziehbar ist, gegen welche Fassung des Frameworks
+    // bewertet wurde. Auch nicht-anwendbare Bewertungen werden gebunden, weil
+    // die "auto_not_applicable"-Entscheidung selbst auditrelevant ist und
+    // unter einer bestimmten Frameworkfassung getroffen wurde. Ist (noch)
+    // keine Snapshot-Version vorhanden — z. B. bei System-Frameworks aus dem
+    // Seed, die nie editiert wurden — legen wir jetzt eine Initial-Version
+    // an.
+    let frameworkVersionId: string | null = await getLatestFrameworkVersionId(fw.id);
+    if (frameworkVersionId === null) {
+      const seeded = await snapshotRegulatoryFrameworkVersion({
+        frameworkId: fw.id,
+        changeAction: 'framework_created',
+        changeSummary: `Initialer Snapshot bei erstem Compliance-Check (Version ${fw.version})`,
+        actor: 'system',
+      });
+      frameworkVersionId = seeded?.id ?? null;
+    }
+
     const assessmentId = `cra_${randomUUID().slice(0, 8)}`;
     const inserted = await db
       .insert(contractRegulatoryAssessmentsTable)
@@ -22997,6 +23190,7 @@ router.post('/contracts/:contractId/regulations/check', async (req, res) => {
         tenantId: scope.tenantId,
         contractId,
         frameworkId: fw.id,
+        frameworkVersionId,
         applicability,
         applicabilityReason,
         findings,
@@ -23007,6 +23201,7 @@ router.post('/contracts/:contractId/regulations/check', async (req, res) => {
       .onConflictDoUpdate({
         target: [contractRegulatoryAssessmentsTable.contractId, contractRegulatoryAssessmentsTable.frameworkId],
         set: {
+          frameworkVersionId,
           applicability,
           applicabilityReason,
           findings,
