@@ -1193,6 +1193,16 @@ export interface Quote {
   validUntil: string;
   /** Sprachfassung des Angebots. */
   language: QuoteLanguage;
+  /**
+   * Zeitpunkt des letzten erfolgreichen E-Mail-Versands an den Kunden. NULL = noch nicht versendet.
+   * @nullable
+   */
+  sentAt?: string | null;
+  /**
+   * Empfänger des letzten erfolgreichen E-Mail-Versands (komma-getrennt).
+   * @nullable
+   */
+  sentTo?: string | null;
 }
 
 /**
@@ -1387,6 +1397,20 @@ export interface TimelineEvent {
   dealId?: string | null;
   /** @nullable */
   dealName?: string | null;
+}
+
+export interface QuoteSendInput {
+  /**
+   * Primäre Empfänger-Adressen.
+   * @minItems 1
+   */
+  to: string[];
+  /** Optionale CC-Adressen. */
+  cc?: string[];
+  /** @minLength 1 */
+  subject: string;
+  /** @minLength 1 */
+  message: string;
 }
 
 /**

@@ -14,14 +14,23 @@ import { logger } from "./logger";
  * blocking the underlying business action (e.g. magic-link creation).
  */
 
+export interface EmailAttachment {
+  filename: string;
+  /** Raw bytes of the attachment. Will be base64-encoded for the provider. */
+  content: Buffer;
+  contentType?: string;
+}
+
 export interface SendEmailInput {
-  to: string;
+  to: string | string[];
+  cc?: string[];
   from: { email: string; name?: string | null };
   subject: string;
   html: string;
   text: string;
   replyTo?: string | null;
   tags?: Record<string, string>;
+  attachments?: EmailAttachment[];
 }
 
 export interface SendEmailResult {
@@ -39,6 +48,15 @@ function fromHeader(from: SendEmailInput["from"]): string {
   return from.email;
 }
 
+function toRecipientList(to: string | string[]): string[] {
+  return Array.isArray(to) ? to : [to];
+}
+
+function firstRecipient(to: string | string[]): string {
+  const list = toRecipientList(to);
+  return list[0] ?? "";
+}
+
 async function sendViaResend(input: SendEmailInput, apiKey: string): Promise<SendEmailResult> {
   try {
     const res = await fetch("https://api.resend.com/emails", {
@@ -49,13 +67,21 @@ async function sendViaResend(input: SendEmailInput, apiKey: string): Promise<Sen
       },
       body: JSON.stringify({
         from: fromHeader(input.from),
-        to: [input.to],
+        to: toRecipientList(input.to),
+        cc: input.cc && input.cc.length > 0 ? input.cc : undefined,
         subject: input.subject,
         html: input.html,
         text: input.text,
         reply_to: input.replyTo ?? undefined,
         tags: input.tags
           ? Object.entries(input.tags).map(([name, value]) => ({ name, value }))
+          : undefined,
+        attachments: input.attachments && input.attachments.length > 0
+          ? input.attachments.map(a => ({
+              filename: a.filename,
+              content: a.content.toString("base64"),
+              ...(a.contentType ? { content_type: a.contentType } : {}),
+            }))
           : undefined,
       }),
     });
@@ -65,7 +91,7 @@ async function sendViaResend(input: SendEmailInput, apiKey: string): Promise<Sen
       // tokens). Log only status + recipient domain.
       await res.text().catch(() => "");
       logger.warn(
-        { provider: "resend", status: res.status, recipientDomain: recipientDomain(input.to) },
+        { provider: "resend", status: res.status, recipientDomain: recipientDomain(firstRecipient(input.to)) },
         "email send failed",
       );
       return { ok: false, provider: "resend", error: `resend ${res.status}` };
@@ -77,7 +103,7 @@ async function sendViaResend(input: SendEmailInput, apiKey: string): Promise<Sen
       {
         provider: "resend",
         err: err instanceof Error ? err.message : String(err),
-        recipientDomain: recipientDomain(input.to),
+        recipientDomain: recipientDomain(firstRecipient(input.to)),
       },
       "email send threw",
     );
@@ -99,14 +125,19 @@ function sendViaLog(input: SendEmailInput): SendEmailResult {
   // invite emails contain magic-link tokens (bearer credentials) and recipient
   // PII. Log only minimal, non-credential metadata so dev/test runs stay
   // observable without leaking auth material into centralized logs.
+  const toList = toRecipientList(input.to);
   logger.info(
     {
       provider: "log",
-      recipientDomain: recipientDomain(input.to),
+      recipientDomain: recipientDomain(toList[0] ?? ""),
+      recipientCount: toList.length,
+      ccCount: input.cc?.length ?? 0,
       fromDomain: recipientDomain(input.from.email),
       subjectLength: input.subject.length,
       htmlLength: input.html.length,
       textLength: input.text.length,
+      attachmentCount: input.attachments?.length ?? 0,
+      attachmentBytes: input.attachments?.reduce((s, a) => s + a.content.length, 0) ?? 0,
       tagNames: input.tags ? Object.keys(input.tags) : null,
     },
     "outbound email (log provider — no real delivery configured)",

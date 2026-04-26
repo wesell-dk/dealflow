@@ -83,6 +83,11 @@ export const brandsTable = pgTable("brands", {
   // auf die Heuristik zurück, wenn der Vertragstyp inaktiv/weg ist).
   defaultContractTypeId: text("default_contract_type_id")
     .references((): AnyPgColumn => contractTypesTable.id, { onDelete: "set null" }),
+  // Brand-Vorlage für die "Per E-Mail senden"-Aktion auf Angeboten.
+  // Beide Felder optional: NULL → Fallback-Default aus dem Versand-Endpoint
+  // wird verwendet. Platzhalter: {{number}}, {{customer}}, {{brand}}, {{validUntil}}.
+  quoteEmailSubjectTemplate: text("quote_email_subject_template"),
+  quoteEmailBodyTemplate: text("quote_email_body_template"),
 });
 
 export const usersTable = pgTable("users", {
@@ -224,6 +229,12 @@ export const quotesTable = pgTable("quotes", {
   // Sprachfassung des Angebots (de/en). NULL → wird beim Lesen aus
   // Brand-/Tenant-Default abgeleitet.
   language: text("language"),
+  // Letzter erfolgreicher E-Mail-Versand an den Kunden. NULL = noch nicht
+  // versendet. Nur für UI-Anzeige; einzelne Versuche (auch fehlgeschlagene)
+  // landen zusätzlich im audit_log.
+  sentAt: timestamp("sent_at", { withTimezone: true }),
+  // Komma-getrennte Empfänger-Adressen aus dem letzten erfolgreichen Versand.
+  sentTo: text("sent_to"),
   createdAt: ts("created_at"),
 });
 

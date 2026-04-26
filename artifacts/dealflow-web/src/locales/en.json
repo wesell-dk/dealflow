@@ -213,7 +213,27 @@
       "convertExistsBody": "Order confirmation {{number}} was already created from this quote. Create another one anyway?",
       "convertForce": "Create another anyway",
       "openOrder": "Open order",
-      "linkedOrders": "Linked order confirmations"
+      "linkedOrders": "Linked order confirmations",
+      "send": {
+        "action": "Send via email",
+        "title": "Send quote {{number}}",
+        "description": "We will attach the quote as a PDF and deliver it to the selected recipients.",
+        "recipients": "Recipients (from account contacts)",
+        "decisionMaker": "Decision maker",
+        "additionalRecipients": "Additional recipients (comma separated)",
+        "cc": "CC",
+        "subject": "Subject",
+        "message": "Message",
+        "attachmentHint": "The file \"quote-{{number}}.pdf\" will be attached automatically.",
+        "noContactEmails": "No contact email is on file for this account yet. Add recipients manually below or maintain the contacts on the account detail page.",
+        "invalidEmail": "Invalid email address: {{email}}",
+        "success": "Quote sent",
+        "failed": "Send failed",
+        "lastSent": "Last sent",
+        "sentTo": "To",
+        "defaultCustomer": "customer",
+        "defaultBrand": "Your DealFlow team"
+      }
     },
     "templates": {
       "title": "Quote Templates",

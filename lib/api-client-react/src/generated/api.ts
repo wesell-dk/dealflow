@@ -237,6 +237,7 @@ import type {
   QuoteFromTemplateInput,
   QuoteInput,
   QuotePatchInput,
+  QuoteSendInput,
   QuoteTemplate,
   QuoteTemplateInput,
   QuoteVersion,
@@ -3873,6 +3874,93 @@ export function useGetQuotePdf<
 
   return { ...query, queryKey: queryOptions.queryKey };
 }
+
+/**
+ * @summary Send the quote PDF to the customer via email
+ */
+export const getSendQuoteEmailUrl = (id: string) => {
+  return `/api/v1/quotes/${id}/send`;
+};
+
+export const sendQuoteEmail = async (
+  id: string,
+  quoteSendInput: QuoteSendInput,
+  options?: RequestInit,
+): Promise<Quote> => {
+  return customFetch<Quote>(getSendQuoteEmailUrl(id), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(quoteSendInput),
+  });
+};
+
+export const getSendQuoteEmailMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof sendQuoteEmail>>,
+    TError,
+    { id: string; data: BodyType<QuoteSendInput> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof sendQuoteEmail>>,
+  TError,
+  { id: string; data: BodyType<QuoteSendInput> },
+  TContext
+> => {
+  const mutationKey = ["sendQuoteEmail"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof sendQuoteEmail>>,
+    { id: string; data: BodyType<QuoteSendInput> }
+  > = (props) => {
+    const { id, data } = props ?? {};
+
+    return sendQuoteEmail(id, data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type SendQuoteEmailMutationResult = NonNullable<
+  Awaited<ReturnType<typeof sendQuoteEmail>>
+>;
+export type SendQuoteEmailMutationBody = BodyType<QuoteSendInput>;
+export type SendQuoteEmailMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Send the quote PDF to the customer via email
+ */
+export const useSendQuoteEmail = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof sendQuoteEmail>>,
+    TError,
+    { id: string; data: BodyType<QuoteSendInput> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof sendQuoteEmail>>,
+  TError,
+  { id: string; data: BodyType<QuoteSendInput> },
+  TContext
+> => {
+  return useMutation(getSendQuoteEmailMutationOptions(options));
+};
 
 export const getCreateQuoteVersionUrl = (id: string) => {
   return `/api/v1/quotes/${id}/versions`;

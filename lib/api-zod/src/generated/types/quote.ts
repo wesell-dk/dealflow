@@ -24,4 +24,14 @@ export interface Quote {
   validUntil: Date;
   /** Sprachfassung des Angebots. */
   language: QuoteLanguage;
+  /**
+   * Zeitpunkt des letzten erfolgreichen E-Mail-Versands an den Kunden. NULL = noch nicht versendet.
+   * @nullable
+   */
+  sentAt?: Date | null;
+  /**
+   * Empfänger des letzten erfolgreichen E-Mail-Versands (komma-getrennt).
+   * @nullable
+   */
+  sentTo?: string | null;
 }

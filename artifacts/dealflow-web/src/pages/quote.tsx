@@ -40,6 +40,7 @@ import {
   AlertTriangle,
 } from "lucide-react";
 import { QuoteDuplicateButton } from "@/components/quotes/quote-duplicate-button";
+import { SendQuoteDialog } from "@/components/quotes/send-quote-dialog";
 import { useToast } from "@/hooks/use-toast";
 import { AiPromptPanel } from "@/components/copilot/ai-prompt-panel";
 import { Breadcrumbs } from "@/components/patterns/breadcrumbs";
@@ -146,6 +147,12 @@ export default function Quote() {
           <Button variant="outline" size="sm" onClick={() => window.open(`/api/quotes/${id}/pdf`, '_blank')}>
             <FileText className="h-4 w-4 mr-2" /> {t("pages.quote.openPdf")}
           </Button>
+          <SendQuoteDialog
+            quoteId={quote.id}
+            quoteNumber={quote.number}
+            dealId={quote.dealId}
+            language={quote.language === "en" ? "en" : "de"}
+          />
           <QuoteDuplicateButton quoteId={quote.id} quoteNumber={quote.number} />
           {canConvert && (
             <Button
@@ -157,9 +164,26 @@ export default function Quote() {
               {t("pages.quote.convertToOrder")}
             </Button>
           )}
-          <Badge variant="outline">{quote.status}</Badge>
+          <Badge variant="outline" data-testid="quote-status-badge">{quote.status}</Badge>
         </div>
       </div>
+      {quote.sentAt && (
+        <div
+          className="rounded-md border bg-muted/40 px-4 py-2 text-sm text-muted-foreground flex flex-wrap gap-x-4 gap-y-1"
+          data-testid="quote-sent-info"
+        >
+          <span>
+            <strong className="text-foreground">{t("pages.quote.send.lastSent")}:</strong>{" "}
+            {new Date(quote.sentAt).toLocaleString()}
+          </span>
+          {quote.sentTo && (
+            <span>
+              <strong className="text-foreground">{t("pages.quote.send.sentTo")}:</strong>{" "}
+              {quote.sentTo}
+            </span>
+          )}
+        </div>
+      )}
 
       <div className="grid md:grid-cols-3 gap-6">
         <div className="md:col-span-2 space-y-6">

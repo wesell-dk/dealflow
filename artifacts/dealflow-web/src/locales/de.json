@@ -213,7 +213,27 @@
       "convertExistsBody": "Für dieses Angebot wurde bereits Auftragsbestätigung {{number}} angelegt. Trotzdem eine zweite Bestätigung erstellen?",
       "convertForce": "Trotzdem neu anlegen",
       "openOrder": "Auftrag öffnen",
-      "linkedOrders": "Verknüpfte Auftragsbestätigungen"
+      "linkedOrders": "Verknüpfte Auftragsbestätigungen",
+      "send": {
+        "action": "Per E-Mail senden",
+        "title": "Angebot {{number}} versenden",
+        "description": "Wir hängen das Angebot als PDF an und versenden es an die ausgewählten Empfänger.",
+        "recipients": "Empfänger (aus den Account-Kontakten)",
+        "decisionMaker": "Entscheider",
+        "additionalRecipients": "Weitere Empfänger (kommagetrennt)",
+        "cc": "CC",
+        "subject": "Betreff",
+        "message": "Nachricht",
+        "attachmentHint": "Das PDF \"quote-{{number}}.pdf\" wird automatisch angehängt.",
+        "noContactEmails": "Für diesen Account ist noch keine Kontakt-E-Mail-Adresse hinterlegt. Trage Empfänger manuell ein oder ergänze die Kontakte im Account-Detail.",
+        "invalidEmail": "Ungültige E-Mail-Adresse: {{email}}",
+        "success": "Angebot versendet",
+        "failed": "Versand fehlgeschlagen",
+        "lastSent": "Versendet am",
+        "sentTo": "An",
+        "defaultCustomer": "Kunde",
+        "defaultBrand": "Ihr DealFlow-Team"
+      }
     },
     "templates": {
       "title": "Angebots-Vorlagen",

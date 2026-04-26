@@ -410,6 +410,7 @@ export * from "./quoteLanguage";
 export * from "./quoteOrderConfirmationLink";
 export * from "./quotePatchInput";
 export * from "./quotePatchInputLanguage";
+export * from "./quoteSendInput";
 export * from "./quoteTemplate";
 export * from "./quoteTemplateInput";
 export * from "./quoteTemplateLineItem";

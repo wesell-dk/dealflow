@@ -953,6 +953,18 @@ export const GetDealResponse = zod
           language: zod
             .enum(["de", "en"])
             .describe("Sprachfassung des Angebots."),
+          sentAt: zod.coerce
+            .date()
+            .nullish()
+            .describe(
+              "Zeitpunkt des letzten erfolgreichen E-Mail-Versands an den Kunden. NULL = noch nicht versendet.",
+            ),
+          sentTo: zod
+            .string()
+            .nullish()
+            .describe(
+              "Empfänger des letzten erfolgreichen E-Mail-Versands (komma-getrennt).",
+            ),
         }),
       ),
       contracts: zod.array(
@@ -1162,6 +1174,18 @@ export const ListQuotesResponseItem = zod.object({
   createdAt: zod.coerce.date(),
   validUntil: zod.coerce.date(),
   language: zod.enum(["de", "en"]).describe("Sprachfassung des Angebots."),
+  sentAt: zod.coerce
+    .date()
+    .nullish()
+    .describe(
+      "Zeitpunkt des letzten erfolgreichen E-Mail-Versands an den Kunden. NULL = noch nicht versendet.",
+    ),
+  sentTo: zod
+    .string()
+    .nullish()
+    .describe(
+      "Empfänger des letzten erfolgreichen E-Mail-Versands (komma-getrennt).",
+    ),
 });
 export const ListQuotesResponse = zod.array(ListQuotesResponseItem);
 
@@ -1193,6 +1217,18 @@ export const GetQuoteResponse = zod
     createdAt: zod.coerce.date(),
     validUntil: zod.coerce.date(),
     language: zod.enum(["de", "en"]).describe("Sprachfassung des Angebots."),
+    sentAt: zod.coerce
+      .date()
+      .nullish()
+      .describe(
+        "Zeitpunkt des letzten erfolgreichen E-Mail-Versands an den Kunden. NULL = noch nicht versendet.",
+      ),
+    sentTo: zod
+      .string()
+      .nullish()
+      .describe(
+        "Empfänger des letzten erfolgreichen E-Mail-Versands (komma-getrennt).",
+      ),
   })
   .and(
     zod.object({
@@ -1261,10 +1297,70 @@ export const PatchQuoteResponse = zod.object({
   createdAt: zod.coerce.date(),
   validUntil: zod.coerce.date(),
   language: zod.enum(["de", "en"]).describe("Sprachfassung des Angebots."),
+  sentAt: zod.coerce
+    .date()
+    .nullish()
+    .describe(
+      "Zeitpunkt des letzten erfolgreichen E-Mail-Versands an den Kunden. NULL = noch nicht versendet.",
+    ),
+  sentTo: zod
+    .string()
+    .nullish()
+    .describe(
+      "Empfänger des letzten erfolgreichen E-Mail-Versands (komma-getrennt).",
+    ),
 });
 
 export const GetQuotePdfParams = zod.object({
   id: zod.coerce.string(),
+});
+
+/**
+ * @summary Send the quote PDF to the customer via email
+ */
+export const SendQuoteEmailParams = zod.object({
+  id: zod.coerce.string(),
+});
+
+export const SendQuoteEmailBody = zod.object({
+  to: zod
+    .array(zod.string().email())
+    .min(1)
+    .describe("Primäre Empfänger-Adressen."),
+  cc: zod
+    .array(zod.string().email())
+    .optional()
+    .describe("Optionale CC-Adressen."),
+  subject: zod.string().min(1),
+  message: zod.string().min(1),
+});
+
+export const SendQuoteEmailResponse = zod.object({
+  id: zod.string(),
+  dealId: zod.string(),
+  dealName: zod.string(),
+  number: zod.string(),
+  status: zod.string(),
+  currentVersion: zod.number(),
+  totalAmount: zod.number(),
+  discountPct: zod.number(),
+  marginPct: zod.number(),
+  currency: zod.string(),
+  createdAt: zod.coerce.date(),
+  validUntil: zod.coerce.date(),
+  language: zod.enum(["de", "en"]).describe("Sprachfassung des Angebots."),
+  sentAt: zod.coerce
+    .date()
+    .nullish()
+    .describe(
+      "Zeitpunkt des letzten erfolgreichen E-Mail-Versands an den Kunden. NULL = noch nicht versendet.",
+    ),
+  sentTo: zod
+    .string()
+    .nullish()
+    .describe(
+      "Empfänger des letzten erfolgreichen E-Mail-Versands (komma-getrennt).",
+    ),
 });
 
 export const CreateQuoteVersionParams = zod.object({
@@ -1294,6 +1390,18 @@ export const AcceptQuoteResponse = zod.object({
   createdAt: zod.coerce.date(),
   validUntil: zod.coerce.date(),
   language: zod.enum(["de", "en"]).describe("Sprachfassung des Angebots."),
+  sentAt: zod.coerce
+    .date()
+    .nullish()
+    .describe(
+      "Zeitpunkt des letzten erfolgreichen E-Mail-Versands an den Kunden. NULL = noch nicht versendet.",
+    ),
+  sentTo: zod
+    .string()
+    .nullish()
+    .describe(
+      "Empfänger des letzten erfolgreichen E-Mail-Versands (komma-getrennt).",
+    ),
 });
 
 /**

@@ -845,6 +845,28 @@ paths:
             application/pdf:
               schema: { type: string, format: binary }
 
+  /quotes/{id}/send:
+    post:
+      operationId: sendQuoteEmail
+      tags: [quotes]
+      summary: Send the quote PDF to the customer via email
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/QuoteSendInput" }
+      responses:
+        "200":
+          description: ok — quote updated with sentAt/sentTo and (if previously draft) status=sent
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Quote" }
+
   /quotes/{id}/versions:
     post:
       operationId: createQuoteVersion
@@ -5810,6 +5832,29 @@ components:
           type: string
           enum: [de, en]
           description: "Sprachfassung des Angebots."
+        sentAt:
+          type: ["string", "null"]
+          format: date-time
+          description: "Zeitpunkt des letzten erfolgreichen E-Mail-Versands an den Kunden. NULL = noch nicht versendet."
+        sentTo:
+          type: ["string", "null"]
+          description: "Empfänger des letzten erfolgreichen E-Mail-Versands (komma-getrennt)."
+
+    QuoteSendInput:
+      type: object
+      required: [to, subject, message]
+      properties:
+        to:
+          type: array
+          minItems: 1
+          items: { type: string, format: email }
+          description: "Primäre Empfänger-Adressen."
+        cc:
+          type: array
+          items: { type: string, format: email }
+          description: "Optionale CC-Adressen."
+        subject: { type: string, minLength: 1 }
+        message: { type: string, minLength: 1 }
 
     QuoteInput:
       type: object

@@ -1459,6 +1459,8 @@ function mapQuote(q: typeof quotesTable.$inferSelect, dealName: string) {
     createdAt: iso(q.createdAt)!,
     validUntil: typeof q.validUntil === 'string' ? q.validUntil : iso(q.validUntil)!.slice(0, 10),
     language: (q.language === 'en' ? 'en' : 'de') as 'de' | 'en',
+    sentAt: iso(q.sentAt) ?? null,
+    sentTo: q.sentTo ?? null,
   };
 }
 
@@ -1659,12 +1661,15 @@ router.get('/quotes/:id', async (req, res) => {
   });
 });
 
-router.get('/quotes/:id/pdf', async (req, res) => {
-  if (!validateInline(req, res, { params: Z.GetQuotePdfParams })) return;
-  const [q] = await db.select().from(quotesTable).where(eq(quotesTable.id, req.params.id));
-  if (!q) { res.status(404).json({ error: 'not found' }); return; }
-  if (!(await gateDeal(req, res, q.dealId))) return;
-  const [d] = await db.select().from(dealsTable).where(eq(dealsTable.id, q.dealId));
+/**
+ * Build the payload for the quote PDF renderer. Used by both the inline
+ * `GET /quotes/:id/pdf` endpoint and the `POST /quotes/:id/send` flow which
+ * needs to attach the same PDF to an outbound email.
+ */
+async function buildQuotePdfPayload(
+  q: typeof quotesTable.$inferSelect,
+  d: typeof dealsTable.$inferSelect | undefined,
+) {
   const versions = await db.select().from(quoteVersionsTable)
     .where(eq(quoteVersionsTable.quoteId, q.id))
     .orderBy(desc(quoteVersionsTable.version));
@@ -1682,48 +1687,199 @@ router.get('/quotes/:id/pdf', async (req, res) => {
     const [b] = await db.select().from(brandsTable).where(eq(brandsTable.id, d.brandId));
     brand = b;
   }
+  return {
+    brand,
+    payload: {
+      number: q.number,
+      currency: q.currency,
+      status: q.status,
+      validUntil: String(q.validUntil),
+      language: (q.language === 'en' ? 'en' : 'de') as 'de' | 'en',
+      dealName: d?.name ?? 'Unknown',
+      version: current?.version ?? 1,
+      totalAmount: num(current?.totalAmount),
+      discountPct: num(current?.discountPct),
+      marginPct: num(current?.marginPct),
+      notes: current?.notes ?? null,
+      lines: lines.map(l => ({
+        name: l.name,
+        description: l.description ?? null,
+        quantity: num(l.quantity),
+        unitPrice: num(l.unitPrice),
+        listPrice: num(l.listPrice),
+        discountPct: num(l.discountPct),
+        total: num(l.total),
+      })),
+      brand: brand ? {
+        name: brand.name,
+        logoUrl: await resolveLogoForPdf(brand.logoUrl),
+        primaryColor: brand.primaryColor ?? brand.color,
+        secondaryColor: brand.secondaryColor ?? null,
+        legalEntityName: brand.legalEntityName ?? null,
+        addressLine: brand.addressLine ?? null,
+        tone: brand.tone ?? null,
+      } : null,
+      sections: (current?.sectionsSnapshot ?? []) as Array<{ kind: string; title: string; body: string; order: number }>,
+      attachments: attachments.map(a => ({
+        name: a.name,
+        label: a.label,
+        mimeType: a.mimeType,
+        size: a.size,
+      })),
+    },
+  };
+}
+
+async function streamToBuffer(stream: NodeJS.ReadableStream): Promise<Buffer> {
+  const chunks: Buffer[] = [];
+  for await (const chunk of stream) {
+    chunks.push(typeof chunk === 'string' ? Buffer.from(chunk) : chunk as Buffer);
+  }
+  return Buffer.concat(chunks);
+}
+
+router.get('/quotes/:id/pdf', async (req, res) => {
+  if (!validateInline(req, res, { params: Z.GetQuotePdfParams })) return;
+  const [q] = await db.select().from(quotesTable).where(eq(quotesTable.id, req.params.id));
+  if (!q) { res.status(404).json({ error: 'not found' }); return; }
+  if (!(await gateDeal(req, res, q.dealId))) return;
+  const [d] = await db.select().from(dealsTable).where(eq(dealsTable.id, q.dealId));
+  const { payload } = await buildQuotePdfPayload(q, d);
   const { renderQuotePdf } = await import('../pdf/quote');
-  const stream = await renderQuotePdf({
-    number: q.number,
-    currency: q.currency,
-    status: q.status,
-    validUntil: String(q.validUntil),
-    language: q.language === 'en' ? 'en' : 'de',
-    dealName: d?.name ?? 'Unknown',
-    version: current?.version ?? 1,
-    totalAmount: num(current?.totalAmount),
-    discountPct: num(current?.discountPct),
-    marginPct: num(current?.marginPct),
-    notes: current?.notes ?? null,
-    lines: lines.map(l => ({
-      name: l.name,
-      description: l.description ?? null,
-      quantity: num(l.quantity),
-      unitPrice: num(l.unitPrice),
-      listPrice: num(l.listPrice),
-      discountPct: num(l.discountPct),
-      total: num(l.total),
-    })),
-    brand: brand ? {
-      name: brand.name,
-      logoUrl: await resolveLogoForPdf(brand.logoUrl),
-      primaryColor: brand.primaryColor ?? brand.color,
-      secondaryColor: brand.secondaryColor ?? null,
-      legalEntityName: brand.legalEntityName ?? null,
-      addressLine: brand.addressLine ?? null,
-      tone: brand.tone ?? null,
-    } : null,
-    sections: (current?.sectionsSnapshot ?? []) as Array<{ kind: string; title: string; body: string; order: number }>,
-    attachments: attachments.map(a => ({
-      name: a.name,
-      label: a.label,
-      mimeType: a.mimeType,
-      size: a.size,
-    })),
-  });
+  const stream = await renderQuotePdf(payload);
   res.setHeader('Content-Type', 'application/pdf');
   res.setHeader('Content-Disposition', `inline; filename="quote-${q.number}.pdf"`);
   stream.pipe(res);
+});
+
+// Simple email syntax check. The dialog already filters obviously broken
+// addresses; this guards against direct API misuse.
+const QUOTE_SEND_EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+router.post('/quotes/:id/send', async (req, res) => {
+  const [q] = await db.select().from(quotesTable).where(eq(quotesTable.id, req.params.id));
+  if (!q) { res.status(404).json({ error: 'not found' }); return; }
+  if (!(await gateDeal(req, res, q.dealId))) return;
+  const body = (req.body ?? {}) as { to?: unknown; cc?: unknown; subject?: unknown; message?: unknown };
+  const toRaw = Array.isArray(body.to) ? body.to : null;
+  if (!toRaw || toRaw.length === 0) {
+    res.status(422).json({ error: 'to must be a non-empty array of email addresses' }); return;
+  }
+  const to = toRaw
+    .filter((v): v is string => typeof v === 'string')
+    .map(v => v.trim())
+    .filter(Boolean);
+  if (to.length === 0) {
+    res.status(422).json({ error: 'to must contain at least one email address' }); return;
+  }
+  const invalid = to.find(v => !QUOTE_SEND_EMAIL_RE.test(v));
+  if (invalid) {
+    res.status(422).json({ error: `invalid email address: ${invalid}` }); return;
+  }
+  const ccRaw = Array.isArray(body.cc) ? body.cc : [];
+  const cc = ccRaw
+    .filter((v): v is string => typeof v === 'string')
+    .map(v => v.trim())
+    .filter(Boolean);
+  const ccInvalid = cc.find(v => !QUOTE_SEND_EMAIL_RE.test(v));
+  if (ccInvalid) {
+    res.status(422).json({ error: `invalid cc address: ${ccInvalid}` }); return;
+  }
+  const subjectInput = typeof body.subject === 'string' ? body.subject.trim() : '';
+  const messageInput = typeof body.message === 'string' ? body.message : '';
+  if (!subjectInput) {
+    res.status(422).json({ error: 'subject is required' }); return;
+  }
+  if (!messageInput.trim()) {
+    res.status(422).json({ error: 'message is required' }); return;
+  }
+  if (subjectInput.length > 300) {
+    res.status(422).json({ error: 'subject too long (max 300 chars)' }); return;
+  }
+  if (messageInput.length > 20_000) {
+    res.status(422).json({ error: 'message too long (max 20000 chars)' }); return;
+  }
+
+  const [d] = await db.select().from(dealsTable).where(eq(dealsTable.id, q.dealId));
+  const { brand, payload } = await buildQuotePdfPayload(q, d);
+  const { renderQuotePdf } = await import('../pdf/quote');
+  const { sendQuoteEmail } = await import('../lib/quoteEmail');
+
+  const scope = getScope(req);
+  const language = q.language === 'en' ? 'en' : 'de';
+  const brandName = brand?.name ?? d?.name ?? 'DealFlow';
+  const recipientsLabel = [...to, ...(cc.length ? cc.map(c => `cc:${c}`) : [])].join(', ');
+
+  let pdfBytes: Buffer;
+  try {
+    const stream = await renderQuotePdf(payload);
+    pdfBytes = await streamToBuffer(stream);
+  } catch (err) {
+    const errMsg = err instanceof Error ? err.message : String(err);
+    await writeAuditFromReq(req, {
+      entityType: 'quote', entityId: q.id, action: 'send_failed',
+      actor: scope.user.name,
+      summary: `E-Mail-Versand fehlgeschlagen (PDF-Erzeugung): ${errMsg}`,
+      after: { to, cc, error: errMsg, stage: 'pdf_render' },
+    });
+    res.status(500).json({ error: 'failed to render quote PDF', detail: errMsg });
+    return;
+  }
+
+  const result = await sendQuoteEmail({
+    to,
+    cc,
+    subject: subjectInput,
+    body: messageInput,
+    language,
+    brandName,
+    legalEntityName: brand?.legalEntityName ?? null,
+    addressLine: brand?.addressLine ?? null,
+    primaryColor: brand?.primaryColor ?? brand?.color ?? null,
+    replyTo: scope.user.email ?? null,
+    pdf: { filename: `quote-${q.number}.pdf`, bytes: pdfBytes },
+    quoteNumber: q.number,
+    quoteId: q.id,
+  });
+
+  if (!result.ok) {
+    await writeAuditFromReq(req, {
+      entityType: 'quote', entityId: q.id, action: 'send_failed',
+      actor: scope.user.name,
+      summary: `E-Mail-Versand an ${recipientsLabel} fehlgeschlagen (${result.provider})`,
+      after: { to, cc, provider: result.provider, error: result.error ?? null },
+    });
+    res.status(502).json({ error: 'email send failed', detail: result.error ?? null, provider: result.provider });
+    return;
+  }
+
+  const sentAt = new Date();
+  const patch: Partial<typeof quotesTable.$inferInsert> = {
+    sentAt,
+    sentTo: to.join(', '),
+  };
+  // Status flips draft → sent on first successful send. Later sends keep
+  // whatever status is current (e.g. accepted) but still update sentAt/sentTo.
+  if (q.status === 'draft') patch.status = 'sent';
+  await db.update(quotesTable).set(patch).where(eq(quotesTable.id, q.id));
+  await writeAuditFromReq(req, {
+    entityType: 'quote', entityId: q.id, action: 'sent',
+    actor: scope.user.name,
+    summary: `Angebot ${q.number} per E-Mail an ${recipientsLabel} versendet (${result.provider})`,
+    before: { status: q.status, sentAt: iso(q.sentAt), sentTo: q.sentTo ?? null },
+    after: {
+      status: patch.status ?? q.status,
+      sentAt: iso(sentAt),
+      sentTo: patch.sentTo,
+      to, cc,
+      provider: result.provider,
+      messageId: result.messageId ?? null,
+      pdfBytes: pdfBytes.length,
+    },
+  });
+
+  const [updated] = await db.select().from(quotesTable).where(eq(quotesTable.id, q.id));
+  res.json(await enrichQuote(updated!, d?.name ?? 'Unknown'));
 });
 
 // PATCH quote — currently only supports updating the language.
