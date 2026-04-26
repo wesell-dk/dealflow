@@ -1,6 +1,7 @@
 {
   "nav": {
     "home": "Home",
+    "leads": "Leads",
     "accounts": "Accounts",
     "deals": "Deals",
     "quotes": "Quotes",
@@ -18,8 +19,19 @@
     "copilot": "Copilot",
     "admin": "Admin",
     "templates": "Templates",
+    "clauses": "Clause Library",
+    "clausesImport": "Clause Import",
+    "clausesSuggestions": "Clause Suggestions",
     "attachments": "Attachments",
-    "platformAdmin": "Platform"
+    "platformAdmin": "Platform",
+    "groups": {
+      "overview": "Overview",
+      "sales": "Sales",
+      "closing": "Closing",
+      "postSale": "Post-Sale",
+      "insights": "Insights",
+      "settings": "Settings"
+    }
   },
   "common": {
     "search": "Search deals, accounts, quotes…",
@@ -122,6 +134,12 @@
       "subtitle": "Manage your active pipeline.",
       "searchPlaceholder": "Search deals…",
       "closeDate": "Close Date"
+    },
+    "leads": {
+      "title": "Leads",
+      "subtitle": "Early contacts and inquiries, before they become customers.",
+      "emptyTitle": "No leads yet",
+      "emptyBody": "The full lead management — inbox, qualification, and conversion to accounts or deals — is coming in a follow-up step."
     },
     "accounts": {
       "title": "Accounts",

@@ -11,6 +11,7 @@ import { Loader2 } from "lucide-react";
 import NotFound from "@/pages/not-found";
 
 import Home from "@/pages/home";
+import Leads from "@/pages/leads";
 import Deals from "@/pages/deals";
 import DealDetail from "@/pages/deal";
 import Quotes from "@/pages/quotes";
@@ -64,6 +65,7 @@ function ProtectedRoutes() {
       <AppShell>
         <Switch>
         <Route path="/" component={Home} />
+        <Route path="/leads" component={Leads} />
         <Route path="/deals" component={Deals} />
         <Route path="/deals/:id" component={DealDetail} />
         <Route path="/quotes" component={Quotes} />

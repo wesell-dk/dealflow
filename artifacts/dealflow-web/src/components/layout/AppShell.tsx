@@ -27,6 +27,13 @@ import {
   Building2,
   ClipboardList,
   User as UserIcon,
+  UserPlus,
+  BookOpen,
+  Upload,
+  Lightbulb,
+  ChevronRight,
+  ChevronDown,
+  type LucideIcon,
 } from "lucide-react";
 import { useGetTenant } from "@workspace/api-client-react";
 import { useAuth } from "@/contexts/auth-context";
@@ -52,38 +59,160 @@ import { PageHelpDrawer } from "@/components/onboarding/page-help";
 import { CommandPalette } from "@/components/patterns/command-palette";
 import { RecentsDropdown } from "@/components/patterns/recents-dropdown";
 
-function useNavigation() {
+interface NavItem {
+  key: string;
+  label: string;
+  href: string;
+  icon: LucideIcon;
+  gate?: boolean;
+}
+
+interface NavGroup {
+  key: string;
+  label: string;
+  items: NavItem[];
+  collapsible?: boolean;
+  defaultCollapsed?: boolean;
+}
+
+function useNavigationGroups(): NavGroup[] {
   const { t } = useTranslation();
   const { user } = useAuth();
-  const items = [
-    { name: t("nav.home"), href: "/", icon: LayoutDashboard },
-    { name: t("nav.accounts"), href: "/accounts", icon: Users },
-    { name: t("nav.deals"), href: "/deals", icon: Briefcase },
-    { name: t("nav.quotes"), href: "/quotes", icon: FileText },
-    { name: t("nav.templates"), href: "/templates", icon: FileStack },
-    { name: t("nav.attachments"), href: "/attachments", icon: Paperclip },
-    { name: t("nav.pricing"), href: "/pricing", icon: BadgeDollarSign },
-    { name: t("nav.approvals"), href: "/approvals", icon: CheckSquare },
-    { name: t("nav.contracts"), href: "/contracts", icon: FileSignature },
-    { name: t("nav.obligations"), href: "/obligations", icon: ClipboardList },
-    { name: t("nav.negotiations"), href: "/negotiations", icon: Handshake },
-    { name: t("nav.signatures"), href: "/signatures", icon: PenTool },
-    { name: t("nav.priceIncreases"), href: "/price-increases", icon: TrendingUp },
-    { name: t("nav.orderConfirmations"), href: "/order-confirmations", icon: ClipboardCheck },
-    { name: t("nav.renewals"), href: "/renewals", icon: CalendarClock },
-    { name: t("nav.reports"), href: "/reports", icon: BarChart3 },
-    { name: t("nav.audit"), href: "/audit", icon: History },
-    { name: t("nav.copilot"), href: "/copilot", icon: Bot },
-    { name: t("nav.admin"), href: "/admin", icon: Settings },
+
+  const settingsItems: NavItem[] = [
+    { key: "templates", label: t("nav.templates"), href: "/templates", icon: FileStack },
+    { key: "clauses", label: t("nav.clauses"), href: "/clauses", icon: BookOpen },
+    { key: "clausesImport", label: t("nav.clausesImport"), href: "/clauses/import", icon: Upload },
+    { key: "clausesSuggestions", label: t("nav.clausesSuggestions"), href: "/clauses/suggestions", icon: Lightbulb },
+    { key: "attachments", label: t("nav.attachments"), href: "/attachments", icon: Paperclip },
+    { key: "pricing", label: t("nav.pricing"), href: "/pricing", icon: BadgeDollarSign },
+    { key: "admin", label: t("nav.admin"), href: "/admin", icon: Settings },
+    { key: "audit", label: t("nav.audit"), href: "/audit", icon: History },
   ];
   if (user?.isPlatformAdmin) {
-    items.push({ name: t("nav.platformAdmin"), href: "/platform-admin", icon: Building2 });
+    settingsItems.push({
+      key: "platformAdmin",
+      label: t("nav.platformAdmin"),
+      href: "/platform-admin",
+      icon: Building2,
+      gate: true,
+    });
   }
-  return items;
+
+  return [
+    {
+      key: "overview",
+      label: t("nav.groups.overview"),
+      items: [{ key: "home", label: t("nav.home"), href: "/", icon: LayoutDashboard }],
+    },
+    {
+      key: "sales",
+      label: t("nav.groups.sales"),
+      items: [
+        { key: "leads", label: t("nav.leads"), href: "/leads", icon: UserPlus },
+        { key: "accounts", label: t("nav.accounts"), href: "/accounts", icon: Users },
+        { key: "deals", label: t("nav.deals"), href: "/deals", icon: Briefcase },
+        { key: "quotes", label: t("nav.quotes"), href: "/quotes", icon: FileText },
+        { key: "negotiations", label: t("nav.negotiations"), href: "/negotiations", icon: Handshake },
+        { key: "approvals", label: t("nav.approvals"), href: "/approvals", icon: CheckSquare },
+      ],
+    },
+    {
+      key: "closing",
+      label: t("nav.groups.closing"),
+      items: [
+        { key: "orderConfirmations", label: t("nav.orderConfirmations"), href: "/order-confirmations", icon: ClipboardCheck },
+        { key: "contracts", label: t("nav.contracts"), href: "/contracts", icon: FileSignature },
+        { key: "signatures", label: t("nav.signatures"), href: "/signatures", icon: PenTool },
+      ],
+    },
+    {
+      key: "postSale",
+      label: t("nav.groups.postSale"),
+      items: [
+        { key: "obligations", label: t("nav.obligations"), href: "/obligations", icon: ClipboardList },
+        { key: "renewals", label: t("nav.renewals"), href: "/renewals", icon: CalendarClock },
+        { key: "priceIncreases", label: t("nav.priceIncreases"), href: "/price-increases", icon: TrendingUp },
+      ],
+    },
+    {
+      key: "insights",
+      label: t("nav.groups.insights"),
+      items: [
+        { key: "reports", label: t("nav.reports"), href: "/reports", icon: BarChart3 },
+        { key: "copilot", label: t("nav.copilot"), href: "/copilot", icon: Bot },
+      ],
+    },
+    {
+      key: "settings",
+      label: t("nav.groups.settings"),
+      collapsible: true,
+      defaultCollapsed: true,
+      items: settingsItems,
+    },
+  ];
+}
+
+const SETTINGS_COLLAPSED_STORAGE_KEY = "dealflow.sidebar.settingsCollapsed";
+
+function hrefMatches(currentPath: string, href: string): boolean {
+  if (href === "/") return currentPath === "/";
+  return currentPath === href || currentPath.startsWith(href + "/");
 }
 
 function Sidebar({ currentPath }: { currentPath: string }) {
-  const navigation = useNavigation();
+  const groups = useNavigationGroups();
+  const [collapsed, setCollapsed] = useState<Record<string, boolean>>(() => {
+    const initial: Record<string, boolean> = {};
+    for (const g of groups) {
+      if (g.collapsible) {
+        initial[g.key] = g.defaultCollapsed ?? false;
+      }
+    }
+    if (typeof window !== "undefined") {
+      try {
+        const stored = window.localStorage.getItem(SETTINGS_COLLAPSED_STORAGE_KEY);
+        if (stored != null) initial.settings = stored === "1";
+      } catch {
+        // ignore storage errors
+      }
+    }
+    return initial;
+  });
+
+  function toggleGroup(key: string) {
+    setCollapsed((prev) => {
+      const next = { ...prev, [key]: !prev[key] };
+      if (key === "settings" && typeof window !== "undefined") {
+        try {
+          window.localStorage.setItem(SETTINGS_COLLAPSED_STORAGE_KEY, next.settings ? "1" : "0");
+        } catch {
+          // ignore storage errors
+        }
+      }
+      return next;
+    });
+  }
+
+  // Pick the single most-specific (longest matching href) item across all
+  // groups so that overlapping routes like /clauses vs /clauses/import only
+  // highlight one entry.
+  let bestMatchHref: string | null = null;
+  for (const group of groups) {
+    for (const item of group.items) {
+      if (
+        hrefMatches(currentPath, item.href) &&
+        (bestMatchHref === null || item.href.length > bestMatchHref.length)
+      ) {
+        bestMatchHref = item.href;
+      }
+    }
+  }
+
+  function isItemActive(href: string): boolean {
+    return href === bestMatchHref;
+  }
+
   return (
     <div className="flex h-full flex-col gap-2">
       <div className="flex h-14 items-center border-b px-4 lg:h-[60px] lg:px-6">
@@ -93,20 +222,54 @@ function Sidebar({ currentPath }: { currentPath: string }) {
         </Link>
       </div>
       <div className="flex-1 overflow-auto py-2">
-        <nav className="grid items-start px-2 text-sm font-medium lg:px-4 space-y-1">
-          {navigation.map((item) => {
-            const isActive = currentPath === item.href || (item.href !== "/" && currentPath.startsWith(item.href));
+        <nav className="grid items-start px-2 text-sm font-medium lg:px-4">
+          {groups.map((group, gIdx) => {
+            const isCollapsed = !!group.collapsible && !!collapsed[group.key];
+            const headingClass =
+              "px-3 pt-3 pb-1 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground/70";
             return (
-              <Link
-                key={item.href}
-                href={item.href}
-                className={`flex items-center gap-3 rounded-lg px-3 py-2 transition-all hover:text-primary ${
-                  isActive ? "bg-muted text-primary" : "text-muted-foreground"
-                }`}
-              >
-                <item.icon className="h-4 w-4" />
-                {item.name}
-              </Link>
+              <div key={group.key} className={gIdx === 0 ? "" : "mt-1"}>
+                {group.collapsible ? (
+                  <button
+                    type="button"
+                    onClick={() => toggleGroup(group.key)}
+                    className={`flex w-full items-center justify-between ${headingClass} hover:text-muted-foreground transition-colors`}
+                    aria-expanded={!isCollapsed}
+                    data-testid={`sidebar-group-toggle-${group.key}`}
+                  >
+                    <span>{group.label}</span>
+                    {isCollapsed ? (
+                      <ChevronRight className="h-3.5 w-3.5" aria-hidden />
+                    ) : (
+                      <ChevronDown className="h-3.5 w-3.5" aria-hidden />
+                    )}
+                  </button>
+                ) : (
+                  <div className={headingClass} data-testid={`sidebar-group-${group.key}`}>
+                    {group.label}
+                  </div>
+                )}
+                {!isCollapsed && (
+                  <div className="space-y-1 mt-1">
+                    {group.items.map((item) => {
+                      const isActive = isItemActive(item.href);
+                      return (
+                        <Link
+                          key={item.href}
+                          href={item.href}
+                          className={`flex items-center gap-3 rounded-lg px-3 py-2 transition-all hover:text-primary ${
+                            isActive ? "bg-muted text-primary" : "text-muted-foreground"
+                          }`}
+                          data-testid={`sidebar-nav-${item.key}`}
+                        >
+                          <item.icon className="h-4 w-4" />
+                          {item.label}
+                        </Link>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
             );
           })}
         </nav>

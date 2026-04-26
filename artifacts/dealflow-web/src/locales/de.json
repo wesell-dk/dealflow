@@ -1,6 +1,7 @@
 {
   "nav": {
     "home": "Startseite",
+    "leads": "Leads",
     "accounts": "Kunden",
     "deals": "Deals",
     "quotes": "Angebote",
@@ -12,14 +13,25 @@
     "signatures": "Unterschriften",
     "priceIncreases": "Preiserhöhungen",
     "orderConfirmations": "Auftragsbestätigungen",
-    "renewals": "Renewals",
+    "renewals": "Verlängerungen",
     "reports": "Berichte",
     "audit": "Audit-Log",
     "copilot": "Copilot",
     "admin": "Verwaltung",
     "templates": "Vorlagen",
+    "clauses": "Klauselbibliothek",
+    "clausesImport": "Klausel-Import",
+    "clausesSuggestions": "Klausel-Vorschläge",
     "attachments": "Anhänge",
-    "platformAdmin": "Plattform"
+    "platformAdmin": "Plattform",
+    "groups": {
+      "overview": "Übersicht",
+      "sales": "Vertrieb",
+      "closing": "Abschluss",
+      "postSale": "Bestand",
+      "insights": "Analyse",
+      "settings": "Einstellungen"
+    }
   },
   "common": {
     "search": "Deals, Kunden, Angebote suchen…",
@@ -122,6 +134,12 @@
       "subtitle": "Verwalte deine aktive Pipeline.",
       "searchPlaceholder": "Deals suchen…",
       "closeDate": "Abschlussdatum"
+    },
+    "leads": {
+      "title": "Leads",
+      "subtitle": "Frühe Kontakte und Anfragen, bevor daraus ein Kunde wird.",
+      "emptyTitle": "Noch keine Leads",
+      "emptyBody": "Die eigentliche Lead-Verwaltung — Inbox, Qualifizierung und Konvertierung in Kunden oder Deals — folgt als nächste Ausbaustufe."
     },
     "accounts": {
       "title": "Kunden",
