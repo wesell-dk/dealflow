@@ -934,6 +934,30 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/QuoteConvertConflict" }
 
+  /quotes/{id}/transition:
+    post:
+      operationId: transitionQuote
+      tags: [quotes]
+      summary: Statuswechsel am Angebot mit State-Machine-Validierung
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/QuoteTransitionInput" }
+      responses:
+        "200":
+          description: ok
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Quote" }
+        "409":
+          description: Übergang nicht erlaubt
+
   /quotes/from-template:
     post:
       operationId: createQuoteFromTemplate
@@ -5869,6 +5893,18 @@ components:
         sentTo:
           type: ["string", "null"]
           description: "Empfänger des letzten erfolgreichen E-Mail-Versands (komma-getrennt)."
+        rejectionReason:
+          type: ["string", "null"]
+          description: "Optionaler Freitext-Grund, wenn das Angebot abgelehnt wurde."
+        displayStatus:
+          type: string
+          description: |
+            Anzeige-Status: identisch mit `status`, außer wenn ein 'sent'-Angebot
+            sein `validUntil` überschritten hat — dann 'expired'. Die Datenbank
+            wird dabei nicht geändert; die Ableitung passiert beim Lesen.
+        canEdit:
+          type: boolean
+          description: "Darf der aktuelle Nutzer das Angebot bearbeiten/Statuswechsel durchführen."
 
     QuoteSendInput:
       type: object
@@ -5903,6 +5939,22 @@ components:
         language:
           type: string
           enum: [de, en]
+
+    QuoteTransitionInput:
+      type: object
+      required: [status]
+      properties:
+        status:
+          type: string
+          enum: [sent, accepted, rejected]
+          description: |
+            Ziel-Status. Erlaubte Übergänge:
+              - draft → sent
+              - sent → accepted
+              - sent → rejected
+        rejectionReason:
+          type: ["string", "null"]
+          description: "Optionaler Freitext-Grund (nur wenn status=rejected)."
 
     QuoteVersion:
       type: object

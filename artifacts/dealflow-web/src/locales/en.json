@@ -256,7 +256,20 @@
       "brutto": "Gross (incl. VAT)",
       "vatAt": "VAT {{pct}}%",
       "vatExempt": "Tax-exempt (0%)",
-      "taxRateLine": "VAT {{pct}}%"
+      "taxRateLine": "VAT {{pct}}%",
+      "markAsSent": "Mark as sent",
+      "markAsAccepted": "Mark as accepted",
+      "markAsRejected": "Mark as rejected",
+      "rejectDialogTitle": "Reject quote",
+      "rejectDialogBody": "You can optionally add a rejection reason — it will appear on the quote and in the audit log.",
+      "rejectReasonPlaceholder": "Reason for rejection (optional)",
+      "rejectConfirm": "Reject",
+      "rejectionReasonLabel": "Rejection reason",
+      "statusChanged": {
+        "sent": "Quote marked as sent",
+        "accepted": "Quote accepted",
+        "rejected": "Quote rejected"
+      }
     },
     "templates": {
       "title": "Quote Templates",

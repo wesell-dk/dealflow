@@ -7,6 +7,8 @@ import { logger } from "./logger";
 
 export type WebhookEvent =
   | "quote.accepted"
+  | "quote.sent"
+  | "quote.rejected"
   | "contract.signed"
   | "approval.decided"
   | "approval.stage.decided"
@@ -313,6 +315,8 @@ async function scheduleRetry(
 
 export const WEBHOOK_EVENTS: WebhookEvent[] = [
   "quote.accepted",
+  "quote.sent",
+  "quote.rejected",
   "contract.signed",
   "approval.decided",
   "approval.stage.decided",

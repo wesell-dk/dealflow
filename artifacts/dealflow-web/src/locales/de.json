@@ -256,7 +256,20 @@
       "brutto": "Brutto (inkl. USt.)",
       "vatAt": "USt. {{pct}}%",
       "vatExempt": "Steuerfrei (0%)",
-      "taxRateLine": "USt. {{pct}}%"
+      "taxRateLine": "USt. {{pct}}%",
+      "markAsSent": "Als versendet markieren",
+      "markAsAccepted": "Als angenommen markieren",
+      "markAsRejected": "Als abgelehnt markieren",
+      "rejectDialogTitle": "Angebot ablehnen",
+      "rejectDialogBody": "Optional kannst du einen Ablehnungsgrund hinterlegen – er erscheint später am Angebot und im Audit-Log.",
+      "rejectReasonPlaceholder": "Grund für die Ablehnung (optional)",
+      "rejectConfirm": "Ablehnen",
+      "rejectionReasonLabel": "Ablehnungsgrund",
+      "statusChanged": {
+        "sent": "Angebot als versendet markiert",
+        "accepted": "Angebot angenommen",
+        "rejected": "Angebot abgelehnt"
+      }
     },
     "templates": {
       "title": "Angebots-Vorlagen",

@@ -240,6 +240,9 @@ export const quotesTable = pgTable("quotes", {
   sentAt: timestamp("sent_at", { withTimezone: true }),
   // Komma-getrennte Empfänger-Adressen aus dem letzten erfolgreichen Versand.
   sentTo: text("sent_to"),
+  // Optionaler Freitext-Grund, wenn das Angebot abgelehnt wurde.
+  // Wird beim Statuswechsel auf 'rejected' am Angebot gespeichert.
+  rejectionReason: text("rejection_reason"),
   createdAt: ts("created_at"),
 });
 

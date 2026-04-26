@@ -417,6 +417,8 @@ export * from "./quoteTemplateInput";
 export * from "./quoteTemplateLineItem";
 export * from "./quoteTemplateSection";
 export * from "./quoteTemplateSectionInput";
+export * from "./quoteTransitionInput";
+export * from "./quoteTransitionInputStatus";
 export * from "./quoteVersion";
 export * from "./quoteVersionInput";
 export * from "./reactionInput";

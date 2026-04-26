@@ -34,4 +34,16 @@ export interface Quote {
    * @nullable
    */
   sentTo?: string | null;
+  /**
+   * Optionaler Freitext-Grund, wenn das Angebot abgelehnt wurde.
+   * @nullable
+   */
+  rejectionReason?: string | null;
+  /** Anzeige-Status: identisch mit `status`, außer wenn ein 'sent'-Angebot
+sein `validUntil` überschritten hat — dann 'expired'. Die Datenbank
+wird dabei nicht geändert; die Ableitung passiert beim Lesen.
+ */
+  displayStatus?: string;
+  /** Darf der aktuelle Nutzer das Angebot bearbeiten/Statuswechsel durchführen. */
+  canEdit?: boolean;
 }

@@ -240,6 +240,7 @@ import type {
   QuoteSendInput,
   QuoteTemplate,
   QuoteTemplateInput,
+  QuoteTransitionInput,
   QuoteVersion,
   QuoteVersionInput,
   ReactionInput,
@@ -4207,6 +4208,93 @@ export const useConvertQuoteToOrder = <
   TContext
 > => {
   return useMutation(getConvertQuoteToOrderMutationOptions(options));
+};
+
+/**
+ * @summary Statuswechsel am Angebot mit State-Machine-Validierung
+ */
+export const getTransitionQuoteUrl = (id: string) => {
+  return `/api/v1/quotes/${id}/transition`;
+};
+
+export const transitionQuote = async (
+  id: string,
+  quoteTransitionInput: QuoteTransitionInput,
+  options?: RequestInit,
+): Promise<Quote> => {
+  return customFetch<Quote>(getTransitionQuoteUrl(id), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(quoteTransitionInput),
+  });
+};
+
+export const getTransitionQuoteMutationOptions = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof transitionQuote>>,
+    TError,
+    { id: string; data: BodyType<QuoteTransitionInput> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof transitionQuote>>,
+  TError,
+  { id: string; data: BodyType<QuoteTransitionInput> },
+  TContext
+> => {
+  const mutationKey = ["transitionQuote"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof transitionQuote>>,
+    { id: string; data: BodyType<QuoteTransitionInput> }
+  > = (props) => {
+    const { id, data } = props ?? {};
+
+    return transitionQuote(id, data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type TransitionQuoteMutationResult = NonNullable<
+  Awaited<ReturnType<typeof transitionQuote>>
+>;
+export type TransitionQuoteMutationBody = BodyType<QuoteTransitionInput>;
+export type TransitionQuoteMutationError = ErrorType<void>;
+
+/**
+ * @summary Statuswechsel am Angebot mit State-Machine-Validierung
+ */
+export const useTransitionQuote = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof transitionQuote>>,
+    TError,
+    { id: string; data: BodyType<QuoteTransitionInput> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof transitionQuote>>,
+  TError,
+  { id: string; data: BodyType<QuoteTransitionInput> },
+  TContext
+> => {
+  return useMutation(getTransitionQuoteMutationOptions(options));
 };
 
 /**

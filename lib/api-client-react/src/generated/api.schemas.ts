@@ -1227,6 +1227,18 @@ export interface Quote {
    * @nullable
    */
   sentTo?: string | null;
+  /**
+   * Optionaler Freitext-Grund, wenn das Angebot abgelehnt wurde.
+   * @nullable
+   */
+  rejectionReason?: string | null;
+  /** Anzeige-Status: identisch mit `status`, außer wenn ein 'sent'-Angebot
+sein `validUntil` überschritten hat — dann 'expired'. Die Datenbank
+wird dabei nicht geändert; die Ableitung passiert beim Lesen.
+ */
+  displayStatus?: string;
+  /** Darf der aktuelle Nutzer das Angebot bearbeiten/Statuswechsel durchführen. */
+  canEdit?: boolean;
 }
 
 /**
@@ -1465,6 +1477,36 @@ export const QuotePatchInputLanguage = {
 
 export interface QuotePatchInput {
   language?: QuotePatchInputLanguage;
+}
+
+/**
+ * Ziel-Status. Erlaubte Übergänge:
+  - draft → sent
+  - sent → accepted
+  - sent → rejected
+
+ */
+export type QuoteTransitionInputStatus =
+  (typeof QuoteTransitionInputStatus)[keyof typeof QuoteTransitionInputStatus];
+
+export const QuoteTransitionInputStatus = {
+  sent: "sent",
+  accepted: "accepted",
+  rejected: "rejected",
+} as const;
+
+export interface QuoteTransitionInput {
+  /** Ziel-Status. Erlaubte Übergänge:
+  - draft → sent
+  - sent → accepted
+  - sent → rejected
+ */
+  status: QuoteTransitionInputStatus;
+  /**
+   * Optionaler Freitext-Grund (nur wenn status=rejected).
+   * @nullable
+   */
+  rejectionReason?: string | null;
 }
 
 export interface QuoteVersion {

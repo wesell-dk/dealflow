@@ -1411,7 +1411,7 @@ router.get('/deals/:id', async (req, res) => {
   ]);
   res.json({
     ...base,
-    quotes: quotes.map(q => mapQuote(q, base.name)),
+    quotes: quotes.map(q => mapQuote(q, base.name, { canEdit: userCanEditQuote(req) })),
     contracts: contracts.map(c => mapContract(c, base.name)),
     approvals: await Promise.all(
       approvals.map(a => mapApproval(a, base.name, ctx.users, getScope(req).user.id, getScope(req).tenantId)),
@@ -1462,7 +1462,23 @@ router.get('/deals/:id/timeline', async (req, res) => {
 });
 
 // ── QUOTES ──
-function mapQuote(q: typeof quotesTable.$inferSelect, dealName: string) {
+// Anzeige-Status: 'sent' + überschrittenes validUntil → 'expired' (nur Anzeige,
+// die DB-Spalte bleibt unverändert).
+function deriveDisplayStatus(q: typeof quotesTable.$inferSelect): string {
+  if (q.status !== 'sent') return q.status;
+  const vu = typeof q.validUntil === 'string' ? q.validUntil : iso(q.validUntil)?.slice(0, 10);
+  if (!vu) return q.status;
+  const today = new Date().toISOString().slice(0, 10);
+  return vu < today ? 'expired' : q.status;
+}
+
+// Read-Only-Rolle darf keinen Statuswechsel durchführen.
+function userCanEditQuote(req: Request): boolean {
+  const scope = getScope(req);
+  return scope.user.role !== 'Read-Only Executive';
+}
+
+function mapQuote(q: typeof quotesTable.$inferSelect, dealName: string, opts?: { canEdit?: boolean }) {
   return {
     id: q.id, dealId: q.dealId, dealName,
     number: q.number, status: q.status, currentVersion: q.currentVersion,
@@ -1473,21 +1489,34 @@ function mapQuote(q: typeof quotesTable.$inferSelect, dealName: string) {
     language: (q.language === 'en' ? 'en' : 'de') as 'de' | 'en',
     sentAt: iso(q.sentAt) ?? null,
     sentTo: q.sentTo ?? null,
+    rejectionReason: q.rejectionReason ?? null,
+    displayStatus: deriveDisplayStatus(q),
+    canEdit: opts?.canEdit ?? false,
   };
 }
 
-async function enrichQuote(q: typeof quotesTable.$inferSelect, dealName: string) {
+async function enrichQuote(q: typeof quotesTable.$inferSelect, dealName: string, opts?: { canEdit?: boolean }) {
   const versions = await db.select().from(quoteVersionsTable)
     .where(eq(quoteVersionsTable.quoteId, q.id))
     .orderBy(desc(quoteVersionsTable.version));
   const current = versions.find(v => v.version === q.currentVersion) ?? versions[0];
   return {
-    ...mapQuote(q, dealName),
+    ...mapQuote(q, dealName, opts),
     totalAmount: num(current?.totalAmount),
     discountPct: num(current?.discountPct),
     marginPct: num(current?.marginPct),
   };
 }
+
+// Erlaubte Statusübergänge am Angebot. 'expired' entsteht nur als Anzeige
+// (deriveDisplayStatus); manuell schalten kann man nur draft → sent → {accepted,rejected}.
+const ALLOWED_QUOTE_TRANSITIONS: Record<string, ReadonlyArray<'sent' | 'accepted' | 'rejected'>> = {
+  draft: ['sent'],
+  sent: ['accepted', 'rejected'],
+  accepted: [],
+  rejected: [],
+  expired: [],
+};
 
 router.get('/quotes', async (req, res) => {
   if (!validateInline(req, res, { query: Z.ListQuotesQueryParams })) return;
@@ -1501,7 +1530,8 @@ router.get('/quotes', async (req, res) => {
     .where(and(...filters))
     .orderBy(desc(quotesTable.createdAt));
   const dealMap = await getDealMap();
-  const out = await Promise.all(rows.map(q => enrichQuote(q, dealMap.get(q.dealId)?.name ?? 'Unknown')));
+  const canEdit = userCanEditQuote(req);
+  const out = await Promise.all(rows.map(q => enrichQuote(q, dealMap.get(q.dealId)?.name ?? 'Unknown', { canEdit })));
   res.json(out);
 });
 
@@ -1528,7 +1558,7 @@ router.post('/quotes', async (req, res) => {
     discountPct: '0', marginPct: '35', status: 'draft', notes: 'Initial draft',
   });
   const [q] = await db.select().from(quotesTable).where(eq(quotesTable.id, id));
-  res.status(201).json(await enrichQuote(q!, d.name));
+  res.status(201).json(await enrichQuote(q!, d.name, { canEdit: userCanEditQuote(req) }));
 });
 
 router.get('/quotes/current', async (req, res) => {
@@ -1592,7 +1622,7 @@ router.get('/quotes/:id', async (req, res) => {
     const lines = await db.select().from(lineItemsTable)
       .where(eq(lineItemsTable.quoteVersionId, chosen.id));
     const [d] = await db.select().from(dealsTable).where(eq(dealsTable.id, q.dealId));
-    const base = await enrichQuote(q, d?.name ?? 'Unknown');
+    const base = await enrichQuote(q, d?.name ?? 'Unknown', { canEdit: userCanEditQuote(req) });
     const ocs = await db.select({
       id: orderConfirmationsTable.id,
       number: orderConfirmationsTable.number,
@@ -1640,7 +1670,7 @@ router.get('/quotes/:id', async (req, res) => {
   const lines = current
     ? await db.select().from(lineItemsTable).where(eq(lineItemsTable.quoteVersionId, current.id))
     : [];
-  const base = await enrichQuote(q, d?.name ?? 'Unknown');
+  const base = await enrichQuote(q, d?.name ?? 'Unknown', { canEdit: userCanEditQuote(req) });
   const ocs = await db.select({
     id: orderConfirmationsTable.id,
     number: orderConfirmationsTable.number,
@@ -1933,7 +1963,7 @@ router.patch('/quotes/:id', async (req, res) => {
   }
   const [updated] = await db.select().from(quotesTable).where(eq(quotesTable.id, q.id));
   const dealMap = await getDealMap();
-  res.json(mapQuote(updated!, dealMap.get(updated!.dealId)?.name ?? 'Unknown'));
+  res.json(mapQuote(updated!, dealMap.get(updated!.dealId)?.name ?? 'Unknown', { canEdit: userCanEditQuote(req) }));
 });
 
 router.post('/quotes/:id/versions', async (req, res) => {
@@ -2066,22 +2096,22 @@ router.post('/quotes/:id/convert-to-order', async (req, res) => {
   await respondOcDetail(req, res, ocId, 201);
 });
 
-router.post('/quotes/:id/accept', async (req, res) => {
-  if (!validateInline(req, res, { params: Z.AcceptQuoteParams })) return;
-  const [q0] = await db.select().from(quotesTable).where(eq(quotesTable.id, req.params.id));
-  if (!q0) { res.status(404).json({ error: 'not found' }); return; }
-  if (!(await gateDeal(req, res, q0.dealId))) return;
-  await db.update(quotesTable).set({ status: 'accepted' }).where(eq(quotesTable.id, req.params.id));
-  const [q] = await db.select().from(quotesTable).where(eq(quotesTable.id, req.params.id));
-  if (!q) { res.status(404).json({ error: 'not found' }); return; }
-  const [d] = await db.select().from(dealsTable).where(eq(dealsTable.id, q.dealId));
+// Gemeinsame Logik für Accept-/Transition-Pfade. Setzt Status, schreibt Audit
+// und triggert ggf. Deal-Wert-Auto-Fill bzw. quote.accepted-Webhook.
+async function applyQuoteAccepted(
+  req: Request,
+  q0: typeof quotesTable.$inferSelect,
+): Promise<typeof quotesTable.$inferSelect> {
+  await db.update(quotesTable).set({ status: 'accepted' }).where(eq(quotesTable.id, q0.id));
+  const [q] = await db.select().from(quotesTable).where(eq(quotesTable.id, q0.id));
+  const [d] = await db.select().from(dealsTable).where(eq(dealsTable.id, q!.dealId));
 
   // Auto-Fill: Wenn der Deal noch keinen Wert hat (== 0), übernehme den
   // totalAmount der neusten Quote-Version. So können Vertriebler einen Deal
   // ohne Wert anlegen und ihn nach Angebotsannahme automatisch befüllen lassen.
   if (d && (Number(d.value) === 0 || d.value === null)) {
     const [latest] = await db.select().from(quoteVersionsTable)
-      .where(eq(quoteVersionsTable.quoteId, q.id))
+      .where(eq(quoteVersionsTable.quoteId, q!.id))
       .orderBy(desc(quoteVersionsTable.version))
       .limit(1);
     const total = latest ? Number(latest.totalAmount) : 0;
@@ -2098,8 +2128,89 @@ router.post('/quotes/:id/accept', async (req, res) => {
     }
   }
 
-  void emitEvent(getScope(req).tenantId, 'quote.accepted', { quoteId: q.id, dealId: q.dealId });
-  res.json(await enrichQuote(q, d?.name ?? 'Unknown'));
+  void emitEvent(getScope(req).tenantId, 'quote.accepted', { quoteId: q!.id, dealId: q!.dealId });
+  return q!;
+}
+
+router.post('/quotes/:id/accept', async (req, res) => {
+  if (!validateInline(req, res, { params: Z.AcceptQuoteParams })) return;
+  const [q0] = await db.select().from(quotesTable).where(eq(quotesTable.id, req.params.id));
+  if (!q0) { res.status(404).json({ error: 'not found' }); return; }
+  if (!(await gateDeal(req, res, q0.dealId))) return;
+  if (!userCanEditQuote(req)) { res.status(403).json({ error: 'forbidden' }); return; }
+  const before = q0.status;
+  const q = await applyQuoteAccepted(req, q0);
+  await writeAuditFromReq(req, {
+    entityType: 'quote', entityId: q.id, action: 'status_changed',
+    summary: `Angebotsstatus: ${before} → accepted`,
+    before: { status: before }, after: { status: 'accepted' },
+  });
+  const [d] = await db.select().from(dealsTable).where(eq(dealsTable.id, q.dealId));
+  res.json(await enrichQuote(q, d?.name ?? 'Unknown', { canEdit: userCanEditQuote(req) }));
+});
+
+// Statuswechsel mit State-Machine-Validierung.
+//   draft → sent
+//   sent  → accepted | rejected
+// 'expired' ist nur Anzeige (deriveDisplayStatus) — kein manueller Übergang.
+router.post('/quotes/:id/transition', async (req, res) => {
+  const TransitionBody = z.object({
+    status: z.enum(['sent', 'accepted', 'rejected']),
+    rejectionReason: z.string().trim().max(2000).optional().nullable(),
+  });
+  if (!validateInline(req, res, { body: TransitionBody })) return;
+  const [q0] = await db.select().from(quotesTable).where(eq(quotesTable.id, req.params.id));
+  if (!q0) { res.status(404).json({ error: 'not found' }); return; }
+  if (!(await gateDeal(req, res, q0.dealId))) return;
+  if (!userCanEditQuote(req)) { res.status(403).json({ error: 'forbidden' }); return; }
+  const body = req.body as z.infer<typeof TransitionBody>;
+  const allowed = ALLOWED_QUOTE_TRANSITIONS[q0.status] ?? [];
+  if (!allowed.includes(body.status)) {
+    res.status(409).json({
+      error: 'transition not allowed',
+      from: q0.status,
+      to: body.status,
+      allowed,
+    });
+    return;
+  }
+
+  let q: typeof quotesTable.$inferSelect;
+  let auditSummary = `Angebotsstatus: ${q0.status} → ${body.status}`;
+  const beforeSnap: { status: string; rejectionReason?: string | null } = { status: q0.status };
+  const afterSnap: { status: string; rejectionReason?: string | null } = { status: body.status };
+
+  if (body.status === 'accepted') {
+    q = await applyQuoteAccepted(req, q0);
+  } else if (body.status === 'rejected') {
+    const reason = body.rejectionReason?.trim() || null;
+    await db.update(quotesTable)
+      .set({ status: 'rejected', rejectionReason: reason })
+      .where(eq(quotesTable.id, q0.id));
+    const [updated] = await db.select().from(quotesTable).where(eq(quotesTable.id, q0.id));
+    q = updated!;
+    beforeSnap.rejectionReason = q0.rejectionReason ?? null;
+    afterSnap.rejectionReason = reason;
+    if (reason) auditSummary += ` (Grund: ${reason})`;
+    void emitEvent(getScope(req).tenantId, 'quote.rejected', {
+      quoteId: q.id, dealId: q.dealId, rejectionReason: reason,
+    });
+  } else {
+    // body.status === 'sent'
+    await db.update(quotesTable).set({ status: 'sent' }).where(eq(quotesTable.id, q0.id));
+    const [updated] = await db.select().from(quotesTable).where(eq(quotesTable.id, q0.id));
+    q = updated!;
+    void emitEvent(getScope(req).tenantId, 'quote.sent', { quoteId: q.id, dealId: q.dealId });
+  }
+
+  await writeAuditFromReq(req, {
+    entityType: 'quote', entityId: q.id, action: 'status_changed',
+    summary: auditSummary,
+    before: beforeSnap, after: afterSnap,
+  });
+
+  const [d] = await db.select().from(dealsTable).where(eq(dealsTable.id, q.dealId));
+  res.json(await enrichQuote(q, d?.name ?? 'Unknown', { canEdit: userCanEditQuote(req) }));
 });
 
 // ── QUOTE TEMPLATES ──
@@ -2563,7 +2674,7 @@ router.post('/quotes/from-template', async (req, res) => {
   const [q] = await db.select().from(quotesTable).where(eq(quotesTable.id, id));
   const versions = await db.select().from(quoteVersionsTable).where(eq(quoteVersionsTable.quoteId, id));
   const lines = await db.select().from(lineItemsTable).where(eq(lineItemsTable.quoteVersionId, qvId));
-  const base = await enrichQuote(q!, d.name);
+  const base = await enrichQuote(q!, d.name, { canEdit: userCanEditQuote(req) });
   const defaultRate = await resolveDefaultTaxRatePct({
     brandId: d.brandId, tenantId: scope.tenantId,
   });

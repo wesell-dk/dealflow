@@ -1033,6 +1033,24 @@ export const GetDealResponse = zod
             .describe(
               "Empfänger des letzten erfolgreichen E-Mail-Versands (komma-getrennt).",
             ),
+          rejectionReason: zod
+            .string()
+            .nullish()
+            .describe(
+              "Optionaler Freitext-Grund, wenn das Angebot abgelehnt wurde.",
+            ),
+          displayStatus: zod
+            .string()
+            .optional()
+            .describe(
+              "Anzeige-Status: identisch mit `status`, außer wenn ein 'sent'-Angebot\nsein `validUntil` überschritten hat — dann 'expired'. Die Datenbank\nwird dabei nicht geändert; die Ableitung passiert beim Lesen.\n",
+            ),
+          canEdit: zod
+            .boolean()
+            .optional()
+            .describe(
+              "Darf der aktuelle Nutzer das Angebot bearbeiten\/Statuswechsel durchführen.",
+            ),
         }),
       ),
       contracts: zod.array(
@@ -1254,6 +1272,22 @@ export const ListQuotesResponseItem = zod.object({
     .describe(
       "Empfänger des letzten erfolgreichen E-Mail-Versands (komma-getrennt).",
     ),
+  rejectionReason: zod
+    .string()
+    .nullish()
+    .describe("Optionaler Freitext-Grund, wenn das Angebot abgelehnt wurde."),
+  displayStatus: zod
+    .string()
+    .optional()
+    .describe(
+      "Anzeige-Status: identisch mit `status`, außer wenn ein 'sent'-Angebot\nsein `validUntil` überschritten hat — dann 'expired'. Die Datenbank\nwird dabei nicht geändert; die Ableitung passiert beim Lesen.\n",
+    ),
+  canEdit: zod
+    .boolean()
+    .optional()
+    .describe(
+      "Darf der aktuelle Nutzer das Angebot bearbeiten\/Statuswechsel durchführen.",
+    ),
 });
 export const ListQuotesResponse = zod.array(ListQuotesResponseItem);
 
@@ -1302,6 +1336,22 @@ export const GetQuoteResponse = zod
       .nullish()
       .describe(
         "Empfänger des letzten erfolgreichen E-Mail-Versands (komma-getrennt).",
+      ),
+    rejectionReason: zod
+      .string()
+      .nullish()
+      .describe("Optionaler Freitext-Grund, wenn das Angebot abgelehnt wurde."),
+    displayStatus: zod
+      .string()
+      .optional()
+      .describe(
+        "Anzeige-Status: identisch mit `status`, außer wenn ein 'sent'-Angebot\nsein `validUntil` überschritten hat — dann 'expired'. Die Datenbank\nwird dabei nicht geändert; die Ableitung passiert beim Lesen.\n",
+      ),
+    canEdit: zod
+      .boolean()
+      .optional()
+      .describe(
+        "Darf der aktuelle Nutzer das Angebot bearbeiten\/Statuswechsel durchführen.",
       ),
   })
   .and(
@@ -1419,6 +1469,22 @@ export const PatchQuoteResponse = zod.object({
     .describe(
       "Empfänger des letzten erfolgreichen E-Mail-Versands (komma-getrennt).",
     ),
+  rejectionReason: zod
+    .string()
+    .nullish()
+    .describe("Optionaler Freitext-Grund, wenn das Angebot abgelehnt wurde."),
+  displayStatus: zod
+    .string()
+    .optional()
+    .describe(
+      "Anzeige-Status: identisch mit `status`, außer wenn ein 'sent'-Angebot\nsein `validUntil` überschritten hat — dann 'expired'. Die Datenbank\nwird dabei nicht geändert; die Ableitung passiert beim Lesen.\n",
+    ),
+  canEdit: zod
+    .boolean()
+    .optional()
+    .describe(
+      "Darf der aktuelle Nutzer das Angebot bearbeiten\/Statuswechsel durchführen.",
+    ),
 });
 
 export const GetQuotePdfParams = zod.object({
@@ -1471,6 +1537,22 @@ export const SendQuoteEmailResponse = zod.object({
     .describe(
       "Empfänger des letzten erfolgreichen E-Mail-Versands (komma-getrennt).",
     ),
+  rejectionReason: zod
+    .string()
+    .nullish()
+    .describe("Optionaler Freitext-Grund, wenn das Angebot abgelehnt wurde."),
+  displayStatus: zod
+    .string()
+    .optional()
+    .describe(
+      "Anzeige-Status: identisch mit `status`, außer wenn ein 'sent'-Angebot\nsein `validUntil` überschritten hat — dann 'expired'. Die Datenbank\nwird dabei nicht geändert; die Ableitung passiert beim Lesen.\n",
+    ),
+  canEdit: zod
+    .boolean()
+    .optional()
+    .describe(
+      "Darf der aktuelle Nutzer das Angebot bearbeiten\/Statuswechsel durchführen.",
+    ),
 });
 
 export const CreateQuoteVersionParams = zod.object({
@@ -1512,6 +1594,22 @@ export const AcceptQuoteResponse = zod.object({
     .describe(
       "Empfänger des letzten erfolgreichen E-Mail-Versands (komma-getrennt).",
     ),
+  rejectionReason: zod
+    .string()
+    .nullish()
+    .describe("Optionaler Freitext-Grund, wenn das Angebot abgelehnt wurde."),
+  displayStatus: zod
+    .string()
+    .optional()
+    .describe(
+      "Anzeige-Status: identisch mit `status`, außer wenn ein 'sent'-Angebot\nsein `validUntil` überschritten hat — dann 'expired'. Die Datenbank\nwird dabei nicht geändert; die Ableitung passiert beim Lesen.\n",
+    ),
+  canEdit: zod
+    .boolean()
+    .optional()
+    .describe(
+      "Darf der aktuelle Nutzer das Angebot bearbeiten\/Statuswechsel durchführen.",
+    ),
 });
 
 /**
@@ -1531,6 +1629,69 @@ export const ConvertQuoteToOrderBody = zod.object({
     .optional()
     .describe(
       "Wenn true, wird die Anlage auch dann durchgeführt, wenn bereits ein Auftrag aus diesem Angebot existiert.",
+    ),
+});
+
+/**
+ * @summary Statuswechsel am Angebot mit State-Machine-Validierung
+ */
+export const TransitionQuoteParams = zod.object({
+  id: zod.coerce.string(),
+});
+
+export const TransitionQuoteBody = zod.object({
+  status: zod
+    .enum(["sent", "accepted", "rejected"])
+    .describe(
+      "Ziel-Status. Erlaubte Übergänge:\n  - draft → sent\n  - sent → accepted\n  - sent → rejected\n",
+    ),
+  rejectionReason: zod
+    .string()
+    .nullish()
+    .describe("Optionaler Freitext-Grund (nur wenn status=rejected)."),
+});
+
+export const TransitionQuoteResponse = zod.object({
+  id: zod.string(),
+  dealId: zod.string(),
+  dealName: zod.string(),
+  number: zod.string(),
+  status: zod.string(),
+  currentVersion: zod.number(),
+  totalAmount: zod.number(),
+  discountPct: zod.number(),
+  marginPct: zod.number(),
+  currency: zod.string(),
+  createdAt: zod.coerce.date(),
+  validUntil: zod.coerce.date(),
+  language: zod.enum(["de", "en"]).describe("Sprachfassung des Angebots."),
+  sentAt: zod.coerce
+    .date()
+    .nullish()
+    .describe(
+      "Zeitpunkt des letzten erfolgreichen E-Mail-Versands an den Kunden. NULL = noch nicht versendet.",
+    ),
+  sentTo: zod
+    .string()
+    .nullish()
+    .describe(
+      "Empfänger des letzten erfolgreichen E-Mail-Versands (komma-getrennt).",
+    ),
+  rejectionReason: zod
+    .string()
+    .nullish()
+    .describe("Optionaler Freitext-Grund, wenn das Angebot abgelehnt wurde."),
+  displayStatus: zod
+    .string()
+    .optional()
+    .describe(
+      "Anzeige-Status: identisch mit `status`, außer wenn ein 'sent'-Angebot\nsein `validUntil` überschritten hat — dann 'expired'. Die Datenbank\nwird dabei nicht geändert; die Ableitung passiert beim Lesen.\n",
+    ),
+  canEdit: zod
+    .boolean()
+    .optional()
+    .describe(
+      "Darf der aktuelle Nutzer das Angebot bearbeiten\/Statuswechsel durchführen.",
     ),
 });
 

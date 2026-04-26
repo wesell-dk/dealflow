@@ -6,7 +6,9 @@ import {
   useListQuoteAttachments,
   usePatchQuote,
   useConvertQuoteToOrder,
+  useTransitionQuote,
   getGetQuoteQueryKey,
+  getListQuotesQueryKey,
   getListOrderConfirmationsQueryKey,
 } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
@@ -31,6 +33,13 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import {
   FileText,
   Download,
@@ -38,12 +47,19 @@ import {
   Languages,
   ClipboardCheck,
   AlertTriangle,
+  Send,
+  CheckCircle2,
+  XCircle,
+  ChevronDown,
 } from "lucide-react";
 import { QuoteDuplicateButton } from "@/components/quotes/quote-duplicate-button";
 import { SendQuoteDialog } from "@/components/quotes/send-quote-dialog";
 import { useToast } from "@/hooks/use-toast";
 import { AiPromptPanel } from "@/components/copilot/ai-prompt-panel";
 import { Breadcrumbs } from "@/components/patterns/breadcrumbs";
+import { QuoteStatusBadge } from "@/components/patterns/status-badges";
+
+type TransitionTarget = "sent" | "accepted" | "rejected";
 
 export default function Quote() {
   const params = useParams();
@@ -59,12 +75,15 @@ export default function Quote() {
   });
   const patchQuote = usePatchQuote();
   const convertMutation = useConvertQuoteToOrder();
+  const transition = useTransitionQuote();
   const [convertOpen, setConvertOpen] = useState(false);
   const [expectedDelivery, setExpectedDelivery] = useState("");
   const [conflict, setConflict] = useState<
     | { id: string; number: string }
     | null
   >(null);
+  const [rejectOpen, setRejectOpen] = useState(false);
+  const [rejectReason, setRejectReason] = useState("");
 
   async function changeLanguage(next: "de" | "en") {
     if (!quote || quote.language === next) return;
@@ -112,11 +131,56 @@ export default function Quote() {
     }
   }
 
+  async function runTransition(target: TransitionTarget, rejectionReason?: string) {
+    try {
+      await transition.mutateAsync({
+        id,
+        data: { status: target, ...(rejectionReason !== undefined ? { rejectionReason } : {}) },
+      });
+      await Promise.all([
+        qc.invalidateQueries({ queryKey: getGetQuoteQueryKey(id) }),
+        qc.invalidateQueries({ queryKey: getListQuotesQueryKey() }),
+      ]);
+      toast({ description: t(`pages.quote.statusChanged.${target}`) });
+    } catch (e) {
+      toast({ title: "Error", description: String(e), variant: "destructive" });
+    }
+  }
+
+  function openReject() {
+    setRejectReason("");
+    setRejectOpen(true);
+  }
+
+  async function confirmReject() {
+    const reason = rejectReason.trim();
+    setRejectOpen(false);
+    await runTransition("rejected", reason || undefined);
+  }
+
   if (isLoading) return <div className="p-8"><Skeleton className="h-64 w-full" /></div>;
   if (!quote) return <div className="p-8">Quote not found</div>;
 
   const canConvert = quote.status === "accepted";
   const linkedOrders = quote.orderConfirmations ?? [];
+
+  const displayStatus = (quote as { displayStatus?: string }).displayStatus ?? quote.status;
+  const canEdit = (quote as { canEdit?: boolean }).canEdit === true;
+  const rejectionReason = (quote as { rejectionReason?: string | null }).rejectionReason ?? null;
+
+  // Aktionen werden nur am echten DB-Status berechnet (nicht am abgeleiteten
+  // 'expired'). Ein abgelaufenes Angebot bleibt intern 'sent' und kann immer
+  // noch akzeptiert/abgelehnt werden, falls es nachträglich behandelt wurde.
+  const actions: Array<{ key: TransitionTarget; label: string; icon: typeof Send; testId: string }> = [];
+  if (canEdit) {
+    if (quote.status === "draft") {
+      actions.push({ key: "sent", label: t("pages.quote.markAsSent"), icon: Send, testId: "quote-mark-sent" });
+    }
+    if (quote.status === "sent") {
+      actions.push({ key: "accepted", label: t("pages.quote.markAsAccepted"), icon: CheckCircle2, testId: "quote-mark-accepted" });
+      actions.push({ key: "rejected", label: t("pages.quote.markAsRejected"), icon: XCircle, testId: "quote-mark-rejected" });
+    }
+  }
 
   return (
     <div className="flex flex-col gap-6">
@@ -164,7 +228,39 @@ export default function Quote() {
               {t("pages.quote.convertToOrder")}
             </Button>
           )}
-          <Badge variant="outline" data-testid="quote-status-badge">{quote.status}</Badge>
+          {actions.length > 0 ? (
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="gap-1"
+                  disabled={transition.isPending}
+                  data-testid="quote-status-menu"
+                >
+                  <QuoteStatusBadge status={displayStatus} testId="quote-status-badge" />
+                  <ChevronDown className="h-3.5 w-3.5 opacity-60" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                {actions.map(({ key, label, icon: Icon, testId }) => (
+                  <DropdownMenuItem
+                    key={key}
+                    data-testid={testId}
+                    onSelect={() => {
+                      if (key === "rejected") openReject();
+                      else void runTransition(key);
+                    }}
+                  >
+                    <Icon className="h-4 w-4 mr-2" />
+                    {label}
+                  </DropdownMenuItem>
+                ))}
+              </DropdownMenuContent>
+            </DropdownMenu>
+          ) : (
+            <QuoteStatusBadge status={displayStatus} testId="quote-status-badge" />
+          )}
         </div>
       </div>
       {quote.sentAt && (
@@ -183,6 +279,19 @@ export default function Quote() {
             </span>
           )}
         </div>
+      )}
+
+      {displayStatus === "rejected" && rejectionReason && (
+        <Card className="border-rose-200 bg-rose-50/50 dark:border-rose-900/50 dark:bg-rose-950/20">
+          <CardContent className="py-3">
+            <div className="text-xs font-medium uppercase text-rose-700 dark:text-rose-300">
+              {t("pages.quote.rejectionReasonLabel")}
+            </div>
+            <div className="mt-1 text-sm text-rose-900 dark:text-rose-100" data-testid="quote-rejection-reason">
+              {rejectionReason}
+            </div>
+          </CardContent>
+        </Card>
       )}
 
       <div className="grid md:grid-cols-3 gap-6">
@@ -442,6 +551,36 @@ export default function Quote() {
               data-testid="quote-convert-confirm"
             >
               {conflict ? t("pages.quote.convertForce") : t("pages.quote.convertConfirm")}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={rejectOpen} onOpenChange={setRejectOpen}>
+        <DialogContent data-testid="quote-reject-dialog">
+          <DialogHeader>
+            <DialogTitle>{t("pages.quote.rejectDialogTitle")}</DialogTitle>
+            <DialogDescription>{t("pages.quote.rejectDialogBody")}</DialogDescription>
+          </DialogHeader>
+          <Textarea
+            value={rejectReason}
+            onChange={(e) => setRejectReason(e.target.value)}
+            placeholder={t("pages.quote.rejectReasonPlaceholder")}
+            rows={4}
+            maxLength={2000}
+            data-testid="quote-reject-reason"
+          />
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => setRejectOpen(false)} data-testid="quote-reject-cancel">
+              {t("common.cancel")}
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={confirmReject}
+              disabled={transition.isPending}
+              data-testid="quote-reject-confirm"
+            >
+              {t("pages.quote.rejectConfirm")}
             </Button>
           </DialogFooter>
         </DialogContent>

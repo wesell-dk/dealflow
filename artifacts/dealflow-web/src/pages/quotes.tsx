@@ -68,7 +68,13 @@ export default function Quotes() {
   const filtered = useMemo(() => {
     const f = view.filters as Record<string, unknown>;
     let rows = (quotes ?? []).slice();
-    if (f.status) rows = rows.filter((q) => q.status === f.status);
+    // Status-Filter prüft den Anzeige-Status (inkl. abgeleitetem 'expired'),
+    // damit Filter und Badge übereinstimmen.
+    if (f.status) {
+      rows = rows.filter(
+        (q) => ((q as { displayStatus?: string }).displayStatus ?? q.status) === f.status,
+      );
+    }
     if (f.minDiscount) rows = rows.filter((q) => q.discountPct >= Number(f.minDiscount));
     const s = search.trim().toLowerCase();
     if (s) rows = rows.filter((q) => q.number.toLowerCase().includes(s) || q.dealName.toLowerCase().includes(s));
@@ -219,7 +225,7 @@ export default function Quotes() {
                   <TableCell>{quote.dealName}</TableCell>
                   <TableCell className="tabular-nums">{quote.totalAmount.toLocaleString()} {quote.currency}</TableCell>
                   <TableCell className="tabular-nums">{quote.discountPct}%</TableCell>
-                  <TableCell><QuoteStatusBadge status={quote.status} /></TableCell>
+                  <TableCell><QuoteStatusBadge status={(quote as { displayStatus?: string }).displayStatus ?? quote.status} /></TableCell>
                   <TableCell className="tabular-nums">{new Date(quote.validUntil).toLocaleDateString()}</TableCell>
                   <TableCell className="text-right">
                     <DropdownMenu>
