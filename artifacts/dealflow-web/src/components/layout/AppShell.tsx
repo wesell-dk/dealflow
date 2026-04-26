@@ -67,7 +67,7 @@ interface NavItem {
   href: string;
   icon: LucideIcon;
   gate?: boolean;
-  badgeKey?: "approvals" | "signatures";
+  badgeKey?: "approvals" | "signatures" | "renewals" | "obligations" | "priceIncreases";
 }
 
 interface NavGroup {
@@ -133,9 +133,9 @@ function useNavigationGroups(): NavGroup[] {
       key: "postSale",
       label: t("nav.groups.postSale"),
       items: [
-        { key: "obligations", label: t("nav.obligations"), href: "/obligations", icon: ClipboardList },
-        { key: "renewals", label: t("nav.renewals"), href: "/renewals", icon: CalendarClock },
-        { key: "priceIncreases", label: t("nav.priceIncreases"), href: "/price-increases", icon: TrendingUp },
+        { key: "obligations", label: t("nav.obligations"), href: "/obligations", icon: ClipboardList, badgeKey: "obligations" },
+        { key: "renewals", label: t("nav.renewals"), href: "/renewals", icon: CalendarClock, badgeKey: "renewals" },
+        { key: "priceIncreases", label: t("nav.priceIncreases"), href: "/price-increases", icon: TrendingUp, badgeKey: "priceIncreases" },
       ],
     },
     {
@@ -170,6 +170,9 @@ function Sidebar({ currentPath }: { currentPath: string }) {
   const badgeCounts: Record<NonNullable<NavItem["badgeKey"]>, number | undefined> = {
     approvals: summary?.openApprovals,
     signatures: summary?.signaturesPending,
+    renewals: summary?.renewalsDueSoonCount,
+    obligations: summary?.overdueObligationsCount,
+    priceIncreases: summary?.priceLettersAwaitingResponseCount,
   };
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>(() => {
     const initial: Record<string, boolean> = {};

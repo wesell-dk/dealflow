@@ -6506,6 +6506,16 @@ export const GetDashboardSummaryResponse = zod.object({
     .number()
     .optional()
     .describe("Überfällige Vertragspflichten"),
+  renewalsDueSoonCount: zod
+    .number()
+    .optional()
+    .describe(
+      "Offene Renewals mit Kündigungsfrist innerhalb der nächsten 90 Tage",
+    ),
+  priceLettersAwaitingResponseCount: zod
+    .number()
+    .optional()
+    .describe("Versendete Preisbriefe, die noch keine Kundenantwort haben"),
   avgTimeToSignatureDays: zod
     .number()
     .nullish()

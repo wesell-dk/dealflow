@@ -9775,6 +9775,8 @@ components:
         atRiskDeals: { type: integer }
         openDeviationsCount: { type: integer, description: "Offene Klausel-Abweichungen im sichtbaren Scope" }
         overdueObligationsCount: { type: integer, description: "Überfällige Vertragspflichten" }
+        renewalsDueSoonCount: { type: integer, description: "Offene Renewals mit Kündigungsfrist innerhalb der nächsten 90 Tage" }
+        priceLettersAwaitingResponseCount: { type: integer, description: "Versendete Preisbriefe, die noch keine Kundenantwort haben" }
         avgTimeToSignatureDays: { type: number, nullable: true, description: "ø Tage von Vertragserstellung bis Signatur (90d Rolling)" }
         avgApprovalDurationHours: { type: number, nullable: true, description: "ø Stunden von Approval-Antrag bis Entscheidung" }
         stageBreakdown:

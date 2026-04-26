@@ -24,6 +24,10 @@ export interface DashboardSummary {
   openDeviationsCount?: number;
   /** Überfällige Vertragspflichten */
   overdueObligationsCount?: number;
+  /** Offene Renewals mit Kündigungsfrist innerhalb der nächsten 90 Tage */
+  renewalsDueSoonCount?: number;
+  /** Versendete Preisbriefe, die noch keine Kundenantwort haben */
+  priceLettersAwaitingResponseCount?: number;
   /** ø Tage von Vertragserstellung bis Signatur (90d Rolling) */
   avgTimeToSignatureDays?: number | null;
   /** ø Stunden von Approval-Antrag bis Entscheidung */

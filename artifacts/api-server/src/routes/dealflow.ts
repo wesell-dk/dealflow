@@ -11648,6 +11648,50 @@ router.get('/reports/dashboard', async (req, res) => {
         sql`${obligationsTable.dueAt} < now()`,
         sql`${obligationsTable.status} NOT IN ('done','waived')`,
       ))).at(0)?.c ?? 0;
+  // Renewals & price-letter live counters für die Sidebar.
+  // Beide Aggregate übernehmen die Sichtbarkeitslogik der entsprechenden
+  // Listen-Endpunkte (Tenant + Account-/Brand-Scope) und werden im selben
+  // Roundtrip wie die übrigen KPIs berechnet, damit das initiale Laden
+  // nicht zusätzliche Calls auslöst.
+  const allowedAccs = await allowedAccountIds(req);
+  const allowedAccArr = [...allowedAccs];
+  const renewalFilters: SQL[] = [
+    eq(renewalOpportunitiesTable.tenantId, scope.tenantId),
+    eq(renewalOpportunitiesTable.status, 'open'),
+  ];
+  if (!scope.tenantWide || hasActiveScopeFilter(scope)) {
+    const allowB = await allowedBrandIds(req);
+    if (allowB.length > 0) {
+      renewalFilters.push(sql`(${renewalOpportunitiesTable.brandId} is null or ${renewalOpportunitiesTable.brandId} = any(${allowB}))`);
+    } else {
+      renewalFilters.push(sql`${renewalOpportunitiesTable.brandId} is null`);
+    }
+    if (allowedAccArr.length === 0) {
+      // Keine sichtbaren Accounts → keine sichtbaren Renewals.
+      renewalFilters.push(sql`false`);
+    } else {
+      renewalFilters.push(inArray(renewalOpportunitiesTable.accountId, allowedAccArr));
+    }
+  }
+  const __today = toDateOnly(new Date())!;
+  const __next90 = toDateOnly(addDays(new Date(), 90))!;
+  renewalFilters.push(sql`${renewalOpportunitiesTable.noticeDeadline} >= ${__today}`);
+  renewalFilters.push(sql`${renewalOpportunitiesTable.noticeDeadline} <= ${__next90}`);
+  const renewalsDueSoonCount =
+    (await db.select({ c: sql<number>`count(*)::int` }).from(renewalOpportunitiesTable)
+      .where(and(...renewalFilters))).at(0)?.c ?? 0;
+  // Price-Letters: versendet (sentAt gesetzt), Status pending/negotiating und
+  // ohne respondedAt — d.h. der Kunde hat noch nicht reagiert. Für diese
+  // Letters steht typischerweise eine Reminder-Aktion an.
+  const priceLettersAwaitingResponseCount = allowedAccArr.length === 0
+    ? 0
+    : (await db.select({ c: sql<number>`count(*)::int` }).from(priceIncreaseLettersTable)
+        .where(and(
+          inArray(priceIncreaseLettersTable.accountId, allowedAccArr),
+          inArray(priceIncreaseLettersTable.status, ['pending', 'negotiating']),
+          sql`${priceIncreaseLettersTable.sentAt} is not null`,
+          sql`${priceIncreaseLettersTable.respondedAt} is null`,
+        ))).at(0)?.c ?? 0;
   // Time-to-Signature: Tage zwischen contract.createdAt und signedAt (ø der letzten 90 Tage)
   const __nowDash = new Date();
   const recentSigned = visibleContracts.filter(c => c.signedAt && c.createdAt
@@ -11684,6 +11728,8 @@ router.get('/reports/dashboard', async (req, res) => {
     atRiskDeals: open.filter(d => d.riskLevel === 'high').length,
     openDeviationsCount,
     overdueObligationsCount,
+    renewalsDueSoonCount,
+    priceLettersAwaitingResponseCount,
     avgTimeToSignatureDays,
     avgApprovalDurationHours,
     stageBreakdown,
