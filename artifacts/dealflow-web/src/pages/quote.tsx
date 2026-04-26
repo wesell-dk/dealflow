@@ -54,6 +54,7 @@ import {
 } from "lucide-react";
 import { QuoteDuplicateButton } from "@/components/quotes/quote-duplicate-button";
 import { SendQuoteDialog } from "@/components/quotes/send-quote-dialog";
+import { QuoteEditor } from "@/components/quote-editor";
 import { useToast } from "@/hooks/use-toast";
 import { AiPromptPanel } from "@/components/copilot/ai-prompt-panel";
 import { Breadcrumbs } from "@/components/patterns/breadcrumbs";
@@ -294,40 +295,53 @@ export default function Quote() {
         </Card>
       )}
 
+      {quote.status === "draft" && (
+        <QuoteEditor quoteId={id} />
+      )}
+
       <div className="grid md:grid-cols-3 gap-6">
         <div className="md:col-span-2 space-y-6">
           <AiPromptPanel mode="pricing.review" entityId={id} />
-          <Card>
-            <CardHeader><CardTitle>{t("pages.quote.lineItems")}</CardTitle></CardHeader>
-            <CardContent>
-              <div className="space-y-4">
-                {quote.lineItems.map(item => {
-                  const ratePctRaw = (item as { taxRatePct?: number | null }).taxRatePct;
-                  const ratePct = ratePctRaw == null ? null : Number(ratePctRaw);
-                  const ratePctDisplay = ratePct == null
-                    ? null
-                    : (Math.round(ratePct * 100) / 100).toLocaleString();
-                  return (
-                    <div key={item.id} className="flex justify-between items-center border-b pb-2" data-testid={`quote-line-${item.id}`}>
-                      <div>
-                        <div className="font-medium">{item.name}</div>
-                        <div className="text-xs text-muted-foreground">
-                          {t("quoteWizard.qty")}: {item.quantity} &times; {item.unitPrice}
-                          {ratePctDisplay !== null && (
-                            <>
-                              {" · "}
-                              {t("pages.quote.taxRateLine", { pct: ratePctDisplay })}
-                            </>
-                          )}
+          {quote.status !== "draft" && (
+            <Card>
+              <CardHeader><CardTitle>{t("pages.quote.lineItems")}</CardTitle></CardHeader>
+              <CardContent>
+                <div className="space-y-4">
+                  {quote.lineItems.map(item => {
+                    if (item.kind === "heading") {
+                      return (
+                        <div key={item.id} className="border-b-2 border-primary/30 pb-2 pt-2 text-base font-semibold" data-testid={`quote-line-${item.id}`}>
+                          {item.name}
                         </div>
+                      );
+                    }
+                    const ratePctRaw = (item as { taxRatePct?: number | null }).taxRatePct;
+                    const ratePct = ratePctRaw == null ? null : Number(ratePctRaw);
+                    const ratePctDisplay = ratePct == null
+                      ? null
+                      : (Math.round(ratePct * 100) / 100).toLocaleString();
+                    return (
+                      <div key={item.id} className="flex justify-between items-center border-b pb-2" data-testid={`quote-line-${item.id}`}>
+                        <div>
+                          <div className="font-medium">{item.name}</div>
+                          <div className="text-xs text-muted-foreground">
+                            {t("quoteWizard.qty")}: {item.quantity} &times; {item.unitPrice}
+                            {ratePctDisplay !== null && (
+                              <>
+                                {" · "}
+                                {t("pages.quote.taxRateLine", { pct: ratePctDisplay })}
+                              </>
+                            )}
+                          </div>
+                        </div>
+                        <div className="font-bold">{item.total.toLocaleString()}</div>
                       </div>
-                      <div className="font-bold">{item.total.toLocaleString()}</div>
-                    </div>
-                  );
-                })}
-              </div>
-            </CardContent>
-          </Card>
+                    );
+                  })}
+                </div>
+              </CardContent>
+            </Card>
+          )}
 
           <Card>
             <CardHeader>

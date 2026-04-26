@@ -5973,10 +5973,12 @@ components:
 
     LineItem:
       type: object
-      required: [id, quoteVersionId, name, quantity, unitPrice, listPrice, discountPct, total, taxRatePct]
+      required: [id, quoteVersionId, kind, sortOrder, name, quantity, unitPrice, listPrice, discountPct, total, taxRatePct]
       properties:
         id: { type: string }
         quoteVersionId: { type: string }
+        kind: { type: string, enum: [item, heading], description: "item = priced line; heading = section header in the line-item table" }
+        sortOrder: { type: integer, description: "0-based position within the quote version" }
         name: { type: string }
         description:
           type: ["string", "null"]
@@ -6048,8 +6050,10 @@ components:
 
     LineItemInput:
       type: object
-      required: [name, quantity, unitPrice, listPrice, discountPct]
+      required: [name]
       properties:
+        kind: { type: string, enum: [item, heading], default: item }
+        sortOrder: { type: integer }
         name: { type: string }
         description: { type: string }
         quantity: { type: number }

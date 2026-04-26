@@ -7,11 +7,16 @@ Multi-tenant, multi-company, multi-brand. Deal-centric.
 
  * OpenAPI spec version: 0.1.0
  */
+import type { LineItemKind } from "./lineItemKind";
 import type { LineItemTaxRatePctSource } from "./lineItemTaxRatePctSource";
 
 export interface LineItem {
   id: string;
   quoteVersionId: string;
+  /** item = priced line; heading = section header in the line-item table */
+  kind: LineItemKind;
+  /** 0-based position within the quote version */
+  sortOrder: number;
   name: string;
   /** @nullable */
   description?: string | null;

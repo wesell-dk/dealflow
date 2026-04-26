@@ -266,6 +266,12 @@ export const quoteVersionsTable = pgTable("quote_versions", {
 export const lineItemsTable = pgTable("line_items", {
   id: id(),
   quoteVersionId: text("quote_version_id").notNull(),
+  // 'item' (default) → echte Position mit Preis. 'heading' → reine
+  // Zwischenüberschrift, die nur die Positionstabelle strukturiert.
+  kind: text("kind").notNull().default("item"),
+  // Stabile Reihenfolge innerhalb einer quote_version (kleinster Wert zuerst).
+  // Bestehende Daten erhalten 0 und werden bei der nächsten Speicherung normalisiert.
+  sortOrder: integer("sort_order").notNull().default(0),
   name: text("name").notNull(),
   description: text("description"),
   quantity: numeric("quantity").notNull(),

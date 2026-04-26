@@ -20,6 +20,7 @@ export interface QuotePdfBrand {
 }
 
 export interface QuotePdfLine {
+  kind?: 'item' | 'heading';
   name: string;
   description: string | null;
   quantity: number;
@@ -252,6 +253,20 @@ export function QuoteDocument({ data }: { data: QuotePdfData }) {
       borderBottomWidth: 1,
       padding: 6,
     },
+    headingRow: {
+      flexDirection: 'row',
+      backgroundColor: '#f3f4f6',
+      borderBottomColor: primary,
+      borderBottomWidth: 1,
+      paddingHorizontal: 6,
+      paddingVertical: 5,
+      marginTop: 4,
+    },
+    headingText: {
+      fontSize: 11,
+      fontWeight: 'bold',
+      color: secondary,
+    },
     colName: { width: '32%' },
     colQty: { width: '8%', textAlign: 'right' },
     colPrice: { width: '17%', textAlign: 'right' },
@@ -296,7 +311,10 @@ export function QuoteDocument({ data }: { data: QuotePdfData }) {
     },
   });
 
-  const subtotal = data.lines.reduce((s, l) => s + l.listPrice * l.quantity, 0);
+  const subtotal = data.lines.reduce(
+    (s, l) => (l.kind === 'heading' ? s : s + l.listPrice * l.quantity),
+    0,
+  );
   const discount = subtotal - data.totalAmount;
   // Falls der Server kein TaxSummary liefert (defensive Fallback), aus den
   // Lines selbst aggregieren — totalAmount wird als Netto interpretiert.
@@ -499,19 +517,25 @@ export function QuoteDocument({ data }: { data: QuotePdfData }) {
           <Text style={styles.colTotal}>{L.sum}</Text>
         </View>
         {data.lines.map((l, i) => (
-          <View key={i} style={styles.tr} wrap={false}>
-            <View style={styles.colName}>
-              <Text>{l.name}</Text>
-              {l.description ? (
-                <Text style={{ fontSize: 8, color: '#6b7280' }}>{l.description}</Text>
-              ) : null}
+          l.kind === 'heading' ? (
+            <View key={i} style={styles.headingRow} wrap={false}>
+              <Text style={styles.headingText}>{l.name}</Text>
             </View>
-            <Text style={styles.colQty}>{l.quantity}</Text>
-            <Text style={styles.colPrice}>{fmt(l.listPrice, data.currency, lang)}</Text>
-            <Text style={styles.colDisc}>{l.discountPct.toFixed(1)}%</Text>
-            <Text style={styles.colTax}>{`${formatTaxRate(l.taxRatePct)} %`}</Text>
-            <Text style={styles.colTotal}>{fmt(l.total, data.currency, lang)}</Text>
-          </View>
+          ) : (
+            <View key={i} style={styles.tr} wrap={false}>
+              <View style={styles.colName}>
+                <Text>{l.name}</Text>
+                {l.description ? (
+                  <Text style={{ fontSize: 8, color: '#6b7280' }}>{l.description}</Text>
+                ) : null}
+              </View>
+              <Text style={styles.colQty}>{l.quantity}</Text>
+              <Text style={styles.colPrice}>{fmt(l.listPrice, data.currency, lang)}</Text>
+              <Text style={styles.colDisc}>{l.discountPct.toFixed(1)}%</Text>
+              <Text style={styles.colTax}>{`${formatTaxRate(l.taxRatePct)} %`}</Text>
+              <Text style={styles.colTotal}>{fmt(l.total, data.currency, lang)}</Text>
+            </View>
+          )
         ))}
 
         <View style={styles.totalsRow}>

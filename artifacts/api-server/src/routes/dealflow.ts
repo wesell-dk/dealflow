@@ -1620,7 +1620,8 @@ router.get('/quotes/:id', async (req, res) => {
     const chosen = allVersions[idx]!;
     const next = allVersions[idx + 1];
     const lines = await db.select().from(lineItemsTable)
-      .where(eq(lineItemsTable.quoteVersionId, chosen.id));
+      .where(eq(lineItemsTable.quoteVersionId, chosen.id))
+      .orderBy(asc(lineItemsTable.sortOrder));
     const [d] = await db.select().from(dealsTable).where(eq(dealsTable.id, q.dealId));
     const base = await enrichQuote(q, d?.name ?? 'Unknown', { canEdit: userCanEditQuote(req) });
     const ocs = await db.select({
@@ -1668,7 +1669,9 @@ router.get('/quotes/:id', async (req, res) => {
     .orderBy(desc(quoteVersionsTable.version));
   const current = versions.find(v => v.version === q.currentVersion) ?? versions[0];
   const lines = current
-    ? await db.select().from(lineItemsTable).where(eq(lineItemsTable.quoteVersionId, current.id))
+    ? await db.select().from(lineItemsTable)
+        .where(eq(lineItemsTable.quoteVersionId, current.id))
+        .orderBy(asc(lineItemsTable.sortOrder))
     : [];
   const base = await enrichQuote(q, d?.name ?? 'Unknown', { canEdit: userCanEditQuote(req) });
   const ocs = await db.select({
@@ -1724,7 +1727,9 @@ async function buildQuotePdfPayload(
     .orderBy(desc(quoteVersionsTable.version));
   const current = versions.find(v => v.version === q.currentVersion) ?? versions[0];
   const lines = current
-    ? await db.select().from(lineItemsTable).where(eq(lineItemsTable.quoteVersionId, current.id))
+    ? await db.select().from(lineItemsTable)
+        .where(eq(lineItemsTable.quoteVersionId, current.id))
+        .orderBy(asc(lineItemsTable.sortOrder))
     : [];
   const attachments = current
     ? await db.select().from(quoteAttachmentsTable)
@@ -1758,6 +1763,7 @@ async function buildQuotePdfPayload(
       marginPct: num(current?.marginPct),
       notes: current?.notes ?? null,
       lines: linesWithTax.map(l => ({
+        kind: l.kind as 'item' | 'heading',
         name: l.name,
         description: l.description ?? null,
         quantity: l.quantity,
@@ -2576,8 +2582,28 @@ router.delete('/industry-profiles/:id', async (req, res) => {
 });
 
 // ── QUOTE FROM TEMPLATE / LINE ITEMS / ATTACHMENTS ──
-function calcLineTotal(item: { quantity: number; unitPrice: number; discountPct: number }) {
+function calcLineTotal(item: { quantity: number; unitPrice: number; discountPct: number; kind?: string }) {
+  if (item.kind === 'heading') return 0;
   return Math.round(item.quantity * item.unitPrice * (1 - item.discountPct / 100));
+}
+
+// Map a DB line item row to the API LineItem shape, normalising kind/sortOrder
+// so existing rows (created before the new columns existed) stay valid.
+function mapLineItem(l: typeof lineItemsTable.$inferSelect) {
+  const kind = l.kind === 'heading' ? 'heading' : 'item';
+  return {
+    id: l.id,
+    quoteVersionId: l.quoteVersionId,
+    kind,
+    sortOrder: l.sortOrder ?? 0,
+    name: l.name,
+    description: l.description,
+    quantity: kind === 'heading' ? 0 : num(l.quantity),
+    unitPrice: kind === 'heading' ? 0 : num(l.unitPrice),
+    listPrice: kind === 'heading' ? 0 : num(l.listPrice),
+    discountPct: kind === 'heading' ? 0 : num(l.discountPct),
+    total: kind === 'heading' ? 0 : num(l.total),
+  };
 }
 
 const QuoteFromTemplateBody = z.object({
@@ -2613,11 +2639,14 @@ router.post('/quotes/from-template', async (req, res) => {
   });
   const qvId = `qv_${randomUUID().slice(0, 8)}`;
   const tplLines = tpl?.defaultLineItems ?? [];
-  const lineRows = tplLines.map(li => {
+  const lineRows = tplLines.map((li, idx) => {
     const total = calcLineTotal(li);
     return {
       id: `li_${randomUUID().slice(0, 8)}`,
-      quoteVersionId: qvId, name: li.name, description: li.description ?? null,
+      quoteVersionId: qvId,
+      kind: 'item',
+      sortOrder: idx,
+      name: li.name, description: li.description ?? null,
       quantity: String(li.quantity), unitPrice: String(li.unitPrice),
       listPrice: String(li.listPrice), discountPct: String(li.discountPct),
       total: String(total),
@@ -2673,7 +2702,9 @@ router.post('/quotes/from-template', async (req, res) => {
   // Return enriched quote detail (re-uses /quotes/:id logic shape)
   const [q] = await db.select().from(quotesTable).where(eq(quotesTable.id, id));
   const versions = await db.select().from(quoteVersionsTable).where(eq(quoteVersionsTable.quoteId, id));
-  const lines = await db.select().from(lineItemsTable).where(eq(lineItemsTable.quoteVersionId, qvId));
+  const lines = await db.select().from(lineItemsTable)
+    .where(eq(lineItemsTable.quoteVersionId, qvId))
+    .orderBy(asc(lineItemsTable.sortOrder));
   const base = await enrichQuote(q!, d.name, { canEdit: userCanEditQuote(req) });
   const defaultRate = await resolveDefaultTaxRatePct({
     brandId: d.brandId, tenantId: scope.tenantId,
@@ -2701,12 +2732,14 @@ router.post('/quotes/from-template', async (req, res) => {
 
 const ReplaceLineItemsBody = z.object({
   items: z.array(z.object({
+    kind: z.enum(['item', 'heading']).optional(),
+    sortOrder: z.number().int().optional(),
     name: z.string().min(1).max(200),
     description: z.string().max(2000).optional(),
-    quantity: z.number().nonnegative(),
-    unitPrice: z.number().nonnegative(),
-    listPrice: z.number().nonnegative(),
-    discountPct: z.number().min(0).max(100),
+    quantity: z.number().nonnegative().optional(),
+    unitPrice: z.number().nonnegative().optional(),
+    listPrice: z.number().nonnegative().optional(),
+    discountPct: z.number().min(0).max(100).optional(),
     // Optionaler Positions-Override für USt. Null/undefined → Brand-/Tenant-Default.
     taxRatePct: z.number().min(0).max(100).nullable().optional(),
   })),
@@ -2722,18 +2755,39 @@ async function replaceLineItemsHandler(req: Request, res: Response, qvIdParam: s
   if (qv.status !== 'draft') { res.status(409).json({ error: 'version not draft' }); return; }
   const b = req.body as z.infer<typeof ReplaceLineItemsBody>;
   await db.delete(lineItemsTable).where(eq(lineItemsTable.quoteVersionId, qv.id));
-  const rows = b.items.map(li => {
-    const total = calcLineTotal(li);
+  // Reihenfolge: bevorzugt explizit übergebene sortOrder, sonst Array-Index.
+  // sortOrder wird beim Schreiben auf 0..N-1 normalisiert, damit Drag-and-Drop
+  // konsistent funktioniert.
+  const ordered = [...b.items].map((it, idx) => ({ it, idx }));
+  ordered.sort((a, b) => {
+    const ao = a.it.sortOrder ?? a.idx;
+    const bo = b.it.sortOrder ?? b.idx;
+    if (ao !== bo) return ao - bo;
+    return a.idx - b.idx;
+  });
+  const rows = ordered.map(({ it }, i) => {
+    const kind = it.kind === 'heading' ? 'heading' : 'item';
+    const isHeading = kind === 'heading';
+    const quantity = isHeading ? 0 : (it.quantity ?? 0);
+    const unitPrice = isHeading ? 0 : (it.unitPrice ?? 0);
+    const listPrice = isHeading ? 0 : (it.listPrice ?? 0);
+    const discountPct = isHeading ? 0 : (it.discountPct ?? 0);
+    const total = calcLineTotal({ kind, quantity, unitPrice, discountPct });
     return {
       id: `li_${randomUUID().slice(0, 8)}`,
-      quoteVersionId: qv.id, name: li.name,
-      description: li.description ?? null,
-      quantity: String(li.quantity), unitPrice: String(li.unitPrice),
-      listPrice: String(li.listPrice), discountPct: String(li.discountPct),
+      quoteVersionId: qv.id,
+      kind,
+      sortOrder: i,
+      name: it.name,
+      description: it.description ?? null,
+      quantity: String(quantity),
+      unitPrice: String(unitPrice),
+      listPrice: String(listPrice),
+      discountPct: String(discountPct),
       total: String(total),
-      taxRatePct: li.taxRatePct === null || li.taxRatePct === undefined
+      taxRatePct: it.taxRatePct === null || it.taxRatePct === undefined
         ? null
-        : String(li.taxRatePct),
+        : String(it.taxRatePct),
     };
   });
   if (rows.length) await db.insert(lineItemsTable).values(rows);
@@ -2749,11 +2803,19 @@ async function replaceLineItemsHandler(req: Request, res: Response, qvIdParam: s
   });
   const itemsOut = rows.map(r => {
     const eff = effectiveTaxRateFor(r.taxRatePct, defaultRate);
+    const kind = r.kind === 'heading' ? 'heading' : 'item';
     return {
-      id: r.id, quoteVersionId: r.quoteVersionId, name: r.name,
-      description: r.description, quantity: Number(r.quantity),
-      unitPrice: Number(r.unitPrice), listPrice: Number(r.listPrice),
-      discountPct: Number(r.discountPct), total: Number(r.total),
+      id: r.id,
+      quoteVersionId: r.quoteVersionId,
+      kind,
+      sortOrder: r.sortOrder,
+      name: r.name,
+      description: r.description,
+      quantity: Number(r.quantity),
+      unitPrice: Number(r.unitPrice),
+      listPrice: Number(r.listPrice),
+      discountPct: Number(r.discountPct),
+      total: Number(r.total),
       taxRatePct: eff.ratePct,
       taxRatePctSource: eff.source,
     };
@@ -3663,12 +3725,19 @@ function mapLineWithTax(
   l: typeof lineItemsTable.$inferSelect,
   defaultRate: { ratePct: number; source: 'brand' | 'tenant' | 'fallback' },
 ) {
+  const kind = l.kind === 'heading' ? 'heading' : 'item';
   const eff = effectiveTaxRateFor(l.taxRatePct, defaultRate);
   return {
-    id: l.id, quoteVersionId: l.quoteVersionId, name: l.name,
-    description: l.description, quantity: num(l.quantity),
-    unitPrice: num(l.unitPrice), listPrice: num(l.listPrice),
-    discountPct: num(l.discountPct), total: num(l.total),
+    id: l.id, quoteVersionId: l.quoteVersionId,
+    kind,
+    sortOrder: l.sortOrder ?? 0,
+    name: l.name,
+    description: l.description,
+    quantity: kind === 'heading' ? 0 : num(l.quantity),
+    unitPrice: kind === 'heading' ? 0 : num(l.unitPrice),
+    listPrice: kind === 'heading' ? 0 : num(l.listPrice),
+    discountPct: kind === 'heading' ? 0 : num(l.discountPct),
+    total: kind === 'heading' ? 0 : num(l.total),
     taxRatePct: eff.ratePct,
     taxRatePctSource: eff.source,
   };
@@ -11186,9 +11255,26 @@ router.post('/quotes/:id/duplicate', async (req, res) => {
     });
     if (srcVer) {
       const srcLines = await tx.select().from(lineItemsTable)
-        .where(eq(lineItemsTable.quoteVersionId, srcVer.id));
+        .where(eq(lineItemsTable.quoteVersionId, srcVer.id))
+        .orderBy(asc(lineItemsTable.sortOrder));
       if (srcLines.length) {
-        await tx.insert(lineItemsTable).values(srcLines.map(l => {
+        await tx.insert(lineItemsTable).values(srcLines.map((l, idx) => {
+          // Headings haben keinen Preis/Rabatt; immer 1:1 übernehmen.
+          if (l.kind === 'heading') {
+            return {
+              id: `li_${randomUUID().slice(0, 8)}`,
+              quoteVersionId: newQvId,
+              kind: 'heading' as const,
+              sortOrder: idx,
+              name: l.name,
+              description: l.description,
+              quantity: l.quantity,
+              unitPrice: l.unitPrice,
+              listPrice: l.listPrice,
+              discountPct: l.discountPct,
+              total: l.total,
+            };
+          }
           // Wenn Rabatt nicht übernommen wird, fällt der Preis auf den
           // Listenpreis zurück — sonst wäre die Position rabattiert ohne dass
           // man es im UI sieht.
@@ -11199,6 +11285,8 @@ router.post('/quotes/:id/duplicate', async (req, res) => {
             return {
               id: `li_${randomUUID().slice(0, 8)}`,
               quoteVersionId: newQvId,
+              kind: 'item' as const,
+              sortOrder: idx,
               name: l.name,
               description: l.description,
               quantity: l.quantity,
@@ -11212,6 +11300,8 @@ router.post('/quotes/:id/duplicate', async (req, res) => {
           return {
             id: `li_${randomUUID().slice(0, 8)}`,
             quoteVersionId: newQvId,
+            kind: l.kind ?? 'item',
+            sortOrder: idx,
             name: l.name,
             description: l.description,
             quantity: l.quantity,
@@ -11223,9 +11313,10 @@ router.post('/quotes/:id/duplicate', async (req, res) => {
           };
         }));
         // Wenn Rabatt entfernt wurde, Gesamtsumme der Version neu berechnen.
+        // Headings tragen 0 zur Summe bei.
         if (!includeDiscount) {
           const newTotal = srcLines
-            .reduce((s, l) => s + Number(l.quantity) * Number(l.listPrice), 0)
+            .reduce((s, l) => l.kind === 'heading' ? s : s + Number(l.quantity) * Number(l.listPrice), 0)
             .toFixed(2);
           await tx.update(quoteVersionsTable)
             .set({ totalAmount: newTotal })
@@ -13075,7 +13166,10 @@ async function gatherRenewalRiskInput(
   if (c?.acceptedQuoteVersionId) {
     const lines = await db.select({ d: lineItemsTable.discountPct })
       .from(lineItemsTable)
-      .where(eq(lineItemsTable.quoteVersionId, c.acceptedQuoteVersionId));
+      .where(and(
+        eq(lineItemsTable.quoteVersionId, c.acceptedQuoteVersionId),
+        eq(lineItemsTable.kind, 'item'),
+      ));
     if (lines.length > 0) {
       const nums = lines.map(l => Number(l.d ?? 0)).filter(n => !Number.isNaN(n));
       if (nums.length > 0) {

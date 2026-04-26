@@ -290,6 +290,8 @@ export * from "./industryProfileInput";
 export * from "./industryProfileInputDefaultClauseVariants";
 export * from "./lineItem";
 export * from "./lineItemInput";
+export * from "./lineItemInputKind";
+export * from "./lineItemKind";
 export * from "./lineItemTaxRatePctSource";
 export * from "./listAccountsParams";
 export * from "./listAccountsStatus";

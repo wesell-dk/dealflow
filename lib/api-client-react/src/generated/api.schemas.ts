@@ -1523,6 +1523,16 @@ export interface QuoteVersion {
 }
 
 /**
+ * item = priced line; heading = section header in the line-item table
+ */
+export type LineItemKind = (typeof LineItemKind)[keyof typeof LineItemKind];
+
+export const LineItemKind = {
+  item: "item",
+  heading: "heading",
+} as const;
+
+/**
  * Herkunft des effektiven Satzes (line=Override, brand=Brand-Default, tenant=Tenant-Default, fallback=hardcoded 19).
  */
 export type LineItemTaxRatePctSource =
@@ -1538,6 +1548,10 @@ export const LineItemTaxRatePctSource = {
 export interface LineItem {
   id: string;
   quoteVersionId: string;
+  /** item = priced line; heading = section header in the line-item table */
+  kind: LineItemKind;
+  /** 0-based position within the quote version */
+  sortOrder: number;
   name: string;
   /** @nullable */
   description?: string | null;
@@ -1602,13 +1616,23 @@ export interface QuoteVersionInput {
   notes?: string;
 }
 
+export type LineItemInputKind =
+  (typeof LineItemInputKind)[keyof typeof LineItemInputKind];
+
+export const LineItemInputKind = {
+  item: "item",
+  heading: "heading",
+} as const;
+
 export interface LineItemInput {
+  kind?: LineItemInputKind;
+  sortOrder?: number;
   name: string;
   description?: string;
-  quantity: number;
-  unitPrice: number;
-  listPrice: number;
-  discountPct: number;
+  quantity?: number;
+  unitPrice?: number;
+  listPrice?: number;
+  discountPct?: number;
   /**
    * Optional. Wenn gesetzt → Position-Override. NULL/weggelassen → Brand- bzw. Tenant-Default.
    * @minimum 0

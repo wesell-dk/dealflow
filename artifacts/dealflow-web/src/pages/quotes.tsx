@@ -10,7 +10,8 @@ import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem,
   DropdownMenuSeparator, DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Plus, MoreHorizontal, ExternalLink, FileText, Search, ArrowDown, ArrowUp } from "lucide-react";
+import { Plus, MoreHorizontal, ExternalLink, FileText, Search, ArrowDown, ArrowUp, FilePlus, Wand2 } from "lucide-react";
+import { useLocation } from "wouter";
 import { QuoteWizard } from "@/components/quote-wizard";
 import { QuoteDuplicateButton } from "@/components/quotes/quote-duplicate-button";
 import { PageHeader } from "@/components/patterns/page-header";
@@ -29,6 +30,7 @@ const DEFAULT_VIEW: ViewState = {
 
 export default function Quotes() {
   const { t } = useTranslation();
+  const [, navigate] = useLocation();
   const { data: quotes, isLoading } = useListQuotes();
   const [wizardOpen, setWizardOpen] = useState(false);
 
@@ -118,10 +120,37 @@ export default function Quotes() {
         title={t("pages.quotes.title")}
         subtitle={t("pages.quotes.subtitle")}
         actions={
-          <Button onClick={() => setWizardOpen(true)} data-testid="quotes-new-button">
-            <Plus className="h-4 w-4 mr-1" />
-            {t("pages.quotes.newQuote")}
-          </Button>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button data-testid="quotes-new-button">
+                <Plus className="h-4 w-4 mr-1" />
+                {t("pages.quotes.newQuote")}
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-72">
+              <DropdownMenuItem
+                onClick={() => navigate("/quotes/new")}
+                data-testid="quotes-new-inline"
+              >
+                <FilePlus className="mr-2 h-4 w-4" />
+                <div className="flex flex-col">
+                  <span className="font-medium">{t("quoteEditor.newInline")}</span>
+                  <span className="text-xs text-muted-foreground">{t("quoteEditor.newInlineDesc")}</span>
+                </div>
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem
+                onClick={() => setWizardOpen(true)}
+                data-testid="quotes-new-wizard"
+              >
+                <Wand2 className="mr-2 h-4 w-4" />
+                <div className="flex flex-col">
+                  <span className="font-medium">{t("quoteEditor.newWizard")}</span>
+                  <span className="text-xs text-muted-foreground">{t("quoteEditor.newWizardDesc")}</span>
+                </div>
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         }
       />
 

@@ -269,7 +269,18 @@
         "sent": "Angebot als versendet markiert",
         "accepted": "Angebot angenommen",
         "rejected": "Angebot abgelehnt"
-      }
+      },
+      "edit": "Bearbeiten",
+      "backToOverview": "Zur Übersicht"
+    },
+    "quotesNew": {
+      "title": "Neues Angebot",
+      "subtitle": "Wähle einen Deal und starte mit dem Inline-Editor.",
+      "selectDeal": "Deal auswählen…",
+      "language": "Sprache",
+      "create": "Angebot anlegen",
+      "creating": "Wird angelegt…",
+      "useWizard": "Stattdessen den Vorlagen-Assistenten verwenden"
     },
     "templates": {
       "title": "Angebots-Vorlagen",
@@ -1179,5 +1190,34 @@
     "auditFiltered": "Gefiltert",
     "wizardHintTitle": "Eingeschränkte Sicht aktiv",
     "wizardHintBody": "Du arbeitest gerade in einer gefilterten Sicht. Es können nur Companies und Brands ausgewählt werden, die in deiner aktiven Sicht enthalten sind."
+  },
+  "quoteEditor": {
+    "title": "Positionen",
+    "previewTitle": "Live-Vorschau",
+    "saving": "Speichert…",
+    "saved": "Gespeichert",
+    "saveError": "Fehler beim Speichern",
+    "namePlaceholder": "Position bezeichnen oder aus Pricebook wählen…",
+    "descriptionPlaceholder": "Beschreibung (optional)",
+    "headingPlaceholder": "Zwischenüberschrift",
+    "searchPricebook": "Pricebook durchsuchen…",
+    "noPricebookMatch": "Keine Pricebook-Treffer.",
+    "pricebookGroup": "Pricebook",
+    "addItem": "Position hinzufügen",
+    "addHeading": "Zwischenüberschrift",
+    "addFromPricebook": "Aus Pricebook",
+    "addBundle": "Bundle einfügen",
+    "empty": "Noch keine Positionen — füge eine Position oder Zwischenüberschrift hinzu.",
+    "summary": "{{items}} Positionen · {{headings}} Überschriften",
+    "colName": "Bezeichnung",
+    "colQty": "Menge",
+    "colPrice": "Listenpreis",
+    "colDiscount": "Rabatt %",
+    "colTotal": "Summe",
+    "newQuoteChoice": "Wie möchtest du anlegen?",
+    "newInline": "Inline-Editor (leer)",
+    "newInlineDesc": "Lexoffice-artig — Drag-and-Drop, Live-PDF, Pricebook.",
+    "newWizard": "Vorlagen-Assistent",
+    "newWizardDesc": "Schritt-für-Schritt mit Branchen-Vorlage."
   }
 }

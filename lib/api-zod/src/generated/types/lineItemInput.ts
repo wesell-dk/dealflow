@@ -7,14 +7,17 @@ Multi-tenant, multi-company, multi-brand. Deal-centric.
 
  * OpenAPI spec version: 0.1.0
  */
+import type { LineItemInputKind } from "./lineItemInputKind";
 
 export interface LineItemInput {
+  kind?: LineItemInputKind;
+  sortOrder?: number;
   name: string;
   description?: string;
-  quantity: number;
-  unitPrice: number;
-  listPrice: number;
-  discountPct: number;
+  quantity?: number;
+  unitPrice?: number;
+  listPrice?: number;
+  discountPct?: number;
   /**
    * Optional. Wenn gesetzt → Position-Override. NULL/weggelassen → Brand- bzw. Tenant-Default.
    * @minimum 0

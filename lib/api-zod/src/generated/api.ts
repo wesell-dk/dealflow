@@ -1373,6 +1373,14 @@ export const GetQuoteResponse = zod
         zod.object({
           id: zod.string(),
           quoteVersionId: zod.string(),
+          kind: zod
+            .enum(["item", "heading"])
+            .describe(
+              "item = priced line; heading = section header in the line-item table",
+            ),
+          sortOrder: zod
+            .number()
+            .describe("0-based position within the quote version"),
           name: zod.string(),
           description: zod.string().nullish(),
           quantity: zod.number(),
@@ -1713,18 +1721,23 @@ export const ReplaceQuoteLineItemsParams = zod.object({
   id: zod.coerce.string(),
 });
 
+export const replaceQuoteLineItemsBodyItemsItemKindDefault = `item`;
 export const replaceQuoteLineItemsBodyItemsItemTaxRatePctMin = 0;
 export const replaceQuoteLineItemsBodyItemsItemTaxRatePctMax = 100;
 
 export const ReplaceQuoteLineItemsBody = zod.object({
   items: zod.array(
     zod.object({
+      kind: zod
+        .enum(["item", "heading"])
+        .default(replaceQuoteLineItemsBodyItemsItemKindDefault),
+      sortOrder: zod.number().optional(),
       name: zod.string(),
       description: zod.string().optional(),
-      quantity: zod.number(),
-      unitPrice: zod.number(),
-      listPrice: zod.number(),
-      discountPct: zod.number(),
+      quantity: zod.number().optional(),
+      unitPrice: zod.number().optional(),
+      listPrice: zod.number().optional(),
+      discountPct: zod.number().optional(),
       taxRatePct: zod
         .number()
         .min(replaceQuoteLineItemsBodyItemsItemTaxRatePctMin)
@@ -1745,6 +1758,14 @@ export const ReplaceQuoteLineItemsResponse = zod.object({
     zod.object({
       id: zod.string(),
       quoteVersionId: zod.string(),
+      kind: zod
+        .enum(["item", "heading"])
+        .describe(
+          "item = priced line; heading = section header in the line-item table",
+        ),
+      sortOrder: zod
+        .number()
+        .describe("0-based position within the quote version"),
       name: zod.string(),
       description: zod.string().nullish(),
       quantity: zod.number(),

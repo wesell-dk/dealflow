@@ -269,7 +269,18 @@
         "sent": "Quote marked as sent",
         "accepted": "Quote accepted",
         "rejected": "Quote rejected"
-      }
+      },
+      "edit": "Edit",
+      "backToOverview": "Back to overview"
+    },
+    "quotesNew": {
+      "title": "New Quote",
+      "subtitle": "Pick a deal and start with the inline editor.",
+      "selectDeal": "Select deal…",
+      "language": "Language",
+      "create": "Create quote",
+      "creating": "Creating…",
+      "useWizard": "Use template wizard instead"
     },
     "templates": {
       "title": "Quote Templates",
@@ -1173,5 +1184,34 @@
     "auditFiltered": "Filtered",
     "wizardHintTitle": "Filtered view active",
     "wizardHintBody": "You are currently working in a filtered scope. Only companies and brands within your active scope can be selected."
+  },
+  "quoteEditor": {
+    "title": "Line items",
+    "previewTitle": "Live preview",
+    "saving": "Saving…",
+    "saved": "Saved",
+    "saveError": "Save failed",
+    "namePlaceholder": "Name the line or pick from pricebook…",
+    "descriptionPlaceholder": "Description (optional)",
+    "headingPlaceholder": "Section heading",
+    "searchPricebook": "Search pricebook…",
+    "noPricebookMatch": "No pricebook matches.",
+    "pricebookGroup": "Pricebook",
+    "addItem": "Add item",
+    "addHeading": "Heading",
+    "addFromPricebook": "From pricebook",
+    "addBundle": "Insert bundle",
+    "empty": "No lines yet — add an item or section heading.",
+    "summary": "{{items}} items · {{headings}} headings",
+    "colName": "Name",
+    "colQty": "Qty",
+    "colPrice": "List price",
+    "colDiscount": "Disc %",
+    "colTotal": "Total",
+    "newQuoteChoice": "How would you like to start?",
+    "newInline": "Inline editor (blank)",
+    "newInlineDesc": "Lexoffice-style — drag, drop, live PDF, pricebook.",
+    "newWizard": "Template wizard",
+    "newWizardDesc": "Step-by-step with industry template."
   }
 }

@@ -15,6 +15,7 @@ import Leads from "@/pages/leads";
 import Deals from "@/pages/deals";
 import DealDetail from "@/pages/deal";
 import Quotes from "@/pages/quotes";
+import QuoteNew from "@/pages/quote-new";
 import QuoteDetail from "@/pages/quote";
 import Pricing from "@/pages/pricing";
 import Approvals from "@/pages/approvals";
@@ -69,6 +70,7 @@ function ProtectedRoutes() {
         <Route path="/deals" component={Deals} />
         <Route path="/deals/:id" component={DealDetail} />
         <Route path="/quotes" component={Quotes} />
+        <Route path="/quotes/new" component={QuoteNew} />
         <Route path="/quotes/:id" component={QuoteDetail} />
         <Route path="/pricing" component={Pricing} />
         <Route path="/approvals" component={Approvals} />
