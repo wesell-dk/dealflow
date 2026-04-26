@@ -16,6 +16,10 @@ export interface OrderConfirmation {
   dealName: string;
   /** @nullable */
   contractId?: string | null;
+  /** @nullable */
+  sourceQuoteId?: string | null;
+  /** @nullable */
+  sourceQuoteNumber?: string | null;
   number: string;
   status: OrderConfirmationStatus;
   readinessScore: number;

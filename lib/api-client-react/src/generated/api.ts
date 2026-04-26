@@ -229,6 +229,8 @@ import type {
   Quote,
   QuoteAttachment,
   QuoteAttachmentInput,
+  QuoteConvertConflict,
+  QuoteConvertToOrderInput,
   QuoteDetail,
   QuoteDuplicateOptions,
   QuoteDuplicateResult,
@@ -4029,6 +4031,94 @@ export const useAcceptQuote = <
   TContext
 > => {
   return useMutation(getAcceptQuoteMutationOptions(options));
+};
+
+/**
+ * @summary Wandelt ein angenommenes Angebot in einen Auftrag (Order Confirmation) um. Übernimmt Kunde, Positionen, Summen und Steuern und referenziert das Quell-Angebot beidseitig.
+ */
+export const getConvertQuoteToOrderUrl = (id: string) => {
+  return `/api/v1/quotes/${id}/convert-to-order`;
+};
+
+export const convertQuoteToOrder = async (
+  id: string,
+  quoteConvertToOrderInput?: QuoteConvertToOrderInput,
+  options?: RequestInit,
+): Promise<OrderConfirmationDetail> => {
+  return customFetch<OrderConfirmationDetail>(getConvertQuoteToOrderUrl(id), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(quoteConvertToOrderInput),
+  });
+};
+
+export const getConvertQuoteToOrderMutationOptions = <
+  TError = ErrorType<QuoteConvertConflict>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof convertQuoteToOrder>>,
+    TError,
+    { id: string; data: BodyType<QuoteConvertToOrderInput> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof convertQuoteToOrder>>,
+  TError,
+  { id: string; data: BodyType<QuoteConvertToOrderInput> },
+  TContext
+> => {
+  const mutationKey = ["convertQuoteToOrder"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof convertQuoteToOrder>>,
+    { id: string; data: BodyType<QuoteConvertToOrderInput> }
+  > = (props) => {
+    const { id, data } = props ?? {};
+
+    return convertQuoteToOrder(id, data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type ConvertQuoteToOrderMutationResult = NonNullable<
+  Awaited<ReturnType<typeof convertQuoteToOrder>>
+>;
+export type ConvertQuoteToOrderMutationBody =
+  BodyType<QuoteConvertToOrderInput>;
+export type ConvertQuoteToOrderMutationError = ErrorType<QuoteConvertConflict>;
+
+/**
+ * @summary Wandelt ein angenommenes Angebot in einen Auftrag (Order Confirmation) um. Übernimmt Kunde, Positionen, Summen und Steuern und referenziert das Quell-Angebot beidseitig.
+ */
+export const useConvertQuoteToOrder = <
+  TError = ErrorType<QuoteConvertConflict>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof convertQuoteToOrder>>,
+    TError,
+    { id: string; data: BodyType<QuoteConvertToOrderInput> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof convertQuoteToOrder>>,
+  TError,
+  { id: string; data: BodyType<QuoteConvertToOrderInput> },
+  TContext
+> => {
+  return useMutation(getConvertQuoteToOrderMutationOptions(options));
 };
 
 /**

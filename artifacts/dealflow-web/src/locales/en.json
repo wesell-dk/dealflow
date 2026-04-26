@@ -200,7 +200,19 @@
       "openPdf": "Open PDF",
       "attachments": "Attachments",
       "noAttachments": "No attachments on this version.",
-      "languageChanged": "Quote language updated"
+      "languageChanged": "Quote language updated",
+      "convertToOrder": "Convert to order",
+      "convertDialogTitle": "Convert quote to order",
+      "convertDialogDescription": "A new order confirmation will be created from this accepted quote. Amount and terms are taken from the current version.",
+      "convertExpectedDelivery": "Expected delivery date (optional)",
+      "convertConfirm": "Create order",
+      "convertSuccess": "Order confirmation {{number}} created.",
+      "convertOnlyAccepted": "Only accepted quotes can be converted to an order.",
+      "convertExistsTitle": "Order already exists",
+      "convertExistsBody": "Order confirmation {{number}} was already created from this quote. Create another one anyway?",
+      "convertForce": "Create another anyway",
+      "openOrder": "Open order",
+      "linkedOrders": "Linked order confirmations"
     },
     "templates": {
       "title": "Quote Templates",

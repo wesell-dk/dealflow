@@ -1032,6 +1032,10 @@ export const orderConfirmationsTable = pgTable("order_confirmations", {
   id: id(),
   dealId: text("deal_id").notNull(),
   contractId: text("contract_id"),
+  // Quelle: aus welchem Angebot (+ Version) wurde diese Bestätigung erzeugt?
+  // NULL für historische OCs (z.B. aus Signatur-Abschluss ohne Angebotsbezug).
+  sourceQuoteId: text("source_quote_id"),
+  sourceQuoteVersionId: text("source_quote_version_id"),
   number: text("number").notNull(),
   status: text("status").notNull(),
   readinessScore: integer("readiness_score").notNull().default(0),

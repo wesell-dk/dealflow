@@ -200,7 +200,19 @@
       "openPdf": "PDF anzeigen",
       "attachments": "Anhänge",
       "noAttachments": "Keine Anhänge an diese Version gehängt.",
-      "languageChanged": "Angebotssprache aktualisiert"
+      "languageChanged": "Angebotssprache aktualisiert",
+      "convertToOrder": "In Auftrag umwandeln",
+      "convertDialogTitle": "Angebot in Auftrag umwandeln",
+      "convertDialogDescription": "Aus diesem angenommenen Angebot wird eine neue Auftragsbestätigung erstellt. Betrag und Konditionen werden aus der aktuellen Version übernommen.",
+      "convertExpectedDelivery": "Voraussichtlicher Liefertermin (optional)",
+      "convertConfirm": "Auftrag anlegen",
+      "convertSuccess": "Auftragsbestätigung {{number}} angelegt.",
+      "convertOnlyAccepted": "Nur angenommene Angebote können in einen Auftrag umgewandelt werden.",
+      "convertExistsTitle": "Auftrag existiert bereits",
+      "convertExistsBody": "Für dieses Angebot wurde bereits Auftragsbestätigung {{number}} angelegt. Trotzdem eine zweite Bestätigung erstellen?",
+      "convertForce": "Trotzdem neu anlegen",
+      "openOrder": "Auftrag öffnen",
+      "linkedOrders": "Verknüpfte Auftragsbestätigungen"
     },
     "templates": {
       "title": "Angebots-Vorlagen",

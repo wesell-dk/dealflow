@@ -882,6 +882,36 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/Quote" }
 
+  /quotes/{id}/convert-to-order:
+    post:
+      operationId: convertQuoteToOrder
+      tags: [quotes]
+      summary: >-
+        Wandelt ein angenommenes Angebot in einen Auftrag (Order Confirmation)
+        um. Übernimmt Kunde, Positionen, Summen und Steuern und referenziert das
+        Quell-Angebot beidseitig.
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/QuoteConvertToOrderInput" }
+      responses:
+        "201":
+          description: created
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/OrderConfirmationDetail" }
+        "409":
+          description: existing order confirmation for this quote
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/QuoteConvertConflict" }
+
   /quotes/from-template:
     post:
       operationId: createQuoteFromTemplate
@@ -5841,6 +5871,12 @@ components:
             lineItems:
               type: array
               items: { $ref: "#/components/schemas/LineItem" }
+            orderConfirmations:
+              type: array
+              description: >-
+                Aus diesem Angebot bereits abgeleitete Auftragsbestätigungen.
+                Leeres Array, solange noch keiner umgewandelt wurde.
+              items: { $ref: "#/components/schemas/QuoteOrderConfirmationLink" }
 
     QuoteVersionInput:
       type: object
@@ -7782,6 +7818,10 @@ components:
         dealName: { type: string }
         contractId:
           type: ["string", "null"]
+        sourceQuoteId:
+          type: ["string", "null"]
+        sourceQuoteNumber:
+          type: ["string", "null"]
         number: { type: string }
         status:
           type: string
@@ -7852,6 +7892,36 @@ components:
                   required: { type: boolean }
                   detail:
                     type: ["string", "null"]
+
+    QuoteConvertToOrderInput:
+      type: object
+      properties:
+        expectedDelivery:
+          type: ["string", "null"]
+          description: Optionales Liefer-/Startdatum für den Auftrag.
+        force:
+          type: boolean
+          description: >-
+            Wenn true, wird die Anlage auch dann durchgeführt, wenn bereits ein
+            Auftrag aus diesem Angebot existiert.
+
+    QuoteConvertConflict:
+      type: object
+      required: [error, existing]
+      properties:
+        error: { type: string }
+        existing: { $ref: "#/components/schemas/OrderConfirmation" }
+
+    QuoteOrderConfirmationLink:
+      type: object
+      required: [id, number, status, createdAt]
+      properties:
+        id: { type: string }
+        number: { type: string }
+        status: { type: string }
+        createdAt: { type: string, format: date-time }
+        sourceQuoteVersionId:
+          type: ["string", "null"]
 
     OrderConfirmationHandoverInput:
       type: object

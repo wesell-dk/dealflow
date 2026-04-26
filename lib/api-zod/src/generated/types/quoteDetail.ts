@@ -9,9 +9,12 @@ Multi-tenant, multi-company, multi-brand. Deal-centric.
  */
 import type { LineItem } from "./lineItem";
 import type { Quote } from "./quote";
+import type { QuoteOrderConfirmationLink } from "./quoteOrderConfirmationLink";
 import type { QuoteVersion } from "./quoteVersion";
 
 export type QuoteDetail = Quote & {
   versions: QuoteVersion[];
   lineItems: LineItem[];
+  /** Aus diesem Angebot bereits abgeleitete Auftragsbestätigungen. Leeres Array, solange noch keiner umgewandelt wurde. */
+  orderConfirmations?: QuoteOrderConfirmationLink[];
 };

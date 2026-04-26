@@ -1445,9 +1445,20 @@ export interface LineItem {
   total: number;
 }
 
+export interface QuoteOrderConfirmationLink {
+  id: string;
+  number: string;
+  status: string;
+  createdAt: string;
+  /** @nullable */
+  sourceQuoteVersionId?: string | null;
+}
+
 export type QuoteDetail = Quote & {
   versions: QuoteVersion[];
   lineItems: LineItem[];
+  /** Aus diesem Angebot bereits abgeleitete Auftragsbestätigungen. Leeres Array, solange noch keiner umgewandelt wurde. */
+  orderConfirmations?: QuoteOrderConfirmationLink[];
 };
 
 export interface QuoteVersionInput {
@@ -3292,6 +3303,10 @@ export interface OrderConfirmation {
   dealName: string;
   /** @nullable */
   contractId?: string | null;
+  /** @nullable */
+  sourceQuoteId?: string | null;
+  /** @nullable */
+  sourceQuoteNumber?: string | null;
   number: string;
   status: OrderConfirmationStatus;
   readinessScore: number;
@@ -3351,6 +3366,21 @@ export type OrderConfirmationDetail = OrderConfirmation & {
   escalations: OrderConfirmationDetailEscalationsItem[];
   checks: OrderConfirmationDetailChecksItem[];
 };
+
+export interface QuoteConvertToOrderInput {
+  /**
+   * Optionales Liefer-/Startdatum für den Auftrag.
+   * @nullable
+   */
+  expectedDelivery?: string | null;
+  /** Wenn true, wird die Anlage auch dann durchgeführt, wenn bereits ein Auftrag aus diesem Angebot existiert. */
+  force?: boolean;
+}
+
+export interface QuoteConvertConflict {
+  error: string;
+  existing: OrderConfirmation;
+}
 
 export interface OrderConfirmationHandoverInput {
   onboardingOwnerId: string;

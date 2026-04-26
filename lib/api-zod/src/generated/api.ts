@@ -1222,6 +1222,20 @@ export const GetQuoteResponse = zod
           total: zod.number(),
         }),
       ),
+      orderConfirmations: zod
+        .array(
+          zod.object({
+            id: zod.string(),
+            number: zod.string(),
+            status: zod.string(),
+            createdAt: zod.coerce.date(),
+            sourceQuoteVersionId: zod.string().nullish(),
+          }),
+        )
+        .optional()
+        .describe(
+          "Aus diesem Angebot bereits abgeleitete Auftragsbestätigungen. Leeres Array, solange noch keiner umgewandelt wurde.",
+        ),
     }),
   );
 
@@ -1280,6 +1294,26 @@ export const AcceptQuoteResponse = zod.object({
   createdAt: zod.coerce.date(),
   validUntil: zod.coerce.date(),
   language: zod.enum(["de", "en"]).describe("Sprachfassung des Angebots."),
+});
+
+/**
+ * @summary Wandelt ein angenommenes Angebot in einen Auftrag (Order Confirmation) um. Übernimmt Kunde, Positionen, Summen und Steuern und referenziert das Quell-Angebot beidseitig.
+ */
+export const ConvertQuoteToOrderParams = zod.object({
+  id: zod.coerce.string(),
+});
+
+export const ConvertQuoteToOrderBody = zod.object({
+  expectedDelivery: zod
+    .string()
+    .nullish()
+    .describe("Optionales Liefer-\/Startdatum für den Auftrag."),
+  force: zod
+    .boolean()
+    .optional()
+    .describe(
+      "Wenn true, wird die Anlage auch dann durchgeführt, wenn bereits ein Auftrag aus diesem Angebot existiert.",
+    ),
 });
 
 /**
@@ -4596,6 +4630,8 @@ export const ListOrderConfirmationsResponseItem = zod.object({
   dealId: zod.string(),
   dealName: zod.string(),
   contractId: zod.string().nullish(),
+  sourceQuoteId: zod.string().nullish(),
+  sourceQuoteNumber: zod.string().nullish(),
   number: zod.string(),
   status: zod.enum([
     "preparing",
@@ -4632,6 +4668,8 @@ export const GetOrderConfirmationResponse = zod
     dealId: zod.string(),
     dealName: zod.string(),
     contractId: zod.string().nullish(),
+    sourceQuoteId: zod.string().nullish(),
+    sourceQuoteNumber: zod.string().nullish(),
     number: zod.string(),
     status: zod.enum([
       "preparing",
@@ -4703,6 +4741,8 @@ export const HandoverOrderConfirmationResponse = zod
     dealId: zod.string(),
     dealName: zod.string(),
     contractId: zod.string().nullish(),
+    sourceQuoteId: zod.string().nullish(),
+    sourceQuoteNumber: zod.string().nullish(),
     number: zod.string(),
     status: zod.enum([
       "preparing",
@@ -4765,6 +4805,8 @@ export const CompleteOrderConfirmationResponse = zod
     dealId: zod.string(),
     dealName: zod.string(),
     contractId: zod.string().nullish(),
+    sourceQuoteId: zod.string().nullish(),
+    sourceQuoteNumber: zod.string().nullish(),
     number: zod.string(),
     status: zod.enum([
       "preparing",

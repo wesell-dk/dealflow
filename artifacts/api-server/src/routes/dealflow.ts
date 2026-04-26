@@ -1578,6 +1578,14 @@ router.get('/quotes/:id', async (req, res) => {
       .where(eq(lineItemsTable.quoteVersionId, chosen.id));
     const [d] = await db.select().from(dealsTable).where(eq(dealsTable.id, q.dealId));
     const base = await enrichQuote(q, d?.name ?? 'Unknown');
+    const ocs = await db.select({
+      id: orderConfirmationsTable.id,
+      number: orderConfirmationsTable.number,
+      status: orderConfirmationsTable.status,
+      createdAt: orderConfirmationsTable.createdAt,
+    }).from(orderConfirmationsTable)
+      .where(eq(orderConfirmationsTable.sourceQuoteId, q.id))
+      .orderBy(desc(orderConfirmationsTable.createdAt));
     res.json({
       ...base,
       versions: allVersions.map(v => ({
@@ -1591,6 +1599,9 @@ router.get('/quotes/:id', async (req, res) => {
         description: l.description, quantity: num(l.quantity),
         unitPrice: num(l.unitPrice), listPrice: num(l.listPrice),
         discountPct: num(l.discountPct), total: num(l.total),
+      })),
+      orderConfirmations: ocs.map(o => ({
+        id: o.id, number: o.number, status: o.status, createdAt: iso(o.createdAt)!,
       })),
       meta: {
         source: 'version',
@@ -1612,6 +1623,14 @@ router.get('/quotes/:id', async (req, res) => {
     ? await db.select().from(lineItemsTable).where(eq(lineItemsTable.quoteVersionId, current.id))
     : [];
   const base = await enrichQuote(q, d?.name ?? 'Unknown');
+  const ocs = await db.select({
+    id: orderConfirmationsTable.id,
+    number: orderConfirmationsTable.number,
+    status: orderConfirmationsTable.status,
+    createdAt: orderConfirmationsTable.createdAt,
+  }).from(orderConfirmationsTable)
+    .where(eq(orderConfirmationsTable.sourceQuoteId, q.id))
+    .orderBy(desc(orderConfirmationsTable.createdAt));
   res.json({
     ...base,
     versions: versions.map(v => ({
@@ -1625,6 +1644,9 @@ router.get('/quotes/:id', async (req, res) => {
       description: l.description, quantity: num(l.quantity),
       unitPrice: num(l.unitPrice), listPrice: num(l.listPrice),
       discountPct: num(l.discountPct), total: num(l.total),
+    })),
+    orderConfirmations: ocs.map(o => ({
+      id: o.id, number: o.number, status: o.status, createdAt: iso(o.createdAt)!,
     })),
     meta: {
       source: 'live',
@@ -1756,6 +1778,107 @@ router.post('/quotes/:id/versions', async (req, res) => {
     marginPct: num(created!.marginPct), status: created!.status, notes: created!.notes,
     createdAt: iso(created!.createdAt)!,
   });
+});
+
+router.post('/quotes/:id/convert-to-order', async (req, res) => {
+  if (!validateInline(req, res, { params: Z.ConvertQuoteToOrderParams, body: Z.ConvertQuoteToOrderBody })) return;
+  const [q] = await db.select().from(quotesTable).where(eq(quotesTable.id, req.params.id));
+  if (!q) { res.status(404).json({ error: 'not found' }); return; }
+  if (!(await gateDeal(req, res, q.dealId))) return;
+  if (q.status !== 'accepted') {
+    res.status(409).json({ error: `quote status must be "accepted" (current: "${q.status}")` });
+    return;
+  }
+  const body = (req.body ?? {}) as { expectedDelivery?: string | null; force?: boolean };
+  const force = body.force === true;
+  const expectedDelivery = body.expectedDelivery && String(body.expectedDelivery).trim().length > 0
+    ? String(body.expectedDelivery)
+    : null;
+
+  // Bestehende Auftragsbestätigung aus diesem Angebot finden — Idempotenz/Doppelklick-Schutz.
+  const existingForQuote = await db.select().from(orderConfirmationsTable)
+    .where(eq(orderConfirmationsTable.sourceQuoteId, q.id))
+    .orderBy(desc(orderConfirmationsTable.createdAt));
+  if (existingForQuote.length > 0 && !force) {
+    const ex = existingForQuote[0]!;
+    const dealMap = await getDealMap();
+    const userMap = await getUserMap(getScope(req).tenantId);
+    res.status(409).json({
+      error: 'order confirmation already exists for this quote',
+      existing: mapOC(ex, dealMap.get(ex.dealId)?.name ?? 'Unknown', userMap, q.number),
+    });
+    return;
+  }
+
+  // Quelle: aktuelle Version + Deal für Stamm-Daten.
+  const [latestVersion] = await db.select().from(quoteVersionsTable)
+    .where(eq(quoteVersionsTable.quoteId, q.id))
+    .orderBy(desc(quoteVersionsTable.version))
+    .limit(1);
+  const [deal] = await db.select().from(dealsTable).where(eq(dealsTable.id, q.dealId));
+  if (!deal) { res.status(404).json({ error: 'deal not found' }); return; }
+
+  const total = latestVersion ? num(latestVersion.totalAmount) : num(deal.value);
+  const ocId = `oc_${randomUUID().slice(0, 8)}`;
+  const year = new Date().getFullYear();
+  const existingCount = await db.select({ c: sql<number>`count(*)::int` }).from(orderConfirmationsTable);
+  const seq = String((existingCount[0]?.c ?? 0) + 1).padStart(3, '0');
+  await db.insert(orderConfirmationsTable).values({
+    id: ocId,
+    dealId: q.dealId,
+    contractId: null,
+    sourceQuoteId: q.id,
+    sourceQuoteVersionId: latestVersion?.id ?? null,
+    number: `OC-${year}-${seq}`,
+    status: 'checks_pending',
+    readinessScore: 20,
+    totalAmount: String(total),
+    currency: q.currency ?? deal.currency ?? 'EUR',
+    expectedDelivery: expectedDelivery,
+    handoverAt: null,
+    salesOwnerId: deal.ownerId ?? null,
+  });
+  await db.insert(orderConfirmationChecksTable).values({
+    id: `ocx_${randomUUID().slice(0, 8)}`,
+    orderConfirmationId: ocId,
+    label: 'Übernahme aus angenommenem Angebot',
+    status: 'pending',
+    detail: `Aus Angebot ${q.number} (Version ${latestVersion?.version ?? q.currentVersion}) angelegt.`,
+  });
+
+  await db.insert(timelineEventsTable).values({
+    id: `tl_${randomUUID().slice(0, 8)}`,
+    tenantId: getScope(req).tenantId,
+    type: 'handover',
+    title: 'Auftragsbestätigung aus Angebot angelegt',
+    description: `Angebot ${q.number} → Auftragsbestätigung OC-${year}-${seq}.${force && existingForQuote.length > 0 ? ' Trotz vorhandener Folgebestätigung erneut angelegt.' : ''}`,
+    actor: getScope(req).user.name,
+    dealId: q.dealId,
+  });
+
+  await writeAuditFromReq(req, {
+    entityType: 'order_confirmation',
+    entityId: ocId,
+    action: 'created_from_quote',
+    summary: `Auftragsbestätigung OC-${year}-${seq} aus Angebot ${q.number} erstellt`,
+    after: {
+      sourceQuoteId: q.id,
+      sourceQuoteVersionId: latestVersion?.id ?? null,
+      total,
+      currency: q.currency,
+      expectedDelivery,
+      forced: force && existingForQuote.length > 0,
+    },
+  });
+
+  void emitEvent(getScope(req).tenantId, 'order.completed', {
+    orderConfirmationId: ocId,
+    dealId: q.dealId,
+    sourceQuoteId: q.id,
+    event: 'created_from_quote',
+  });
+
+  await respondOcDetail(req, res, ocId, 201);
 });
 
 router.post('/quotes/:id/accept', async (req, res) => {
@@ -7872,9 +7995,12 @@ function mapOC(
   o: typeof orderConfirmationsTable.$inferSelect,
   dealName: string,
   users?: Map<string, typeof usersTable.$inferSelect>,
+  sourceQuoteNumber?: string | null,
 ) {
   return {
     id: o.id, dealId: o.dealId, dealName, contractId: o.contractId,
+    sourceQuoteId: o.sourceQuoteId ?? null,
+    sourceQuoteNumber: sourceQuoteNumber ?? null,
     number: o.number, status: o.status, readinessScore: o.readinessScore,
     totalAmount: num(o.totalAmount), currency: o.currency,
     expectedDelivery: o.expectedDelivery
@@ -7892,7 +8018,23 @@ function mapOC(
   };
 }
 
-function buildOcDetail(o: typeof orderConfirmationsTable.$inferSelect, dealName: string, users: Map<string, typeof usersTable.$inferSelect>, checks: Array<typeof orderConfirmationChecksTable.$inferSelect>) {
+async function loadSourceQuoteNumbers(
+  ocs: Array<typeof orderConfirmationsTable.$inferSelect>,
+): Promise<Map<string, string>> {
+  const ids = Array.from(new Set(ocs.map(o => o.sourceQuoteId).filter((x): x is string => !!x)));
+  if (ids.length === 0) return new Map();
+  const rows = await db.select({ id: quotesTable.id, number: quotesTable.number })
+    .from(quotesTable).where(inArray(quotesTable.id, ids));
+  return new Map(rows.map(r => [r.id, r.number]));
+}
+
+function buildOcDetail(
+  o: typeof orderConfirmationsTable.$inferSelect,
+  dealName: string,
+  users: Map<string, typeof usersTable.$inferSelect>,
+  checks: Array<typeof orderConfirmationChecksTable.$inferSelect>,
+  sourceQuoteNumber?: string | null,
+) {
   const requiredChecks = checks.filter(c => c.required);
   const handoverReady = requiredChecks.length > 0 && requiredChecks.every(c => c.status === 'ok');
   const escalations = checks
@@ -7942,7 +8084,13 @@ router.get('/order-confirmations', async (req, res) => {
       .where(eq(orderConfirmationChecksTable.orderConfirmationId, o.id));
     return reconcileOcState(req, o, checks);
   }));
-  res.json(reconciled.map(o => mapOC(o, dealMap.get(o.dealId)?.name ?? 'Unknown', userMap)));
+  const quoteNumbers = await loadSourceQuoteNumbers(reconciled);
+  res.json(reconciled.map(o => mapOC(
+    o,
+    dealMap.get(o.dealId)?.name ?? 'Unknown',
+    userMap,
+    o.sourceQuoteId ? quoteNumbers.get(o.sourceQuoteId) ?? null : null,
+  )));
 });
 
 async function reconcileOcState(
@@ -8002,16 +8150,28 @@ router.get('/order-confirmations/:id', async (req, res) => {
   const checks = await db.select().from(orderConfirmationChecksTable)
     .where(eq(orderConfirmationChecksTable.orderConfirmationId, raw.id));
   const o = await reconcileOcState(req, raw, checks);
-  res.json(buildOcDetail(o, dealMap.get(o.dealId)?.name ?? 'Unknown', userMap, checks));
+  let sourceQuoteNumber: string | null = null;
+  if (o.sourceQuoteId) {
+    const [sq] = await db.select({ number: quotesTable.number })
+      .from(quotesTable).where(eq(quotesTable.id, o.sourceQuoteId));
+    sourceQuoteNumber = sq?.number ?? null;
+  }
+  res.json(buildOcDetail(o, dealMap.get(o.dealId)?.name ?? 'Unknown', userMap, checks, sourceQuoteNumber));
 });
 
-async function respondOcDetail(req: Request, res: Response, ocId: string) {
+async function respondOcDetail(req: Request, res: Response, ocId: string, statusCode = 200) {
   const [u] = await db.select().from(orderConfirmationsTable).where(eq(orderConfirmationsTable.id, ocId));
   const checks = await db.select().from(orderConfirmationChecksTable)
     .where(eq(orderConfirmationChecksTable.orderConfirmationId, ocId));
   const dealMap = await getDealMap();
   const userMap = await getUserMap(getScope(req).tenantId);
-  res.json(buildOcDetail(u!, dealMap.get(u!.dealId)?.name ?? 'Unknown', userMap, checks));
+  let sourceQuoteNumber: string | null = null;
+  if (u?.sourceQuoteId) {
+    const [sq] = await db.select({ number: quotesTable.number })
+      .from(quotesTable).where(eq(quotesTable.id, u.sourceQuoteId));
+    sourceQuoteNumber = sq?.number ?? null;
+  }
+  res.status(statusCode).json(buildOcDetail(u!, dealMap.get(u!.dealId)?.name ?? 'Unknown', userMap, checks, sourceQuoteNumber));
 }
 
 router.post('/order-confirmations/:id/handover', async (req, res) => {

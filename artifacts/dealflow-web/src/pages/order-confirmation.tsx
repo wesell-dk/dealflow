@@ -111,7 +111,21 @@ export default function OrderConfirmationDetail() {
               {t(`pages.orderConfirmations.status.${data.status}`, data.status)}
             </Badge>
           </h1>
-          <p className="text-sm text-muted-foreground">{data.dealName}</p>
+          <p className="text-sm text-muted-foreground">
+            {data.dealName}
+            {data.sourceQuoteId && data.sourceQuoteNumber && (
+              <>
+                {" · "}
+                <Link
+                  href={`/quotes/${data.sourceQuoteId}`}
+                  className="underline hover:text-foreground"
+                  data-testid="oc-source-quote-link"
+                >
+                  {t("common.quote")} {data.sourceQuoteNumber}
+                </Link>
+              </>
+            )}
+          </p>
         </div>
         {(data.status === "preparing" || data.status === "checks_pending" || data.status === "ready_for_handover") && (
           <Dialog open={dialogOpen} onOpenChange={(o) => canHandover && setDialogOpen(o)}>
