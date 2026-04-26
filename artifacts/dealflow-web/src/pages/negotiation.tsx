@@ -33,10 +33,10 @@ import { useTranslation } from "react-i18next";
 type ReactionTypeKey = "question" | "objection" | "counterproposal" | "acceptance" | "partial" | "price_rejected" | "clause_rejected" | "term_change" | "deferred";
 
 const followUpLabel: Record<string, string> = {
-  new_quote_version: "Neue Angebotsversion",
+  new_quote_version: "Neue Quotesversion",
   discount_approval: "Discount-Approval",
-  contract_amendment: "Vertragsänderung",
-  clause_change: "Klausel-Wechsel",
+  contract_amendment: "Contract amendment",
+  clause_change: "Clause-Wechsel",
 };
 
 function formatCurrency(n: number | null | undefined) {
@@ -82,7 +82,7 @@ export default function NegotiationWorkspace() {
   const [createNewVersion, setCreateNewVersion] = useState(false);
 
   if (isLoading) return <div className="p-8"><Skeleton className="h-64 w-full" /></div>;
-  if (!neg) return <div className="p-8">Verhandlung nicht gefunden</div>;
+  if (!neg) return <div className="p-8">Verhandlung not found</div>;
 
   const impactsByReaction = new Map(neg.impacts.map(i => [i.reactionId, i]));
   const baseline = neg.baseline ?? null;
@@ -106,7 +106,7 @@ export default function NegotiationWorkspace() {
       } },
       {
         onSuccess: () => { toast({ title: "Reaktion erfasst" }); invalidate(); resetForm(); },
-        onError: () => toast({ title: "Fehler beim Erfassen", variant: "destructive" }),
+        onError: () => toast({ title: "Error beim Erfassen", variant: "destructive" }),
       },
     );
   };
@@ -128,7 +128,7 @@ export default function NegotiationWorkspace() {
           invalidate(); resetForm();
           qc.invalidateQueries({ queryKey: getListQuotesQueryKey() });
         },
-        onError: () => toast({ title: "Fehler beim Speichern", variant: "destructive" }),
+        onError: () => toast({ title: "Error beim Save", variant: "destructive" }),
       },
     );
   };
@@ -136,7 +136,7 @@ export default function NegotiationWorkspace() {
   const handleCreateVersion = (reactionId: string) => {
     createVersion.mutate({ id, reactionId }, {
       onSuccess: () => {
-        toast({ title: "Neue Angebotsversion erstellt" });
+        toast({ title: "Neue Quotesversion erstellt" });
         invalidate();
         qc.invalidateQueries({ queryKey: getListQuotesQueryKey() });
       },
@@ -168,9 +168,9 @@ export default function NegotiationWorkspace() {
         <div>
           <h1 className="text-3xl font-bold tracking-tight">{neg.dealName}</h1>
           <div className="flex items-center gap-3 mt-2 text-sm text-muted-foreground">
-            <Badge variant={neg.status === "active" ? "default" : "secondary"}>{neg.status === "active" ? "Aktiv" : neg.status}</Badge>
+            <Badge variant={neg.status === "active" ? "default" : "secondary"}>{neg.status === "active" ? "Active" : neg.status}</Badge>
             <Badge variant="outline">Runde {neg.round}</Badge>
-            <Badge variant={neg.riskLevel === "high" ? "destructive" : "outline"}>Risiko: {neg.riskLevel}</Badge>
+            <Badge variant={neg.riskLevel === "high" ? "destructive" : "outline"}>Risk: {neg.riskLevel}</Badge>
             {baseline && (
               <span className="text-xs">
                 Basis: {formatCurrency(baseline.totalAmount)} · Rabatt {baseline.discountPct}% · Marge {baseline.marginPct}%
@@ -207,7 +207,7 @@ export default function NegotiationWorkspace() {
         {/* CENTER: Reactions with impact */}
         <div className="lg:col-span-6">
           <Card>
-            <CardHeader><CardTitle>Kundenreaktionen &amp; Impact</CardTitle></CardHeader>
+            <CardHeader><CardTitle>Customersreaktionen &amp; Impact</CardTitle></CardHeader>
             <CardContent>
               {(!neg.reactions || neg.reactions.length === 0) ? (
                 <div className="text-center py-8 text-muted-foreground">
@@ -258,7 +258,7 @@ export default function NegotiationWorkspace() {
                               <div className="flex items-center gap-2 text-sm font-semibold">
                                 <TrendIcon className={`h-4 w-4 ${trendColor}`} />
                                 <span>Impact-Analyse</span>
-                                <span className={`text-xs ${trendColor}`}>Risiko {impact.riskTrend === "up" ? "↑" : impact.riskTrend === "down" ? "↓" : "="}</span>
+                                <span className={`text-xs ${trendColor}`}>Risk {impact.riskTrend === "up" ? "↑" : impact.riskTrend === "down" ? "↓" : "="}</span>
                               </div>
                               <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-xs">
                                 {impact.priceDeltaPct != null && (
@@ -299,7 +299,7 @@ export default function NegotiationWorkspace() {
                                 )}
                                 {impact.requestedClauseVariantId && (
                                   <div>
-                                    <div className="text-muted-foreground">Klausel-Wechsel</div>
+                                    <div className="text-muted-foreground">Clause-Wechsel</div>
                                     <div className="font-semibold">{impact.requestedClauseVariantId}</div>
                                   </div>
                                 )}
@@ -330,7 +330,7 @@ export default function NegotiationWorkspace() {
                                 {impact.priceDeltaPct != null && !impact.linkedQuoteVersionId && (
                                   <Button size="sm" variant="outline" disabled={createVersion.isPending}
                                     onClick={() => handleCreateVersion(r.id)}>
-                                    <FilePlus className="h-3.5 w-3.5 mr-1" /> Neue Angebotsversion
+                                    <FilePlus className="h-3.5 w-3.5 mr-1" /> Neue Quotesversion
                                   </Button>
                                 )}
                                 {impact.linkedQuoteVersionId && (
@@ -382,14 +382,14 @@ export default function NegotiationWorkspace() {
                     <Select value={type} onValueChange={(v) => setType(v as ReactionTypeKey)}>
                       <SelectTrigger><SelectValue /></SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="question">Frage</SelectItem>
-                        <SelectItem value="objection">Einwand</SelectItem>
-                        <SelectItem value="partial">Teilweise</SelectItem>
-                        <SelectItem value="price_rejected">Preis abgelehnt</SelectItem>
-                        <SelectItem value="clause_rejected">Klausel abgelehnt</SelectItem>
-                        <SelectItem value="term_change">Laufzeit-Änderung</SelectItem>
-                        <SelectItem value="acceptance">Akzeptiert</SelectItem>
-                        <SelectItem value="deferred">Vertagt</SelectItem>
+                        <SelectItem value="question">Question</SelectItem>
+                        <SelectItem value="objection">Objection</SelectItem>
+                        <SelectItem value="partial">Partial</SelectItem>
+                        <SelectItem value="price_rejected">Price rejected</SelectItem>
+                        <SelectItem value="clause_rejected">Clause rejected</SelectItem>
+                        <SelectItem value="term_change">Term change</SelectItem>
+                        <SelectItem value="acceptance">Accepted</SelectItem>
+                        <SelectItem value="deferred">Deferred</SelectItem>
                       </SelectContent>
                     </Select>
                   </div>
@@ -407,7 +407,7 @@ export default function NegotiationWorkspace() {
                   <Input value={source} onChange={e => setSource(e.target.value)} required placeholder="z. B. E-Mail CFO" />
                 </div>
                 <div className="space-y-2">
-                  <Label>Priorität</Label>
+                  <Label>Priority</Label>
                   <Select value={priority} onValueChange={setPriority}>
                     <SelectTrigger><SelectValue /></SelectTrigger>
                     <SelectContent>
@@ -434,21 +434,21 @@ export default function NegotiationWorkspace() {
                       <Input type="number" value={paymentTermsDeltaDays} onChange={e => setPaymentTermsDeltaDays(e.target.value)} placeholder="30" />
                     </div>
                     <div>
-                      <Label className="text-xs">Klausel-Variante</Label>
+                      <Label className="text-xs">Clause-Variante</Label>
                       <Input value={requestedClauseVariantId} onChange={e => setRequestedClauseVariantId(e.target.value)} placeholder="cv_xxx" />
                     </div>
                   </div>
                   {mode === "counterproposal" && (
                     <label className="flex items-center gap-2 text-xs mt-2">
                       <input type="checkbox" checked={createNewVersion} onChange={e => setCreateNewVersion(e.target.checked)} />
-                      Neue Angebotsversion direkt erstellen
+                      Neue Quotesversion direkt create
                     </label>
                   )}
                 </div>
 
                 <Button type="submit" className="w-full"
                   disabled={(mode === "counterproposal" ? counterprop.isPending : addReaction.isPending) || !topic || !summary || !source}>
-                  {(mode === "counterproposal" ? counterprop.isPending : addReaction.isPending) ? "Speichern..." : "Speichern"}
+                  {(mode === "counterproposal" ? counterprop.isPending : addReaction.isPending) ? "Save..." : "Save"}
                 </Button>
               </form>
             </CardContent>

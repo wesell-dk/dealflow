@@ -47,7 +47,7 @@ export function ContactScrapeDialog({ open, onOpenChange, accountId, defaultWebs
   const runScrape = async () => {
     const w = website.trim();
     if (!w) {
-      toast({ title: "Website fehlt", description: "Bitte eine URL oder Domain eintragen.", variant: "destructive" });
+      toast({ title: "Website missing", description: "Please enter a URL or domain.", variant: "destructive" });
       return;
     }
     try {
@@ -60,19 +60,19 @@ export function ContactScrapeDialog({ open, onOpenChange, accountId, defaultWebs
       setSelected(next);
       if (res.results.length === 0) {
         toast({
-          title: "Keine Personen gefunden",
+          title: "No people found",
           description: pagesCrawledMessage(res.pagesCrawled),
         });
       } else {
         toast({
-          title: `${res.results.length} Vorschläge geladen`,
+          title: `${res.results.length} suggestions loaded`,
           description: pagesCrawledMessage(res.pagesCrawled),
         });
       }
     } catch (err) {
       toast({
-        title: "Suche fehlgeschlagen",
-        description: err instanceof Error ? err.message : "Unbekannter Fehler",
+        title: "Search failed",
+        description: err instanceof Error ? err.message : "Unknown error",
         variant: "destructive",
       });
     }
@@ -113,11 +113,11 @@ export function ContactScrapeDialog({ open, onOpenChange, accountId, defaultWebs
         qc.invalidateQueries({ queryKey: getListContactsQueryKey({ accountId }) }),
       ]);
       if (failed === 0) {
-        toast({ title: `${ok} Kontakte übernommen` });
+        toast({ title: `${ok} contacts imported` });
         onOpenChange(false);
       } else {
         toast({
-          title: `${ok} übernommen, ${failed} fehlgeschlagen`,
+          title: `${ok} imported, ${failed} failed`,
           variant: failed > 0 ? "destructive" : "default",
         });
       }
@@ -133,12 +133,12 @@ export function ContactScrapeDialog({ open, onOpenChange, accountId, defaultWebs
       <DialogContent className="max-w-2xl max-h-[90vh] flex flex-col" data-testid="contact-scrape-dialog">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
-            <Sparkles className="h-4 w-4 text-primary" /> Kontakte aus Website vorschlagen
+            <Sparkles className="h-4 w-4 text-primary" /> Suggest contacts from website
           </DialogTitle>
           <DialogDescription>
-            Wir durchsuchen Impressum, Team-, Kontakt- und About-Seiten nach
-            Ansprechpartnern. Geschäftsführer/CEO/Vorstand werden zuverlässig
-            erkannt; weitere Rollen sind Best-Effort.
+            We crawl imprint, team, contact and about pages for contacts.
+            Managing directors, CEOs and board members are detected reliably;
+            other roles are best-effort.
           </DialogDescription>
         </DialogHeader>
 
@@ -150,7 +150,7 @@ export function ContactScrapeDialog({ open, onOpenChange, accountId, defaultWebs
               data-testid="contact-scrape-url"
               value={website}
               onChange={(e) => setWebsite(e.target.value)}
-              placeholder="z.B. https://acme.de"
+              placeholder="e.g. https://acme.de"
               disabled={pending || importing}
             />
             <Button
@@ -162,7 +162,7 @@ export function ContactScrapeDialog({ open, onOpenChange, accountId, defaultWebs
               {pending
                 ? <Loader2 className="h-4 w-4 mr-1 animate-spin" />
                 : <Sparkles className="h-4 w-4 mr-1" />}
-              Suchen
+              Search
             </Button>
           </div>
         </div>
@@ -170,7 +170,7 @@ export function ContactScrapeDialog({ open, onOpenChange, accountId, defaultWebs
         {results !== null && (
           <div className="text-xs text-muted-foreground flex items-center gap-1.5 pt-2">
             <Globe className="h-3 w-3" />
-            {pagesCrawledMessage(pagesCrawled)} · {results.length} Personen gefunden
+            {pagesCrawledMessage(pagesCrawled)} · {results.length} people found
           </div>
         )}
 
@@ -195,17 +195,17 @@ export function ContactScrapeDialog({ open, onOpenChange, accountId, defaultWebs
                     <div className="flex flex-wrap items-center gap-2">
                       <span className="font-medium">{c.name}</span>
                       {c.role && <span className="text-sm text-muted-foreground">· {c.role}</span>}
-                      {c.isDecisionMaker && <Badge variant="secondary">Entscheider</Badge>}
+                      {c.isDecisionMaker && <Badge variant="secondary">Decision maker</Badge>}
                       {c.isDuplicate && (
                         <Badge variant="outline" className="text-amber-700 border-amber-400">
-                          <AlertCircle className="h-3 w-3 mr-1" /> Bereits vorhanden
+                          <AlertCircle className="h-3 w-3 mr-1" /> Already exists
                         </Badge>
                       )}
                     </div>
                     <div className="flex flex-wrap gap-x-3 gap-y-1 text-xs text-muted-foreground mt-1">
                       {c.email && <span className="inline-flex items-center gap-1"><Mail className="h-3 w-3" /> {c.email}</span>}
                       {c.phone && <span className="inline-flex items-center gap-1"><Phone className="h-3 w-3" /> {c.phone}</span>}
-                      {c.sourceUrl && <span className="italic truncate max-w-[260px]" title={c.sourceUrl}>Quelle: {c.sourceUrl}</span>}
+                      {c.sourceUrl && <span className="italic truncate max-w-[260px]" title={c.sourceUrl}>Source: {c.sourceUrl}</span>}
                     </div>
                   </div>
                 </label>
@@ -216,13 +216,13 @@ export function ContactScrapeDialog({ open, onOpenChange, accountId, defaultWebs
 
         {results !== null && results.length === 0 && (
           <div className="text-center text-sm text-muted-foreground py-6">
-            Keine Personen erkannt. Versuche eine spezifischere URL (z.B. /team oder /impressum).
+            No people detected. Try a more specific URL (e.g. /team or /imprint).
           </div>
         )}
 
         <DialogFooter>
           <Button type="button" variant="outline" onClick={() => onOpenChange(false)} disabled={pending || importing}>
-            Schließen
+            Close
           </Button>
           <Button
             type="button"
@@ -231,7 +231,7 @@ export function ContactScrapeDialog({ open, onOpenChange, accountId, defaultWebs
             data-testid="contact-scrape-import"
           >
             {importing && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-            {selectedCount > 0 ? `${selectedCount} übernehmen` : "Übernehmen"}
+            {selectedCount > 0 ? `Import ${selectedCount}` : "Import"}
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -240,7 +240,7 @@ export function ContactScrapeDialog({ open, onOpenChange, accountId, defaultWebs
 }
 
 function pagesCrawledMessage(n: number): string {
-  if (n === 0) return "Keine Seite konnte abgerufen werden.";
-  if (n === 1) return "1 Seite durchsucht.";
-  return `${n} Seiten durchsucht.`;
+  if (n === 0) return "No page could be retrieved.";
+  if (n === 1) return "1 page crawled.";
+  return `${n} pages crawled.`;
 }

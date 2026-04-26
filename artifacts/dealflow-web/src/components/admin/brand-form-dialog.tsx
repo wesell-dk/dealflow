@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   useCreateBrand,
@@ -37,10 +38,10 @@ interface Props {
 }
 
 const TONES: Array<{ value: string; label: string; hint: string }> = [
-  { value: "precise",  label: "Precise",  hint: "Sachlich, klar, faktenorientiert." },
-  { value: "premium",  label: "Premium",  hint: "Wertig, zurückhaltend, exklusiv." },
-  { value: "concise",  label: "Concise",  hint: "Knapp, ergebnisorientiert, ohne Floskeln." },
-  { value: "bold",     label: "Bold",     hint: "Selbstbewusst, akzentuiert, plakativ." },
+  { value: "precise",  label: "Precise",  hint: "Factual, clear, data-driven." },
+  { value: "premium",  label: "Premium",  hint: "Refined, understated, exclusive." },
+  { value: "concise",  label: "Concise",  hint: "Brief, results-oriented, no fluff." },
+  { value: "bold",     label: "Bold",     hint: "Confident, accentuated, punchy." },
 ];
 
 const HEX_RE = /^#[0-9a-fA-F]{6}$/;
@@ -80,6 +81,7 @@ export function composeAddressLine(street: string, postalCode: string, city: str
 }
 
 export function BrandFormDialog({ open, onOpenChange, companies, defaultCompanyId, brand }: Props) {
+  const { t } = useTranslation();
   const { toast } = useToast();
   const qc = useQueryClient();
   const createMut = useCreateBrand();
@@ -168,11 +170,11 @@ export function BrandFormDialog({ open, onOpenChange, companies, defaultCompanyI
 
   const onUpload = async (file: File) => {
     if (!ALLOWED_LOGO_MIME.includes(file.type)) {
-      toast({ title: "Format nicht unterstützt", description: `${file.name || "Datei"} — erlaubt: PNG, JPEG, SVG, WebP.`, variant: "destructive" });
+      toast({ title: t("pages.admin.brandDialog.formatNotSupported"), description: t("pages.admin.brandDialog.formatNotSupportedDesc", { name: file.name || "File" }), variant: "destructive" });
       return;
     }
     if (file.size > MAX_LOGO_BYTES) {
-      toast({ title: "Logo zu groß", description: `${(file.size / 1024 / 1024).toFixed(1)} MB — Maximum 5 MB.`, variant: "destructive" });
+      toast({ title: t("pages.admin.brandDialog.logoTooLarge"), description: t("pages.admin.brandDialog.logoTooLargeDesc", { size: (file.size / 1024 / 1024).toFixed(1) }), variant: "destructive" });
       return;
     }
     setUploading(true);
@@ -201,23 +203,23 @@ export function BrandFormDialog({ open, onOpenChange, companies, defaultCompanyI
           (body as { message?: string; error?: string })?.message
           ?? (body as { error?: string })?.error;
         const msg = serverMsg
-          ?? (res.status === 401 ? "Sitzung abgelaufen — bitte neu anmelden."
-              : res.status === 403 ? "Nur Tenant-Admins dürfen Logos hochladen."
+          ?? (res.status === 401 ? t("pages.admin.brandDialog.sessionExpired")
+              : res.status === 403 ? t("pages.admin.brandDialog.onlyAdminsCanUpload")
               : (res.status === 502 || res.status === 503 || res.status === 504)
-                ? "Server kurz nicht erreichbar. Bitte in wenigen Sekunden erneut versuchen."
-                : `Upload-URL fehlgeschlagen (${res.status})`);
+                ? t("pages.admin.brandDialog.serverBriefly")
+                : t("pages.admin.brandDialog.uploadUrlFailed", { status: res.status }));
         throw new Error(msg);
       }
       const { uploadURL, objectPath } = await res.json();
       const put = await fetch(uploadURL, { method: "PUT", headers: { "Content-Type": file.type }, body: file });
-      if (!put.ok) throw new Error(`Upload fehlgeschlagen (${put.status})`);
+      if (!put.ok) throw new Error(t("pages.admin.brandDialog.uploadFailedStatus", { status: put.status }));
       if (myToken === uploadTokenRef.current) {
         setLogoUrl(`/api/storage${objectPath}`);
       }
       await applyColors();
     } catch (e: unknown) {
       await applyColors();
-      toast({ title: "Logo-Upload fehlgeschlagen", description: e instanceof Error ? e.message : "Unbekannt", variant: "destructive" });
+      toast({ title: t("pages.admin.logoUploadFailed"), description: e instanceof Error ? e.message : t("pages.admin.brandDialog.unknown"), variant: "destructive" });
     } finally {
       setUploading(false);
     }
@@ -238,20 +240,20 @@ export function BrandFormDialog({ open, onOpenChange, companies, defaultCompanyI
 
   const submit = async () => {
     if (!companyId) {
-      toast({ title: "Gesellschaft wählen", description: "Ein Brand muss einer Gesellschaft zugeordnet sein.", variant: "destructive" });
+      toast({ title: t("pages.admin.selectCompanyFirstTitle"), description: t("pages.admin.selectCompanyFirstBody"), variant: "destructive" });
       return;
     }
     const trimmed = name.trim();
     if (!trimmed) {
-      toast({ title: "Name fehlt", variant: "destructive" });
+      toast({ title: t("pages.admin.brandDialog.missingName"), variant: "destructive" });
       return;
     }
     if (!HEX_RE.test(primaryColor)) {
-      toast({ title: "Primärfarbe ungültig", description: "Bitte #RRGGBB.", variant: "destructive" });
+      toast({ title: t("pages.admin.brandDialog.primaryColorInvalid"), description: t("pages.admin.brandDialog.primaryColorInvalidHint"), variant: "destructive" });
       return;
     }
     if (secondaryColor && !HEX_RE.test(secondaryColor)) {
-      toast({ title: "Sekundärfarbe ungültig", description: "Bitte #RRGGBB oder leer lassen.", variant: "destructive" });
+      toast({ title: t("pages.admin.brandDialog.secondaryColorInvalid"), description: t("pages.admin.brandDialog.secondaryColorInvalidHint"), variant: "destructive" });
       return;
     }
     const parent = parentBrandId === NO_PARENT ? null : parentBrandId;
@@ -261,7 +263,7 @@ export function BrandFormDialog({ open, onOpenChange, companies, defaultCompanyI
     else if (taxRateMode === "custom") {
       const v = parseFloat(customTaxRate.replace(",", "."));
       if (!Number.isFinite(v) || v < 0 || v > 100) {
-        toast({ title: "USt-Satz ungültig", description: "Bitte 0–100 %.", variant: "destructive" });
+        toast({ title: "Invalid VAT rate", description: "Please enter 0–100 %.", variant: "destructive" });
         return;
       }
       resolvedTaxRate = Math.round(v * 100) / 100;
@@ -288,7 +290,7 @@ export function BrandFormDialog({ open, onOpenChange, companies, defaultCompanyI
             defaultTaxRatePct: resolvedTaxRate,
           },
         });
-        toast({ title: "Brand aktualisiert", description: trimmed });
+        toast({ title: t("pages.admin.brandUpdated"), description: trimmed });
       } else {
         await createMut.mutateAsync({
           data: {
@@ -307,7 +309,7 @@ export function BrandFormDialog({ open, onOpenChange, companies, defaultCompanyI
             defaultTaxRatePct: resolvedTaxRate,
           },
         });
-        toast({ title: "Brand angelegt", description: trimmed });
+        toast({ title: t("pages.admin.brandCreated"), description: trimmed });
       }
       await qc.invalidateQueries({ queryKey: getListBrandsQueryKey() });
       onOpenChange(false);
@@ -315,8 +317,8 @@ export function BrandFormDialog({ open, onOpenChange, companies, defaultCompanyI
       const status = (e as { response?: { status?: number } })?.response?.status;
       const body = (e as { response?: { data?: { error?: string } } })?.response?.data;
       toast({
-        title: status === 409 ? "Name bereits vergeben" : isEdit ? "Speichern fehlgeschlagen" : "Anlegen fehlgeschlagen",
-        description: body?.error ?? (e instanceof Error ? e.message : "Unbekannter Fehler"),
+        title: status === 409 ? t("pages.admin.nameTaken") : isEdit ? t("pages.admin.brandDialog.saveFailed") : t("pages.admin.brandDialog.createFailed"),
+        description: body?.error ?? (e instanceof Error ? e.message : t("pages.admin.brandDialog.unknownError")),
         variant: "destructive",
       });
     }
@@ -328,19 +330,18 @@ export function BrandFormDialog({ open, onOpenChange, companies, defaultCompanyI
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>{isEdit ? "Brand bearbeiten" : "Neuen Brand anlegen"}</DialogTitle>
+          <DialogTitle>{isEdit ? t("pages.admin.brandDialog.titleEdit") : t("pages.admin.brandDialog.titleNew")}</DialogTitle>
           <DialogDescription>
-            Markenauftritt einer Gesellschaft — bestimmt Logo, Farben, Tonalität und juristisches Impressum
-            in generierten Angeboten und Verträgen.
+            {t("pages.admin.brandDialog.description")}
           </DialogDescription>
         </DialogHeader>
 
         <div className="space-y-4 py-2">
           <div className="space-y-1.5">
-            <Label htmlFor="brand-company">Gesellschaft *</Label>
+            <Label htmlFor="brand-company">{t("pages.admin.companyRequired")}</Label>
             <Select value={companyId} onValueChange={setCompanyId} disabled={isEdit}>
               <SelectTrigger id="brand-company" data-testid="select-brand-company">
-                <SelectValue>{companies.find(c => c.id === companyId)?.name ?? "Wählen…"}</SelectValue>
+                <SelectValue>{companies.find(c => c.id === companyId)?.name ?? t("common.select")}</SelectValue>
               </SelectTrigger>
               <SelectContent>
                 {companies.map(c => (
@@ -353,35 +354,35 @@ export function BrandFormDialog({ open, onOpenChange, companies, defaultCompanyI
                 ))}
               </SelectContent>
             </Select>
-            {isEdit && <p className="text-xs text-muted-foreground">Gesellschaft eines bestehenden Brands kann nicht gewechselt werden.</p>}
+            {isEdit && <p className="text-xs text-muted-foreground">{t("pages.admin.companyLockedHint")}</p>}
           </div>
 
           <div className="space-y-1.5">
-            <Label htmlFor="brand-parent">Eltern-Marke</Label>
+            <Label htmlFor="brand-parent">{t("pages.admin.brandDialog.parentBrand")}</Label>
             <Select value={parentBrandId} onValueChange={setParentBrandId}>
               <SelectTrigger id="brand-parent" data-testid="select-brand-parent">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value={NO_PARENT}>— Keine (Top-Level) —</SelectItem>
+                <SelectItem value={NO_PARENT}>{t("pages.admin.brandDialog.parentNone")}</SelectItem>
                 {parentCandidates.map((b) => (
                   <SelectItem key={b.id} value={b.id} textValue={b.name}>{b.name}</SelectItem>
                 ))}
               </SelectContent>
             </Select>
-            <p className="text-xs text-muted-foreground">Optional — Sub-Brand unter einer übergeordneten Marke (z. B. WFS → weCREATE).</p>
+            <p className="text-xs text-muted-foreground">{t("pages.admin.subBrandHintFull")}</p>
           </div>
 
           <div className="space-y-1.5">
-            <Label htmlFor="brand-name">Brand-Name *</Label>
-            <Input id="brand-name" value={name} onChange={e => setName(e.target.value)} placeholder="z. B. Helix Premium" data-testid="input-brand-name" />
+            <Label htmlFor="brand-name">{t("pages.admin.brandNameRequired")}</Label>
+            <Input id="brand-name" value={name} onChange={e => setName(e.target.value)} placeholder={t("pages.admin.brandDialog.brandNamePlaceholder")} data-testid="input-brand-name" />
           </div>
 
           <div className="space-y-1.5">
-            <Label htmlFor="brand-tone">Tonalität</Label>
+            <Label htmlFor="brand-tone">{t("pages.admin.brandDialog.tone")}</Label>
             <Select value={tone} onValueChange={setTone}>
               <SelectTrigger id="brand-tone" data-testid="select-brand-tone">
-                <SelectValue>{TONES.find(t => t.value === tone)?.label ?? tone}</SelectValue>
+                <SelectValue>{TONES.find(toneOpt => toneOpt.value === tone)?.label ?? tone}</SelectValue>
               </SelectTrigger>
               <SelectContent>
                 {TONES.map(opt => (
@@ -394,12 +395,12 @@ export function BrandFormDialog({ open, onOpenChange, companies, defaultCompanyI
                 ))}
               </SelectContent>
             </Select>
-            <p className="text-xs text-muted-foreground">Steuert Ansprache und Wortwahl in generierten Texten.</p>
+            <p className="text-xs text-muted-foreground">{t("pages.admin.brandDialog.toneHint")}</p>
           </div>
 
           {/* Logo */}
           <div className="space-y-1.5">
-            <Label>Logo</Label>
+            <Label>{t("pages.admin.brandDialog.logo")}</Label>
             <div
               onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
               onDragLeave={() => setDragOver(false)}
@@ -421,7 +422,7 @@ export function BrandFormDialog({ open, onOpenChange, companies, defaultCompanyI
               <div className="flex items-center gap-4 p-4">
                 {logoUrl ? (
                   <div className="flex-shrink-0 h-24 w-24 rounded-md border bg-white p-2 flex items-center justify-center">
-                    <img src={toAssetSrc(logoUrl)} alt="Logo-Vorschau" className="max-h-full max-w-full object-contain" />
+                    <img src={toAssetSrc(logoUrl)} alt="Logo preview" className="max-h-full max-w-full object-contain" />
                   </div>
                 ) : (
                   <div className="flex-shrink-0 h-24 w-24 rounded-md bg-muted flex items-center justify-center text-muted-foreground">
@@ -432,46 +433,46 @@ export function BrandFormDialog({ open, onOpenChange, companies, defaultCompanyI
                   {uploading ? (
                     <p className="text-sm text-muted-foreground flex items-center gap-2">
                       <Loader2 className="h-4 w-4 animate-spin" />
-                      Wird hochgeladen…
+                      {t("pages.admin.brandDialog.logoUploading")}
                     </p>
                   ) : logoUrl ? (
                     <>
-                      <p className="text-sm font-medium">Logo geladen</p>
-                      <p className="text-xs text-muted-foreground mt-1">Klicken oder Datei ziehen, um zu ersetzen.</p>
+                      <p className="text-sm font-medium">{t("pages.admin.brandDialog.logoLoaded")}</p>
+                      <p className="text-xs text-muted-foreground mt-1">{t("pages.admin.brandDialog.logoLoadedHint")}</p>
                     </>
                   ) : (
                     <>
-                      <p className="text-sm font-medium">Datei hierher ziehen oder klicken</p>
-                      <p className="text-xs text-muted-foreground mt-1">PNG, JPEG, SVG, WebP — bis 5 MB</p>
+                      <p className="text-sm font-medium">{t("pages.admin.brandDialog.logoDropzone")}</p>
+                      <p className="text-xs text-muted-foreground mt-1">{t("pages.admin.brandDialog.logoDropzoneHint")}</p>
                     </>
                   )}
                 </div>
                 {logoUrl && !uploading && (
                   <Button type="button" size="sm" variant="ghost"
                     onClick={(e) => { e.stopPropagation(); setLogoUrl(""); setColorsExtracted(null); }}
-                    aria-label="Logo entfernen">
+                    aria-label={t("pages.admin.brandDialog.logoRemove")}>
                     <X className="h-4 w-4" />
                   </Button>
                 )}
                 {!logoUrl && !uploading && (
                   <Button type="button" size="sm" variant="outline" onClick={(e) => { e.stopPropagation(); fileInputRef.current?.click(); }}>
                     <Upload className="h-4 w-4 mr-1" />
-                    Hochladen
+                    {t("pages.admin.brandDialog.logoUpload")}
                   </Button>
                 )}
               </div>
               {logoUrl && !uploading && (
                 <div className="border-t grid grid-cols-2 gap-px bg-muted/30">
-                  <div className="bg-white p-3 flex items-center justify-center gap-2" title="Wirkung auf weißem Papier (DIN A4)">
+                  <div className="bg-white p-3 flex items-center justify-center gap-2">
                     <img src={toAssetSrc(logoUrl)} alt="" className="h-8 w-8 object-contain" />
                     <span className="px-2 py-1 rounded text-xs font-medium" style={{ background: primaryColor || "#ffffff", color: foregroundFor(primaryColor || "#ffffff") }}>
-                      auf Weiß
+                      {t("pages.admin.brandDialog.logoOnWhite")}
                     </span>
                   </div>
-                  <div className="bg-slate-900 p-3 flex items-center justify-center gap-2" title="Wirkung auf dunklem Header (App)">
+                  <div className="bg-slate-900 p-3 flex items-center justify-center gap-2">
                     <img src={toAssetSrc(logoUrl)} alt="" className="h-8 w-8 object-contain" />
                     <span className="px-2 py-1 rounded text-xs font-medium" style={{ background: primaryColor || "#ffffff", color: foregroundFor(primaryColor || "#ffffff") }}>
-                      auf Dunkel
+                      {t("pages.admin.brandDialog.logoOnDark")}
                     </span>
                   </div>
                 </div>
@@ -479,7 +480,7 @@ export function BrandFormDialog({ open, onOpenChange, companies, defaultCompanyI
             </div>
 
             <details className="text-xs">
-              <summary className="cursor-pointer text-muted-foreground hover:text-foreground">URL manuell eintragen…</summary>
+              <summary className="cursor-pointer text-muted-foreground hover:text-foreground">{t("pages.admin.brandDialog.manualUrl")}</summary>
               <Input
                 value={logoUrl}
                 onChange={e => setLogoUrl(e.target.value)}
@@ -491,14 +492,14 @@ export function BrandFormDialog({ open, onOpenChange, companies, defaultCompanyI
             {colorsExtracted && (
               <div className="flex items-center gap-2 text-xs text-muted-foreground" data-testid="brand-colors-extracted">
                 <Sparkles className="h-3.5 w-3.5 text-primary" />
-                <span>Farben aus Logo abgeleitet — du kannst sie unten anpassen.</span>
+                <span>{t("pages.admin.brandDialog.colorsExtracted")}</span>
               </div>
             )}
           </div>
 
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1.5">
-              <Label htmlFor="brand-primary">Primärfarbe</Label>
+              <Label htmlFor="brand-primary">{t("pages.admin.brandDialog.primaryColor")}</Label>
               <div className="flex gap-2">
                 <Input
                   id="brand-primary"
@@ -514,11 +515,11 @@ export function BrandFormDialog({ open, onOpenChange, companies, defaultCompanyI
                 />
               </div>
               {isTooLightForPaper(primaryColor || "#ffffff") && (
-                <p className="text-xs text-amber-700">⚠ Sehr hell — auf weißem Papier kaum sichtbar.</p>
+                <p className="text-xs text-amber-700">⚠ {t("pages.admin.lightLogoWarning")}</p>
               )}
             </div>
             <div className="space-y-1.5">
-              <Label htmlFor="brand-secondary">Sekundärfarbe (optional)</Label>
+              <Label htmlFor="brand-secondary">{t("pages.admin.brandDialog.secondaryColor")}</Label>
               <div className="flex gap-2">
                 <Input
                   id="brand-secondary"
@@ -531,20 +532,20 @@ export function BrandFormDialog({ open, onOpenChange, companies, defaultCompanyI
                   value={secondaryColor}
                   onChange={e => { setSecondaryColor(e.target.value); setSecondaryTouched(true); secondaryTouchedRef.current = true; }}
                   className="flex-1"
-                  placeholder="leer = nur Primärfarbe"
+                  placeholder=""
                 />
               </div>
             </div>
           </div>
 
           <div className="space-y-1.5">
-            <Label htmlFor="brand-default-contract-type">Standard-Vertragstyp</Label>
+            <Label htmlFor="brand-default-contract-type">{t("pages.admin.defaultContractType")}</Label>
             <Select value={defaultContractTypeId} onValueChange={setDefaultContractTypeId}>
               <SelectTrigger id="brand-default-contract-type" data-testid="select-brand-default-contract-type">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value={NO_CONTRACT_TYPE}>— Heuristik aus Template-Name —</SelectItem>
+                <SelectItem value={NO_CONTRACT_TYPE}>—</SelectItem>
                 {(contractTypes ?? []).filter(ct => ct.active !== false).map(ct => (
                   <SelectItem key={ct.id} value={ct.id} textValue={ct.name}>
                     <div className="flex flex-col">
@@ -556,70 +557,69 @@ export function BrandFormDialog({ open, onOpenChange, companies, defaultCompanyI
               </SelectContent>
             </Select>
             <p className="text-xs text-muted-foreground">
-              Wird in „Vertrag erstellen" verwendet, wenn kein Vertragstyp explizit gewählt wurde — bevor die
-              Schlagwort-Heuristik aus dem Templatenamen greift.
+              {t("pages.admin.defaultContractTypeHint")}
             </p>
           </div>
 
           <div className="space-y-1.5">
-            <Label htmlFor="brand-default-tax">Standard-USt-Satz</Label>
+            <Label htmlFor="brand-default-tax">Default tax rate</Label>
             <Select value={taxRateMode} onValueChange={(v) => setTaxRateMode(v as typeof taxRateMode)}>
               <SelectTrigger id="brand-default-tax" data-testid="select-brand-default-tax">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="tenant">— Tenant-Standard —</SelectItem>
-                <SelectItem value="19">19 % (Regelsatz)</SelectItem>
-                <SelectItem value="7">7 % (ermäßigt)</SelectItem>
-                <SelectItem value="0">0 % (steuerfrei)</SelectItem>
-                <SelectItem value="custom">Anderer Satz…</SelectItem>
+                <SelectItem value="tenant">— Tenant default —</SelectItem>
+                <SelectItem value="19">19 %</SelectItem>
+                <SelectItem value="7">7 %</SelectItem>
+                <SelectItem value="0">0 %</SelectItem>
+                <SelectItem value="custom">Other…</SelectItem>
               </SelectContent>
             </Select>
             {taxRateMode === "custom" && (
               <Input
                 value={customTaxRate}
                 onChange={(e) => setCustomTaxRate(e.target.value)}
-                placeholder="z. B. 5,5"
+                placeholder="e.g. 5.5"
                 inputMode="decimal"
                 data-testid="input-brand-default-tax-custom"
               />
             )}
             <p className="text-xs text-muted-foreground">
-              Vorbelegung für neue Angebotspositionen dieser Marke. Lässt sich pro Position weiterhin überschreiben.
+              Default tax rate for new quote positions of this brand. Can still be overridden per position.
             </p>
           </div>
 
           <div className="space-y-1.5">
-            <Label htmlFor="brand-legal">Juristischer Name (Impressum)</Label>
-            <Input id="brand-legal" value={legalEntityName} onChange={e => setLegalEntityName(e.target.value)} placeholder="z. B. Helix Logistics GmbH" />
+            <Label htmlFor="brand-legal">Legal name (imprint)</Label>
+            <Input id="brand-legal" value={legalEntityName} onChange={e => setLegalEntityName(e.target.value)} placeholder="e.g. Helix Logistics GmbH" />
           </div>
           <div className="space-y-1.5">
-            <Label>Adresse (Impressum)</Label>
+            <Label>Address (imprint)</Label>
             <Input
               id="brand-street"
               value={street}
               onChange={e => setStreet(e.target.value)}
-              placeholder="Straße / Hausnummer (z. B. Musterstraße 1)"
+              placeholder="Street / number"
               data-testid="input-brand-street"
-              aria-label="Straße und Hausnummer"
+              aria-label="Street and number"
             />
             <div className="grid grid-cols-[1fr_2fr] gap-2">
               <Input
                 id="brand-postal-code"
                 value={postalCode}
                 onChange={e => setPostalCode(e.target.value)}
-                placeholder="PLZ"
+                placeholder="ZIP"
                 data-testid="input-brand-postal-code"
-                aria-label="Postleitzahl"
+                aria-label="ZIP / postal code"
                 inputMode="numeric"
               />
               <Input
                 id="brand-city"
                 value={city}
                 onChange={e => setCity(e.target.value)}
-                placeholder="Ort"
+                placeholder="City"
                 data-testid="input-brand-city"
-                aria-label="Ort"
+                aria-label="City"
               />
             </div>
           </div>
@@ -627,10 +627,10 @@ export function BrandFormDialog({ open, onOpenChange, companies, defaultCompanyI
           {isEdit && brand && (
             <div className="space-y-2 pt-2 border-t">
               <div>
-                <p className="text-sm font-medium">Dokument-Vorlagen</p>
+                <p className="text-sm font-medium">Document templates</p>
                 <p className="text-xs text-muted-foreground">
-                  Lade pro Dokumentart eine Referenz-PDF hoch — die KI extrahiert das Layout (Farben, Header,
-                  Footer, Spalten, Beschriftungen) und wendet es auf neu erzeugte Dokumente dieser Brand an.
+                  Upload a reference PDF per document type — AI extracts the layout (colors, headers,
+                  footers, columns, labels) and applies it to newly generated documents of this brand.
                 </p>
               </div>
               <BrandDocumentTemplates brandId={brand.id} />
@@ -639,10 +639,10 @@ export function BrandFormDialog({ open, onOpenChange, companies, defaultCompanyI
         </div>
 
         <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)} disabled={busy}>Abbrechen</Button>
+          <Button variant="outline" onClick={() => onOpenChange(false)} disabled={busy}>{t("common.cancel")}</Button>
           <Button onClick={submit} disabled={busy || uploading} data-testid="button-brand-submit">
             {busy && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-            {isEdit ? "Speichern" : "Anlegen"}
+            {isEdit ? t("common.save") : t("common.create")}
           </Button>
         </DialogFooter>
       </DialogContent>

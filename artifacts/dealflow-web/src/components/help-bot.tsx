@@ -37,10 +37,10 @@ type Msg = {
 };
 
 const QUICK_ACTIONS: Array<{ icon: typeof Plus; label: string; question: string }> = [
-  { icon: BarChart3, label: "Pipeline-Stats", question: "Gib mir einen kurzen Pipeline-Überblick — Anzahl Deals nach Stage und offener Wert." },
-  { icon: Briefcase, label: "Top 5 Deals", question: "Was sind meine 5 größten offenen Deals?" },
-  { icon: Users, label: "Letzte Kunden", question: "Zeig mir die letzten 5 Kunden im System." },
-  { icon: Activity, label: "Letzte Aktivität", question: "Was ist im letzten Tag passiert?" },
+  { icon: BarChart3, label: "Pipeline stats", question: "Give me a quick pipeline overview — number of deals by stage and open value." },
+  { icon: Briefcase, label: "Top 5 deals", question: "What are my 5 largest open deals?" },
+  { icon: Users, label: "Recent customers", question: "Show me the 5 most recent customers in the system." },
+  { icon: Activity, label: "Recent activity", question: "What happened in the last day?" },
 ];
 
 function ToolIcon({ tool }: { tool?: string }) {
@@ -53,26 +53,26 @@ function ToolIcon({ tool }: { tool?: string }) {
 }
 
 const TOOL_LABELS: Record<string, string> = {
-  search_accounts: "Kunden gesucht",
-  search_deals: "Deals gesucht",
-  pipeline_stats: "Pipeline-Statistik",
-  recent_activity: "Letzte Aktivitäten",
-  create_account: "Kunde angelegt",
-  create_deal: "Deal angelegt",
-  create_contact: "Kontakt angelegt",
+  search_accounts: "Searched customers",
+  search_deals: "Searched deals",
+  pipeline_stats: "Pipeline statistics",
+  recent_activity: "Recent activity",
+  create_account: "Customer created",
+  create_deal: "Deal created",
+  create_contact: "Contact created",
 };
 
 function compactSummary(tool: string, result: unknown): string {
   if (Array.isArray(result)) {
-    if (result.length === 0) return "keine Treffer";
-    return `${result.length} Treffer`;
+    if (result.length === 0) return "no results";
+    return `${result.length} results`;
   }
   if (result && typeof result === "object") {
     const r = result as Record<string, unknown>;
     if (typeof r.id === "string") return String(r.id);
     if (r.totals && typeof r.totals === "object") {
       const t = r.totals as Record<string, number>;
-      return `${t.accounts ?? 0} Kunden · ${t.deals ?? 0} Deals · ${t.approvals ?? 0} Approvals`;
+      return `${t.accounts ?? 0} customers · ${t.deals ?? 0} deals · ${t.approvals ?? 0} approvals`;
     }
   }
   return TOOL_LABELS[tool] ?? tool;
@@ -85,7 +85,7 @@ function TraceCard({ trace }: { trace: Trace }) {
       <div className="flex items-start gap-2 rounded border border-destructive/30 bg-destructive/5 px-2 py-1.5 text-xs">
         <AlertCircle className="h-3.5 w-3.5 text-destructive shrink-0 mt-0.5" />
         <div className="min-w-0">
-          <div className="font-medium">{trace.tool ?? "Werkzeug"} fehlgeschlagen</div>
+          <div className="font-medium">{trace.tool ?? "Tool"} failed</div>
           <div className="text-muted-foreground truncate">{trace.errorMessage}</div>
         </div>
       </div>
@@ -125,7 +125,7 @@ function TraceCard({ trace }: { trace: Trace }) {
             </li>
           ))}
           {(trace.result as Array<unknown>).length > 5 && (
-            <li className="text-[10px] italic">… +{(trace.result as Array<unknown>).length - 5} weitere</li>
+            <li className="text-[10px] italic">… +{(trace.result as Array<unknown>).length - 5} more</li>
           )}
         </ul>
       )}
@@ -166,7 +166,7 @@ function PipelineStatsView({ data }: { data: PipelineStats }) {
         </ul>
       )}
       <div className="pt-1 border-t border-border/50 text-[10px]">
-        Offen {eur(data.openValue ?? 0)} · Won {eur(data.wonValue ?? 0)} · Pending Approvals {data.pendingApprovals ?? 0}
+        Open {eur(data.openValue ?? 0)} · Won {eur(data.wonValue ?? 0)} · Pending approvals {data.pendingApprovals ?? 0}
       </div>
     </div>
   );
@@ -240,7 +240,7 @@ export function HelpBot() {
     } catch {
       setMessages([
         ...next,
-        { role: "assistant", content: "Hmm, da ist etwas schiefgegangen. Versuch es bitte gleich nochmal." },
+        { role: "assistant", content: "Hmm, something went wrong. Please try again in a moment." },
       ]);
     }
   };
@@ -303,7 +303,7 @@ export function HelpBot() {
                       className="h-7 text-xs"
                       onClick={() => setOpen(false)}
                     >
-                      <Link href={m.action.path}>Jetzt öffnen →</Link>
+                      <Link href={m.action.path}>Open now →</Link>
                     </Button>
                   </div>
                 )}
@@ -322,11 +322,11 @@ export function HelpBot() {
                   </div>
                 )}
                 {m.role === "assistant" && m.meta?.source === "fallback" && (
-                  <div className="mt-1 text-[10px] text-muted-foreground italic">Offline-Modus</div>
+                  <div className="mt-1 text-[10px] text-muted-foreground italic">Offline mode</div>
                 )}
                 {m.role === "assistant" && m.meta?.source === "ai" && m.meta.steps && m.meta.steps > 1 && (
                   <div className="mt-1 text-[10px] text-muted-foreground italic">
-                    {m.meta.steps} Schritte · {m.meta.latencyMs ? `${(m.meta.latencyMs / 1000).toFixed(1)}s` : ""}
+                    {m.meta.steps} steps · {m.meta.latencyMs ? `${(m.meta.latencyMs / 1000).toFixed(1)}s` : ""}
                   </div>
                 )}
               </div>
@@ -335,7 +335,7 @@ export function HelpBot() {
 
           {messages.length <= 1 && !askMutation.isPending && (
             <div className="pt-2">
-              <div className="text-xs text-muted-foreground mb-2">Schnelle Aktionen:</div>
+              <div className="text-xs text-muted-foreground mb-2">Quick actions:</div>
               <div className="grid grid-cols-2 gap-1.5">
                 {QUICK_ACTIONS.map((qa) => {
                   const Icon = qa.icon;
@@ -353,7 +353,7 @@ export function HelpBot() {
                 })}
               </div>
               <div className="mt-2 text-[10px] text-muted-foreground italic">
-                Tipp: Du kannst mich auch fragen "Lege einen Kunden 'Acme GmbH' an, Branche Software, Deutschland" — ich erledige das direkt.
+                Tip: You can also ask me "Create a customer 'Acme GmbH', industry Software, Germany" — I'll handle it directly.
               </div>
             </div>
           )}

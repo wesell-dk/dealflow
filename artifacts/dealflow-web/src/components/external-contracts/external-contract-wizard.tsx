@@ -55,11 +55,11 @@ const PARTY_ROLES: ExternalContractPartyRole[] = [
 ];
 
 const ROLE_LABEL: Record<ExternalContractPartyRole, string> = {
-  customer: "Kunde",
-  supplier: "Lieferant",
-  our_entity: "Eigene Firma",
-  third_party: "Dritter",
-  unknown: "Unbekannt",
+  customer: "Customer",
+  supplier: "Supplier",
+  our_entity: "Our entity",
+  third_party: "Third party",
+  unknown: "Unknown",
 };
 
 const EMPTY_DRAFT: ExternalContractDraftFields = {
@@ -80,7 +80,7 @@ const EMPTY_DRAFT: ExternalContractDraftFields = {
   // Task #69: aggregierte Konfidenz fuer den Wizard. Bevor die KI laeuft,
   // ist der Default "low" plus Hinweis, dass der User selber pruefen muss.
   overallConfidence: "low",
-  overallConfidenceReason: "Noch keine KI-Auswertung verfügbar.",
+  overallConfidenceReason: "No AI analysis available yet.",
   notes: [],
 };
 
@@ -152,15 +152,15 @@ export function ExternalContractWizard({ open, onOpenChange, accountId, defaultB
 
   const handleNextFromStep1 = async () => {
     if (!file) {
-      toast({ title: "Bitte Datei auswählen", variant: "destructive" });
+      toast({ title: "Please select a file", variant: "destructive" });
       return;
     }
     if (!ALLOWED_MIME.includes(file.type)) {
-      toast({ title: "Nur PDF oder DOCX erlaubt", variant: "destructive" });
+      toast({ title: "Only PDF or DOCX allowed", variant: "destructive" });
       return;
     }
     if (file.size > MAX_BYTES) {
-      toast({ title: "Datei zu groß (max. 20 MB)", variant: "destructive" });
+      toast({ title: "File too large (max. 20 MB)", variant: "destructive" });
       return;
     }
     setBusy(true);
@@ -175,7 +175,7 @@ export function ExternalContractWizard({ open, onOpenChange, accountId, defaultB
         headers: { "Content-Type": file.type },
         body: file,
       });
-      if (!putRes.ok) throw new Error(`Upload fehlgeschlagen: ${putRes.status}`);
+      if (!putRes.ok) throw new Error(`Upload failed: ${putRes.status}`);
       setObjectPath(upload.objectPath);
 
       const extraction = await extractMut.mutateAsync({
@@ -202,14 +202,14 @@ export function ExternalContractWizard({ open, onOpenChange, accountId, defaultB
       }
       if (!extraction.aiAvailable) {
         toast({
-          title: "KI nicht verfügbar",
-          description: "Bitte Felder manuell ausfüllen.",
+          title: "AI not available",
+          description: "Please fill in the fields manually.",
         });
       }
       setStep(2);
     } catch (e) {
       toast({
-        title: "Fehler",
+        title: "Error",
         description: describeUploadError(e),
         variant: "destructive",
       });
@@ -221,7 +221,7 @@ export function ExternalContractWizard({ open, onOpenChange, accountId, defaultB
   const handleSave = async () => {
     if (!file) return;
     if (!draft.title || draft.title.trim().length === 0) {
-      toast({ title: "Titel ist Pflicht", variant: "destructive" });
+      toast({ title: "Title is required", variant: "destructive" });
       setStep(2);
       return;
     }
@@ -253,7 +253,7 @@ export function ExternalContractWizard({ open, onOpenChange, accountId, defaultB
           notes: draft.notes.length > 0 ? draft.notes.join("\n") : null,
         },
       });
-      toast({ title: "Vertrag gespeichert" });
+      toast({ title: "Contract saved" });
       await qc.invalidateQueries({
         queryKey: getListExternalContractsQueryKey({ accountId }),
       });
@@ -264,7 +264,7 @@ export function ExternalContractWizard({ open, onOpenChange, accountId, defaultB
       close();
     } catch (e) {
       toast({
-        title: "Speichern fehlgeschlagen",
+        title: "Save failed",
         description: e instanceof Error ? e.message : "",
         variant: "destructive",
       });
@@ -324,9 +324,9 @@ export function ExternalContractWizard({ open, onOpenChange, accountId, defaultB
       <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>
-            Externen Vertrag hochladen
+            Upload external contract
             <span className="ml-3 text-sm font-normal text-muted-foreground">
-              Schritt {step} von 3
+              Step {step} of 3
             </span>
           </DialogTitle>
         </DialogHeader>
@@ -334,7 +334,7 @@ export function ExternalContractWizard({ open, onOpenChange, accountId, defaultB
         {step === 1 && (
           <div className="space-y-4">
             <div>
-              <Label>Datei (PDF oder DOCX, max. 20 MB)</Label>
+              <Label>File (PDF or DOCX, max. 20 MB)</Label>
               <Input
                 ref={fileRef}
                 type="file"
@@ -350,11 +350,11 @@ export function ExternalContractWizard({ open, onOpenChange, accountId, defaultB
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <Label>Marke (optional)</Label>
+                <Label>Brand (optional)</Label>
                 <Select value={brandId} onValueChange={setBrandId}>
                   <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="__none__">— keine —</SelectItem>
+                    <SelectItem value="__none__">— none —</SelectItem>
                     {brands.map((b) => (
                       <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>
                     ))}
@@ -362,11 +362,11 @@ export function ExternalContractWizard({ open, onOpenChange, accountId, defaultB
                 </Select>
               </div>
               <div>
-                <Label>Vertragstyp (optional)</Label>
+                <Label>Contract type (optional)</Label>
                 <Select value={contractTypeCode} onValueChange={setContractTypeCode}>
                   <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="__none__">— wird ggf. von KI vorgeschlagen —</SelectItem>
+                    <SelectItem value="__none__">— may be suggested by AI —</SelectItem>
                     {contractTypes.map((t) => (
                       <SelectItem key={t.id} value={t.code}>{t.name}</SelectItem>
                     ))}
@@ -375,8 +375,8 @@ export function ExternalContractWizard({ open, onOpenChange, accountId, defaultB
               </div>
             </div>
             <div className="rounded border bg-muted/30 p-3 text-xs text-muted-foreground">
-              Im nächsten Schritt liest die KI Kerndaten aus dem Dokument und schlägt Felder vor.
-              Du kannst alles korrigieren, bevor gespeichert wird.
+              In the next step the AI reads core data from the document and suggests fields.
+              You can correct everything before saving.
             </div>
           </div>
         )}
@@ -387,9 +387,9 @@ export function ExternalContractWizard({ open, onOpenChange, accountId, defaultB
               <div className="flex items-start gap-2 rounded border border-amber-500/40 bg-amber-500/10 p-3 text-sm">
                 <AlertTriangle className="h-4 w-4 mt-0.5 text-amber-600" />
                 <div>
-                  <div className="font-medium">KI nicht verfügbar</div>
+                  <div className="font-medium">AI not available</div>
                   <div className="text-muted-foreground">
-                    Bitte Felder manuell ausfüllen. Datei ist bereits hochgeladen.
+                    Please fill in the fields manually. File has already been uploaded.
                   </div>
                 </div>
               </div>
@@ -400,7 +400,7 @@ export function ExternalContractWizard({ open, onOpenChange, accountId, defaultB
                 data-testid="external-contract-ai-confidence-row"
               >
                 <Sparkles className="h-4 w-4 text-primary" />
-                <span className="font-medium">KI-Auswertung</span>
+                <span className="font-medium">AI analysis</span>
                 <AIConfidenceBadge
                   level={aiExtraction.confidenceLevel ?? draft.overallConfidence ?? undefined}
                   numeric={aiExtraction.confidence ?? undefined}
@@ -418,7 +418,7 @@ export function ExternalContractWizard({ open, onOpenChange, accountId, defaultB
             )}
             <div className="grid grid-cols-2 gap-3">
               <div className="col-span-2">
-                <Label>Titel *<ConfidenceBadge value={conf.title} /></Label>
+                <Label>Title *<ConfidenceBadge value={conf.title} /></Label>
                 <Input
                   value={draft.title ?? ""}
                   onChange={(e) => updateDraft("title", e.target.value)}
@@ -426,7 +426,7 @@ export function ExternalContractWizard({ open, onOpenChange, accountId, defaultB
                 />
               </div>
               <div>
-                <Label>Währung<ConfidenceBadge value={conf.currency} /></Label>
+                <Label>Currency<ConfidenceBadge value={conf.currency} /></Label>
                 <Input
                   value={draft.currency ?? ""}
                   onChange={(e) => updateDraft("currency", e.target.value || null)}
@@ -434,7 +434,7 @@ export function ExternalContractWizard({ open, onOpenChange, accountId, defaultB
                 />
               </div>
               <div>
-                <Label>Wert<ConfidenceBadge value={conf.valueAmount} /></Label>
+                <Label>Value<ConfidenceBadge value={conf.valueAmount} /></Label>
                 <Input
                   type="number"
                   value={draft.valueAmount ?? ""}
@@ -442,7 +442,7 @@ export function ExternalContractWizard({ open, onOpenChange, accountId, defaultB
                 />
               </div>
               <div>
-                <Label>Gültig ab<ConfidenceBadge value={conf.effectiveFrom} /></Label>
+                <Label>Effective from<ConfidenceBadge value={conf.effectiveFrom} /></Label>
                 <Input
                   type="date"
                   value={draft.effectiveFrom ?? ""}
@@ -450,7 +450,7 @@ export function ExternalContractWizard({ open, onOpenChange, accountId, defaultB
                 />
               </div>
               <div>
-                <Label>Gültig bis<ConfidenceBadge value={conf.effectiveTo} /></Label>
+                <Label>Effective to<ConfidenceBadge value={conf.effectiveTo} /></Label>
                 <Input
                   type="date"
                   value={draft.effectiveTo ?? ""}
@@ -458,7 +458,7 @@ export function ExternalContractWizard({ open, onOpenChange, accountId, defaultB
                 />
               </div>
               <div>
-                <Label>Kündigungsfrist (Tage)<ConfidenceBadge value={conf.terminationNoticeDays} /></Label>
+                <Label>Termination notice (days)<ConfidenceBadge value={conf.terminationNoticeDays} /></Label>
                 <Input
                   type="number"
                   value={draft.terminationNoticeDays ?? ""}
@@ -471,7 +471,7 @@ export function ExternalContractWizard({ open, onOpenChange, accountId, defaultB
                 />
               </div>
               <div>
-                <Label>Renewal-Frist (Tage)<ConfidenceBadge value={conf.renewalNoticeDays} /></Label>
+                <Label>Renewal notice (days)<ConfidenceBadge value={conf.renewalNoticeDays} /></Label>
                 <Input
                   type="number"
                   value={draft.renewalNoticeDays ?? ""}
@@ -484,7 +484,7 @@ export function ExternalContractWizard({ open, onOpenChange, accountId, defaultB
                 />
               </div>
               <div>
-                <Label>Geltendes Recht<ConfidenceBadge value={conf.governingLaw} /></Label>
+                <Label>Governing law<ConfidenceBadge value={conf.governingLaw} /></Label>
                 <Input
                   value={draft.governingLaw ?? ""}
                   onChange={(e) => updateDraft("governingLaw", e.target.value || null)}
@@ -492,7 +492,7 @@ export function ExternalContractWizard({ open, onOpenChange, accountId, defaultB
                 />
               </div>
               <div>
-                <Label>Gerichtsstand<ConfidenceBadge value={conf.jurisdiction} /></Label>
+                <Label>Jurisdiction<ConfidenceBadge value={conf.jurisdiction} /></Label>
                 <Input
                   value={draft.jurisdiction ?? ""}
                   onChange={(e) => updateDraft("jurisdiction", e.target.value || null)}
@@ -500,7 +500,7 @@ export function ExternalContractWizard({ open, onOpenChange, accountId, defaultB
               </div>
               <div className="col-span-2 flex items-center justify-between rounded border p-3">
                 <div className="flex items-center gap-2">
-                  <Label htmlFor="autoRenewal">Automatische Verlängerung</Label>
+                  <Label htmlFor="autoRenewal">Automatic renewal</Label>
                   <ConfidenceBadge value={conf.autoRenewal} />
                 </div>
                 <Switch
@@ -514,15 +514,15 @@ export function ExternalContractWizard({ open, onOpenChange, accountId, defaultB
 
             <div>
               <div className="mb-2 flex items-center justify-between">
-                <Label>Vertragsparteien<ConfidenceBadge value={conf.parties} /></Label>
+                <Label>Contract parties<ConfidenceBadge value={conf.parties} /></Label>
                 <Button type="button" variant="outline" size="sm" onClick={addParty}>
-                  <Plus className="h-3.5 w-3.5 mr-1" /> Partei
+                  <Plus className="h-3.5 w-3.5 mr-1" /> Party
                 </Button>
               </div>
               <div className="space-y-2">
                 {draft.parties.length === 0 && (
                   <div className="rounded border border-dashed p-3 text-center text-xs text-muted-foreground">
-                    Keine Parteien identifiziert.
+                    No parties identified.
                   </div>
                 )}
                 {draft.parties.map((p, idx) => (
@@ -543,7 +543,7 @@ export function ExternalContractWizard({ open, onOpenChange, accountId, defaultB
                     <Input
                       value={p.name}
                       onChange={(e) => updateParty(idx, { name: e.target.value })}
-                      placeholder="Name der Partei"
+                      placeholder="Party name"
                     />
                     <Button
                       type="button"
@@ -559,11 +559,11 @@ export function ExternalContractWizard({ open, onOpenChange, accountId, defaultB
             </div>
 
             <div>
-              <Label>Identifizierte Klausel-Familien</Label>
+              <Label>Identified clause families</Label>
               <div className="mt-2 space-y-1">
                 {draft.identifiedClauseFamilies.length === 0 && (
                   <div className="rounded border border-dashed p-3 text-center text-xs text-muted-foreground">
-                    Keine Klausel-Familien identifiziert.
+                    No clause families identified.
                   </div>
                 )}
                 {draft.identifiedClauseFamilies.map((c, idx) => (
@@ -591,7 +591,7 @@ export function ExternalContractWizard({ open, onOpenChange, accountId, defaultB
 
             {draft.notes.length > 0 && (
               <div>
-                <Label>KI-Notizen</Label>
+                <Label>AI notes</Label>
                 <Textarea
                   readOnly
                   value={draft.notes.join("\n")}
@@ -607,32 +607,32 @@ export function ExternalContractWizard({ open, onOpenChange, accountId, defaultB
           <div className="space-y-3 text-sm">
             <div className="rounded border bg-muted/30 p-4">
               <div className="flex items-center gap-2 font-medium">
-                <Sparkles className="h-4 w-4 text-primary" /> Zusammenfassung
+                <Sparkles className="h-4 w-4 text-primary" /> Summary
               </div>
               <dl className="mt-3 grid grid-cols-2 gap-x-4 gap-y-2">
-                <dt className="text-muted-foreground">Titel</dt>
+                <dt className="text-muted-foreground">Title</dt>
                 <dd className="font-medium">{draft.title || "—"}</dd>
-                <dt className="text-muted-foreground">Datei</dt>
+                <dt className="text-muted-foreground">File</dt>
                 <dd>{file?.name}</dd>
-                <dt className="text-muted-foreground">Wert</dt>
+                <dt className="text-muted-foreground">Value</dt>
                 <dd>
                   {draft.valueAmount
                     ? `${Number(draft.valueAmount).toLocaleString("de-DE")} ${draft.currency ?? ""}`
                     : "—"}
                 </dd>
-                <dt className="text-muted-foreground">Laufzeit</dt>
+                <dt className="text-muted-foreground">Term</dt>
                 <dd>
                   {draft.effectiveFrom ?? "—"} → {draft.effectiveTo ?? "—"}
                 </dd>
-                <dt className="text-muted-foreground">Auto-Renewal</dt>
-                <dd>{draft.autoRenewal ? "Ja" : "Nein"}</dd>
-                <dt className="text-muted-foreground">Parteien</dt>
+                <dt className="text-muted-foreground">Auto-renewal</dt>
+                <dd>{draft.autoRenewal ? "Yes" : "No"}</dd>
+                <dt className="text-muted-foreground">Parties</dt>
                 <dd>
                   {draft.parties.length
                     ? draft.parties.map((p) => `${ROLE_LABEL[p.role]}: ${p.name}`).join(", ")
                     : "—"}
                 </dd>
-                <dt className="text-muted-foreground">Klausel-Familien</dt>
+                <dt className="text-muted-foreground">Clause families</dt>
                 <dd>{draft.identifiedClauseFamilies.length}</dd>
               </dl>
             </div>
@@ -643,13 +643,13 @@ export function ExternalContractWizard({ open, onOpenChange, accountId, defaultB
           <div>
             {step > 1 && (
               <Button variant="ghost" onClick={() => setStep((s) => (s - 1) as Step)} disabled={busy}>
-                Zurück
+                Back
               </Button>
             )}
           </div>
           <div className="flex gap-2">
             <Button variant="outline" onClick={close} disabled={busy}>
-              Abbrechen
+              Cancel
             </Button>
             {step === 1 && (
               <Button
@@ -658,12 +658,12 @@ export function ExternalContractWizard({ open, onOpenChange, accountId, defaultB
                 data-testid="external-contract-next-step1"
               >
                 {busy ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Upload className="h-4 w-4 mr-2" />}
-                Hochladen & analysieren
+                Upload & analyze
               </Button>
             )}
             {step === 2 && (
               <Button onClick={() => setStep(3)} data-testid="external-contract-next-step2">
-                Weiter
+                Next
               </Button>
             )}
             {step === 3 && (
@@ -673,7 +673,7 @@ export function ExternalContractWizard({ open, onOpenChange, accountId, defaultB
                 data-testid="external-contract-save"
               >
                 {busy ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Check className="h-4 w-4 mr-2" />}
-                Speichern
+                Save
               </Button>
             )}
           </div>

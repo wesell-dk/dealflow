@@ -15,10 +15,10 @@ export interface CollaboratorEmailInput {
 }
 
 const CAP_LABEL_DE: Record<string, string> = {
-  view: "Lesen",
-  comment: "Kommentieren",
-  edit_fields: "Felder bearbeiten",
-  sign_party: "Mitzeichnen",
+  view: "View",
+  comment: "Comment",
+  edit_fields: "Edit fields",
+  sign_party: "Countersign",
 };
 
 function escapeHtml(s: string): string {
@@ -31,10 +31,10 @@ function escapeHtml(s: string): string {
 }
 
 function formatDateDe(d: Date): string {
-  // 24.05.2026
+  // 2026-05-24
   const day = String(d.getUTCDate()).padStart(2, "0");
   const month = String(d.getUTCMonth() + 1).padStart(2, "0");
-  return `${day}.${month}.${d.getUTCFullYear()}`;
+  return `${d.getUTCFullYear()}-${month}-${day}`;
 }
 
 function senderName(brandName: string | null): { name: string; email: string } {
@@ -54,8 +54,8 @@ export function buildCollaboratorInviteContent(input: CollaboratorEmailInput): {
   const greetingName = input.recipientName?.trim() || input.recipientEmail;
   const brandLine = input.brandName ? input.brandName : "DealFlow";
   const subject = input.brandName
-    ? `${input.brandName}: Vertragsfreigabe für ${input.contractTitle}`
-    : `Vertragsfreigabe für ${input.contractTitle}`;
+    ? `${input.brandName}: Contract access for ${input.contractTitle}`
+    : `Contract access for ${input.contractTitle}`;
 
   const capLabels = input.capabilities.map((c) => CAP_LABEL_DE[c] ?? c).join(", ");
   const expiresStr = formatDateDe(input.expiresAt);
@@ -64,72 +64,72 @@ export function buildCollaboratorInviteContent(input: CollaboratorEmailInput): {
     : input.inviterName;
   const ipLine =
     input.ipAllowlistCount > 0
-      ? `Hinweis: Der Zugriff ist auf ${input.ipAllowlistCount} freigegebene IP-Adresse${input.ipAllowlistCount === 1 ? "" : "n"} beschränkt.`
+      ? `Note: Access is restricted to ${input.ipAllowlistCount} approved IP address${input.ipAllowlistCount === 1 ? "" : "es"}.`
       : null;
 
   const text = [
-    `Hallo ${greetingName},`,
+    `Hello ${greetingName},`,
     "",
-    `${inviterLine} hat Sie als externe/n Mitwirkende/n für den Vertrag „${input.contractTitle}“ freigegeben${input.organization ? ` (${input.organization})` : ""}.`,
+    `${inviterLine} has shared the contract "${input.contractTitle}" with you as an external collaborator${input.organization ? ` (${input.organization})` : ""}.`,
     "",
-    `Berechtigungen: ${capLabels}`,
-    `Gültig bis: ${expiresStr}`,
+    `Permissions: ${capLabels}`,
+    `Valid until: ${expiresStr}`,
     ...(ipLine ? [ipLine] : []),
     "",
-    "Öffnen Sie den Vertrag über folgenden Link:",
+    "Open the contract using the following link:",
     input.magicLinkUrl,
     "",
-    "Der Link ist persönlich und sollte nicht weitergegeben werden. Bei Fragen antworten Sie einfach auf diese E-Mail.",
+    "This link is personal and should not be shared. If you have any questions, simply reply to this email.",
     "",
     `— ${brandLine} via DealFlow`,
   ].join("\n");
 
   const html = `<!doctype html>
-<html lang="de">
+<html lang="en">
   <body style="font-family:system-ui,Segoe UI,Helvetica,Arial,sans-serif;background:#f6f7f9;margin:0;padding:24px;color:#0b1220">
     <table role="presentation" cellpadding="0" cellspacing="0" width="100%" style="max-width:560px;margin:0 auto;background:#fff;border:1px solid #e5e7eb;border-radius:12px;overflow:hidden">
       <tr>
         <td style="padding:24px 28px;border-bottom:1px solid #f1f5f9">
           <div style="font-size:13px;color:#64748b;letter-spacing:0.04em;text-transform:uppercase">${escapeHtml(brandLine)}</div>
-          <div style="font-size:20px;font-weight:600;margin-top:4px">Vertragsfreigabe</div>
+          <div style="font-size:20px;font-weight:600;margin-top:4px">Contract access</div>
         </td>
       </tr>
       <tr>
         <td style="padding:24px 28px">
-          <p style="margin:0 0 12px">Hallo ${escapeHtml(greetingName)},</p>
+          <p style="margin:0 0 12px">Hello ${escapeHtml(greetingName)},</p>
           <p style="margin:0 0 12px">
-            <strong>${escapeHtml(inviterLine)}</strong> hat Sie als externe/n Mitwirkende/n für den Vertrag
-            „<strong>${escapeHtml(input.contractTitle)}</strong>“ freigegeben${input.organization ? ` (${escapeHtml(input.organization)})` : ""}.
+            <strong>${escapeHtml(inviterLine)}</strong> has shared the contract
+            "<strong>${escapeHtml(input.contractTitle)}</strong>" with you as an external collaborator${input.organization ? ` (${escapeHtml(input.organization)})` : ""}.
           </p>
           <table role="presentation" cellpadding="0" cellspacing="0" style="margin:16px 0;font-size:14px;color:#0b1220">
             <tr>
-              <td style="padding:4px 12px 4px 0;color:#64748b">Berechtigungen</td>
+              <td style="padding:4px 12px 4px 0;color:#64748b">Permissions</td>
               <td style="padding:4px 0">${escapeHtml(capLabels)}</td>
             </tr>
             <tr>
-              <td style="padding:4px 12px 4px 0;color:#64748b">Gültig bis</td>
+              <td style="padding:4px 12px 4px 0;color:#64748b">Valid until</td>
               <td style="padding:4px 0">${escapeHtml(expiresStr)}</td>
             </tr>
             ${
               ipLine
-                ? `<tr><td style="padding:4px 12px 4px 0;color:#64748b">IP-Beschränkung</td><td style="padding:4px 0">${escapeHtml(ipLine)}</td></tr>`
+                ? `<tr><td style="padding:4px 12px 4px 0;color:#64748b">IP restriction</td><td style="padding:4px 0">${escapeHtml(ipLine)}</td></tr>`
                 : ""
             }
           </table>
           <p style="margin:24px 0">
             <a href="${escapeHtml(input.magicLinkUrl)}"
                style="display:inline-block;background:#2563eb;color:#fff;text-decoration:none;font-weight:600;padding:10px 18px;border-radius:8px">
-              Vertrag öffnen
+              Open contract
             </a>
           </p>
           <p style="margin:0 0 8px;font-size:12px;color:#64748b">
-            Falls der Button nicht funktioniert, kopieren Sie folgenden Link in den Browser:
+            If the button does not work, copy the following link into your browser:
           </p>
           <p style="margin:0 0 16px;font-size:12px;word-break:break-all;color:#1d4ed8">
             ${escapeHtml(input.magicLinkUrl)}
           </p>
           <p style="margin:24px 0 0;font-size:12px;color:#64748b">
-            Der Link ist persönlich und sollte nicht weitergegeben werden. Bei Fragen antworten Sie einfach auf diese E-Mail.
+            This link is personal and should not be shared. If you have any questions, simply reply to this email.
           </p>
         </td>
       </tr>
@@ -164,7 +164,7 @@ export async function sendCollaboratorInviteEmail(
 }
 
 // ─────────────────────────────────────────────────────────────────────────
-// Counter-signature confirmation (Mitzeichnung) e-mails.
+// Counter-signature confirmation e-mails.
 // Sent after a successful POST /external/:token/sign so that:
 //  a) the external lawyer keeps a paper trail outside our app, and
 //  b) the internal contract owner is notified that the counter-signature
@@ -185,13 +185,13 @@ export interface CollaboratorSignConfirmationInput {
 }
 
 function formatDateTimeDe(d: Date): string {
-  // 24.05.2026, 14:32 (UTC)
+  // 2026-05-24, 14:32 (UTC)
   const day = String(d.getUTCDate()).padStart(2, "0");
   const month = String(d.getUTCMonth() + 1).padStart(2, "0");
   const year = d.getUTCFullYear();
   const hh = String(d.getUTCHours()).padStart(2, "0");
   const mm = String(d.getUTCMinutes()).padStart(2, "0");
-  return `${day}.${month}.${year}, ${hh}:${mm} (UTC)`;
+  return `${year}-${month}-${day}, ${hh}:${mm} (UTC)`;
 }
 
 export function buildCollaboratorSignConfirmationContent(
@@ -199,8 +199,8 @@ export function buildCollaboratorSignConfirmationContent(
 ): { subject: string; html: string; text: string } {
   const brandLine = input.brandName ? input.brandName : "DealFlow";
   const subject = input.brandName
-    ? `${input.brandName}: Mitzeichnung bestätigt – ${input.contractTitle}`
-    : `Mitzeichnung bestätigt – ${input.contractTitle}`;
+    ? `${input.brandName}: Countersignature confirmed – ${input.contractTitle}`
+    : `Countersignature confirmed – ${input.contractTitle}`;
   const signedStr = formatDateTimeDe(input.signedAt);
   const dealLine = input.dealName ? input.dealName : null;
   const ownerLine = input.ownerName
@@ -211,51 +211,51 @@ export function buildCollaboratorSignConfirmationContent(
   const orgLine = input.organization ?? null;
 
   const text = [
-    `Hallo ${input.signerName},`,
+    `Hello ${input.signerName},`,
     "",
-    `Ihre Mitzeichnung für den Vertrag „${input.contractTitle}“ ist bei uns eingegangen.`,
+    `Your countersignature for the contract "${input.contractTitle}" has been received.`,
     "",
-    `Mitzeichner: ${input.signerName}${orgLine ? ` (${orgLine})` : ""}`,
-    `Empfangen am: ${signedStr}`,
+    `Countersigner: ${input.signerName}${orgLine ? ` (${orgLine})` : ""}`,
+    `Received at: ${signedStr}`,
     ...(dealLine ? [`Deal: ${dealLine}`] : []),
-    ...(ownerLine ? [`Verantwortlich intern: ${ownerLine}`] : []),
+    ...(ownerLine ? [`Internal owner: ${ownerLine}`] : []),
     "",
     ...(input.magicLinkUrl
       ? [
-          "Sie können den Vertrag weiterhin über folgenden Link einsehen:",
+          "You can continue to view the contract using the following link:",
           input.magicLinkUrl,
           "",
         ]
       : []),
-    "Diese E-Mail dient als Empfangsbestätigung. Bei Rückfragen antworten Sie einfach.",
+    "This email serves as a confirmation of receipt. If you have any questions, simply reply.",
     "",
     `— ${brandLine} via DealFlow`,
   ].join("\n");
 
   const html = `<!doctype html>
-<html lang="de">
+<html lang="en">
   <body style="font-family:system-ui,Segoe UI,Helvetica,Arial,sans-serif;background:#f6f7f9;margin:0;padding:24px;color:#0b1220">
     <table role="presentation" cellpadding="0" cellspacing="0" width="100%" style="max-width:560px;margin:0 auto;background:#fff;border:1px solid #e5e7eb;border-radius:12px;overflow:hidden">
       <tr>
         <td style="padding:24px 28px;border-bottom:1px solid #f1f5f9">
           <div style="font-size:13px;color:#64748b;letter-spacing:0.04em;text-transform:uppercase">${escapeHtml(brandLine)}</div>
-          <div style="font-size:20px;font-weight:600;margin-top:4px">Mitzeichnung bestätigt</div>
+          <div style="font-size:20px;font-weight:600;margin-top:4px">Countersignature confirmed</div>
         </td>
       </tr>
       <tr>
         <td style="padding:24px 28px">
-          <p style="margin:0 0 12px">Hallo ${escapeHtml(input.signerName)},</p>
+          <p style="margin:0 0 12px">Hello ${escapeHtml(input.signerName)},</p>
           <p style="margin:0 0 12px">
-            Ihre Mitzeichnung für den Vertrag
-            „<strong>${escapeHtml(input.contractTitle)}</strong>“ ist bei uns eingegangen.
+            Your countersignature for the contract
+            "<strong>${escapeHtml(input.contractTitle)}</strong>" has been received.
           </p>
           <table role="presentation" cellpadding="0" cellspacing="0" style="margin:16px 0;font-size:14px;color:#0b1220">
             <tr>
-              <td style="padding:4px 12px 4px 0;color:#64748b">Mitzeichner</td>
+              <td style="padding:4px 12px 4px 0;color:#64748b">Countersigner</td>
               <td style="padding:4px 0">${escapeHtml(input.signerName)}${orgLine ? ` (${escapeHtml(orgLine)})` : ""}</td>
             </tr>
             <tr>
-              <td style="padding:4px 12px 4px 0;color:#64748b">Empfangen am</td>
+              <td style="padding:4px 12px 4px 0;color:#64748b">Received at</td>
               <td style="padding:4px 0">${escapeHtml(signedStr)}</td>
             </tr>
             ${
@@ -265,7 +265,7 @@ export function buildCollaboratorSignConfirmationContent(
             }
             ${
               ownerLine
-                ? `<tr><td style="padding:4px 12px 4px 0;color:#64748b">Verantwortlich intern</td><td style="padding:4px 0">${escapeHtml(ownerLine)}</td></tr>`
+                ? `<tr><td style="padding:4px 12px 4px 0;color:#64748b">Internal owner</td><td style="padding:4px 0">${escapeHtml(ownerLine)}</td></tr>`
                 : ""
             }
           </table>
@@ -274,11 +274,11 @@ export function buildCollaboratorSignConfirmationContent(
               ? `<p style="margin:24px 0">
                   <a href="${escapeHtml(input.magicLinkUrl)}"
                      style="display:inline-block;background:#2563eb;color:#fff;text-decoration:none;font-weight:600;padding:10px 18px;border-radius:8px">
-                    Vertrag öffnen
+                    Open contract
                   </a>
                 </p>
                 <p style="margin:0 0 8px;font-size:12px;color:#64748b">
-                  Falls der Button nicht funktioniert, kopieren Sie folgenden Link in den Browser:
+                  If the button does not work, copy the following link into your browser:
                 </p>
                 <p style="margin:0 0 16px;font-size:12px;word-break:break-all;color:#1d4ed8">
                   ${escapeHtml(input.magicLinkUrl)}
@@ -286,7 +286,7 @@ export function buildCollaboratorSignConfirmationContent(
               : ""
           }
           <p style="margin:24px 0 0;font-size:12px;color:#64748b">
-            Diese E-Mail dient als Empfangsbestätigung. Bei Rückfragen antworten Sie einfach.
+            This email serves as a confirmation of receipt. If you have any questions, simply reply.
           </p>
         </td>
       </tr>
@@ -338,8 +338,8 @@ export function buildOwnerCounterSignNotificationContent(
 ): { subject: string; html: string; text: string } {
   const brandLine = input.brandName ? input.brandName : "DealFlow";
   const subject = input.brandName
-    ? `${input.brandName}: Externe Mitzeichnung – ${input.contractTitle}`
-    : `Externe Mitzeichnung – ${input.contractTitle}`;
+    ? `${input.brandName}: External countersignature – ${input.contractTitle}`
+    : `External countersignature – ${input.contractTitle}`;
   const signedStr = formatDateTimeDe(input.signedAt);
   const greetingName = input.recipientName?.trim() || input.recipientEmail;
   const signerLine = input.organization
@@ -347,50 +347,50 @@ export function buildOwnerCounterSignNotificationContent(
     : `${input.signerName} (${input.signerEmail})`;
 
   const text = [
-    `Hallo ${greetingName},`,
+    `Hello ${greetingName},`,
     "",
-    `Eine externe Mitzeichnung für den Vertrag „${input.contractTitle}“ ist eingegangen.`,
+    `An external countersignature for the contract "${input.contractTitle}" has been received.`,
     "",
-    `Mitzeichner: ${signerLine}`,
-    `Empfangen am: ${signedStr}`,
+    `Countersigner: ${signerLine}`,
+    `Received at: ${signedStr}`,
     ...(input.dealName ? [`Deal: ${input.dealName}`] : []),
     "",
     ...(input.magicLinkUrl
       ? [
-          "Externer Reviewer-Link (gleicher Token wie der Mitzeichner):",
+          "External reviewer link (same token as the countersigner):",
           input.magicLinkUrl,
           "",
         ]
       : []),
-    "Bitte prüfen Sie den weiteren Signatur- und Auftragsbestätigungs-Status in DealFlow.",
+    "Please check the further signature and order confirmation status in DealFlow.",
     "",
     `— DealFlow`,
   ].join("\n");
 
   const html = `<!doctype html>
-<html lang="de">
+<html lang="en">
   <body style="font-family:system-ui,Segoe UI,Helvetica,Arial,sans-serif;background:#f6f7f9;margin:0;padding:24px;color:#0b1220">
     <table role="presentation" cellpadding="0" cellspacing="0" width="100%" style="max-width:560px;margin:0 auto;background:#fff;border:1px solid #e5e7eb;border-radius:12px;overflow:hidden">
       <tr>
         <td style="padding:24px 28px;border-bottom:1px solid #f1f5f9">
           <div style="font-size:13px;color:#64748b;letter-spacing:0.04em;text-transform:uppercase">${escapeHtml(brandLine)}</div>
-          <div style="font-size:20px;font-weight:600;margin-top:4px">Externe Mitzeichnung eingegangen</div>
+          <div style="font-size:20px;font-weight:600;margin-top:4px">External countersignature received</div>
         </td>
       </tr>
       <tr>
         <td style="padding:24px 28px">
-          <p style="margin:0 0 12px">Hallo ${escapeHtml(greetingName)},</p>
+          <p style="margin:0 0 12px">Hello ${escapeHtml(greetingName)},</p>
           <p style="margin:0 0 12px">
-            Für den Vertrag „<strong>${escapeHtml(input.contractTitle)}</strong>“ ist eine
-            externe Mitzeichnung eingegangen.
+            An external countersignature has been received for the contract
+            "<strong>${escapeHtml(input.contractTitle)}</strong>".
           </p>
           <table role="presentation" cellpadding="0" cellspacing="0" style="margin:16px 0;font-size:14px;color:#0b1220">
             <tr>
-              <td style="padding:4px 12px 4px 0;color:#64748b">Mitzeichner</td>
+              <td style="padding:4px 12px 4px 0;color:#64748b">Countersigner</td>
               <td style="padding:4px 0">${escapeHtml(signerLine)}</td>
             </tr>
             <tr>
-              <td style="padding:4px 12px 4px 0;color:#64748b">Empfangen am</td>
+              <td style="padding:4px 12px 4px 0;color:#64748b">Received at</td>
               <td style="padding:4px 0">${escapeHtml(signedStr)}</td>
             </tr>
             ${
@@ -402,7 +402,7 @@ export function buildOwnerCounterSignNotificationContent(
           ${
             input.magicLinkUrl
               ? `<p style="margin:0 0 8px;font-size:12px;color:#64748b">
-                  Externer Reviewer-Link (gleicher Token wie der Mitzeichner):
+                  External reviewer link (same token as the countersigner):
                 </p>
                 <p style="margin:0 0 16px;font-size:12px;word-break:break-all;color:#1d4ed8">
                   ${escapeHtml(input.magicLinkUrl)}
@@ -410,7 +410,7 @@ export function buildOwnerCounterSignNotificationContent(
               : ""
           }
           <p style="margin:24px 0 0;font-size:12px;color:#64748b">
-            Bitte prüfen Sie den weiteren Signatur- und Auftragsbestätigungs-Status in DealFlow.
+            Please check the further signature and order confirmation status in DealFlow.
           </p>
         </td>
       </tr>

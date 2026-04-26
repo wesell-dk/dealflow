@@ -166,8 +166,8 @@ export function TenantFormDialog({ open, onOpenChange, mode = "create", tenant =
               <div className="flex items-center gap-1.5">
                 <Label htmlFor="tenant-plan">{t("pages.platformAdmin.plan")}</Label>
                 <FieldHint
-                  title="Tarif"
-                  text="Bestimmt Limits (User, Deals, Speicher) und freigeschaltete Funktionen. Wähle einen Eintrag, um die Beschreibung zu sehen."
+                  title="Plan"
+                  text="Determines limits (users, deals, storage) and unlocked features. Select an entry to see the description."
                 />
               </div>
               <Select value={plan} onValueChange={(v) => setPlan(v as Plan)}>
@@ -190,8 +190,8 @@ export function TenantFormDialog({ open, onOpenChange, mode = "create", tenant =
               <div className="flex items-center gap-1.5">
                 <Label htmlFor="tenant-region">{t("pages.platformAdmin.region")}</Label>
                 <FieldHint
-                  title="Datenresidenz"
-                  text="Region, in der Daten dieses Mandanten physisch gespeichert werden. Änderungen nach Bereitstellung können Compliance-Auswirkungen haben."
+                  title="Data residency"
+                  text="Region where this tenant's data is physically stored. Changes after provisioning can have compliance implications."
                 />
               </div>
               <Select value={region} onValueChange={(v) => setRegion(v as Region)}>
@@ -264,7 +264,7 @@ export function TenantFormDialog({ open, onOpenChange, mode = "create", tenant =
                   type="password"
                   value={adminPassword}
                   onChange={(e) => setAdminPassword(e.target.value)}
-                  placeholder="min. 8 Zeichen"
+                  placeholder="min. 8 characters"
                   data-testid="input-admin-password"
                 />
               </div>

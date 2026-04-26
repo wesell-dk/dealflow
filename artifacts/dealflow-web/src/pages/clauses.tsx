@@ -999,7 +999,7 @@ function CuadAdminSection({ families }: { families: FamilyLite[] }) {
       setCtDraft(null);
       toast({ title: "CUAD-Erwartungen gespeichert" });
     } catch (e) {
-      toast({ title: "Fehler", description: String(e), variant: "destructive" });
+      toast({ title: "Error", description: String(e), variant: "destructive" });
     }
   };
 
@@ -1014,7 +1014,7 @@ function CuadAdminSection({ families }: { families: FamilyLite[] }) {
       setFamDraft(null);
       toast({ title: "CUAD-Mapping gespeichert" });
     } catch (e) {
-      toast({ title: "Fehler", description: String(e), variant: "destructive" });
+      toast({ title: "Error", description: String(e), variant: "destructive" });
     }
   };
 
@@ -1023,10 +1023,10 @@ function CuadAdminSection({ families }: { families: FamilyLite[] }) {
       <CardHeader className="flex flex-row items-center gap-2 space-y-0">
         <Library className="h-5 w-5 text-muted-foreground" />
         <div>
-          <CardTitle>CUAD-Vollständigkeit</CardTitle>
+          <CardTitle>CUAD completeness</CardTitle>
           <p className="text-xs text-muted-foreground mt-1">
-            Pflegt die erwarteten CUAD-Kategorien je Vertragstyp und das Mapping
-            Klauselfamilie ↔ CUAD-Kategorie für den Gap-Check.
+            Manages the expected CUAD categories per contract type and the mapping
+            of clause family ↔ CUAD category for the gap check.
           </p>
         </div>
       </CardHeader>
@@ -1038,7 +1038,7 @@ function CuadAdminSection({ families }: { families: FamilyLite[] }) {
             className={`px-3 py-1.5 text-sm border-b-2 -mb-px ${tab === "contractTypes" ? "border-primary font-medium" : "border-transparent text-muted-foreground"}`}
             data-testid="cuad-tab-contract-types"
           >
-            Vertragstyp → Kategorien
+            Contract type → categories
           </button>
           <button
             type="button"
@@ -1046,17 +1046,17 @@ function CuadAdminSection({ families }: { families: FamilyLite[] }) {
             className={`px-3 py-1.5 text-sm border-b-2 -mb-px ${tab === "families" ? "border-primary font-medium" : "border-transparent text-muted-foreground"}`}
             data-testid="cuad-tab-families"
           >
-            Klauselfamilie → Kategorien
+            Clause family → categories
           </button>
         </div>
 
         {tab === "contractTypes" ? (
           <div className="space-y-3">
             <div className="flex items-center gap-3 flex-wrap">
-              <Label className="text-xs text-muted-foreground">Vertragstyp:</Label>
+              <Label className="text-xs text-muted-foreground">Contract type:</Label>
               <Select value={ctSelected} onValueChange={(v) => { setContractTypeId(v); setCtDraft(null); }}>
                 <SelectTrigger className="h-8 w-[280px] text-xs" data-testid="cuad-select-contract-type">
-                  <SelectValue placeholder="Vertragstyp wählen" />
+                  <SelectValue placeholder="Select contract type" />
                 </SelectTrigger>
                 <SelectContent>
                   {ctActive.map(c => (
@@ -1071,10 +1071,10 @@ function CuadAdminSection({ families }: { families: FamilyLite[] }) {
                 data-testid="cuad-save-contract-type"
               >
                 <Save className="h-3 w-3 mr-1" />
-                {setCt.isPending ? "Speichere…" : "Speichern"}
+                {setCt.isPending ? "Saving…" : "Save"}
               </Button>
               {ctDirty && (
-                <Button size="sm" variant="ghost" onClick={() => setCtDraft(null)}>Verwerfen</Button>
+                <Button size="sm" variant="ghost" onClick={() => setCtDraft(null)}>Discard</Button>
               )}
             </div>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-1.5 max-h-[480px] overflow-auto pr-2">
@@ -1098,9 +1098,9 @@ function CuadAdminSection({ families }: { families: FamilyLite[] }) {
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="off">— aus —</SelectItem>
-                        <SelectItem value="expected">Pflicht</SelectItem>
-                        <SelectItem value="recommended">Empfohlen</SelectItem>
+                        <SelectItem value="off">— off —</SelectItem>
+                        <SelectItem value="expected">Required</SelectItem>
+                        <SelectItem value="recommended">Recommended</SelectItem>
                       </SelectContent>
                     </Select>
                   </div>
@@ -1111,10 +1111,10 @@ function CuadAdminSection({ families }: { families: FamilyLite[] }) {
         ) : (
           <div className="space-y-3">
             <div className="flex items-center gap-3 flex-wrap">
-              <Label className="text-xs text-muted-foreground">Klauselfamilie:</Label>
+              <Label className="text-xs text-muted-foreground">Clause family:</Label>
               <Select value={famSelected} onValueChange={(v) => { setFamilyId(v); setFamDraft(null); }}>
                 <SelectTrigger className="h-8 w-[280px] text-xs" data-testid="cuad-select-family">
-                  <SelectValue placeholder="Klauselfamilie wählen" />
+                  <SelectValue placeholder="Select clause family" />
                 </SelectTrigger>
                 <SelectContent>
                   {families.map(f => (
@@ -1132,10 +1132,10 @@ function CuadAdminSection({ families }: { families: FamilyLite[] }) {
                 data-testid="cuad-save-family"
               >
                 <Save className="h-3 w-3 mr-1" />
-                {setFam.isPending ? "Speichere…" : "Speichern"}
+                {setFam.isPending ? "Saving…" : "Save"}
               </Button>
               {famDirty && (
-                <Button size="sm" variant="ghost" onClick={() => setFamDraft(null)}>Verwerfen</Button>
+                <Button size="sm" variant="ghost" onClick={() => setFamDraft(null)}>Discard</Button>
               )}
             </div>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-1.5 max-h-[480px] overflow-auto pr-2">

@@ -16,9 +16,9 @@ export function WelcomeDialog() {
               <Sparkles className="h-5 w-5 text-primary" />
             </div>
             <div>
-              <DialogTitle className="text-2xl">Willkommen bei DealFlow One</DialogTitle>
+              <DialogTitle className="text-2xl">Welcome to DealFlow One</DialogTitle>
               <DialogDescription>
-                Deine B2B-Commercial-Execution-Plattform – vom ersten Kundenkontakt bis zur signierten Verlängerung.
+                Your B2B commercial execution platform — from first customer contact to signed renewal.
               </DialogDescription>
             </div>
           </div>
@@ -27,29 +27,29 @@ export function WelcomeDialog() {
         <div className="grid gap-4 md:grid-cols-2 mt-2">
           <div className="space-y-3 text-sm">
             <p>
-              Die Plattform bündelt alle Schritte deines Verkaufs- und Vertragsprozesses in einer zusammenhängenden
-              Story – dem <span className="font-semibold text-primary">roten Faden</span>:
+              The platform brings every step of your sales and contracting process together in one coherent
+              story — the <span className="font-semibold text-primary">guided workflow</span>:
             </p>
             <ul className="space-y-2 text-muted-foreground">
               <li className="flex items-start gap-2">
                 <Rocket className="h-4 w-4 mt-0.5 text-primary shrink-0" />
-                <span><span className="font-medium text-foreground">17 Module</span> in der Sidebar – jedes hat eine
-                klare Rolle im Gesamtprozess.</span>
+                <span><span className="font-medium text-foreground">17 modules</span> in the sidebar — each plays a
+                clear role in the overall process.</span>
               </li>
               <li className="flex items-start gap-2">
                 <BookOpen className="h-4 w-4 mt-0.5 text-primary shrink-0" />
-                <span>Auf jeder Seite findest du oben rechts <span className="font-medium text-foreground">'?'-Hilfe</span>:
-                Was kann ich hier? Wie sind die nächsten Schritte?</span>
+                <span>On every page you'll find <span className="font-medium text-foreground">'?' Help</span> in the top right:
+                what can I do here? What are the next steps?</span>
               </li>
               <li className="flex items-start gap-2">
                 <Sparkles className="h-4 w-4 mt-0.5 text-primary shrink-0" />
-                <span><span className="font-medium text-foreground">Copilot</span> unterstützt dich pro Domäne mit
-                Analysen, Empfehlungen und Vertrags-Reviews.</span>
+                <span><span className="font-medium text-foreground">Copilot</span> supports you per domain with
+                analyses, recommendations and contract reviews.</span>
               </li>
             </ul>
             <p className="text-muted-foreground italic pt-2">
-              Tipp: Starte mit <span className="font-semibold not-italic text-foreground">Schritt 1 – Kunde anlegen</span>.
-              Alles Weitere baut darauf auf.
+              Tip: start with <span className="font-semibold not-italic text-foreground">Step 1 – Create customer</span>.
+              Everything else builds on it.
             </p>
           </div>
 
@@ -59,11 +59,11 @@ export function WelcomeDialog() {
         <div className="flex flex-wrap items-center justify-end gap-2 pt-4 border-t">
           <Button variant="outline" onClick={() => { openHelp(); closeWelcome(); }} data-testid="welcome-open-help">
             <BookOpen className="h-4 w-4 mr-1.5" />
-            Hilfe zur aktuellen Seite
+            Help for the current page
           </Button>
           <Button onClick={closeWelcome} data-testid="welcome-cta-start">
             <Rocket className="h-4 w-4 mr-1.5" />
-            Los geht's
+            Let's go
           </Button>
         </div>
       </DialogContent>

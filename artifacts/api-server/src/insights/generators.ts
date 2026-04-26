@@ -165,11 +165,11 @@ export async function generateStaleLetterForLetter(letterId: string, staleDays =
   if (!dealId) return;
   await upsertInsight({
     kind: 'next_action',
-    title: 'Preiserhöhung ohne Antwort',
-    summary: `Letter sendete vor ${ageDays} Tagen und ist ohne Kundenreaktion. Reminder senden.`,
+    title: 'Price increase without response',
+    summary: `Letter was sent ${ageDays} days ago and has no customer response. Send a reminder.`,
     severity: ageDays >= 30 ? 'high' : 'medium',
     dealId,
-    suggestedAction: 'Reminder-Mail an Kunden senden.',
+    suggestedAction: 'Send reminder email to customer.',
     triggerType: 'stale_letter',
     triggerEntityRef: l.id,
     actionType: 'send_letter_reminder',

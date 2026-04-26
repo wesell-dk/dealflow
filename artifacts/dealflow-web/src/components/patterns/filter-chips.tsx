@@ -50,7 +50,7 @@ export function FilterChip<T extends string = string>({
           {active ? (
             <span
               role="button"
-              aria-label={`${label} zurücksetzen`}
+              aria-label={`Reset ${label}`}
               tabIndex={0}
               onClick={(e) => { e.stopPropagation(); onChange(null); }}
               onKeyDown={(e) => {
@@ -72,14 +72,14 @@ export function FilterChip<T extends string = string>({
               autoFocus
               value={q}
               onChange={(e) => setQ(e.target.value)}
-              placeholder="Suchen…"
+              placeholder="Search…"
               className="h-8"
             />
           </div>
         )}
         <div className="max-h-72 overflow-y-auto py-1">
           {filtered.length === 0 ? (
-            <div className="px-3 py-4 text-center text-xs text-muted-foreground">Keine Treffer</div>
+            <div className="px-3 py-4 text-center text-xs text-muted-foreground">No matches</div>
           ) : filtered.map((o) => (
             <button
               key={o.value}
@@ -115,7 +115,7 @@ export function FilterChipsRow({
         {children}
         {hasActive && onClearAll && (
           <Button variant="ghost" size="sm" className="h-8 gap-1 text-xs" onClick={onClearAll}>
-            Alle Filter löschen
+            Clear all filters
           </Button>
         )}
       </div>

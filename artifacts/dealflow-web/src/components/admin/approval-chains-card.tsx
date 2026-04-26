@@ -34,10 +34,10 @@ import {
 
 // ─── Trigger / Felder / Operatoren (identisch zum Backend-Resolver) ────────
 const TRIGGER_TYPES = [
-  { value: "clause_change", label: "Klausel-Änderung", sentence: "eine Klausel geändert wird" },
-  { value: "amendment", label: "Vertragsänderung", sentence: "es einen Vertrags-Nachtrag gibt" },
-  { value: "discount", label: "Rabatt", sentence: "ein Rabatt gewährt wird" },
-  { value: "manual", label: "Manuell", sentence: "die Kette manuell ausgelöst wird" },
+  { value: "clause_change", label: "Clause change" },
+  { value: "amendment", label: "Contract amendment" },
+  { value: "discount", label: "Discount" },
+  { value: "manual", label: "Manual" },
 ] as const;
 
 type ConditionFieldDef = {
@@ -45,49 +45,48 @@ type ConditionFieldDef = {
   label: string;
   type: "number" | "string";
   hint?: string;
-  /** Subjektform für Klartext-Sätze, z.B. "der Rabatt", "die Preisänderung". */
-  subject: string;
-  /** Einheit hinter dem Wert, z.B. "%" / "€" / "Punkte". */
+  /** Subject form for plain-language sentences, e.g. "the discount". Falls back to label when omitted. */
+  subject?: string;
+  /** Unit suffix after the value, e.g. "%" / "€" / "points". */
   unit?: string;
 };
 
 const CONDITION_FIELDS: Record<string, ConditionFieldDef[]> = {
   clause_change: [
-    { key: "deltaScore", label: "Δ Risiko-Score (Punkte)", type: "number", subject: "der Δ Risiko-Score", unit: "Punkte", hint: "Differenz neu − alt. Höher = riskanter." },
-    { key: "riskScore", label: "Risiko-Score (neu)", type: "number", subject: "der neue Risiko-Score", unit: "Punkte" },
-    { key: "softer", label: "Lockerer Wechsel? (1=ja, 0=nein)", type: "number", subject: "die Klausel-Lockerung", unit: "(1=ja, 0=nein)" },
-    { key: "brandId", label: "Brand-ID", type: "string", subject: "die Brand-ID" },
+    { key: "deltaScore", label: "Δ Risk score (points)", type: "number", hint: "Difference new − old. Higher = riskier." },
+    { key: "riskScore", label: "Risk score (new)", type: "number" },
+    { key: "softer", label: "Softer change? (1=yes, 0=no)", type: "number" },
+    { key: "brandId", label: "Brand ID", type: "string" },
   ],
   discount: [
-    { key: "discountPct", label: "Rabatt %", type: "number", subject: "der Rabatt", unit: "%" },
-    { key: "dealValue", label: "Deal-Wert (EUR)", type: "number", subject: "der Deal-Wert", unit: "€" },
-    { key: "brandId", label: "Brand-ID", type: "string", subject: "die Brand-ID" },
+    { key: "discountPct", label: "Discount %", type: "number" },
+    { key: "dealValue", label: "Deal value (EUR)", type: "number" },
+    { key: "brandId", label: "Brand ID", type: "string" },
   ],
   amendment: [
-    { key: "priceDelta", label: "Preis-Δ (EUR)", type: "number", subject: "die Preisänderung", unit: "€" },
-    { key: "dealValue", label: "Deal-Wert (EUR)", type: "number", subject: "der Deal-Wert", unit: "€" },
+    { key: "priceDelta", label: "Price Δ (EUR)", type: "number" },
+    { key: "dealValue", label: "Deal value (EUR)", type: "number" },
   ],
   manual: [
-    { key: "dealValue", label: "Deal-Wert (EUR)", type: "number", subject: "der Deal-Wert", unit: "€" },
-    { key: "brandId", label: "Brand-ID", type: "string", subject: "die Brand-ID" },
+    { key: "dealValue", label: "Deal value (EUR)", type: "number" },
+    { key: "brandId", label: "Brand ID", type: "string" },
   ],
 };
-
 const OPERATORS_NUM = [
-  { value: "gte", label: "≥ (mindestens)", sentence: "mindestens" },
-  { value: "gt", label: "> (größer als)", sentence: "größer als" },
-  { value: "lte", label: "≤ (höchstens)", sentence: "höchstens" },
-  { value: "lt", label: "< (kleiner als)", sentence: "kleiner als" },
-  { value: "eq", label: "= (gleich)", sentence: "gleich" },
+  { value: "gte", label: "≥ (at least)" },
+  { value: "gt", label: "> (greater than)" },
+  { value: "lte", label: "≤ (at most)" },
+  { value: "lt", label: "< (less than)" },
+  { value: "eq", label: "= (equals)" },
 ] as const;
-const OPERATORS_STR = [{ value: "eq", label: "= (gleich)", sentence: "gleich" }] as const;
+const OPERATORS_STR = [{ value: "eq", label: "= (equals)" }] as const;
 
 function findFieldDef(triggerType: string, key: string): ConditionFieldDef | undefined {
   return CONDITION_FIELDS[triggerType]?.find(f => f.key === key);
 }
 function opSentence(op: ApprovalChainCondition["op"], type: "number" | "string"): string {
-  const list: ReadonlyArray<{ value: string; sentence: string }> = type === "string" ? OPERATORS_STR : OPERATORS_NUM;
-  return list.find(o => o.value === op)?.sentence ?? op;
+  const list: ReadonlyArray<{ value: string; label: string }> = type === "string" ? OPERATORS_STR : OPERATORS_NUM;
+  return list.find(o => o.value === op)?.label ?? op;
 }
 
 // ─── Vorlagen ─────────────────────────────────────────────────────────────
@@ -106,41 +105,41 @@ type Template = {
 const TEMPLATES: Template[] = [
   {
     id: "discount-pct",
-    title: "Rabatt über X % muss freigegeben werden",
-    description: "Greift, sobald ein Rabatt einen Schwellwert überschreitet. Du legst nur den Prozentsatz und die Freigeber:innen fest.",
+    title: "Discount above X % requires approval",
+    description: "Triggers as soon as a discount exceeds a threshold. You only set the percentage and the approvers.",
     icon: Percent,
     preset: {
-      name: "Rabatt-Freigabe",
+      name: "Discount approval",
       triggerType: "discount",
       condition: { field: "discountPct", op: "gte", value: 10 },
     },
   },
   {
     id: "amendment-price",
-    title: "Vertragsänderung mit Preiserhöhung über X €",
-    description: "Greift bei Nachträgen mit Preiserhöhung über einem Schwellwert. Du legst den Euro-Betrag und die Freigeber:innen fest.",
+    title: "Contract amendment with price increase above X €",
+    description: "Triggers on amendments with a price increase above a threshold. You only set the euro amount and the approvers.",
     icon: FileEdit,
     preset: {
-      name: "Vertragsänderung — Preiserhöhung",
+      name: "Amendment — price increase",
       triggerType: "amendment",
       condition: { field: "priceDelta", op: "gte", value: 5000 },
     },
   },
   {
     id: "risky-clause",
-    title: "Risikoreiche Klausel-Änderung",
-    description: "Greift, wenn eine Klausel den Risiko-Score deutlich erhöht. Du legst nur die Schwelle und die Freigeber:innen fest.",
+    title: "Risky clause change",
+    description: "Triggers when a clause significantly raises the risk score. You only set the threshold and the approvers.",
     icon: AlertTriangle,
     preset: {
-      name: "Risikoreiche Klausel-Änderung",
+      name: "Risky clause change",
       triggerType: "clause_change",
       condition: { field: "deltaScore", op: "gte", value: 10 },
     },
   },
   {
     id: "custom",
-    title: "Eigene Kette von Grund auf",
-    description: "Volle Kontrolle: Trigger, Bedingungen und Freigabe-Stufen frei wählen.",
+    title: "Custom chain from scratch",
+    description: "Full control: choose trigger, conditions and approval stages freely.",
     icon: Sparkles,
   },
 ];
@@ -159,16 +158,20 @@ function conditionToDraft(c: ApprovalChainCondition, triggerType: string): Condi
     known?.type ?? (typeof c.value === "number" ? "number" : "string");
   return { field: c.field, op: c.op, value: String(c.value), valueType };
 }
-
-function draftToCondition(d: ConditionDraft): ApprovalChainCondition | { error: string } {
-  if (!d.field) return { error: "Bitte alle Bedingungs-Felder wählen." };
-  if (d.value.trim() === "") return { error: `Wert für "${d.field}" fehlt.` };
-  if (d.valueType === "number") {
-    const n = Number(d.value);
-    if (!Number.isFinite(n)) return { error: `"${d.value}" ist keine gültige Zahl für "${d.field}".` };
-    return { field: d.field, op: d.op, value: n };
+function draftsToConditions(drafts: ConditionDraft[]): ApprovalChainCondition[] | { error: string } {
+  const out: ApprovalChainCondition[] = [];
+  for (const d of drafts) {
+    if (!d.field) return { error: "Please select all condition fields." };
+    if (d.value.trim() === "") return { error: `Value for "${d.field}" is missing.` };
+    if (d.valueType === "number") {
+      const n = Number(d.value);
+      if (!Number.isFinite(n)) return { error: `"${d.value}" is not a valid number for "${d.field}".` };
+      out.push({ field: d.field, op: d.op, value: n });
+    } else {
+      out.push({ field: d.field, op: d.op, value: d.value });
+    }
   }
-  return { field: d.field, op: d.op, value: d.value };
+  return out;
 }
 
 type StageDraft = {
@@ -179,7 +182,7 @@ type StageDraft = {
 };
 
 const emptyStage = (order: number): StageDraft => ({
-  order, label: `Stufe ${order}`, approverRole: "", approverUserId: "",
+  order, label: `Stage ${order}`, approverRole: "", approverUserId: "",
 });
 
 // Approver-Picker kodiert Rolle/User in einen einzigen Select-Wert.
@@ -263,7 +266,10 @@ export function ApprovalChainsCard() {
     // klappen wir die erweiterten Optionen direkt auf, damit der User sieht,
     // was bereits gesetzt ist.
     const hasUnknownConditions = (c.conditions ?? []).some(cd => !findFieldDef(c.triggerType, cd.field));
-    const hasCustomLabels = c.stages.some((s, i) => (s.label ?? "").trim() !== `Stufe ${i + 1}`);
+    const hasCustomLabels = c.stages.some((s, i) => {
+      const label = (s.label ?? "").trim();
+      return label !== `Stage ${i + 1}` && label !== `Stufe ${i + 1}`;
+    });
     setAdvancedOpen(c.priority !== 100 || !!c.description || hasUnknownConditions || hasCustomLabels);
     setTouched(true);
     setView("form");
@@ -290,75 +296,60 @@ export function ApprovalChainsCard() {
 
   const refresh = () => qc.invalidateQueries({ queryKey: getListApprovalChainsQueryKey() });
 
-  // ─── Validierung (für Inline-Hinweise + Save-Button) ────────────────────
-  const buildPayload = (): { ok: true; conditions: ApprovalChainCondition[]; stages: ApprovalStage[] } | { ok: false; error: string } => {
-    if (!name.trim()) return { ok: false, error: "Bitte gib der Kette einen Namen." };
-    if (stages.length === 0) return { ok: false, error: "Mindestens eine Stufe ist erforderlich." };
-
-    const builtConds: ApprovalChainCondition[] = [];
-    for (const d of conditions) {
-      const r = draftToCondition(d);
-      if ("error" in r) return { ok: false, error: r.error };
-      builtConds.push(r);
-    }
-
-    const stagesPayload: ApprovalStage[] = [];
-    for (let i = 0; i < stages.length; i++) {
-      const s = stages[i]!;
-      if (!s.approverRole && !s.approverUserId) {
-        return { ok: false, error: `Stufe ${i + 1} braucht eine Freigeber:in (Rolle oder Person).` };
-      }
-      stagesPayload.push({
-        order: i + 1,
-        label: s.label.trim() || `Stufe ${i + 1}`,
-        approverRole: s.approverRole || null,
-        approverUserId: s.approverUserId || null,
-        status: "pending",
-        decidedBy: null,
-        decidedAt: null,
-        delegatedFrom: null,
-        delegatedFromName: null,
-        decidedByName: null,
-        comment: null,
-      });
-    }
-    return { ok: true, conditions: builtConds, stages: stagesPayload };
-  };
-
-  const validation = buildPayload();
-  const canSave = validation.ok;
-  const saveBlockerReason = validation.ok ? "" : validation.error;
-
   const onSave = async () => {
-    setTouched(true);
-    if (!validation.ok) {
-      toast({ title: "Bitte ergänze noch", description: validation.error, variant: "destructive" });
+    const built = draftsToConditions(conditions);
+    if (!Array.isArray(built)) {
+      toast({ title: "Invalid conditions", description: built.error, variant: "destructive" });
       return;
     }
+    const stagesPayload: ApprovalStage[] = stages.map((s, i) => ({
+      order: i + 1,
+      label: s.label.trim() || `Stage ${i + 1}`,
+      approverRole: s.approverRole || null,
+      approverUserId: s.approverUserId || null,
+      status: "pending",
+      decidedBy: null,
+      decidedAt: null,
+      delegatedFrom: null,
+      delegatedFromName: null,
+      decidedByName: null,
+      comment: null,
+    }));
+    if (stagesPayload.length === 0) {
+      toast({ title: "At least one stage is required", variant: "destructive" });
+      return;
+    }
+    for (const s of stagesPayload) {
+      if (!s.approverRole && !s.approverUserId) {
+        toast({ title: `Stage ${s.order} requires a role or a user`, variant: "destructive" });
+        return;
+      }
+    }
+    
     try {
       if (editing) {
         await update.mutateAsync({
           id: editing.id,
           data: {
             name, description: description || null, triggerType,
-            conditions: validation.conditions, priority, active, stages: validation.stages,
+            conditions: built, priority, active, stages: stagesPayload,
           },
         });
-        toast({ title: "Genehmigungs-Kette aktualisiert" });
+        toast({ title: "Approval chain updated" });
       } else {
         await create.mutateAsync({
           data: {
             name: name.trim(), description: description || undefined, triggerType,
-            conditions: validation.conditions, priority, active, stages: validation.stages,
+            conditions: built, priority, active, stages: stagesPayload,
           },
         });
-        toast({ title: "Genehmigungs-Kette angelegt" });
+        toast({ title: "Approval chain created" });
       }
       await refresh();
       setOpen(false); reset();
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : String(err);
-      toast({ title: "Speichern fehlgeschlagen", description: message, variant: "destructive" });
+      toast({ title: "Save failed", description: message, variant: "destructive" });
     }
   };
 
@@ -366,10 +357,10 @@ export function ApprovalChainsCard() {
     try {
       await del.mutateAsync({ id: c.id });
       await refresh();
-      toast({ title: "Kette gelöscht" });
+      toast({ title: "Chain deleted" });
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : String(err);
-      toast({ title: "Löschen fehlgeschlagen", description: message, variant: "destructive" });
+      toast({ title: "Delete failed", description: message, variant: "destructive" });
     }
   };
 
@@ -421,7 +412,7 @@ export function ApprovalChainsCard() {
 
   // ─── Live-Vorschau-Satz ─────────────────────────────────────────────────
   const previewSentence = useMemo(() => {
-    const trig = TRIGGER_TYPES.find(t => t.value === triggerType)?.sentence ?? triggerType;
+    const trig = TRIGGER_TYPES.find(t => t.value === triggerType)?.label ?? triggerType;
     const condSentences: string[] = [];
     for (const c of conditions) {
       const def = findFieldDef(triggerType, c.field);
@@ -432,8 +423,8 @@ export function ApprovalChainsCard() {
       condSentences.push(`${subject} ${op} ${valueText}${unit}`);
     }
     const ifPart = condSentences.length === 0
-      ? `Wenn ${trig}`
-      : `Wenn ${trig} und ${condSentences.join(" und ")}`;
+      ? `When ${trig}`
+      : `When ${trig} and ${condSentences.join(" and ")}`;
 
     const stageNames = stages.map((s, i) => {
       if (s.approverUserId) {
@@ -441,12 +432,12 @@ export function ApprovalChainsCard() {
         return u?.name ?? `Person #${i + 1}`;
       }
       if (s.approverRole) return s.approverRole;
-      return "(noch offen)";
+      return "(not set)";
     });
     const thenPart = stageNames.length === 0
-      ? "(noch keine Freigeber:innen)"
+      ? "(no approvers yet)"
       : stageNames.join(" → ");
-    return `${ifPart}, dann freigeben durch ${thenPart}.`;
+    return `${ifPart}, then approve via ${thenPart}.`;
   }, [triggerType, conditions, stages, users]);
 
   // ─── Bedingungen aufteilen: bekannt vs. unbekannt (Legacy) ──────────────
@@ -468,17 +459,18 @@ export function ApprovalChainsCard() {
         <div className="flex items-start gap-2">
           <GitBranch className="h-5 w-5 text-primary mt-0.5" />
           <div>
-            <CardTitle>Genehmigungs-Ketten</CardTitle>
+            <CardTitle>Approval chains</CardTitle>
             <p className="text-sm text-muted-foreground mt-1">
-              Lege fest, wann ein Vorgang freigegeben werden muss und wer ihn freigibt.
-              Pro Trigger gewinnt bei mehreren passenden Ketten die mit der niedrigsten
-              Prioritäts-Zahl (Default 100). Jede Stufe braucht eine Freigeber:in
-              (Rolle oder konkrete Person).
+              Define multi-stage approval workflows. A trigger (e.g. clause change
+              or amendment) is matched against all active templates whenever an approval
+              is created; if multiple match, the template with the lowest
+              priority number wins (default 100). Each stage requires either a role or
+              a specific user as approver.
             </p>
           </div>
         </div>
         <Button size="sm" onClick={openCreate} data-testid="button-new-chain">
-          <Plus className="h-4 w-4 mr-1" /> Neue Kette
+          <Plus className="h-4 w-4 mr-1" /> New chain
         </Button>
       </CardHeader>
       <CardContent>
@@ -486,8 +478,8 @@ export function ApprovalChainsCard() {
           <Skeleton className="h-24 w-full" />
         ) : (chains?.length ?? 0) === 0 ? (
           <div className="p-6 text-center text-sm border rounded-md bg-muted/10 text-muted-foreground">
-            Noch keine Genehmigungs-Ketten konfiguriert. Approvals laufen single-stage durch
-            den Anfrage-Empfänger.
+            No approval chains configured yet. Approvals run single-stage through
+            the request recipient.
           </div>
         ) : (
           <Table>
@@ -495,10 +487,10 @@ export function ApprovalChainsCard() {
               <TableRow>
                 <TableHead>Name</TableHead>
                 <TableHead>Trigger</TableHead>
-                <TableHead>Stufen</TableHead>
-                <TableHead>Priorität</TableHead>
-                <TableHead>Aktiv</TableHead>
-                <TableHead className="text-right">Aktion</TableHead>
+                <TableHead>Stages</TableHead>
+                <TableHead>Priority</TableHead>
+                <TableHead>Active</TableHead>
+                <TableHead className="text-right">Action</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -521,13 +513,13 @@ export function ApprovalChainsCard() {
                   <TableCell>{c.priority}</TableCell>
                   <TableCell>
                     <Badge variant="outline" className={c.active ? "border-emerald-300 text-emerald-700" : "border-slate-300 text-slate-500"}>
-                      {c.active ? "ja" : "nein"}
+                      {c.active ? "yes" : "no"}
                     </Badge>
                   </TableCell>
                   <TableCell className="text-right">
                     <div className="inline-flex gap-1.5">
                       <Button size="sm" variant="outline" onClick={() => openEdit(c)} data-testid={`button-edit-chain-${c.id}`}>
-                        Bearbeiten
+                        Edit
                       </Button>
                       <Button size="sm" variant="outline" onClick={() => onDelete(c)} data-testid={`button-delete-chain-${c.id}`}>
                         <Trash2 className="h-3.5 w-3.5" />
@@ -543,422 +535,183 @@ export function ApprovalChainsCard() {
 
       <AlertDialog open={open} onOpenChange={setOpen}>
         <AlertDialogContent className="max-w-3xl">
-          {view === "templates" ? (
-            <>
-              <AlertDialogHeader>
-                <AlertDialogTitle>Neue Genehmigungs-Kette</AlertDialogTitle>
-                <AlertDialogDescription>
-                  Wähle eine Vorlage als Startpunkt. Du kannst danach noch Werte und
-                  Freigeber:innen anpassen.
-                </AlertDialogDescription>
-              </AlertDialogHeader>
-              <div className="grid gap-3 py-2 max-h-[65vh] overflow-y-auto">
-                {TEMPLATES.map(tpl => {
-                  const Icon = tpl.icon;
-                  return (
-                    <button
-                      key={tpl.id}
-                      type="button"
-                      onClick={() => applyTemplate(tpl)}
-                      className="text-left border rounded-lg p-4 hover:border-primary hover:bg-muted/30 transition-colors flex items-start gap-3"
-                      data-testid={`template-card-${tpl.id}`}
-                    >
-                      <div className="p-2 rounded-md bg-muted">
-                        <Icon className="h-5 w-5 text-primary" />
-                      </div>
-                      <div className="flex-1">
-                        <div className="font-medium">{tpl.title}</div>
-                        <div className="text-sm text-muted-foreground mt-0.5">{tpl.description}</div>
-                      </div>
-                      <ChevronRight className="h-5 w-5 text-muted-foreground mt-1" />
-                    </button>
-                  );
-                })}
+          <AlertDialogHeader>
+            <AlertDialogTitle>{editing ? "Edit chain" : "New approval chain"}</AlertDialogTitle>
+            <AlertDialogDescription>
+              Conditions evaluate values from the trigger context (e.g. <span className="font-medium">Δ risk score</span>{" "}
+              for clause changes or <span className="font-medium">discount %</span>). All conditions must be satisfied
+              (AND match) for the chain to apply.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <div className="grid gap-3 py-2 max-h-[65vh] overflow-y-auto">
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <Label>Name</Label>
+                <Input value={name} onChange={e => setName(e.target.value)} data-testid="input-chain-name" />
               </div>
-              <AlertDialogFooter>
-                <AlertDialogCancel>Abbrechen</AlertDialogCancel>
-              </AlertDialogFooter>
-            </>
-          ) : (
-            <TooltipProvider delayDuration={150}>
-              <AlertDialogHeader>
-                <AlertDialogTitle>{editing ? "Kette bearbeiten" : "Neue Genehmigungs-Kette"}</AlertDialogTitle>
-                <AlertDialogDescription>
-                  Lege fest, wann diese Kette greift und wer der Reihe nach freigibt.
-                </AlertDialogDescription>
-              </AlertDialogHeader>
-              <div className="grid gap-4 py-2 max-h-[65vh] overflow-y-auto">
-                {/* ── Name + aktiv-Schalter ───────────────────────────── */}
-                <div>
-                  <Label htmlFor="chain-name">Name dieser Kette</Label>
-                  <Input
-                    id="chain-name"
-                    value={name}
-                    onChange={e => { setName(e.target.value); setTouched(true); }}
-                    onBlur={() => setTouched(true)}
-                    aria-invalid={touched && !name.trim()}
-                    className={touched && !name.trim() ? "border-destructive" : ""}
-                    data-testid="input-chain-name"
-                  />
-                  {touched && !name.trim() && (
-                    <p className="text-xs text-destructive mt-1" data-testid="error-chain-name">
-                      Bitte gib der Kette einen Namen.
-                    </p>
-                  )}
-                  <div className="flex items-center gap-2 mt-3">
-                    <Switch
-                      id="chain-active"
-                      checked={active}
-                      onCheckedChange={v => setActive(!!v)}
-                      data-testid="switch-chain-active"
-                    />
-                    <Label htmlFor="chain-active" className="cursor-pointer">Diese Kette ist aktiv</Label>
-                  </div>
-                </div>
+              <div>
+                <Label>Priority (lower = more important, default 100)</Label>
+                <Input type="number" value={priority} onChange={e => setPriority(parseInt(e.target.value) || 0)} data-testid="input-chain-priority" />
+              </div>
+            </div>
+            <div>
+              <Label>Description</Label>
+              <Input value={description} onChange={e => setDescription(e.target.value)} data-testid="input-chain-description" />
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <Label>Trigger</Label>
+                <select
+                  className="w-full border rounded h-9 px-2 bg-background"
+                  value={triggerType}
+                  onChange={e => onTriggerChange(e.target.value)}
+                  data-testid="select-chain-trigger"
+                >
+                  {TRIGGER_TYPES.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
+                </select>
+              </div>
+              <div className="flex items-center gap-2 pt-6">
+                <input id="chain-active" type="checkbox" checked={active} onChange={e => setActive(e.target.checked)} data-testid="checkbox-chain-active" />
+                <Label htmlFor="chain-active">Active</Label>
+              </div>
+            </div>
 
-                {/* ── Wann greift die Kette ───────────────────────────── */}
-                <div className="space-y-2 border-t pt-4">
-                  <Label className="text-base">Wann greift diese Kette?</Label>
-                  <div className="flex items-center gap-2 text-sm">
-                    <span className="text-muted-foreground">Trigger:</span>
-                    <select
-                      className="border rounded h-9 px-2 bg-background"
-                      value={triggerType}
-                      onChange={e => onTriggerChange(e.target.value)}
-                      data-testid="select-chain-trigger"
-                    >
-                      {TRIGGER_TYPES.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
-                    </select>
-                  </div>
-
-                  {knownConds.length === 0 ? (
-                    <p className="text-xs text-muted-foreground italic">
-                      Keine Bedingungen — die Kette greift bei jedem {TRIGGER_TYPES.find(t => t.value === triggerType)?.label}-Ereignis.
-                    </p>
-                  ) : (
-                    <div className="space-y-2">
-                      {knownConds.map(({ c, i }) => {
-                        const def = findFieldDef(triggerType, c.field)!;
-                        const ops = def.type === "string" ? OPERATORS_STR : OPERATORS_NUM;
-                        const valueMissing = touched && c.value.trim() === "";
-                        return (
-                          <div
-                            key={i}
-                            className="flex flex-wrap items-center gap-2 text-sm border rounded p-3 bg-muted/10"
-                            data-testid={`condition-row-${i}`}
-                          >
-                            <span className="text-muted-foreground">… und</span>
-                            <select
-                              className="border rounded h-9 px-2 bg-background"
-                              value={c.field}
-                              onChange={e => {
-                                const nextDef = findFieldDef(triggerType, e.target.value);
-                                updateCondition(i, {
-                                  field: e.target.value,
-                                  valueType: nextDef?.type ?? "number",
-                                  op: nextDef?.type === "string" ? "eq" : c.op,
-                                  value: "",
-                                });
-                              }}
-                              data-testid={`select-condition-field-${i}`}
-                            >
-                              {fieldDefs.map(f => <option key={f.key} value={f.key}>{f.subject}</option>)}
-                            </select>
-                            <select
-                              className="border rounded h-9 px-2 bg-background"
-                              value={c.op}
-                              onChange={e => updateCondition(i, { op: e.target.value as ApprovalChainCondition["op"] })}
-                              data-testid={`select-condition-op-${i}`}
-                            >
-                              {ops.map(op => <option key={op.value} value={op.value}>{op.sentence}</option>)}
-                            </select>
-                            <Input
-                              type={def.type === "number" ? "number" : "text"}
-                              value={c.value}
-                              onChange={e => updateCondition(i, { value: e.target.value })}
-                              onBlur={() => setTouched(true)}
-                              aria-invalid={valueMissing}
-                              className={`w-28 ${valueMissing ? "border-destructive" : ""}`}
-                              placeholder={def.type === "number" ? "Wert" : "Text"}
-                              data-testid={`input-condition-value-${i}`}
-                            />
-                            {def.unit && <span className="text-muted-foreground">{def.unit}</span>}
-                            <Button
-                              size="sm"
-                              variant="ghost"
-                              className="ml-auto"
-                              onClick={() => removeCondition(i)}
-                              data-testid={`button-condition-remove-${i}`}
-                            >
-                              <Trash2 className="h-3 w-3" />
-                            </Button>
-                            {valueMissing && (
-                              <p className="text-xs text-destructive w-full">Bitte einen Wert eintragen.</p>
-                            )}
-                          </div>
-                        );
-                      })}
-                    </div>
-                  )}
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={addKnownCondition}
-                    disabled={fieldDefs.length === 0}
-                    data-testid="button-add-condition"
-                  >
-                    <Plus className="h-3 w-3 mr-1" /> Bedingung hinzufügen
-                  </Button>
-                </div>
-
-                {/* ── Wer gibt frei? (Stages) ─────────────────────────── */}
-                <div className="space-y-2 border-t pt-4">
-                  <Label className="text-base">Wer soll freigeben?</Label>
-                  <p className="text-xs text-muted-foreground -mt-1">
-                    Die Stufen werden in dieser Reihenfolge der Reihe nach abgefragt.
-                  </p>
-                  {stages.map((s, i) => {
-                    const value = encodeApprover(s);
-                    const missing = touched && !value;
-                    const legacyRole = s.approverRole && !knownRoleNames.has(s.approverRole);
+            {/* ── Bedingungs-Builder (F07) ─────────────────────────────────── */}
+            <div className="space-y-2 border-t pt-3">
+              <div className="flex items-center justify-between">
+                <Label>Conditions</Label>
+                <Button size="sm" variant="outline" onClick={addKnownCondition} disabled={fieldDefs.length === 0} data-testid="button-add-condition">
+                  <Plus className="h-3 w-3 mr-1" /> Add condition
+                </Button>
+              </div>
+              {conditions.length === 0 ? (
+                <p className="text-xs text-muted-foreground italic">
+                  No conditions — the chain applies to every {triggerType} trigger.
+                </p>
+              ) : (
+                <div className="space-y-2">
+                  {conditions.map((c, i) => {
+                    const def = fieldDefs.find(f => f.key === c.field);
+                    const ops = (def?.type ?? c.valueType) === "string" ? OPERATORS_STR : OPERATORS_NUM;
+                    const isUnknownField = !def;
                     return (
-                      <div
-                        key={i}
-                        className="flex flex-wrap items-center gap-2 border rounded p-3 bg-muted/10"
-                        data-testid={`stage-row-${i}`}
-                      >
-                        <div className="font-mono text-sm font-medium w-6">{i + 1}.</div>
-                        <div className="flex-1 min-w-[220px]">
+                      <div key={i} className="grid grid-cols-12 gap-2 items-end border rounded p-2 bg-muted/10" data-testid={`condition-row-${i}`}>
+                        <div className="col-span-5">
+                          <Label className="text-xs">Field</Label>
                           <select
-                            className={`w-full border rounded h-9 px-2 bg-background ${missing ? "border-destructive" : ""}`}
-                            value={value}
+                            className="w-full border rounded h-9 px-2 bg-background"
+                            value={c.field}
                             onChange={e => {
-                              const decoded = decodeApprover(e.target.value);
-                              updateStage(i, decoded);
+                              const nextDef = findFieldDef(triggerType, e.target.value);
+                              updateCondition(i, {
+                                field: e.target.value,
+                                valueType: nextDef?.type ?? "number",
+                                op: nextDef?.type === "string" ? "eq" : c.op,
+                                value: "",
+                              });
                             }}
-                            aria-invalid={missing}
-                            data-testid={`select-stage-approver-${i}`}
+                            data-testid={`select-condition-field-${i}`}
                           >
-                            <option value="">— Wer gibt frei? —</option>
-                            {legacyRole && (
-                              <option value={`role:${s.approverRole}`}>
-                                {s.approverRole} (Legacy-Rolle)
-                              </option>
-                            )}
-                            <optgroup label="Rollen">
-                              {allRoleNames.map(r => (
-                                <option key={`role-${r}`} value={`role:${r}`}>{r}</option>
-                              ))}
-                            </optgroup>
-                            <optgroup label="Personen">
-                              {(users ?? []).map(u => (
-                                <option key={`user-${u.id}`} value={`user:${u.id}`}>{u.name}</option>
-                              ))}
-                            </optgroup>
+                            {isUnknownField && <option value={c.field}>{c.field} (unknown)</option>}
+                            {fieldDefs.map(f => <option key={f.key} value={f.key}>{f.label}</option>)}
                           </select>
-                          {missing && (
-                            <p className="text-xs text-destructive mt-1">Bitte eine Freigeber:in wählen.</p>
-                          )}
                         </div>
-                        <div className="flex gap-1">
-                          <Button size="sm" variant="ghost" onClick={() => moveStage(i, -1)} disabled={i === 0} data-testid={`button-stage-up-${i}`}>
-                            <ArrowUp className="h-3 w-3" />
-                          </Button>
-                          <Button size="sm" variant="ghost" onClick={() => moveStage(i, 1)} disabled={i === stages.length - 1} data-testid={`button-stage-down-${i}`}>
-                            <ArrowDown className="h-3 w-3" />
-                          </Button>
-                          <Button size="sm" variant="ghost" onClick={() => removeStage(i)} disabled={stages.length === 1} data-testid={`button-stage-remove-${i}`}>
+                        <div className="col-span-3">
+                          <Label className="text-xs">Operator</Label>
+                          <select
+                            className="w-full border rounded h-9 px-2 bg-background"
+                            value={c.op}
+                            onChange={e => updateCondition(i, { op: e.target.value as ApprovalChainCondition["op"] })}
+                            data-testid={`select-condition-op-${i}`}
+                          >
+                            {ops.map(op => <option key={op.value} value={op.value}>{op.label}</option>)}
+                          </select>
+                        </div>
+                        <div className="col-span-3">
+                          <Label className="text-xs">Value</Label>
+                          <Input
+                            type={c.valueType === "number" ? "number" : "text"}
+                            value={c.value}
+                            onChange={e => updateCondition(i, { value: e.target.value })}
+                            data-testid={`input-condition-value-${i}`}
+                          />
+                        </div>
+                        <div className="col-span-1 flex justify-end">
+                          <Button size="sm" variant="ghost" onClick={() => removeCondition(i)} data-testid={`button-condition-remove-${i}`}>
                             <Trash2 className="h-3 w-3" />
                           </Button>
                         </div>
                       </div>
                     );
                   })}
-                  <Button size="sm" variant="outline" onClick={addStage} data-testid="button-add-stage">
-                    <Plus className="h-3 w-3 mr-1" /> Stufe hinzufügen
-                  </Button>
                 </div>
+              )}
+            </div>
 
-                {/* ── Live-Vorschau ───────────────────────────────────── */}
-                <div className="border-t pt-4">
-                  <div className="text-xs uppercase tracking-wide text-muted-foreground mb-1">
-                    Vorschau
-                  </div>
-                  <div
-                    className="rounded-md border bg-muted/20 px-3 py-2 text-sm leading-relaxed"
-                    data-testid="chain-preview"
-                  >
-                    {previewSentence}
-                  </div>
-                </div>
-
-                {/* ── Erweiterte Optionen ─────────────────────────────── */}
-                <Collapsible open={advancedOpen} onOpenChange={setAdvancedOpen} className="border-t pt-2">
-                  <CollapsibleTrigger asChild>
-                    <button
-                      type="button"
-                      className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
-                      data-testid="button-toggle-advanced"
-                    >
-                      <ChevronDown className={`h-4 w-4 transition-transform ${advancedOpen ? "" : "-rotate-90"}`} />
-                      Erweiterte Optionen
-                    </button>
-                  </CollapsibleTrigger>
-                  <CollapsibleContent className="space-y-3 pt-3">
-                    <div className="grid grid-cols-2 gap-3">
-                      <div>
-                        <Label htmlFor="chain-priority">Priorität (niedriger = wichtiger)</Label>
-                        <Input
-                          id="chain-priority"
-                          type="number"
-                          value={priority}
-                          onChange={e => setPriority(parseInt(e.target.value) || 0)}
-                          data-testid="input-chain-priority"
-                        />
-                        <p className="text-xs text-muted-foreground mt-1">Default 100 reicht in den meisten Fällen.</p>
-                      </div>
-                      <div>
-                        <Label htmlFor="chain-description">Beschreibung (optional)</Label>
-                        <Input
-                          id="chain-description"
-                          value={description}
-                          onChange={e => setDescription(e.target.value)}
-                          data-testid="input-chain-description"
-                        />
-                      </div>
+            {/* ── Stages ───────────────────────────────────────────────────── */}
+            <div className="space-y-2 border-t pt-3">
+              <div className="flex items-center justify-between">
+                <Label>Stages (sequential)</Label>
+                <Button size="sm" variant="outline" onClick={addStage} data-testid="button-add-stage">
+                  <Plus className="h-3 w-3 mr-1" /> Add stage
+                </Button>
+              </div>
+              {stages.map((s, i) => {
+                const roleKnown = !s.approverRole || allRoleNames.includes(s.approverRole);
+                return (
+                  <div key={i} className="grid grid-cols-12 gap-2 items-end border rounded p-2 bg-muted/10" data-testid={`stage-row-${i}`}>
+                    <div className="col-span-1 text-center font-mono text-sm pt-2">{i + 1}.</div>
+                    <div className="col-span-3">
+                      <Label className="text-xs">Label</Label>
+                      <Input value={s.label} onChange={e => updateStage(i, { label: e.target.value })} data-testid={`input-stage-label-${i}`} />
                     </div>
-
-                    <div>
-                      <Label className="text-sm">Stufen-Bezeichnungen</Label>
-                      <p className="text-xs text-muted-foreground">Optional. Default ist „Stufe 1", „Stufe 2", …</p>
-                      <div className="space-y-1 mt-1">
-                        {stages.map((s, i) => (
-                          <div key={i} className="flex items-center gap-2">
-                            <span className="font-mono text-xs w-6">{i + 1}.</span>
-                            <Input
-                              value={s.label}
-                              onChange={e => updateStage(i, { label: e.target.value })}
-                              data-testid={`input-stage-label-${i}`}
-                            />
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-
-                    <div>
-                      <Label className="text-sm">Freier Bedingungs-Builder</Label>
-                      <p className="text-xs text-muted-foreground">
-                        Für historische / unbekannte Felder, die der Standard-Builder oben nicht kennt.
-                      </p>
-                      {advancedConds.length === 0 ? (
-                        <p className="text-xs text-muted-foreground italic mt-1">Keine erweiterten Bedingungen.</p>
-                      ) : (
-                        <div className="space-y-2 mt-2">
-                          {advancedConds.map(({ c, i }) => (
-                            <div key={i} className="grid grid-cols-12 gap-2 items-end border rounded p-2 bg-muted/10" data-testid={`advanced-condition-row-${i}`}>
-                              <div className="col-span-4">
-                                <Label className="text-xs">Feld (intern)</Label>
-                                <Input
-                                  value={c.field}
-                                  onChange={e => updateCondition(i, { field: e.target.value })}
-                                  placeholder="z. B. customField"
-                                  data-testid={`input-advanced-field-${i}`}
-                                />
-                              </div>
-                              <div className="col-span-3">
-                                <Label className="text-xs">Operator</Label>
-                                <select
-                                  className="w-full border rounded h-9 px-2 bg-background"
-                                  value={c.op}
-                                  onChange={e => updateCondition(i, { op: e.target.value as ApprovalChainCondition["op"] })}
-                                  data-testid={`select-advanced-op-${i}`}
-                                >
-                                  {(c.valueType === "string" ? OPERATORS_STR : OPERATORS_NUM).map(op => (
-                                    <option key={op.value} value={op.value}>{op.label}</option>
-                                  ))}
-                                </select>
-                              </div>
-                              <div className="col-span-2">
-                                <Label className="text-xs">Typ</Label>
-                                <select
-                                  className="w-full border rounded h-9 px-2 bg-background"
-                                  value={c.valueType}
-                                  onChange={e => updateCondition(i, {
-                                    valueType: e.target.value as "number" | "string",
-                                    op: e.target.value === "string" ? "eq" : c.op,
-                                  })}
-                                  data-testid={`select-advanced-type-${i}`}
-                                >
-                                  <option value="number">Zahl</option>
-                                  <option value="string">Text</option>
-                                </select>
-                              </div>
-                              <div className="col-span-2">
-                                <Label className="text-xs">Wert</Label>
-                                <Input
-                                  type={c.valueType === "number" ? "number" : "text"}
-                                  value={c.value}
-                                  onChange={e => updateCondition(i, { value: e.target.value })}
-                                  data-testid={`input-advanced-value-${i}`}
-                                />
-                              </div>
-                              <div className="col-span-1 flex justify-end">
-                                <Button size="sm" variant="ghost" onClick={() => removeCondition(i)} data-testid={`button-advanced-remove-${i}`}>
-                                  <Trash2 className="h-3 w-3" />
-                                </Button>
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                      )}
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        className="mt-2"
-                        onClick={addAdvancedCondition}
-                        data-testid="button-add-advanced-condition"
+                    <div className="col-span-3">
+                      <Label className="text-xs">Role</Label>
+                      <select
+                        className="w-full border rounded h-9 px-2 bg-background"
+                        value={s.approverRole}
+                        onChange={e => updateStage(i, { approverRole: e.target.value, approverUserId: "" })}
+                        data-testid={`select-stage-role-${i}`}
                       >
-                        <Plus className="h-3 w-3 mr-1" /> Erweiterte Bedingung
+                        <option value="">— Role —</option>
+                        {!roleKnown && <option value={s.approverRole}>{s.approverRole} (Legacy)</option>}
+                        {allRoleNames.map(r => <option key={r} value={r}>{r}</option>)}
+                      </select>
+                    </div>
+                    <div className="col-span-3">
+                      <Label className="text-xs">or specific user</Label>
+                      <select
+                        className="w-full border rounded h-9 px-2 bg-background"
+                        value={s.approverUserId}
+                        onChange={e => updateStage(i, { approverUserId: e.target.value, approverRole: "" })}
+                        data-testid={`select-stage-user-${i}`}
+                      >
+                        <option value="">—</option>
+                        {(users ?? []).map(u => <option key={u.id} value={u.id}>{u.name}</option>)}
+                      </select>
+                    </div>
+                    <div className="col-span-2 flex justify-end gap-1">
+                      <Button size="sm" variant="ghost" onClick={() => moveStage(i, -1)} disabled={i === 0} data-testid={`button-stage-up-${i}`}>
+                        <ArrowUp className="h-3 w-3" />
+                      </Button>
+                      <Button size="sm" variant="ghost" onClick={() => moveStage(i, 1)} disabled={i === stages.length - 1} data-testid={`button-stage-down-${i}`}>
+                        <ArrowDown className="h-3 w-3" />
+                      </Button>
+                      <Button size="sm" variant="ghost" onClick={() => removeStage(i)} disabled={stages.length === 1} data-testid={`button-stage-remove-${i}`}>
+                        <Trash2 className="h-3 w-3" />
                       </Button>
                     </div>
-                  </CollapsibleContent>
-                </Collapsible>
-              </div>
-
-              <AlertDialogFooter>
-                {!editing && (
-                  <Button
-                    variant="ghost"
-                    onClick={() => setView("templates")}
-                    data-testid="button-back-to-templates"
-                  >
-                    Zurück zu Vorlagen
-                  </Button>
-                )}
-                <AlertDialogCancel>Abbrechen</AlertDialogCancel>
-                {canSave ? (
-                  <AlertDialogAction onClick={onSave} data-testid="button-save-chain">
-                    Speichern
-                  </AlertDialogAction>
-                ) : (
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <span tabIndex={0}>
-                        <Button
-                          disabled
-                          aria-disabled
-                          data-testid="button-save-chain"
-                        >
-                          Speichern
-                        </Button>
-                      </span>
-                    </TooltipTrigger>
-                    <TooltipContent side="top">{saveBlockerReason}</TooltipContent>
-                  </Tooltip>
-                )}
-              </AlertDialogFooter>
-            </TooltipProvider>
-          )}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={onSave} disabled={!name.trim() || stages.length === 0} data-testid="button-save-chain">
+              Save
+            </AlertDialogAction>
+          </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
     </Card>

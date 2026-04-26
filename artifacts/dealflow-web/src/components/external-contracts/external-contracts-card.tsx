@@ -36,17 +36,17 @@ export function ExternalContractsCard({ accountId, defaultBrandId }: Props) {
   const deleteMut = useDeleteExternalContract();
 
   const handleDelete = async (id: string) => {
-    if (!confirm("Externen Vertrag wirklich löschen? Datei wird ebenfalls entfernt.")) return;
+    if (!confirm("Really delete external contract? File will also be removed.")) return;
     try {
       await deleteMut.mutateAsync({ id });
-      toast({ title: "Vertrag gelöscht" });
+      toast({ title: "Contract deleted" });
       await qc.invalidateQueries({
         queryKey: getListExternalContractsQueryKey({ accountId }),
       });
       await qc.invalidateQueries({ queryKey: getListExternalContractsQueryKey() });
     } catch (e) {
       toast({
-        title: "Löschen fehlgeschlagen",
+        title: "Delete failed",
         description: e instanceof Error ? e.message : "",
         variant: "destructive",
       });
@@ -57,7 +57,7 @@ export function ExternalContractsCard({ accountId, defaultBrandId }: Props) {
     <Card data-testid="external-contracts-card">
       <CardHeader className="flex flex-row items-center justify-between space-y-0">
         <CardTitle className="flex items-center gap-2">
-          <FileText className="h-4 w-4" /> Bestandsverträge
+          <FileText className="h-4 w-4" /> Existing contracts
           <Badge variant="outline" className="ml-1">{contracts.length}</Badge>
         </CardTitle>
         <Button
@@ -65,15 +65,15 @@ export function ExternalContractsCard({ accountId, defaultBrandId }: Props) {
           onClick={() => setWizardOpen(true)}
           data-testid="external-contract-upload-button"
         >
-          <Plus className="h-4 w-4 mr-1" /> Externen Vertrag hochladen
+          <Plus className="h-4 w-4 mr-1" /> Upload external contract
         </Button>
       </CardHeader>
       <CardContent>
         {isLoading ? (
-          <div className="text-sm text-muted-foreground">Lade…</div>
+          <div className="text-sm text-muted-foreground">Loading…</div>
         ) : contracts.length === 0 ? (
           <div className="rounded border border-dashed p-6 text-center text-sm text-muted-foreground">
-            Noch keine externen Verträge hinterlegt.
+            No external contracts on file yet.
           </div>
         ) : (
           <div className="space-y-2">
@@ -125,7 +125,7 @@ function ExternalContractRow({
       >
         <div className="flex items-center gap-2">
           <span className="font-medium">{contract.title}</span>
-          <Badge variant="secondary" className="text-[10px]">Extern</Badge>
+          <Badge variant="secondary" className="text-[10px]">External</Badge>
           {contract.renewalRelevant && (
             <Badge variant="outline" className="text-[10px] gap-1">
               <RefreshCw className="h-3 w-3" /> Renewal
@@ -134,7 +134,7 @@ function ExternalContractRow({
         </div>
         <div className="mt-1 text-xs text-muted-foreground">
           {contract.fileName} · {(contract.fileSize / 1024).toFixed(0)} KB
-          {contract.effectiveTo && ` · gültig bis ${new Date(contract.effectiveTo).toLocaleDateString("de-DE")}`}
+          {contract.effectiveTo && ` · valid until ${new Date(contract.effectiveTo).toLocaleDateString("de-DE")}`}
           {contract.valueAmount && ` · ${Number(contract.valueAmount).toLocaleString("de-DE")} ${contract.currency ?? ""}`}
         </div>
       </button>
@@ -158,45 +158,45 @@ function ExternalContractDetailDialog({ id, onClose }: { id: string; onClose: ()
       <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
-            {data?.title ?? "Externer Vertrag"}
-            <Badge variant="secondary">Extern</Badge>
+            {data?.title ?? "External contract"}
+            <Badge variant="secondary">External</Badge>
           </DialogTitle>
         </DialogHeader>
         {isLoading || !data ? (
-          <div className="text-sm text-muted-foreground">Lade…</div>
+          <div className="text-sm text-muted-foreground">Loading…</div>
         ) : (
           <div className="space-y-3 text-sm">
             <dl className="grid grid-cols-2 gap-x-4 gap-y-2">
-              <dt className="text-muted-foreground">Datei</dt>
+              <dt className="text-muted-foreground">File</dt>
               <dd className="break-all">{data.fileName} ({(data.fileSize / 1024).toFixed(0)} KB)</dd>
               <dt className="text-muted-foreground">Status</dt>
               <dd><Badge variant="outline">{data.status}</Badge></dd>
-              {data.brandName && (<><dt className="text-muted-foreground">Marke</dt><dd>{data.brandName}</dd></>)}
-              {data.contractTypeCode && (<><dt className="text-muted-foreground">Typ</dt><dd>{data.contractTypeCode}</dd></>)}
-              <dt className="text-muted-foreground">Wert</dt>
+              {data.brandName && (<><dt className="text-muted-foreground">Brand</dt><dd>{data.brandName}</dd></>)}
+              {data.contractTypeCode && (<><dt className="text-muted-foreground">Type</dt><dd>{data.contractTypeCode}</dd></>)}
+              <dt className="text-muted-foreground">Value</dt>
               <dd>
                 {data.valueAmount
                   ? `${Number(data.valueAmount).toLocaleString("de-DE")} ${data.currency ?? ""}`
                   : "—"}
               </dd>
-              <dt className="text-muted-foreground">Laufzeit</dt>
+              <dt className="text-muted-foreground">Term</dt>
               <dd>
                 {data.effectiveFrom ? new Date(data.effectiveFrom).toLocaleDateString("de-DE") : "—"}
                 {" → "}
                 {data.effectiveTo ? new Date(data.effectiveTo).toLocaleDateString("de-DE") : "—"}
               </dd>
-              <dt className="text-muted-foreground">Auto-Renewal</dt>
-              <dd>{data.autoRenewal ? `Ja (${data.renewalNoticeDays ?? "?"} Tage)` : "Nein"}</dd>
+              <dt className="text-muted-foreground">Auto-renewal</dt>
+              <dd>{data.autoRenewal ? `Yes (${data.renewalNoticeDays ?? "?"} days)` : "No"}</dd>
               {data.terminationNoticeDays && (
-                <><dt className="text-muted-foreground">Kündigungsfrist</dt><dd>{data.terminationNoticeDays} Tage</dd></>
+                <><dt className="text-muted-foreground">Termination notice</dt><dd>{data.terminationNoticeDays} days</dd></>
               )}
               {data.governingLaw && (
-                <><dt className="text-muted-foreground">Recht / Gerichtsstand</dt><dd>{data.governingLaw}{data.jurisdiction ? ` / ${data.jurisdiction}` : ""}</dd></>
+                <><dt className="text-muted-foreground">Law / Jurisdiction</dt><dd>{data.governingLaw}{data.jurisdiction ? ` / ${data.jurisdiction}` : ""}</dd></>
               )}
             </dl>
             {data.parties.length > 0 && (
               <div>
-                <div className="text-xs uppercase tracking-wide text-muted-foreground">Parteien</div>
+                <div className="text-xs uppercase tracking-wide text-muted-foreground">Parties</div>
                 <ul className="mt-1 space-y-1">
                   {data.parties.map((p, i) => (
                     <li key={i} className="text-sm">
@@ -209,7 +209,7 @@ function ExternalContractDetailDialog({ id, onClose }: { id: string; onClose: ()
             {data.identifiedClauseFamilies.length > 0 && (
               <div>
                 <div className="text-xs uppercase tracking-wide text-muted-foreground">
-                  Klausel-Familien
+                  Clause families
                 </div>
                 <div className="mt-1 flex flex-wrap gap-1">
                   {data.identifiedClauseFamilies.map((c, i) => (
@@ -222,18 +222,18 @@ function ExternalContractDetailDialog({ id, onClose }: { id: string; onClose: ()
             )}
             {data.notes && (
               <div>
-                <div className="text-xs uppercase tracking-wide text-muted-foreground">Notizen</div>
+                <div className="text-xs uppercase tracking-wide text-muted-foreground">Notes</div>
                 <p className="mt-1 whitespace-pre-wrap text-sm">{data.notes}</p>
               </div>
             )}
           </div>
         )}
         <DialogFooter>
-          <Button variant="outline" onClick={onClose}>Schließen</Button>
+          <Button variant="outline" onClick={onClose}>Close</Button>
           {data && (
             <Button asChild data-testid="external-contract-download">
               <a href={data.downloadUrl} target="_blank" rel="noreferrer">
-                <Download className="h-4 w-4 mr-1" /> Original herunterladen
+                <Download className="h-4 w-4 mr-1" /> Download original
                 <ExternalLink className="h-3 w-3 ml-1" />
               </a>
             </Button>

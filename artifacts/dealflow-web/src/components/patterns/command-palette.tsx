@@ -26,25 +26,25 @@ interface NavItem {
 }
 
 const NAV: NavItem[] = [
-  { id: "home", label: "Start", href: "/home", icon: Home, shortcut: "G H" },
+  { id: "home", label: "Home", href: "/home", icon: Home, shortcut: "G H" },
   { id: "accounts", label: "Accounts", href: "/accounts", icon: Building2, shortcut: "G A" },
   { id: "deals", label: "Deals", href: "/deals", icon: Briefcase, shortcut: "G D" },
-  { id: "contracts", label: "Verträge", href: "/contracts", icon: FileText, shortcut: "G C" },
-  { id: "quotes", label: "Angebote", href: "/quotes", icon: QuoteIcon, shortcut: "G Q" },
-  { id: "negotiations", label: "Verhandlungen", href: "/negotiations", icon: FileSignature },
-  { id: "tasks", label: "Aufgaben", href: "/tasks", icon: ListChecks },
-  { id: "users", label: "Nutzer", href: "/admin/users", icon: Users },
-  { id: "products", label: "Produkte", href: "/products", icon: Boxes },
-  { id: "billing", label: "Abrechnung", href: "/billing", icon: Receipt },
-  { id: "audit", label: "Audit-Log", href: "/audit", icon: ShieldCheck },
-  { id: "settings", label: "Einstellungen", href: "/settings", icon: Settings },
+  { id: "contracts", label: "Contracts", href: "/contracts", icon: FileText, shortcut: "G C" },
+  { id: "quotes", label: "Quotes", href: "/quotes", icon: QuoteIcon, shortcut: "G Q" },
+  { id: "negotiations", label: "Negotiations", href: "/negotiations", icon: FileSignature },
+  { id: "tasks", label: "Tasks", href: "/tasks", icon: ListChecks },
+  { id: "users", label: "Users", href: "/admin/users", icon: Users },
+  { id: "products", label: "Products", href: "/products", icon: Boxes },
+  { id: "billing", label: "Billing", href: "/billing", icon: Receipt },
+  { id: "audit", label: "Audit log", href: "/audit", icon: ShieldCheck },
+  { id: "settings", label: "Settings", href: "/settings", icon: Settings },
 ];
 
 const ACTIONS: { id: string; label: string; href: string; icon: typeof Plus }[] = [
-  { id: "new-account", label: "Neuer Account", href: "/accounts?new=1", icon: Building2 },
-  { id: "new-deal", label: "Neuer Deal", href: "/deals?new=1", icon: Briefcase },
-  { id: "new-contract", label: "Neuer Vertrag", href: "/contracts?new=1", icon: FileText },
-  { id: "new-quote", label: "Neues Angebot", href: "/quotes?new=1", icon: QuoteIcon },
+  { id: "new-account", label: "New account", href: "/accounts?new=1", icon: Building2 },
+  { id: "new-deal", label: "New deal", href: "/deals?new=1", icon: Briefcase },
+  { id: "new-contract", label: "New contract", href: "/contracts?new=1", icon: FileText },
+  { id: "new-quote", label: "New quote", href: "/quotes?new=1", icon: QuoteIcon },
 ];
 
 export function CommandPalette({
@@ -105,16 +105,16 @@ export function CommandPalette({
   return (
     <CommandDialog open={open} onOpenChange={onOpenChange}>
       <CommandInput
-        placeholder="Suche Accounts, Deals, Verträge … oder schreib einen Befehl"
+        placeholder="Search accounts, deals, contracts … or type a command"
         value={query}
         onValueChange={setQuery}
       />
       <CommandList>
-        <CommandEmpty>Keine Treffer für „{query}".</CommandEmpty>
+        <CommandEmpty>No results for "{query}".</CommandEmpty>
 
         {!q && recents.length > 0 && (
           <>
-            <CommandGroup heading="Zuletzt geöffnet">
+            <CommandGroup heading="Recently opened">
               {recents.slice(0, 5).map((r) => (
                 <CommandItem key={`${r.kind}-${r.id}`} value={`recent-${r.label}`} onSelect={() => go(r.href)}>
                   <History className="h-4 w-4 mr-2 text-muted-foreground" />
@@ -152,7 +152,7 @@ export function CommandPalette({
         )}
 
         {matchContracts.length > 0 && (
-          <CommandGroup heading="Verträge">
+          <CommandGroup heading="Contracts">
             {matchContracts.map((c) => (
               <CommandItem key={c.id} value={`con-${c.title}-${c.id}`} onSelect={() => go(`/contracts/${c.id}`)}>
                 <FileText className="h-4 w-4 mr-2 text-indigo-600" />
@@ -163,7 +163,7 @@ export function CommandPalette({
         )}
 
         {matchQuotes.length > 0 && (
-          <CommandGroup heading="Angebote">
+          <CommandGroup heading="Quotes">
             {matchQuotes.map((qq) => (
               <CommandItem key={qq.id} value={`quote-${qq.number}-${qq.id}`} onSelect={() => go(`/quotes/${qq.id}`)}>
                 <QuoteIcon className="h-4 w-4 mr-2 text-violet-600" />
@@ -175,7 +175,7 @@ export function CommandPalette({
         )}
 
         <CommandSeparator />
-        <CommandGroup heading="Aktionen">
+        <CommandGroup heading="Actions">
           {ACTIONS.map((a) => {
             const Icon = a.icon;
             return (
@@ -205,7 +205,7 @@ export function CommandPalette({
         {!q && (
           <div className="border-t px-3 py-2 text-[10px] text-muted-foreground flex items-center gap-3">
             <Search className="h-3 w-3" />
-            <span>Tipp: ⌘ K öffnet diese Suche von überall</span>
+            <span>Tip: ⌘ K opens this search from anywhere</span>
           </div>
         )}
       </CommandList>

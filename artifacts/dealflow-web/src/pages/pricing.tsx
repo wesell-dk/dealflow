@@ -155,7 +155,7 @@ function BundlesPanel() {
           icon={Package}
           title={t("pages.pricing.bundles.emptyTitle", "Noch keine Bundles")}
           body={t("pages.pricing.bundles.empty")}
-          hint={t("pages.pricing.bundles.emptyHint", "Bündel wiederkehrende Positionen für schnellere Angebote.")}
+          hint={t("pages.pricing.bundles.emptyHint", "Bundle recurring positions for faster quotes.")}
           primaryAction={{
             label: t("pages.pricing.bundles.create"),
             onClick: () => setCreateOpen(true),
@@ -247,13 +247,13 @@ function PositionsPanel({ positions }: { positions: PricePosition[] | undefined 
         qc.invalidateQueries({ queryKey: getListPricePositionsQueryKey() }),
         qc.invalidateQueries({ queryKey: getGetPricingSummaryQueryKey() }),
       ]);
-      toast({ title: "Preis-Position gelöscht", description: confirmDelete.sku });
+      toast({ title: "price position deleted", description: confirmDelete.sku });
       setConfirmDelete(null);
     } catch (e: unknown) {
       const body = (e as { response?: { data?: { error?: string } } })?.response?.data;
       toast({
-        title: "Löschen fehlgeschlagen",
-        description: body?.error ?? (e instanceof Error ? e.message : "Unbekannt"),
+        title: "Delete failed",
+        description: body?.error ?? (e instanceof Error ? e.message : "Unknown"),
         variant: "destructive",
       });
     }
@@ -262,13 +262,13 @@ function PositionsPanel({ positions }: { positions: PricePosition[] | undefined 
   return (
     <>
       <div className="flex justify-between items-center mb-3">
-        <div className="text-sm text-muted-foreground">{positions?.length ?? 0} Preis-Positionen</div>
+        <div className="text-sm text-muted-foreground">{positions?.length ?? 0} price positions</div>
         <Button
           size="sm"
           onClick={() => { setEditing(undefined); setDialogOpen(true); }}
           data-testid="button-new-price-position"
         >
-          <Plus className="mr-2 h-4 w-4" /> Neue Preis-Position
+          <Plus className="mr-2 h-4 w-4" /> Neue price position
         </Button>
       </div>
       <div className="border rounded-md bg-card">
@@ -282,7 +282,7 @@ function PositionsPanel({ positions }: { positions: PricePosition[] | undefined 
               <TableHead className="text-right">List Price</TableHead>
               <TableHead>Version</TableHead>
               <TableHead>Status</TableHead>
-              <TableHead className="w-24 text-right">Aktionen</TableHead>
+              <TableHead className="w-24 text-right">Actions</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -314,7 +314,7 @@ function PositionsPanel({ positions }: { positions: PricePosition[] | undefined 
                       variant="ghost"
                       onClick={() => { setEditing(pos); setDialogOpen(true); }}
                       data-testid={`button-edit-position-${pos.id}`}
-                      aria-label="Bearbeiten"
+                      aria-label="Edit"
                     >
                       <Pencil className="h-4 w-4" />
                     </Button>
@@ -323,7 +323,7 @@ function PositionsPanel({ positions }: { positions: PricePosition[] | undefined 
                       variant="ghost"
                       onClick={() => setConfirmDelete(pos)}
                       data-testid={`button-delete-position-${pos.id}`}
-                      aria-label="Löschen"
+                      aria-label="Delete"
                     >
                       <Trash2 className="h-4 w-4 text-destructive" />
                     </Button>
@@ -334,7 +334,7 @@ function PositionsPanel({ positions }: { positions: PricePosition[] | undefined 
             {positions?.length === 0 && (
               <TableRow>
                 <TableCell colSpan={8} className="h-24 text-center text-muted-foreground">
-                  Noch keine Preis-Positionen — über „Neue Preis-Position" anlegen.
+                  No price positions yet — create one via "New price position".
                 </TableCell>
               </TableRow>
             )}
@@ -351,20 +351,20 @@ function PositionsPanel({ positions }: { positions: PricePosition[] | undefined 
       <AlertDialog open={!!confirmDelete} onOpenChange={(v) => { if (!v) setConfirmDelete(null); }}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Preis-Position löschen?</AlertDialogTitle>
+            <AlertDialogTitle>price position delete?</AlertDialogTitle>
             <AlertDialogDescription>
-              {confirmDelete?.sku} — {confirmDelete?.name}. Versions-Historie wird mit gelöscht.
-              Diese Aktion kann nicht rückgängig gemacht werden.
+              {confirmDelete?.sku} — {confirmDelete?.name}. Versions-Historie wird mit deleted.
+              This action cannot be undone.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>Abbrechen</AlertDialogCancel>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
             <AlertDialogAction
               onClick={onDelete}
               className="bg-destructive hover:bg-destructive/90"
               data-testid="button-confirm-delete-position"
             >
-              Löschen
+              Delete
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
@@ -386,13 +386,13 @@ function RulesPanel({ rules }: { rules: PriceRule[] | undefined }) {
     try {
       await del.mutateAsync({ id: confirmDelete.id });
       await qc.invalidateQueries({ queryKey: getListPriceRulesQueryKey() });
-      toast({ title: "Regel gelöscht", description: confirmDelete.name });
+      toast({ title: "Regel deleted", description: confirmDelete.name });
       setConfirmDelete(null);
     } catch (e: unknown) {
       const body = (e as { response?: { data?: { error?: string } } })?.response?.data;
       toast({
-        title: "Löschen fehlgeschlagen",
-        description: body?.error ?? (e instanceof Error ? e.message : "Unbekannt"),
+        title: "Delete failed",
+        description: body?.error ?? (e instanceof Error ? e.message : "Unknown"),
         variant: "destructive",
       });
     }
@@ -401,13 +401,13 @@ function RulesPanel({ rules }: { rules: PriceRule[] | undefined }) {
   return (
     <>
       <div className="flex justify-between items-center mb-3">
-        <div className="text-sm text-muted-foreground">{rules?.length ?? 0} Pricing-Regeln</div>
+        <div className="text-sm text-muted-foreground">{rules?.length ?? 0} pricing rules</div>
         <Button
           size="sm"
           onClick={() => { setEditing(undefined); setDialogOpen(true); }}
           data-testid="button-new-price-rule"
         >
-          <Plus className="mr-2 h-4 w-4" /> Neue Pricing-Regel
+          <Plus className="mr-2 h-4 w-4" /> Neue pricing rule
         </Button>
       </div>
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
@@ -437,7 +437,7 @@ function RulesPanel({ rules }: { rules: PriceRule[] | undefined }) {
                     className="h-7 w-7"
                     onClick={() => { setEditing(rule); setDialogOpen(true); }}
                     data-testid={`button-edit-rule-${rule.id}`}
-                    aria-label="Bearbeiten"
+                    aria-label="Edit"
                   >
                     <Pencil className="h-3.5 w-3.5" />
                   </Button>
@@ -447,7 +447,7 @@ function RulesPanel({ rules }: { rules: PriceRule[] | undefined }) {
                     className="h-7 w-7"
                     onClick={() => setConfirmDelete(rule)}
                     data-testid={`button-delete-rule-${rule.id}`}
-                    aria-label="Löschen"
+                    aria-label="Delete"
                   >
                     <Trash2 className="h-3.5 w-3.5 text-destructive" />
                   </Button>
@@ -458,7 +458,7 @@ function RulesPanel({ rules }: { rules: PriceRule[] | undefined }) {
         ))}
         {rules?.length === 0 && (
           <div className="col-span-full p-8 text-center border rounded-md text-muted-foreground bg-muted/10">
-            Noch keine Pricing-Regeln — über „Neue Pricing-Regel" anlegen.
+            No pricing rules yet — create one via "New pricing rule".
           </div>
         )}
       </div>
@@ -472,19 +472,19 @@ function RulesPanel({ rules }: { rules: PriceRule[] | undefined }) {
       <AlertDialog open={!!confirmDelete} onOpenChange={(v) => { if (!v) setConfirmDelete(null); }}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Pricing-Regel löschen?</AlertDialogTitle>
+            <AlertDialogTitle>pricing rule delete?</AlertDialogTitle>
             <AlertDialogDescription>
-              {confirmDelete?.name}. Diese Aktion kann nicht rückgängig gemacht werden.
+              {confirmDelete?.name}. This action cannot be undone.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>Abbrechen</AlertDialogCancel>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
             <AlertDialogAction
               onClick={onDelete}
               className="bg-destructive hover:bg-destructive/90"
               data-testid="button-confirm-delete-rule"
             >
-              Löschen
+              Delete
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

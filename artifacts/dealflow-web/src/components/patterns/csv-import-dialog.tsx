@@ -33,7 +33,7 @@ export interface CSVImportDialogProps<TInput> {
    * Jede Zeile = Map<fieldKey, Wert>.
    */
   templateExample?: Array<Record<string, string>>;
-  /** Dateiname für den Vorlagen-Download (Default: "vorlage.csv"). */
+  /** Dateiname für den Vorlagen-Download (Default: "template.csv"). */
   templateFilename?: string;
 }
 
@@ -109,7 +109,7 @@ export function CSVImportDialog<TInput>({
   onImport,
   testId,
   templateExample,
-  templateFilename = "vorlage.csv",
+  templateFilename = "template.csv",
 }: CSVImportDialogProps<TInput>) {
   const { toast } = useToast();
   const [open, setOpen] = useState(false);
@@ -177,8 +177,8 @@ export function CSVImportDialog<TInput>({
     setResult({ ok, failed });
     setImporting(false);
     toast({
-      title: "Import abgeschlossen",
-      description: `${ok} importiert, ${failed} übersprungen.`,
+      title: "Import complete",
+      description: `${ok} imported, ${failed} skipped.`,
       variant: failed > 0 ? "default" : "default",
     });
   }
@@ -202,7 +202,7 @@ export function CSVImportDialog<TInput>({
           <DialogHeader>
             <DialogTitle>{title}</DialogTitle>
             <DialogDescription>
-              Erste Zeile = Spaltennamen. Trennzeichen Komma oder Semikolon. UTF-8.
+              First row = column headers. Separator comma or semicolon. UTF-8.
             </DialogDescription>
           </DialogHeader>
 
@@ -219,11 +219,11 @@ export function CSVImportDialog<TInput>({
                 }}
                 role="button"
                 tabIndex={0}
-                aria-label="CSV-Datei wählen"
+                aria-label="Choose CSV file"
               >
                 <FileText className="h-10 w-10 text-muted-foreground mb-3" />
-                <p className="text-sm font-medium">CSV-Datei wählen</p>
-                <p className="text-xs text-muted-foreground mt-1">oder hierher ziehen</p>
+                <p className="text-sm font-medium">Choose CSV file</p>
+                <p className="text-xs text-muted-foreground mt-1">or drag it here</p>
                 <input
                   ref={inputRef}
                   type="file"
@@ -236,9 +236,9 @@ export function CSVImportDialog<TInput>({
               {templateExample && templateExample.length > 0 && (
                 <div className="flex items-center justify-between rounded-md bg-muted/40 px-3 py-2 text-xs">
                   <div className="flex flex-col">
-                    <span className="font-medium text-foreground">Unsicher, wie die Datei aussehen muss?</span>
+                    <span className="font-medium text-foreground">Not sure what the file should look like?</span>
                     <span className="text-muted-foreground">
-                      Lade dir eine Beispiel-Vorlage mit den richtigen Spalten und einer Beispielzeile herunter.
+                      Download a sample template with the correct columns and an example row.
                     </span>
                   </div>
                   <Button
@@ -253,7 +253,7 @@ export function CSVImportDialog<TInput>({
                     data-testid={testId ? `${testId}-template` : undefined}
                   >
                     <Download className="h-3.5 w-3.5" />
-                    Vorlage herunterladen
+                    Download template
                   </Button>
                 </div>
               )}
@@ -263,7 +263,7 @@ export function CSVImportDialog<TInput>({
           {parsed && !result && (
             <div className="space-y-3 max-h-[60vh] overflow-y-auto pr-2">
               <div className="text-xs text-muted-foreground">
-                {parsed.rows.length} Zeilen erkannt — ordne CSV-Spalten den Feldern zu:
+                {parsed.rows.length} rows detected — map CSV columns to fields:
               </div>
               <div className="grid gap-2">
                 {fields.map((f) => (
@@ -277,10 +277,10 @@ export function CSVImportDialog<TInput>({
                       onValueChange={(v) => setMapping((m) => ({ ...m, [f.key]: v === "__none__" ? "" : v }))}
                     >
                       <SelectTrigger className="h-8">
-                        <SelectValue placeholder="— ignorieren —" />
+                        <SelectValue placeholder="— ignore —" />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="__none__">— ignorieren —</SelectItem>
+                        <SelectItem value="__none__">— ignore —</SelectItem>
                         {parsed.header.map((h) => (
                           <SelectItem key={h} value={h}>{h}</SelectItem>
                         ))}
@@ -308,20 +308,20 @@ export function CSVImportDialog<TInput>({
               ) : (
                 <AlertCircle className="h-10 w-10 text-amber-500 mb-3" />
               )}
-              <p className="text-lg font-semibold">{result.ok} importiert</p>
+              <p className="text-lg font-semibold">{result.ok} imported</p>
               {result.failed > 0 && (
-                <p className="text-sm text-muted-foreground">{result.failed} übersprungen (ungültige Zeilen)</p>
+                <p className="text-sm text-muted-foreground">{result.failed} skipped (invalid rows)</p>
               )}
             </div>
           )}
 
           <DialogFooter>
             <Button variant="outline" onClick={() => setOpen(false)}>
-              {result ? "Schließen" : "Abbrechen"}
+              {result ? "Close" : "Cancel"}
             </Button>
             {parsed && !result && (
               <Button onClick={runImport} disabled={!requiredOk || importing} data-testid={testId ? `${testId}-run` : undefined}>
-                {importing ? "Importiere…" : `Import starten (${parsed.rows.length})`}
+                {importing ? "Importing…" : `Start import (${parsed.rows.length})`}
               </Button>
             )}
           </DialogFooter>

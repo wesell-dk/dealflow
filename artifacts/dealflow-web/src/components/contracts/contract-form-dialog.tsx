@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   useCreateContract,
@@ -39,6 +40,7 @@ function suggestContractTypeId(template: string, types: ContractType[]): string 
 }
 
 export function ContractFormDialog({ open, onOpenChange, defaultDealId }: Props) {
+  const { t, i18n } = useTranslation();
   const { toast } = useToast();
   const qc = useQueryClient();
   const [, setLocation] = useLocation();
@@ -71,13 +73,15 @@ export function ContractFormDialog({ open, onOpenChange, defaultDealId }: Props)
     setContractTypeId(suggestContractTypeId(template, types));
   }, [template, contractTypes, contractTypeTouched]);
 
+  const collator = useMemo(() => new Intl.Collator(i18n.language || "en"), [i18n.language]);
+
   const dealOptions = useMemo(
     () =>
       (deals ?? [])
         .slice()
-        .sort((a, b) => a.name.localeCompare(b.name, "de"))
+        .sort((a, b) => collator.compare(a.name, b.name))
         .map(d => ({ value: d.id, label: `${d.name}${d.accountName ? ` · ${d.accountName}` : ""}` })),
-    [deals],
+    [deals, collator],
   );
 
   const typeOptions = useMemo(
@@ -85,9 +89,9 @@ export function ContractFormDialog({ open, onOpenChange, defaultDealId }: Props)
       (contractTypes ?? [])
         .filter(t => t.active)
         .slice()
-        .sort((a, b) => a.name.localeCompare(b.name, "de"))
+        .sort((a, b) => collator.compare(a.name, b.name))
         .map(t => ({ value: t.id, label: `${t.name} (${t.code})` })),
-    [contractTypes],
+    [contractTypes, collator],
   );
 
   const canSubmit =
@@ -108,14 +112,14 @@ export function ContractFormDialog({ open, onOpenChange, defaultDealId }: Props)
           contractTypeId,
         },
       });
-      toast({ title: "Vertrag angelegt", description: created.title });
+      toast({ title: t("pages.contracts.createDialog.created"), description: created.title });
       await qc.invalidateQueries({ queryKey: getListContractsQueryKey() });
       await qc.invalidateQueries({ queryKey: getGetDealQueryKey(dealId) });
       onOpenChange(false);
       setLocation(`/contracts/${created.id}`);
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : "Bitte versuche es erneut.";
-      toast({ title: "Anlegen fehlgeschlagen", description: msg, variant: "destructive" });
+      const msg = err instanceof Error ? err.message : t("common.tryAgain");
+      toast({ title: t("pages.contracts.createDialog.createFailed"), description: msg, variant: "destructive" });
     }
   }
 
@@ -123,19 +127,18 @@ export function ContractFormDialog({ open, onOpenChange, defaultDealId }: Props)
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-lg" data-testid="dialog-new-contract">
         <DialogHeader>
-          <DialogTitle>Neuer Vertrag</DialogTitle>
+          <DialogTitle>{t("pages.contracts.createDialog.title")}</DialogTitle>
           <DialogDescription>
-            Wähle Deal und Vertragstyp — der Vertragstyp ist Pflicht, damit der CUAD-Coverage-Check
-            sofort funktioniert.
+            {t("pages.contracts.createDialog.description")}
           </DialogDescription>
         </DialogHeader>
 
         <div className="grid gap-4 py-2">
           <div className="grid gap-2">
-            <Label htmlFor="contract-deal">Deal</Label>
+            <Label htmlFor="contract-deal">{t("pages.contracts.createDialog.deal")}</Label>
             <Select value={dealId} onValueChange={setDealId}>
               <SelectTrigger id="contract-deal" data-testid="select-deal">
-                <SelectValue placeholder="Deal auswählen…" />
+                <SelectValue placeholder={t("pages.contracts.createDialog.selectDeal")} />
               </SelectTrigger>
               <SelectContent>
                 {dealOptions.map(o => (
@@ -146,19 +149,19 @@ export function ContractFormDialog({ open, onOpenChange, defaultDealId }: Props)
           </div>
 
           <div className="grid gap-2">
-            <Label htmlFor="contract-title">Titel</Label>
+            <Label htmlFor="contract-title">{t("pages.contracts.createDialog.titleField")}</Label>
             <Input
               id="contract-title"
               data-testid="input-contract-title"
               value={title}
               onChange={e => setTitle(e.target.value)}
-              placeholder="z. B. MSA mit ACME GmbH"
+              placeholder={t("pages.contracts.createDialog.titlePlaceholder")}
               autoComplete="off"
             />
           </div>
 
           <div className="grid gap-2">
-            <Label htmlFor="contract-template">Template</Label>
+            <Label htmlFor="contract-template">{t("pages.contracts.createDialog.template")}</Label>
             <Select value={template} onValueChange={setTemplate}>
               <SelectTrigger id="contract-template" data-testid="select-template">
                 <SelectValue />
@@ -173,14 +176,14 @@ export function ContractFormDialog({ open, onOpenChange, defaultDealId }: Props)
 
           <div className="grid gap-2">
             <Label htmlFor="contract-type">
-              Vertragstyp <span className="text-destructive">*</span>
+              {t("pages.contracts.createDialog.contractType")} <span className="text-destructive">*</span>
             </Label>
             <Select
               value={contractTypeId}
               onValueChange={(v) => { setContractTypeTouched(true); setContractTypeId(v); }}
             >
               <SelectTrigger id="contract-type" data-testid="select-contract-type">
-                <SelectValue placeholder="Vertragstyp wählen…" />
+                <SelectValue placeholder={t("pages.contracts.createDialog.selectContractType")} />
               </SelectTrigger>
               <SelectContent>
                 {typeOptions.map(o => (
@@ -189,20 +192,20 @@ export function ContractFormDialog({ open, onOpenChange, defaultDealId }: Props)
               </SelectContent>
             </Select>
             <p className="text-xs text-muted-foreground">
-              Vorausgewählt anhand des Templates. Du kannst jederzeit einen anderen Typ wählen.
+              {t("pages.contracts.createDialog.contractTypeHint")}
             </p>
           </div>
         </div>
 
         <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)}>Abbrechen</Button>
+          <Button variant="outline" onClick={() => onOpenChange(false)}>{t("pages.contracts.createDialog.cancel")}</Button>
           <Button
             onClick={handleSubmit}
             disabled={!canSubmit}
             data-testid="button-create-contract"
           >
             {create.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-            Anlegen
+            {t("pages.contracts.createDialog.create")}
           </Button>
         </DialogFooter>
       </DialogContent>

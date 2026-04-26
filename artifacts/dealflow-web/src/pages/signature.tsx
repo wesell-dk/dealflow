@@ -35,18 +35,18 @@ import { useTranslation } from "react-i18next";
 import { de } from "date-fns/locale";
 
 const statusBadge: Record<string, { label: string; cls: string; icon: React.ComponentType<{className?: string}> }> = {
-  pending:  { label: "Ausstehend",   cls: "bg-slate-100 text-slate-700 border-slate-200",   icon: Clock },
-  sent:     { label: "Versendet",    cls: "bg-blue-50 text-blue-700 border-blue-200",       icon: Send },
-  viewed:   { label: "Angesehen",    cls: "bg-amber-50 text-amber-700 border-amber-200",    icon: Eye },
-  signed:   { label: "Signiert",     cls: "bg-emerald-50 text-emerald-700 border-emerald-200", icon: Check },
-  declined: { label: "Abgelehnt",    cls: "bg-rose-50 text-rose-700 border-rose-200",       icon: XCircle },
+  pending:  { label: "Pending",   cls: "bg-slate-100 text-slate-700 border-slate-200",   icon: Clock },
+  sent:     { label: "Sent",      cls: "bg-blue-50 text-blue-700 border-blue-200",       icon: Send },
+  viewed:   { label: "Viewed",    cls: "bg-amber-50 text-amber-700 border-amber-200",    icon: Eye },
+  signed:   { label: "Signed",    cls: "bg-emerald-50 text-emerald-700 border-emerald-200", icon: Check },
+  declined: { label: "Declined",  cls: "bg-rose-50 text-rose-700 border-rose-200",       icon: XCircle },
 };
 
 const packageStatusBadge: Record<string, { label: string; variant: "secondary" | "default" | "outline" | "destructive" }> = {
-  draft:       { label: "Entwurf",      variant: "outline" },
-  in_progress: { label: "In Bearbeitung", variant: "default" },
-  completed:   { label: "Abgeschlossen", variant: "secondary" },
-  blocked:     { label: "Blockiert",    variant: "destructive" },
+  draft:       { label: "Draft",       variant: "outline" },
+  in_progress: { label: "In progress", variant: "default" },
+  completed:   { label: "Completed",   variant: "secondary" },
+  blocked:     { label: "Blocked",     variant: "destructive" },
 };
 
 export default function SignatureDetail() {
@@ -69,7 +69,7 @@ export default function SignatureDetail() {
   const [fallback, setFallback] = useState({ name: "", email: "", role: "" });
 
   if (isLoading) return <div className="p-8"><Skeleton className="h-64 w-full" /></div>;
-  if (!pkg) return <div className="p-8">Signature-Package nicht gefunden.</div>;
+  if (!pkg) return <div className="p-8">Signature package not found.</div>;
 
   const invalidate = () => {
     qc.invalidateQueries({ queryKey: getGetSignaturePackageQueryKey(id) });
@@ -85,22 +85,22 @@ export default function SignatureDetail() {
 
   const handleReminder = () => {
     sendReminder.mutate({ id }, {
-      onSuccess: () => { toast({ title: "Reminder gesendet" }); invalidate(); },
-      onError: () => toast({ title: "Reminder konnte nicht gesendet werden", variant: "destructive" }),
+      onSuccess: () => { toast({ title: "Reminder sent" }); invalidate(); },
+      onError: () => toast({ title: "Reminder could not be sent", variant: "destructive" }),
     });
   };
 
   const handleSign = (signerId: string) => {
     sign.mutate({ id: signerId }, {
       onSuccess: (res) => {
-        toast({ title: "Signatur erfasst" });
+        toast({ title: "Signature recorded" });
         invalidate();
         if (res.status === "completed" && res.orderConfirmationId) {
           qc.invalidateQueries({ queryKey: getListOrderConfirmationsQueryKey() });
-          toast({ title: "Auftragsbestätigung erzeugt", description: `OC ${res.orderConfirmationId}` });
+          toast({ title: "Order confirmation created", description: `OC ${res.orderConfirmationId}` });
         }
       },
-      onError: () => toast({ title: "Signatur nicht möglich", variant: "destructive" }),
+      onError: () => toast({ title: "Signature failed", variant: "destructive" }),
     });
   };
 
@@ -108,17 +108,17 @@ export default function SignatureDetail() {
     if (!declineTarget) return;
     decline.mutate({ id: declineTarget.id, data: { reason: declineReason || undefined } }, {
       onSuccess: () => {
-        toast({ title: "Signatur abgelehnt – Package blockiert" });
+        toast({ title: "Signature declined – package blocked" });
         setDeclineTarget(null); setDeclineReason("");
         invalidate();
       },
-      onError: () => toast({ title: "Ablehnung konnte nicht erfasst werden", variant: "destructive" }),
+      onError: () => toast({ title: "Decline could not be recorded", variant: "destructive" }),
     });
   };
 
   const submitEscalate = () => {
     if (!fallback.name.trim() || !fallback.email.trim()) {
-      toast({ title: "Name und E-Mail erforderlich", variant: "destructive" }); return;
+      toast({ title: "Name and email required", variant: "destructive" }); return;
     }
     escalate.mutate({
       id,
@@ -130,11 +130,11 @@ export default function SignatureDetail() {
       },
     }, {
       onSuccess: () => {
-        toast({ title: "Fallback-Signer aktiviert" });
+        toast({ title: "Fallback signer activated" });
         setEscalateOpen(false); setFallback({ name: "", email: "", role: "" });
         invalidate();
       },
-      onError: () => toast({ title: "Eskalation fehlgeschlagen", variant: "destructive" }),
+      onError: () => toast({ title: "Escalation failed", variant: "destructive" }),
     });
   };
 
@@ -154,7 +154,7 @@ export default function SignatureDetail() {
               <span className="font-medium text-foreground">{pkg.dealName}</span>
               <span>&bull;</span>
               <Badge variant="outline" className="font-normal">
-                {pkg.mode === "parallel" ? "Parallel" : "Sequentiell"}
+                {pkg.mode === "parallel" ? "Parallel" : "Sequential"}
               </Badge>
               <span>&bull;</span>
               <span>Deadline: {pkg.deadline ? format(new Date(pkg.deadline), "dd.MM.yyyy") : "—"}</span>
@@ -165,21 +165,21 @@ export default function SignatureDetail() {
 
         <div className="mt-4 grid grid-cols-1 md:grid-cols-3 gap-4">
           <Card><CardContent className="p-4">
-            <div className="text-xs text-muted-foreground mb-1">Fortschritt</div>
+            <div className="text-xs text-muted-foreground mb-1">Progress</div>
             <div className="text-2xl font-bold">{pkg.signedCount} / {pkg.totalSigners}</div>
             <Progress value={(pkg.signedCount / Math.max(1, pkg.totalSigners)) * 100} className="h-2 mt-2" />
           </CardContent></Card>
 
           <Card><CardContent className="p-4">
-            <div className="text-xs text-muted-foreground mb-1">Wartet auf</div>
+            <div className="text-xs text-muted-foreground mb-1">Waiting on</div>
             {pkg.status === "completed" ? (
-              <div className="text-sm font-medium text-emerald-700">Alle Unterschriften vollständig</div>
+              <div className="text-sm font-medium text-emerald-700">All signatures complete</div>
             ) : pkg.status === "blocked" ? (
-              <div className="text-sm font-medium text-rose-700">Blockiert durch Ablehnung</div>
+              <div className="text-sm font-medium text-rose-700">Blocked by rejection</div>
             ) : waitingName ? (
               <>
                 <div className="text-sm font-semibold">{waitingName}</div>
-                <div className="text-xs text-muted-foreground">seit {Math.round(waitingHours / 24)} Tagen ({waitingHours}h)</div>
+                <div className="text-xs text-muted-foreground">for {Math.round(waitingHours / 24)} days ({waitingHours}h)</div>
               </>
             ) : (
               <div className="text-sm text-muted-foreground">—</div>
@@ -187,16 +187,16 @@ export default function SignatureDetail() {
           </CardContent></Card>
 
           <Card><CardContent className="p-4">
-            <div className="text-xs text-muted-foreground mb-1">Reminder / Eskalation</div>
-            <div className="text-xs">Intervall: {pkg.reminderIntervalHours}h, Eskalation nach {pkg.escalationAfterHours}h</div>
+            <div className="text-xs text-muted-foreground mb-1">Reminder / escalation</div>
+            <div className="text-xs">Interval: {pkg.reminderIntervalHours}h, escalation after {pkg.escalationAfterHours}h</div>
             {nextReminder && pkg.status === "in_progress" && (
               <div className="text-xs mt-1 text-muted-foreground">
-                Nächster Reminder: {formatDistanceToNowStrict(nextReminder, { addSuffix: true, locale: de })}
+                Next reminder: {formatDistanceToNowStrict(nextReminder, { addSuffix: true, locale: de })}
               </div>
             )}
             {escalateAt && pkg.status === "in_progress" && (
               <div className="text-xs text-muted-foreground">
-                Eskalations-Fenster: {formatDistanceToNowStrict(escalateAt, { addSuffix: true, locale: de })}
+                Escalation window: {formatDistanceToNowStrict(escalateAt, { addSuffix: true, locale: de })}
               </div>
             )}
           </CardContent></Card>
@@ -205,22 +205,22 @@ export default function SignatureDetail() {
         <div className="flex flex-wrap gap-2 mt-4">
           {pkg.status === "in_progress" && (
             <Button onClick={handleReminder} disabled={sendReminder.isPending} size="sm">
-              <Bell className="h-4 w-4 mr-2" /> Reminder jetzt senden
+              <Bell className="h-4 w-4 mr-2" /> Send reminder now
             </Button>
           )}
           {pkg.status === "blocked" && declinedSigner && (
             <Dialog open={escalateOpen} onOpenChange={setEscalateOpen}>
               <DialogTrigger asChild>
                 <Button size="sm" variant="destructive">
-                  <UserPlus className="h-4 w-4 mr-2" /> Eskalieren: Fallback-Signer
+                  <UserPlus className="h-4 w-4 mr-2" /> Escalate: fallback signer
                 </Button>
               </DialogTrigger>
               <DialogContent>
                 <DialogHeader>
-                  <DialogTitle>Fallback-Signer aktivieren</DialogTitle>
+                  <DialogTitle>Activate fallback signer</DialogTitle>
                   <DialogDescription>
-                    Ersetzt <span className="font-medium">{declinedSigner.name}</span> ({declinedSigner.role}).
-                    Ablehnungs-Grund: {declinedSigner.declineReason ?? "—"}
+                    Replaces <span className="font-medium">{declinedSigner.name}</span> ({declinedSigner.role}).
+                    Decline reason: {declinedSigner.declineReason ?? "—"}
                   </DialogDescription>
                 </DialogHeader>
                 <div className="space-y-3 py-2">
@@ -229,24 +229,24 @@ export default function SignatureDetail() {
                     <Input id="fbName" value={fallback.name} onChange={e => setFallback({ ...fallback, name: e.target.value })} />
                   </div>
                   <div className="space-y-1">
-                    <Label htmlFor="fbEmail">E-Mail</Label>
+                    <Label htmlFor="fbEmail">Email</Label>
                     <Input id="fbEmail" type="email" value={fallback.email} onChange={e => setFallback({ ...fallback, email: e.target.value })} />
                   </div>
                   <div className="space-y-1">
-                    <Label htmlFor="fbRole">Rolle</Label>
-                    <Input id="fbRole" placeholder="z. B. Stellv. CFO" value={fallback.role} onChange={e => setFallback({ ...fallback, role: e.target.value })} />
+                    <Label htmlFor="fbRole">Role</Label>
+                    <Input id="fbRole" placeholder="e.g. Deputy CFO" value={fallback.role} onChange={e => setFallback({ ...fallback, role: e.target.value })} />
                   </div>
                 </div>
                 <DialogFooter>
-                  <Button variant="outline" onClick={() => setEscalateOpen(false)}>Abbrechen</Button>
-                  <Button onClick={submitEscalate} disabled={escalate.isPending}>Aktivieren</Button>
+                  <Button variant="outline" onClick={() => setEscalateOpen(false)}>Cancel</Button>
+                  <Button onClick={submitEscalate} disabled={escalate.isPending}>Activate</Button>
                 </DialogFooter>
               </DialogContent>
             </Dialog>
           )}
           {pkg.status === "completed" && pkg.orderConfirmationId && (
             <Button size="sm" variant="outline" onClick={() => setLocation(`/order-confirmations/${pkg.orderConfirmationId}`)}>
-              <ArrowRight className="h-4 w-4 mr-2" /> Auftragsbestätigung öffnen ({pkg.orderConfirmationId})
+              <ArrowRight className="h-4 w-4 mr-2" /> Open order confirmation ({pkg.orderConfirmationId})
             </Button>
           )}
         </div>
@@ -255,9 +255,9 @@ export default function SignatureDetail() {
           <div className="mt-4 border border-rose-200 bg-rose-50 rounded-md p-3 text-sm flex gap-2 items-start">
             <AlertOctagon className="h-4 w-4 text-rose-600 shrink-0 mt-0.5" />
             <div>
-              <div className="font-medium text-rose-900">Package blockiert</div>
+              <div className="font-medium text-rose-900">Package blocked</div>
               <div className="text-rose-800/80">
-                Eine Unterschrift wurde abgelehnt. Aktiviere einen Fallback-Signer, um fortzufahren.
+                A signature was declined. Activate a fallback signer to continue.
               </div>
             </div>
           </div>
@@ -265,7 +265,7 @@ export default function SignatureDetail() {
       </div>
 
       <div>
-        <h3 className="text-xl font-bold mb-4">Signer-Reihenfolge</h3>
+        <h3 className="text-xl font-bold mb-4">Signer order</h3>
 
         <div className="space-y-3">
           {pkg.signers?.slice().sort((a, b) => a.order - b.order).map((signer) => {
@@ -294,13 +294,13 @@ export default function SignatureDetail() {
                       </div>
                       <div className="flex items-center gap-3 text-xs text-muted-foreground flex-wrap">
                         <span className="flex items-center gap-1"><Mail className="w-3 h-3" /> {signer.email}</span>
-                        {signer.sentAt && <span>Versendet {format(new Date(signer.sentAt), "dd.MM. HH:mm")}</span>}
-                        {signer.viewedAt && <span>Angesehen {format(new Date(signer.viewedAt), "dd.MM. HH:mm")}</span>}
-                        {signer.signedAt && <span className="text-emerald-700">Signiert {format(new Date(signer.signedAt), "dd.MM. HH:mm")}</span>}
-                        {signer.lastReminderAt && <span>Letzter Reminder {format(new Date(signer.lastReminderAt), "dd.MM. HH:mm")}</span>}
+                        {signer.sentAt && <span>Sent {format(new Date(signer.sentAt), "dd.MM. HH:mm")}</span>}
+                        {signer.viewedAt && <span>Viewed {format(new Date(signer.viewedAt), "dd.MM. HH:mm")}</span>}
+                        {signer.signedAt && <span className="text-emerald-700">Signed {format(new Date(signer.signedAt), "dd.MM. HH:mm")}</span>}
+                        {signer.lastReminderAt && <span>Last reminder {format(new Date(signer.lastReminderAt), "dd.MM. HH:mm")}</span>}
                       </div>
                       {signer.status === "declined" && signer.declineReason && (
-                        <div className="text-xs text-rose-800 mt-1">Grund: {signer.declineReason}</div>
+                        <div className="text-xs text-rose-800 mt-1">Reason: {signer.declineReason}</div>
                       )}
                     </div>
                   </div>
@@ -308,10 +308,10 @@ export default function SignatureDetail() {
                   {canAct && (
                     <div className="flex gap-2">
                       <Button size="sm" variant="outline" onClick={() => handleSign(signer.id)} disabled={sign.isPending}>
-                        <PenTool className="h-3 w-3 mr-1" /> Signatur erfassen
+                        <PenTool className="h-3 w-3 mr-1" /> Capture signature
                       </Button>
                       <Button size="sm" variant="ghost" onClick={() => { setDeclineTarget(signer); setDeclineReason(""); }}>
-                        <XCircle className="h-3 w-3 mr-1" /> Ablehnen
+                        <XCircle className="h-3 w-3 mr-1" /> Decline
                       </Button>
                     </div>
                   )}
@@ -325,24 +325,24 @@ export default function SignatureDetail() {
       <Dialog open={!!declineTarget} onOpenChange={(open) => { if (!open) setDeclineTarget(null); }}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Signatur ablehnen</DialogTitle>
+            <DialogTitle>Decline signature</DialogTitle>
             <DialogDescription>
-              {declineTarget?.name} ({declineTarget?.role}) — das Package geht in den Status „Blockiert".
+              {declineTarget?.name} ({declineTarget?.role}) — the package will move to status "Blocked".
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-2 py-2">
-            <Label htmlFor="declReason">Grund (optional)</Label>
+            <Label htmlFor="declReason">Reason (optional)</Label>
             <Textarea id="declReason" value={declineReason} onChange={e => setDeclineReason(e.target.value)} rows={3} />
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setDeclineTarget(null)}>Abbrechen</Button>
-            <Button variant="destructive" onClick={submitDecline} disabled={decline.isPending}>Ablehnen</Button>
+            <Button variant="outline" onClick={() => setDeclineTarget(null)}>Cancel</Button>
+            <Button variant="destructive" onClick={submitDecline} disabled={decline.isPending}>Decline</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
       <div className="flex justify-end">
-        <Button variant="ghost" asChild><Link href="/signatures">Zurück zur Liste</Link></Button>
+        <Button variant="ghost" asChild><Link href="/signatures">Back to list</Link></Button>
       </div>
     </div>
   );

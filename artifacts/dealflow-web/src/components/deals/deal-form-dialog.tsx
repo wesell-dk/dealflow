@@ -131,7 +131,7 @@ export function DealFormDialog({ open, onOpenChange, deal, defaultAccountId, onS
     e.preventDefault();
     const trimmedName = name.trim();
     if (!trimmedName) {
-      toast({ title: "Name fehlt", variant: "destructive" });
+      toast({ title: "Name missing", variant: "destructive" });
       return;
     }
     // Wert ist optional bei Anlage — wird beim ersten akzeptierten Angebot
@@ -140,20 +140,20 @@ export function DealFormDialog({ open, onOpenChange, deal, defaultAccountId, onS
     const valueProvided = value.trim() !== "";
     const numValue = valueProvided ? Number(value) : 0;
     if (valueProvided && (Number.isNaN(numValue) || numValue < 0)) {
-      toast({ title: "Wert ungültig", description: "Bitte einen positiven Betrag angeben oder leer lassen.", variant: "destructive" });
+      toast({ title: "Invalid value", description: "Please enter a positive amount or leave empty.", variant: "destructive" });
       return;
     }
     // Company wird aus der gewählten Marke abgeleitet — die separate Pflicht-
     // prüfung entfällt, sobald eine Marke gewählt ist.
     if (!isEdit && (!accountId || !brandId || !ownerId || !expectedCloseDate)) {
-      toast({ title: "Pflichtfelder fehlen", description: "Kunde, Marke, Verantwortlich und Abschlussdatum sind erforderlich.", variant: "destructive" });
+      toast({ title: "Required fields missing", description: "Customer, brand, owner and close date are required.", variant: "destructive" });
       return;
     }
     // Sicherheits-Netz: ohne aufgelöste Brand-Daten haben wir keine companyId
     // und dürfen nicht senden — sonst lehnt das Backend (Brand/Company-
     // Konsistenzprüfung) den Request ab.
     if (!isEdit && !derivedCompanyId) {
-      toast({ title: "Marke wird geladen", description: "Bitte einen Moment warten und erneut versuchen.", variant: "destructive" });
+      toast({ title: "Brand is loading", description: "Please wait a moment and try again.", variant: "destructive" });
       return;
     }
     try {
@@ -182,7 +182,7 @@ export function DealFormDialog({ open, onOpenChange, deal, defaultAccountId, onS
         await qc.invalidateQueries({ queryKey: getListDealsQueryKey() });
         await qc.invalidateQueries({ queryKey: getGetDealPipelineQueryKey() });
         await qc.invalidateQueries({ queryKey: getGetAccountQueryKey(deal.accountId) });
-        toast({ title: "Deal aktualisiert", description: trimmedName });
+        toast({ title: "Deal updated", description: trimmedName });
         onSaved?.(deal.id);
       } else {
         const result = await create.mutateAsync({
@@ -208,13 +208,13 @@ export function DealFormDialog({ open, onOpenChange, deal, defaultAccountId, onS
         await qc.invalidateQueries({ queryKey: getGetAccountQueryKey(accountId) });
         await qc.invalidateQueries({ queryKey: getListAccountsQueryKey() });
         markStep("deal");
-        toast({ title: "Deal angelegt", description: trimmedName });
+        toast({ title: "Deal created", description: trimmedName });
         onSaved?.(result.id);
       }
       onOpenChange(false);
     } catch (err) {
-      const msg = err instanceof Error ? err.message : "Speichern fehlgeschlagen";
-      toast({ title: "Fehler", description: msg, variant: "destructive" });
+      const msg = err instanceof Error ? err.message : "Save failed";
+      toast({ title: "Error", description: msg, variant: "destructive" });
     }
   };
 
@@ -224,11 +224,11 @@ export function DealFormDialog({ open, onOpenChange, deal, defaultAccountId, onS
     <Dialog open={open} onOpenChange={(o) => { if (!pending) onOpenChange(o); }}>
       <DialogContent className="max-w-xl max-h-[90vh] overflow-y-auto" data-testid="deal-form-dialog">
         <DialogHeader>
-          <DialogTitle>{isEdit ? "Deal bearbeiten" : "Deal anlegen"}</DialogTitle>
+          <DialogTitle>{isEdit ? "Edit deal" : "Create deal"}</DialogTitle>
           <DialogDescription>
             {isEdit
-              ? "Aktualisiere Phase, Wert und nächsten Schritt dieses Deals."
-              : "Erfasse eine neue Verkaufschance mit Kunde, Marke und erwartetem Abschluss."}
+              ? "Update stage, value and next step of this deal."
+              : "Capture a new opportunity with customer, brand and expected close date."}
           </DialogDescription>
         </DialogHeader>
         <form onSubmit={submit} className="space-y-4">
@@ -239,7 +239,7 @@ export function DealFormDialog({ open, onOpenChange, deal, defaultAccountId, onS
               data-testid="deal-form-name"
               value={name}
               onChange={(e) => setName(e.target.value)}
-              placeholder="z.B. ACME – Wartungsvertrag 2026"
+              placeholder="e.g. ACME – Maintenance contract 2026"
               autoFocus
               disabled={pending}
             />
@@ -247,12 +247,12 @@ export function DealFormDialog({ open, onOpenChange, deal, defaultAccountId, onS
 
           {!isEdit && (
             <div className="space-y-2">
-              <Label htmlFor="deal-account">Kunde *</Label>
+              <Label htmlFor="deal-account">Customer *</Label>
               <Select value={accountId} onValueChange={setAccountId} disabled={pending}>
-                <SelectTrigger id="deal-account" data-testid="deal-form-account"><SelectValue placeholder="Kunde wählen…" /></SelectTrigger>
+                <SelectTrigger id="deal-account" data-testid="deal-form-account"><SelectValue placeholder="Choose customer…" /></SelectTrigger>
                 <SelectContent>
                   {accounts?.map(a => <SelectItem key={a.id} value={a.id}>{a.name}</SelectItem>)}
-                  {!accounts?.length && <div className="px-2 py-1.5 text-xs text-muted-foreground">Noch keine Kunden – lege erst einen Kunden an.</div>}
+                  {!accounts?.length && <div className="px-2 py-1.5 text-xs text-muted-foreground">No customers yet – create one first.</div>}
                 </SelectContent>
               </Select>
             </div>
@@ -261,7 +261,7 @@ export function DealFormDialog({ open, onOpenChange, deal, defaultAccountId, onS
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div className="space-y-2">
               <div className="flex items-center gap-1.5">
-                <Label htmlFor="deal-value">Wert (€)</Label>
+                <Label htmlFor="deal-value">Value (€)</Label>
                 <FieldHint term={{ group: "concepts", value: "value" }} />
               </div>
               <Input
@@ -272,21 +272,21 @@ export function DealFormDialog({ open, onOpenChange, deal, defaultAccountId, onS
                 step="0.01"
                 value={value}
                 onChange={(e) => setValue(e.target.value)}
-                placeholder="optional – wird aus Angebot übernommen"
+                placeholder="optional – taken from accepted quote"
                 disabled={pending}
               />
               {!isEdit && (
                 <p className="text-xs text-muted-foreground">
-                  Leer lassen, wenn der Wert erst aus dem ersten akzeptierten Angebot folgt.
+                  Leave empty if the value only follows from the first accepted quote.
                 </p>
               )}
             </div>
             <div className="space-y-2">
               <div className="flex items-center gap-1.5">
-                <Label htmlFor="deal-stage">Phase *</Label>
+                <Label htmlFor="deal-stage">Stage *</Label>
                 <FieldHint
-                  title="Pipeline-Phasen"
-                  text="Qualifiziert → Discovery → Angebot → Verhandlung → Closing → Won/Lost. Jede Phase steht für einen klaren Reifegrad. Wähle in der Liste eine Phase, um die Detail-Erklärung zu sehen."
+                  title="Pipeline stages"
+                  text="Qualified → Discovery → Proposal → Negotiation → Closing → Won/Lost. Each stage represents a clear maturity level. Select a stage in the list to see the detailed explanation."
                 />
               </div>
               <Select value={stage} onValueChange={setStage} disabled={pending}>
@@ -309,11 +309,11 @@ export function DealFormDialog({ open, onOpenChange, deal, defaultAccountId, onS
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div className="space-y-2">
                 <div className="flex items-center gap-1.5">
-                  <Label htmlFor="deal-brand">Marke *</Label>
+                  <Label htmlFor="deal-brand">Brand *</Label>
                   <FieldHint term={{ group: "concepts", value: "brand" }} />
                 </div>
                 <Select value={brandId} onValueChange={setBrandId} disabled={pending}>
-                  <SelectTrigger id="deal-brand" data-testid="deal-form-brand"><SelectValue placeholder="Marke wählen…" /></SelectTrigger>
+                  <SelectTrigger id="deal-brand" data-testid="deal-form-brand"><SelectValue placeholder="Choose brand…" /></SelectTrigger>
                   <SelectContent>
                     {brands?.map(b => <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>)}
                   </SelectContent>
@@ -333,13 +333,13 @@ export function DealFormDialog({ open, onOpenChange, deal, defaultAccountId, onS
                   id="deal-company"
                   data-testid="deal-form-company"
                   value={derivedCompanyName}
-                  placeholder={brandId ? "Wird aus Marke abgeleitet…" : "Erst eine Marke wählen"}
+                  placeholder={brandId ? "Derived from brand…" : "Select a brand first"}
                   readOnly
                   disabled
                   aria-describedby="deal-company-hint"
                 />
                 <p id="deal-company-hint" className="text-xs text-muted-foreground">
-                  Wird automatisch aus der gewählten Marke übernommen.
+                  Automatically inherited from the selected brand.
                 </p>
               </div>
             </div>
@@ -348,11 +348,11 @@ export function DealFormDialog({ open, onOpenChange, deal, defaultAccountId, onS
           {!isEdit && (
             <div className="space-y-2">
               <div className="flex items-center gap-1.5">
-                <Label htmlFor="deal-owner">Verantwortlich *</Label>
+                <Label htmlFor="deal-owner">Owner *</Label>
                 <FieldHint term={{ group: "concepts", value: "owner" }} />
               </div>
               <Select value={ownerId} onValueChange={setOwnerId} disabled={pending}>
-                <SelectTrigger id="deal-owner" data-testid="deal-form-owner"><SelectValue placeholder="User wählen…" /></SelectTrigger>
+                <SelectTrigger id="deal-owner" data-testid="deal-form-owner"><SelectValue placeholder="Choose user…" /></SelectTrigger>
                 <SelectContent>
                   {users?.map(u => <SelectItem key={u.id} value={u.id}>{u.name}</SelectItem>)}
                 </SelectContent>
@@ -363,7 +363,7 @@ export function DealFormDialog({ open, onOpenChange, deal, defaultAccountId, onS
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div className="space-y-2">
               <div className="flex items-center gap-1.5">
-                <Label htmlFor="deal-close">Erwartetes Abschlussdatum {!isEdit && "*"}</Label>
+                <Label htmlFor="deal-close">Expected close date {!isEdit && "*"}</Label>
                 <FieldHint term={{ group: "concepts", value: "expectedCloseDate" }} />
               </div>
               <Input
@@ -379,7 +379,7 @@ export function DealFormDialog({ open, onOpenChange, deal, defaultAccountId, onS
             {isEdit && (
               <div className="space-y-2">
                 <div className="flex items-center gap-1.5">
-                  <Label htmlFor="deal-prob">Wahrscheinlichkeit (%)</Label>
+                  <Label htmlFor="deal-prob">Probability (%)</Label>
                   <FieldHint term={{ group: "concepts", value: "probability" }} />
                 </div>
                 <Input
@@ -398,13 +398,13 @@ export function DealFormDialog({ open, onOpenChange, deal, defaultAccountId, onS
 
           {isEdit && (
             <div className="space-y-2">
-              <Label htmlFor="deal-next">Nächster Schritt</Label>
+              <Label htmlFor="deal-next">Next step</Label>
               <Input
                 id="deal-next"
                 data-testid="deal-form-next"
                 value={nextStep}
                 onChange={(e) => setNextStep(e.target.value)}
-                placeholder="z.B. Demo am 12.05. mit CTO"
+                placeholder="e.g. Demo on May 12 with CTO"
                 disabled={pending}
               />
             </div>
@@ -412,11 +412,11 @@ export function DealFormDialog({ open, onOpenChange, deal, defaultAccountId, onS
 
           <DialogFooter>
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)} disabled={pending}>
-              Abbrechen
+              Cancel
             </Button>
             <Button type="submit" disabled={pending} data-testid="deal-form-submit">
               {pending && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-              {isEdit ? "Speichern" : "Deal anlegen"}
+              {isEdit ? "Save" : "Create deal"}
             </Button>
           </DialogFooter>
         </form>

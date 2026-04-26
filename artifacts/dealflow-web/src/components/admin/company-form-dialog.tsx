@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   useCreateCompany,
@@ -21,11 +22,12 @@ import { Loader2 } from "lucide-react";
 interface Props {
   open: boolean;
   onOpenChange: (v: boolean) => void;
-  /** Falls gesetzt: Edit-Modus, sonst Create. */
+  /** Edit mode if set, otherwise create. */
   company?: Company | null;
 }
 
 export function CompanyFormDialog({ open, onOpenChange, company }: Props) {
+  const { t } = useTranslation();
   const { toast } = useToast();
   const qc = useQueryClient();
   const createMut = useCreateCompany();
@@ -39,7 +41,7 @@ export function CompanyFormDialog({ open, onOpenChange, company }: Props) {
   const [currency, setCurrency] = useState("EUR");
   const [alsoCreateBrand, setAlsoCreateBrand] = useState(true);
 
-  // Werte synchronisieren, wenn Dialog mit anderer Company geöffnet wird.
+  // Sync values when the dialog opens with a different company.
   useEffect(() => {
     if (open) {
       setName(company?.name ?? "");
@@ -56,15 +58,15 @@ export function CompanyFormDialog({ open, onOpenChange, company }: Props) {
     const c2 = country.trim().toUpperCase();
     const c3 = currency.trim().toUpperCase();
     if (!trimmedName || !trimmedLegal) {
-      toast({ title: "Eingabe unvollständig", description: "Name und juristischer Name sind Pflicht.", variant: "destructive" });
+      toast({ title: t("pages.admin.incompleteInputTitle"), description: t("pages.admin.incompleteInputBody"), variant: "destructive" });
       return;
     }
     if (!/^[A-Z]{2}$/.test(c2)) {
-      toast({ title: "Ungültiges Land", description: "Bitte ISO-2-Code (z. B. DE, CH, AT).", variant: "destructive" });
+      toast({ title: t("pages.admin.companyDialog.invalidCountry"), description: t("pages.admin.companyDialog.invalidCountryHint"), variant: "destructive" });
       return;
     }
     if (!/^[A-Z]{3}$/.test(c3)) {
-      toast({ title: "Ungültige Währung", description: "Bitte ISO-3-Code (z. B. EUR, CHF, USD).", variant: "destructive" });
+      toast({ title: t("pages.admin.companyDialog.invalidCurrency"), description: t("pages.admin.companyDialog.invalidCurrencyHint"), variant: "destructive" });
       return;
     }
     try {
@@ -73,15 +75,15 @@ export function CompanyFormDialog({ open, onOpenChange, company }: Props) {
           id: company.id,
           data: { name: trimmedName, legalName: trimmedLegal, country: c2, currency: c3 },
         });
-        toast({ title: "Gesellschaft aktualisiert", description: trimmedName });
+        toast({ title: t("pages.admin.companyUpdated"), description: trimmedName });
       } else {
         const created = await createMut.mutateAsync({
           data: { name: trimmedName, legalName: trimmedLegal, country: c2, currency: c3 },
         });
-        toast({ title: "Gesellschaft angelegt", description: trimmedName });
+        toast({ title: t("pages.admin.companyCreated"), description: trimmedName });
 
-        // F10: Optional die Firma direkt als Standard-Marke spiegeln, damit
-        // einfache Tenants ohne Sub-Brand-Hierarchie sofort verkaufen können.
+        // F10: Optionally mirror the company directly as a default brand so simple
+        // tenants without a sub-brand hierarchy can sell immediately.
         if (alsoCreateBrand) {
           try {
             await createBrandMut.mutateAsync({
@@ -96,12 +98,12 @@ export function CompanyFormDialog({ open, onOpenChange, company }: Props) {
               },
             });
             await qc.invalidateQueries({ queryKey: getListBrandsQueryKey() });
-            toast({ title: "Standard-Marke angelegt", description: `Marke "${trimmedName}" gespiegelt.` });
+            toast({ title: t("pages.admin.companyDialog.defaultBrandCreated"), description: t("pages.admin.companyDialog.defaultBrandCreatedDesc", { name: trimmedName }) });
           } catch (be) {
-            // Best-effort: Brand-Anlage darf den Company-Workflow nicht crashen
+            // Best-effort: brand creation must not crash the company workflow
             toast({
-              title: "Marke konnte nicht erstellt werden",
-              description: be instanceof Error ? be.message : "Bitte später manuell anlegen.",
+              title: t("pages.admin.companyDialog.brandCreateFailed"),
+              description: be instanceof Error ? be.message : t("pages.admin.companyDialog.brandCreateFailedFallback"),
               variant: "destructive",
             });
           }
@@ -113,8 +115,8 @@ export function CompanyFormDialog({ open, onOpenChange, company }: Props) {
       const status = (e as { response?: { status?: number } })?.response?.status;
       const body = (e as { response?: { data?: { error?: string } } })?.response?.data;
       toast({
-        title: status === 409 ? "Name bereits vergeben" : "Speichern fehlgeschlagen",
-        description: body?.error ?? (e instanceof Error ? e.message : "Unbekannter Fehler"),
+        title: status === 409 ? t("pages.admin.nameTaken") : t("common.saveFailed"),
+        description: body?.error ?? (e instanceof Error ? e.message : t("pages.admin.brandDialog.unknownError")),
         variant: "destructive",
       });
     }
@@ -126,31 +128,30 @@ export function CompanyFormDialog({ open, onOpenChange, company }: Props) {
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-md">
         <DialogHeader>
-          <DialogTitle>{isEdit ? "Gesellschaft bearbeiten" : "Neue Gesellschaft anlegen"}</DialogTitle>
+          <DialogTitle>{isEdit ? t("pages.admin.companyDialog.titleEdit") : t("pages.admin.companyDialog.titleNew")}</DialogTitle>
           <DialogDescription>
-            Juristische Einheit innerhalb deines Tenants — z. B. die operative GmbH oder Tochtergesellschaft.
-            Markenauftritte hängen darunter.
+            {t("pages.admin.companyDialog.description")}
           </DialogDescription>
         </DialogHeader>
 
         <div className="space-y-4 py-2">
           <div className="space-y-1.5">
-            <Label htmlFor="company-name">Anzeige-Name *</Label>
-            <Input id="company-name" value={name} onChange={e => setName(e.target.value)} placeholder="Helix Logistics" data-testid="input-company-name" />
-            <p className="text-xs text-muted-foreground">Der Name, wie er in DealFlow erscheint.</p>
+            <Label htmlFor="company-name">{t("pages.admin.companyDialog.displayName")}</Label>
+            <Input id="company-name" value={name} onChange={e => setName(e.target.value)} placeholder={t("pages.admin.companyDialog.displayNamePlaceholder")} data-testid="input-company-name" />
+            <p className="text-xs text-muted-foreground">{t("pages.admin.companyDialog.displayNameHint")}</p>
           </div>
           <div className="space-y-1.5">
-            <Label htmlFor="company-legal">Juristischer Name *</Label>
-            <Input id="company-legal" value={legalName} onChange={e => setLegalName(e.target.value)} placeholder="Helix Logistics GmbH" data-testid="input-company-legal" />
-            <p className="text-xs text-muted-foreground">Vollständiger Firmenwortlaut wie im Handelsregister.</p>
+            <Label htmlFor="company-legal">{t("pages.admin.companyDialog.legalName")}</Label>
+            <Input id="company-legal" value={legalName} onChange={e => setLegalName(e.target.value)} placeholder={t("pages.admin.companyDialog.legalNamePlaceholder")} data-testid="input-company-legal" />
+            <p className="text-xs text-muted-foreground">{t("pages.admin.companyDialog.legalNameHint")}</p>
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1.5">
-              <Label htmlFor="company-country">Land (ISO-2)</Label>
+              <Label htmlFor="company-country">{t("pages.admin.companyDialog.country")}</Label>
               <Input id="company-country" value={country} onChange={e => setCountry(e.target.value.toUpperCase())} maxLength={2} placeholder="DE" data-testid="input-company-country" />
             </div>
             <div className="space-y-1.5">
-              <Label htmlFor="company-currency">Währung (ISO-3)</Label>
+              <Label htmlFor="company-currency">{t("pages.admin.companyDialog.currency")}</Label>
               <Input id="company-currency" value={currency} onChange={e => setCurrency(e.target.value.toUpperCase())} maxLength={3} placeholder="EUR" data-testid="input-company-currency" />
             </div>
           </div>
@@ -165,10 +166,9 @@ export function CompanyFormDialog({ open, onOpenChange, company }: Props) {
                 data-testid="checkbox-company-also-brand"
               />
               <div className="text-sm flex-1">
-                <div className="font-medium">Auch als Standard-Marke anlegen</div>
+                <div className="font-medium">{t("pages.admin.companyDialog.alsoCreateBrand")}</div>
                 <div className="text-xs text-muted-foreground mt-0.5">
-                  Spiegelt die Gesellschaft als Top-Level-Marke — du kannst später Sub-Marken
-                  (z. B. Premium / Lite) darunter ergänzen.
+                  {t("pages.admin.companyDialog.alsoCreateBrandHint")}
                 </div>
               </div>
             </label>
@@ -176,10 +176,10 @@ export function CompanyFormDialog({ open, onOpenChange, company }: Props) {
         </div>
 
         <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)} disabled={busy}>Abbrechen</Button>
+          <Button variant="outline" onClick={() => onOpenChange(false)} disabled={busy}>{t("common.cancel")}</Button>
           <Button onClick={submit} disabled={busy} data-testid="button-company-submit">
             {busy && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-            {isEdit ? "Speichern" : "Anlegen"}
+            {isEdit ? t("common.save") : t("common.create")}
           </Button>
         </DialogFooter>
       </DialogContent>

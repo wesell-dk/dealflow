@@ -75,7 +75,7 @@ export function computeRenewalRiskScore(input: RenewalRiskInput): RenewalRiskRes
     score += 25;
     factors.push({
       key: "inactivity",
-      label: `Lange keine Aktivität (${input.daysSinceLastTouch} Tage)`,
+      label: `No activity for a long time (${input.daysSinceLastTouch} days)`,
       points: 25,
     });
   }

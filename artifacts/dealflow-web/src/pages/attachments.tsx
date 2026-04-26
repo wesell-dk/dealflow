@@ -225,8 +225,8 @@ export default function Attachments() {
                   <div className="flex items-center gap-1.5">
                     <Label htmlFor="upload-category">{t("pages.attachments.category")}</Label>
                     <FieldHint
-                      title="Kategorie"
-                      text="Bestimmt, wie das Dokument in der Bibliothek gefiltert und an Quotes/Verträge vorgeschlagen wird. Wähle einen Eintrag, um die Beschreibung zu sehen."
+                      title="Category"
+                      text="Determines how the document is filtered in the library and suggested for quotes/contracts. Pick an entry to see its description."
                     />
                   </div>
                   <Select

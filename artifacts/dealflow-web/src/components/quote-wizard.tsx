@@ -476,7 +476,7 @@ export function QuoteWizard({ open, onOpenChange, initialDealId }: Props) {
                       onClick={() => navigate("/admin#industry-profiles")}
                       data-testid="button-configure-industry"
                     >
-                      Branche konfigurieren →
+                      Configure industry →
                     </Button>
                   </div>
                 ) : null}

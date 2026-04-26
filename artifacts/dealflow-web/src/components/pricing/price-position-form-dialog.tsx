@@ -31,9 +31,9 @@ interface Props {
 }
 
 const STATUS_OPTIONS: Array<{ value: "draft" | "active" | "archived"; label: string }> = [
-  { value: "draft", label: "Entwurf" },
-  { value: "active", label: "Aktiv" },
-  { value: "archived", label: "Archiviert" },
+  { value: "draft", label: "Draft" },
+  { value: "active", label: "Active" },
+  { value: "archived", label: "Archived" },
 ];
 
 export function PricePositionFormDialog({ open, onOpenChange, position }: Props) {
@@ -106,19 +106,19 @@ export function PricePositionFormDialog({ open, onOpenChange, position }: Props)
     const trimmedCategory = category.trim();
     const lp = Number(listPrice);
     if (!trimmedSku || !trimmedName || !trimmedCategory) {
-      toast({ title: "Pflichtfelder fehlen", description: "SKU, Name und Kategorie sind erforderlich.", variant: "destructive" });
+      toast({ title: "Required fields missing", description: "SKU, name and category are required.", variant: "destructive" });
       return;
     }
     if (!Number.isFinite(lp) || lp < 0) {
-      toast({ title: "Ungültiger Preis", description: "Listenpreis muss eine nicht-negative Zahl sein.", variant: "destructive" });
+      toast({ title: "Invalid price", description: "List price must be a non-negative number.", variant: "destructive" });
       return;
     }
     if (!companyId || !brandId) {
-      toast({ title: "Zuordnung fehlt", description: "Gesellschaft und Marke wählen.", variant: "destructive" });
+      toast({ title: "Assignment missing", description: "Choose a company and brand.", variant: "destructive" });
       return;
     }
     if (!/^\d{4}-\d{2}-\d{2}$/.test(validFrom)) {
-      toast({ title: "Ungültiges Datum", description: "Gültig ab im Format YYYY-MM-DD.", variant: "destructive" });
+      toast({ title: "Invalid date", description: "Valid from must be in YYYY-MM-DD format.", variant: "destructive" });
       return;
     }
     try {
@@ -136,7 +136,7 @@ export function PricePositionFormDialog({ open, onOpenChange, position }: Props)
           isStandard,
         };
         await updateMut.mutateAsync({ id: position.id, data: patch });
-        toast({ title: "Preis-Position aktualisiert", description: trimmedSku });
+        toast({ title: "Price position updated", description: trimmedSku });
       } else {
         const body: PricePositionInput = {
           sku: trimmedSku,
@@ -149,7 +149,7 @@ export function PricePositionFormDialog({ open, onOpenChange, position }: Props)
           validFrom,
         };
         await createMut.mutateAsync({ data: body });
-        toast({ title: "Preis-Position angelegt", description: trimmedSku });
+        toast({ title: "Price position created", description: trimmedSku });
       }
       await Promise.all([
         qc.invalidateQueries({ queryKey: getListPricePositionsQueryKey() }),
@@ -160,8 +160,8 @@ export function PricePositionFormDialog({ open, onOpenChange, position }: Props)
       const status = (e as { response?: { status?: number } })?.response?.status;
       const body = (e as { response?: { data?: { error?: string } } })?.response?.data;
       toast({
-        title: status === 403 ? "Keine Berechtigung" : "Speichern fehlgeschlagen",
-        description: body?.error ?? (e instanceof Error ? e.message : "Unbekannter Fehler"),
+        title: status === 403 ? "Not authorized" : "Save failed",
+        description: body?.error ?? (e instanceof Error ? e.message : "Unknown error"),
         variant: "destructive",
       });
     }
@@ -173,11 +173,11 @@ export function PricePositionFormDialog({ open, onOpenChange, position }: Props)
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-2xl">
         <DialogHeader>
-          <DialogTitle>{isEdit ? "Preis-Position bearbeiten" : "Neue Preis-Position"}</DialogTitle>
+          <DialogTitle>{isEdit ? "Edit price position" : "New price position"}</DialogTitle>
           <DialogDescription>
             {isEdit
-              ? "Listenpreis, Status und Gültigkeit anpassen. Größere Strukturänderungen besser via neue Version."
-              : "Standard-Preis für eine Marke / Gesellschaft anlegen. Wird im Preis-Resolver berücksichtigt."}
+              ? "Adjust list price, status and validity. For larger structural changes use a new version."
+              : "Create a standard price for a brand / company. Used by the price resolver."}
           </DialogDescription>
         </DialogHeader>
 
@@ -188,8 +188,8 @@ export function PricePositionFormDialog({ open, onOpenChange, position }: Props)
               <Input id="pp-sku" value={sku} onChange={e => setSku(e.target.value)} placeholder="HX-CORE-LIC" data-testid="input-pp-sku" />
             </div>
             <div className="space-y-1.5">
-              <Label htmlFor="pp-category">Kategorie *</Label>
-              <Input id="pp-category" value={category} onChange={e => setCategory(e.target.value)} placeholder="Lizenzen, Services …" data-testid="input-pp-category" />
+              <Label htmlFor="pp-category">Category *</Label>
+              <Input id="pp-category" value={category} onChange={e => setCategory(e.target.value)} placeholder="Licenses, services…" data-testid="input-pp-category" />
             </div>
           </div>
 
@@ -200,7 +200,7 @@ export function PricePositionFormDialog({ open, onOpenChange, position }: Props)
 
           <div className="grid grid-cols-3 gap-3">
             <div className="space-y-1.5">
-              <Label htmlFor="pp-price">Listenpreis *</Label>
+              <Label htmlFor="pp-price">List price *</Label>
               <Input
                 id="pp-price"
                 type="number"
@@ -214,7 +214,7 @@ export function PricePositionFormDialog({ open, onOpenChange, position }: Props)
               />
             </div>
             <div className="space-y-1.5">
-              <Label htmlFor="pp-currency">Währung</Label>
+              <Label htmlFor="pp-currency">Currency</Label>
               <Input id="pp-currency" value={currency} onChange={e => setCurrency(e.target.value.toUpperCase())} maxLength={3} placeholder="EUR" data-testid="input-pp-currency" />
             </div>
             <div className="space-y-1.5">
@@ -225,27 +225,27 @@ export function PricePositionFormDialog({ open, onOpenChange, position }: Props)
                   {STATUS_OPTIONS.map(o => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}
                 </SelectContent>
               </Select>
-              {!isEdit && <p className="text-[11px] text-muted-foreground">Neue Positionen starten als Entwurf.</p>}
+              {!isEdit && <p className="text-[11px] text-muted-foreground">New positions start as draft.</p>}
             </div>
           </div>
 
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1.5">
-              <Label>Gesellschaft *</Label>
+              <Label>Company *</Label>
               <Select value={companyId} onValueChange={setCompanyId} disabled={isEdit}>
-                <SelectTrigger data-testid="select-pp-company"><SelectValue placeholder={companiesQ.isLoading ? "Lade …" : "Wählen"} /></SelectTrigger>
+                <SelectTrigger data-testid="select-pp-company"><SelectValue placeholder={companiesQ.isLoading ? "Loading…" : "Select"} /></SelectTrigger>
                 <SelectContent>
                   {(companiesQ.data ?? []).map(c => (
                     <SelectItem key={c.id} value={c.id} textValue={c.name}>{c.name}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>
-              {isEdit && <p className="text-[11px] text-muted-foreground">Gesellschaft kann nach Anlage nicht gewechselt werden.</p>}
+              {isEdit && <p className="text-[11px] text-muted-foreground">Company cannot be changed after creation.</p>}
             </div>
             <div className="space-y-1.5">
-              <Label>Marke *</Label>
+              <Label>Brand *</Label>
               <Select value={brandId} onValueChange={setBrandId} disabled={!companyId}>
-                <SelectTrigger data-testid="select-pp-brand"><SelectValue placeholder={!companyId ? "Erst Gesellschaft wählen" : (brandsQ.isLoading ? "Lade …" : "Wählen")} /></SelectTrigger>
+                <SelectTrigger data-testid="select-pp-brand"><SelectValue placeholder={!companyId ? "Select a company first" : (brandsQ.isLoading ? "Loading…" : "Select")} /></SelectTrigger>
                 <SelectContent>
                   {filteredBrands.map(b => (
                     <SelectItem key={b.id} value={b.id} textValue={b.name}>{b.name}</SelectItem>
@@ -257,11 +257,11 @@ export function PricePositionFormDialog({ open, onOpenChange, position }: Props)
 
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1.5">
-              <Label htmlFor="pp-vfrom">Gültig ab *</Label>
+              <Label htmlFor="pp-vfrom">Valid from *</Label>
               <Input id="pp-vfrom" type="date" value={validFrom} onChange={e => setValidFrom(e.target.value)} data-testid="input-pp-validfrom" />
             </div>
             <div className="space-y-1.5">
-              <Label htmlFor="pp-vto">Gültig bis</Label>
+              <Label htmlFor="pp-vto">Valid until</Label>
               <Input
                 id="pp-vto"
                 type="date"
@@ -270,7 +270,7 @@ export function PricePositionFormDialog({ open, onOpenChange, position }: Props)
                 disabled={!isEdit}
                 data-testid="input-pp-validuntil"
               />
-              {!isEdit && <p className="text-[11px] text-muted-foreground">Beim Anlegen offen — kannst du später bei Bedarf setzen.</p>}
+              {!isEdit && <p className="text-[11px] text-muted-foreground">Left open at creation — you can set this later if needed.</p>}
             </div>
           </div>
 
@@ -282,16 +282,16 @@ export function PricePositionFormDialog({ open, onOpenChange, position }: Props)
                 onChange={e => setIsStandard(e.target.checked)}
                 data-testid="checkbox-pp-standard"
               />
-              <span>Als Standard-Preis kennzeichnen (zählt in Standard-Coverage-KPI)</span>
+              <span>Mark as standard price (counts towards the standard-coverage KPI)</span>
             </label>
           )}
         </div>
 
         <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)} disabled={busy}>Abbrechen</Button>
+          <Button variant="outline" onClick={() => onOpenChange(false)} disabled={busy}>Cancel</Button>
           <Button onClick={submit} disabled={busy} data-testid="button-pp-submit">
             {busy && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-            {isEdit ? "Speichern" : "Anlegen"}
+            {isEdit ? "Save" : "Create"}
           </Button>
         </DialogFooter>
       </DialogContent>

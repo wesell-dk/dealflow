@@ -51,20 +51,20 @@ interface BrandTemplate {
 }
 
 const TYPES: Array<{ value: DocumentType; label: string; hint: string }> = [
-  { value: "quote", label: "Angebot",
-    hint: "Vorlage fuer neu generierte Angebots-PDFs. Idealerweise ein typisches Angebot mit Header, Logo, Positionen, Summen-Block." },
-  { value: "order_confirmation", label: "Auftragsbestaetigung",
-    hint: "Vorlage fuer Auftragsbestaetigungen — meist gleich aufgebaut wie das Angebot, aber mit anderem Titel und Lieferzeile." },
-  { value: "invoice", label: "Rechnung",
-    hint: "Rechnungslayout — wichtig fuer Rechnungs-PDFs (Pflichtfelder, Footer mit Bankverbindung)." },
-  { value: "contract", label: "Vertrag",
-    hint: "Klauselbasiertes Vertragslayout. Kein Positionsblock, sondern Klausel-Struktur und Unterschriftenfeld." },
+  { value: "quote", label: "Quote",
+    hint: "Template for newly generated quote PDFs. Ideally a typical quote with header, logo, line items and totals block." },
+  { value: "order_confirmation", label: "Order confirmation",
+    hint: "Template for order confirmations — usually structured like a quote, but with a different title and a delivery line." },
+  { value: "invoice", label: "Invoice",
+    hint: "Invoice layout — important for invoice PDFs (required fields, footer with bank details)." },
+  { value: "contract", label: "Contract",
+    hint: "Clause-based contract layout. No line-item block — clause structure and signature field instead." },
 ];
 
 const STATUS_LABEL: Record<BrandTemplate["status"], string> = {
-  pending: "in Bearbeitung",
-  ready: "aktiv",
-  failed: "Fehler",
+  pending: "processing",
+  ready: "active",
+  failed: "Error",
 };
 
 const MAX_BYTES = 25 * 1024 * 1024;
@@ -89,7 +89,7 @@ export function BrandDocumentTemplates({ brandId }: Props) {
       setItems(data);
     } catch (err) {
       toast({
-        title: "Vorlagen laden fehlgeschlagen",
+        title: "Failed to load templates",
         description: err instanceof Error ? err.message : String(err),
         variant: "destructive",
       });
@@ -102,11 +102,11 @@ export function BrandDocumentTemplates({ brandId }: Props) {
 
   const upload = useCallback(async (type: DocumentType, file: File) => {
     if (file.type !== "application/pdf") {
-      toast({ title: "Falscher Dateityp", description: "Bitte eine PDF-Datei waehlen.", variant: "destructive" });
+      toast({ title: "Wrong file type", description: "Please choose a PDF file.", variant: "destructive" });
       return;
     }
     if (file.size > MAX_BYTES) {
-      toast({ title: "Datei zu gross", description: `Max ${MAX_BYTES / 1024 / 1024} MB.`, variant: "destructive" });
+      toast({ title: "File too large", description: `Max ${MAX_BYTES / 1024 / 1024} MB.`, variant: "destructive" });
       return;
     }
     setBusyType(type);
@@ -142,16 +142,16 @@ export function BrandDocumentTemplates({ brandId }: Props) {
       }
       const saved: BrandTemplate = await analyze.json();
       toast({
-        title: saved.status === "ready" ? "Vorlage analysiert" : "Vorlage gespeichert (Analyse fehlgeschlagen)",
+        title: saved.status === "ready" ? "Template analyzed" : "Template saved (analysis failed)",
         description: saved.status === "ready"
-          ? `${file.name} — Layout ist aktiv.`
-          : saved.errorText ?? "Bitte spaeter neu analysieren.",
+          ? `${file.name} — layout is active.`
+          : saved.errorText ?? "Please re-analyze later.",
         variant: saved.status === "ready" ? "default" : "destructive",
       });
       await refresh();
     } catch (err) {
       toast({
-        title: "Upload fehlgeschlagen",
+        title: "Upload failed",
         description: err instanceof Error ? err.message : String(err),
         variant: "destructive",
       });
@@ -170,14 +170,14 @@ export function BrandDocumentTemplates({ brandId }: Props) {
       if (!res.ok) throw new Error(`reanalyze ${res.status}`);
       const updated: BrandTemplate = await res.json();
       toast({
-        title: updated.status === "ready" ? "Neu analysiert" : "Analyse fehlgeschlagen",
+        title: updated.status === "ready" ? "Re-analyzed" : "Analysis failed",
         description: updated.errorText ?? "",
         variant: updated.status === "ready" ? "default" : "destructive",
       });
       await refresh();
     } catch (err) {
       toast({
-        title: "Reanalyze fehlgeschlagen",
+        title: "Re-analyze failed",
         description: err instanceof Error ? err.message : String(err),
         variant: "destructive",
       });
@@ -187,7 +187,7 @@ export function BrandDocumentTemplates({ brandId }: Props) {
   }, [apiBase, refresh, toast]);
 
   const remove = useCallback(async (type: DocumentType) => {
-    if (!window.confirm(`Vorlage "${TYPES.find(t => t.value === type)?.label}" wirklich loeschen?`)) return;
+    if (!window.confirm(`Really delete template "${TYPES.find(t => t.value === type)?.label}"?`)) return;
     setBusyType(type);
     try {
       const res = await fetch(`${apiBase}/${type}`, {
@@ -195,11 +195,11 @@ export function BrandDocumentTemplates({ brandId }: Props) {
         credentials: "include",
       });
       if (!res.ok && res.status !== 204) throw new Error(`delete ${res.status}`);
-      toast({ title: "Vorlage geloescht" });
+      toast({ title: "Template deleted" });
       await refresh();
     } catch (err) {
       toast({
-        title: "Loeschen fehlgeschlagen",
+        title: "Delete failed",
         description: err instanceof Error ? err.message : String(err),
         variant: "destructive",
       });
@@ -211,7 +211,7 @@ export function BrandDocumentTemplates({ brandId }: Props) {
   if (loading) {
     return (
       <div className="flex items-center gap-2 text-sm text-muted-foreground">
-        <Loader2 className="h-4 w-4 animate-spin" /> Vorlagen werden geladen…
+        <Loader2 className="h-4 w-4 animate-spin" /> Loading templates…
       </div>
     );
   }
@@ -311,19 +311,19 @@ function TemplateCard({ type, label, hint, item, busy, apiBase, onUpload, onRean
             {item.status === "ready" && (
               <Button type="button" size="sm" variant="outline" asChild disabled={busy}>
                 <a href={`${apiBase}/${type}/preview.pdf`} target="_blank" rel="noreferrer">
-                  <FileText className="h-3.5 w-3.5 mr-1" /> Vorschau
+                  <FileText className="h-3.5 w-3.5 mr-1" /> Preview
                 </a>
               </Button>
             )}
             <Button type="button" size="sm" variant="outline" onClick={onReanalyze} disabled={busy}>
               {busy ? <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5 mr-1" />}
-              Neu analysieren
+              Re-analyze
             </Button>
             <Button type="button" size="sm" variant="ghost" onClick={() => inputRef.current?.click()} disabled={busy}>
-              <Upload className="h-3.5 w-3.5 mr-1" /> Ersetzen
+              <Upload className="h-3.5 w-3.5 mr-1" /> Replace
             </Button>
             <Button type="button" size="sm" variant="ghost" className="text-destructive hover:text-destructive" onClick={onRemove} disabled={busy}>
-              <Trash2 className="h-3.5 w-3.5 mr-1" /> Loeschen
+              <Trash2 className="h-3.5 w-3.5 mr-1" /> Delete
             </Button>
           </div>
           <input ref={inputRef} type="file" accept="application/pdf" className="hidden" onChange={handleChange} />
@@ -341,10 +341,10 @@ function TemplateCard({ type, label, hint, item, busy, apiBase, onUpload, onRean
         >
           {busy ? (
             <span className="inline-flex items-center gap-2 text-muted-foreground">
-              <Loader2 className="h-3.5 w-3.5 animate-spin" /> Wird analysiert…
+              <Loader2 className="h-3.5 w-3.5 animate-spin" /> Analyzing…
             </span>
           ) : (
-            <span className="text-muted-foreground">PDF hierher ziehen oder klicken — bis 25 MB</span>
+            <span className="text-muted-foreground">Drag a PDF here or click — up to 25 MB</span>
           )}
           <input ref={inputRef} type="file" accept="application/pdf" className="hidden" onChange={handleChange} />
         </div>
@@ -360,30 +360,30 @@ function TemplateCard({ type, label, hint, item, busy, apiBase, onUpload, onRean
  */
 function ProfileSummaryView({ summary }: { summary: ProfileSummary }) {
   const logoLabel: Record<ProfileSummary["logoPosition"], string> = {
-    "top-left": "links oben",
-    "top-right": "rechts oben",
-    "top-center": "mittig oben",
+    "top-left": "top left",
+    "top-right": "top right",
+    "top-center": "top center",
   };
   return (
     <div className="rounded border bg-muted/30 p-2 text-xs space-y-2" data-testid="brand-template-profile-summary">
       <div className="flex flex-wrap gap-x-4 gap-y-1 items-center">
-        <span><span className="text-muted-foreground">Titel:</span> <strong>{summary.documentTitle || "—"}</strong></span>
-        <span><span className="text-muted-foreground">Sprache:</span> {summary.language.toUpperCase()}</span>
+        <span><span className="text-muted-foreground">Title:</span> <strong>{summary.documentTitle || "—"}</strong></span>
+        <span><span className="text-muted-foreground">Language:</span> {summary.language.toUpperCase()}</span>
         <span><span className="text-muted-foreground">Format:</span> {summary.pageSize}</span>
         <span><span className="text-muted-foreground">Logo:</span> {logoLabel[summary.logoPosition]}</span>
       </div>
       <div className="flex flex-wrap items-center gap-2">
-        <span className="text-muted-foreground">Akzentfarben:</span>
+        <span className="text-muted-foreground">Accent colors:</span>
         <ColorChip hex={summary.accentPrimary} />
         {summary.accentSecondary && <ColorChip hex={summary.accentSecondary} />}
       </div>
       <div>
-        <span className="text-muted-foreground">Schrift (pt):</span>{" "}
-        Titel {summary.fontHierarchy.docTitlePt} · Heading {summary.fontHierarchy.sectionHeadingPt} · Body {summary.fontHierarchy.bodyPt}
+        <span className="text-muted-foreground">Font (pt):</span>{" "}
+        Title {summary.fontHierarchy.docTitlePt} · Heading {summary.fontHierarchy.sectionHeadingPt} · Body {summary.fontHierarchy.bodyPt}
       </div>
       {summary.columns.length > 0 && (
         <div>
-          <span className="text-muted-foreground">Spalten:</span>{" "}
+          <span className="text-muted-foreground">Columns:</span>{" "}
           {summary.columns.map((c, i) => (
             <span key={i} className="inline-block mr-1">
               <code className="rounded bg-background border px-1 py-0.5">{c.label || "—"}</code>
@@ -394,9 +394,9 @@ function ProfileSummaryView({ summary }: { summary: ProfileSummary }) {
         </div>
       )}
       <div className="flex flex-wrap gap-x-4">
-        <span><span className="text-muted-foreground">Summe:</span> {summary.totals.subtotalLabel || "—"} → {summary.totals.grandTotalLabel || "—"}</span>
-        <span><span className="text-muted-foreground">Steuer:</span> {summary.totals.taxLabel || "—"}</span>
-        <span><span className="text-muted-foreground">Seitenzahl:</span> <code className="bg-background border rounded px-1">{summary.pageNumberFormat || "—"}</code></span>
+        <span><span className="text-muted-foreground">Total:</span> {summary.totals.subtotalLabel || "—"} → {summary.totals.grandTotalLabel || "—"}</span>
+        <span><span className="text-muted-foreground">Tax:</span> {summary.totals.taxLabel || "—"}</span>
+        <span><span className="text-muted-foreground">Page number:</span> <code className="bg-background border rounded px-1">{summary.pageNumberFormat || "—"}</code></span>
       </div>
       {(summary.footer.addressLine || summary.footer.legalLine || summary.footer.bankLine) && (
         <div className="space-y-0.5">

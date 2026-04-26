@@ -89,7 +89,7 @@ export function AccountFormDialog({ open, onOpenChange, account, onSaved }: Prop
   const onEnrich = async () => {
     const w = website.trim();
     if (!w) {
-      toast({ title: "Website fehlt", description: "Bitte eine URL oder Domain eintragen.", variant: "destructive" });
+      toast({ title: "Website missing", description: "Please enter a URL or domain.", variant: "destructive" });
       return;
     }
     try {
@@ -135,10 +135,10 @@ export function AccountFormDialog({ open, onOpenChange, account, onSaved }: Prop
       };
 
       consider("Name", res.name, name, setName, "name");
-      consider("Land", res.country, country, setCountry, "country", normCountry);
-      consider("Adresse", res.billingAddress, billingAddress, setBillingAddress, "billingAddress");
-      consider("Telefon", res.phone, phone, setPhone, "phone", normPhone);
-      consider("USt-ID", res.vatId, vatId, setVatId, "vatId", normVatId);
+      consider("Country", res.country, country, setCountry, "country", normCountry);
+      consider("Address", res.billingAddress, billingAddress, setBillingAddress, "billingAddress");
+      consider("Phone", res.phone, phone, setPhone, "phone", normPhone);
+      consider("VAT ID", res.vatId, vatId, setVatId, "vatId", normVatId);
       // Firmierung hat kein eigenes Form-Feld — nur als Info im Panel.
       const hasLegalHint = Boolean(res.legalEntityName);
       if (hasLegalHint) {
@@ -150,37 +150,37 @@ export function AccountFormDialog({ open, onOpenChange, account, onSaved }: Prop
 
       if (applied.length === 0 && conflicts.length === 0 && !hasLegalHint) {
         toast({
-          title: "Keine Daten gefunden",
-          description: "Zu dieser Website konnten wir nichts aus Impressum oder öffentlichen Quellen ableiten.",
+          title: "No data found",
+          description: "We couldn't derive anything for this website from the imprint or public sources.",
         });
       } else if (applied.length > 0 && conflicts.length === 0 && !hasLegalHint) {
         toast({
-          title: "Felder ergänzt",
-          description: applied.join(", ") + " automatisch übernommen.",
+          title: "Fields filled in",
+          description: applied.join(", ") + " applied automatically.",
         });
       } else if (applied.length > 0 && conflicts.length > 0) {
         toast({
-          title: "Teilweise übernommen",
-          description: `${applied.join(", ")} ergänzt. ${conflicts.join(", ")} weicht ab — bitte prüfen.`,
+          title: "Partially applied",
+          description: `${applied.join(", ")} filled in. ${conflicts.join(", ")} differs — please review.`,
         });
       } else if (conflicts.length > 0) {
         toast({
-          title: "Vorschläge weichen ab",
-          description: `${conflicts.join(", ")} ${conflicts.length === 1 ? "weicht" : "weichen"} von deiner Eingabe ab — bitte prüfen.`,
+          title: "Suggestions differ",
+          description: `${conflicts.join(", ")} ${conflicts.length === 1 ? "differs" : "differ"} from your input — please review.`,
         });
       } else {
         // Nur legalEntityName-Hinweis ohne Konflikte und/oder ohne übernommene Felder.
         toast({
-          title: applied.length > 0 ? "Felder ergänzt" : "Hinweis aus dem Web",
+          title: applied.length > 0 ? "Fields filled in" : "Hint from the web",
           description: applied.length > 0
-            ? `${applied.join(", ")} übernommen. Zusätzlich Firmierung gefunden.`
-            : `Im Impressum gefunden: Firmierung „${res.legalEntityName}".`,
+            ? `${applied.join(", ")} applied. Additionally found legal entity name.`
+            : `Found in imprint: legal entity name "${res.legalEntityName}".`,
         });
       }
     } catch (e) {
       toast({
-        title: "Anreicherung fehlgeschlagen",
-        description: e instanceof Error ? e.message : "Unbekannter Fehler",
+        title: "Enrichment failed",
+        description: e instanceof Error ? e.message : "Unknown error",
         variant: "destructive",
       });
     }
@@ -196,7 +196,7 @@ export function AccountFormDialog({ open, onOpenChange, account, onSaved }: Prop
     if (suggestion.phone) setPhone(suggestion.phone);
     if (suggestion.vatId) setVatId(suggestion.vatId);
     setSuggestion(null);
-    toast({ title: "Vorschläge übernommen" });
+    toast({ title: "Suggestions applied" });
   };
 
   const submit = async (e: React.FormEvent) => {
@@ -205,7 +205,7 @@ export function AccountFormDialog({ open, onOpenChange, account, onSaved }: Prop
     const trimmedIndustry = industry.trim();
     const trimmedCountry = country.trim();
     if (!trimmedName || !trimmedIndustry || !trimmedCountry) {
-      toast({ title: "Pflichtfelder fehlen", description: "Name, Branche und Land sind erforderlich.", variant: "destructive" });
+      toast({ title: "Required fields missing", description: "Name, industry and country are required.", variant: "destructive" });
       return;
     }
     try {
@@ -232,7 +232,7 @@ export function AccountFormDialog({ open, onOpenChange, account, onSaved }: Prop
         await update.mutateAsync({ id: account.id, data: patch });
         await qc.invalidateQueries({ queryKey: getGetAccountQueryKey(account.id) });
         await qc.invalidateQueries({ queryKey: getListAccountsQueryKey() });
-        toast({ title: "Kunde aktualisiert", description: trimmedName });
+        toast({ title: "Customer updated", description: trimmedName });
         onSaved?.(account.id);
       } else {
         const data: AccountInput = {
@@ -246,13 +246,13 @@ export function AccountFormDialog({ open, onOpenChange, account, onSaved }: Prop
         const result = await create.mutateAsync({ data });
         await qc.invalidateQueries({ queryKey: getListAccountsQueryKey() });
         markStep("account");
-        toast({ title: "Kunde angelegt", description: trimmedName });
+        toast({ title: "Customer created", description: trimmedName });
         onSaved?.(result.id);
       }
       onOpenChange(false);
     } catch (err) {
-      const msg = err instanceof Error ? err.message : "Speichern fehlgeschlagen";
-      toast({ title: "Fehler", description: msg, variant: "destructive" });
+      const msg = err instanceof Error ? err.message : "Save failed";
+      toast({ title: "Error", description: msg, variant: "destructive" });
     }
   };
 
@@ -262,11 +262,11 @@ export function AccountFormDialog({ open, onOpenChange, account, onSaved }: Prop
     <Dialog open={open} onOpenChange={(o) => { if (!pending) onOpenChange(o); }}>
       <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto" data-testid="account-form-dialog">
         <DialogHeader>
-          <DialogTitle>{isEdit ? "Kunde bearbeiten" : "Kunde anlegen"}</DialogTitle>
+          <DialogTitle>{isEdit ? "Edit customer" : "Create customer"}</DialogTitle>
           <DialogDescription>
             {isEdit
-              ? "Aktualisiere Stammdaten dieses Kunden."
-              : "Lege einen neuen B2B-Kunden mit Stammdaten an. Optional Website prüfen, um Adresse, Telefon und USt-ID automatisch zu ergänzen."}
+              ? "Update the master data of this customer."
+              : "Create a new B2B customer with master data. Optionally check the website to auto-fill address, phone and VAT ID."}
           </DialogDescription>
         </DialogHeader>
         <form onSubmit={submit} className="space-y-4">
@@ -277,7 +277,7 @@ export function AccountFormDialog({ open, onOpenChange, account, onSaved }: Prop
               data-testid="account-form-name"
               value={name}
               onChange={(e) => setName(e.target.value)}
-              placeholder="z.B. ACME GmbH"
+              placeholder="e.g. ACME GmbH"
               autoFocus
               disabled={pending}
             />
@@ -285,24 +285,24 @@ export function AccountFormDialog({ open, onOpenChange, account, onSaved }: Prop
 
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-2">
-              <Label htmlFor="acc-industry">Branche *</Label>
+              <Label htmlFor="acc-industry">Industry *</Label>
               <Input
                 id="acc-industry"
                 data-testid="account-form-industry"
                 value={industry}
                 onChange={(e) => setIndustry(e.target.value)}
-                placeholder="z.B. Maschinenbau"
+                placeholder="e.g. Mechanical engineering"
                 disabled={pending}
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="acc-country">Land *</Label>
+              <Label htmlFor="acc-country">Country *</Label>
               <Input
                 id="acc-country"
                 data-testid="account-form-country"
                 value={country}
                 onChange={(e) => setCountry(e.target.value)}
-                placeholder="z.B. DE"
+                placeholder="e.g. DE"
                 disabled={pending}
               />
             </div>
@@ -317,7 +317,7 @@ export function AccountFormDialog({ open, onOpenChange, account, onSaved }: Prop
                 data-testid="account-form-website"
                 value={website}
                 onChange={(e) => setWebsite(e.target.value)}
-                placeholder="z.B. https://acme.de"
+                placeholder="e.g. https://acme.de"
                 disabled={pending || enrich.isPending}
               />
               <Button
@@ -330,11 +330,11 @@ export function AccountFormDialog({ open, onOpenChange, account, onSaved }: Prop
                 {enrich.isPending
                   ? <Loader2 className="h-4 w-4 mr-1 animate-spin" />
                   : <Sparkles className="h-4 w-4 mr-1" />}
-                Website prüfen
+                Check website
               </Button>
             </div>
             <p className="text-xs text-muted-foreground">
-              Ruft Adresse, USt-ID und Telefon aus Impressum / öffentlichen Quellen ab.
+              Pulls address, VAT ID and phone from the imprint / public sources.
             </p>
           </div>
 
@@ -344,30 +344,30 @@ export function AccountFormDialog({ open, onOpenChange, account, onSaved }: Prop
               <div className="flex items-center justify-between">
                 <div className="text-sm font-medium flex items-center gap-1.5">
                   <Sparkles className="h-3.5 w-3.5 text-primary" />
-                  Vorschläge aus dem Web
+                  Suggestions from the web
                 </div>
-                <Button type="button" size="sm" variant="ghost" onClick={() => setSuggestion(null)} aria-label="Vorschläge verwerfen">
+                <Button type="button" size="sm" variant="ghost" onClick={() => setSuggestion(null)} aria-label="Discard suggestions">
                   <X className="h-3.5 w-3.5" />
                 </Button>
               </div>
               <div className="grid grid-cols-2 gap-x-3 gap-y-1 text-xs">
                 {suggestion.name && <div><span className="text-muted-foreground">Name:</span> {suggestion.name}</div>}
-                {suggestion.legalEntityName && <div><span className="text-muted-foreground">Firmierung:</span> {suggestion.legalEntityName}</div>}
-                {suggestion.country && <div><span className="text-muted-foreground">Land:</span> {suggestion.country}</div>}
-                {suggestion.phone && <div><span className="text-muted-foreground">Telefon:</span> {suggestion.phone}</div>}
-                {suggestion.vatId && <div><span className="text-muted-foreground">USt-ID:</span> {suggestion.vatId}</div>}
-                {suggestion.billingAddress && <div className="col-span-2"><span className="text-muted-foreground">Adresse:</span> {suggestion.billingAddress}</div>}
-                {suggestion.sourceUrl && <div className="col-span-2 text-muted-foreground italic">Quelle: {suggestion.sourceUrl}</div>}
+                {suggestion.legalEntityName && <div><span className="text-muted-foreground">Legal entity:</span> {suggestion.legalEntityName}</div>}
+                {suggestion.country && <div><span className="text-muted-foreground">Country:</span> {suggestion.country}</div>}
+                {suggestion.phone && <div><span className="text-muted-foreground">Phone:</span> {suggestion.phone}</div>}
+                {suggestion.vatId && <div><span className="text-muted-foreground">VAT ID:</span> {suggestion.vatId}</div>}
+                {suggestion.billingAddress && <div className="col-span-2"><span className="text-muted-foreground">Address:</span> {suggestion.billingAddress}</div>}
+                {suggestion.sourceUrl && <div className="col-span-2 text-muted-foreground italic">Source: {suggestion.sourceUrl}</div>}
               </div>
               <Button type="button" size="sm" onClick={applySuggestion} data-testid="account-form-apply-suggestion">
-                <Check className="h-3.5 w-3.5 mr-1" /> Übernehmen
+                <Check className="h-3.5 w-3.5 mr-1" /> Apply
               </Button>
             </div>
           )}
 
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-2">
-              <Label htmlFor="acc-phone">Telefon</Label>
+              <Label htmlFor="acc-phone">Phone</Label>
               <Input
                 id="acc-phone"
                 data-testid="account-form-phone"
@@ -378,7 +378,7 @@ export function AccountFormDialog({ open, onOpenChange, account, onSaved }: Prop
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="acc-vatid">USt-IdNr.</Label>
+              <Label htmlFor="acc-vatid">VAT ID</Label>
               <Input
                 id="acc-vatid"
                 data-testid="account-form-vatid"
@@ -391,36 +391,36 @@ export function AccountFormDialog({ open, onOpenChange, account, onSaved }: Prop
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="acc-address">Rechnungsadresse</Label>
+            <Label htmlFor="acc-address">Billing address</Label>
             <Textarea
               id="acc-address"
               data-testid="account-form-address"
               rows={2}
               value={billingAddress}
               onChange={(e) => setBillingAddress(e.target.value)}
-              placeholder="Musterstraße 1, 10115 Berlin"
+              placeholder="123 Main St, 10115 Berlin"
               disabled={pending}
             />
           </div>
 
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-2">
-              <Label htmlFor="acc-size">Mitarbeitergröße</Label>
+              <Label htmlFor="acc-size">Company size</Label>
               <Select value={sizeBracket || "_unset"} onValueChange={(v) => setSizeBracket(v === "_unset" ? "" : v)}>
                 <SelectTrigger id="acc-size" data-testid="account-form-size">
-                  <SelectValue placeholder="Wählen…" />
+                  <SelectValue placeholder="Choose…" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="_unset">— nicht gesetzt —</SelectItem>
+                  <SelectItem value="_unset">— not set —</SelectItem>
                   {SIZE_BRACKETS.map((s) => (
-                    <SelectItem key={s} value={s}>{s} Mitarbeiter</SelectItem>
+                    <SelectItem key={s} value={s}>{s} employees</SelectItem>
                   ))}
                 </SelectContent>
               </Select>
             </div>
             {isEdit && (
               <div className="space-y-2">
-                <Label htmlFor="acc-health">Health-Score (0–100)</Label>
+                <Label htmlFor="acc-health">Health score (0–100)</Label>
                 <Input
                   id="acc-health"
                   data-testid="account-form-health"
@@ -437,11 +437,11 @@ export function AccountFormDialog({ open, onOpenChange, account, onSaved }: Prop
 
           <DialogFooter>
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)} disabled={pending}>
-              Abbrechen
+              Cancel
             </Button>
             <Button type="submit" disabled={pending} data-testid="account-form-submit">
               {pending && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-              {isEdit ? "Speichern" : "Kunde anlegen"}
+              {isEdit ? "Save" : "Create customer"}
             </Button>
           </DialogFooter>
         </form>

@@ -19,10 +19,10 @@ type Stat = { label: string; value: string | number; tone?: "default" | "warn" |
 
 function StatRow({ stats, loading }: { stats: Stat[]; loading?: boolean }) {
   if (loading) {
-    return <div className="text-xs text-muted-foreground italic">Lade Daten…</div>;
+    return <div className="text-xs text-muted-foreground italic">Loading data…</div>;
   }
   if (stats.length === 0) {
-    return <div className="text-xs text-muted-foreground italic">Noch keine Daten erfasst.</div>;
+    return <div className="text-xs text-muted-foreground italic">No data captured yet.</div>;
   }
   return (
     <ul className="grid grid-cols-2 gap-2 text-xs">
@@ -54,8 +54,8 @@ function AccountsLive() {
   const accountsWithDeals = new Set(dealList.map((d) => d.accountId).filter(Boolean));
   const without = accountList.filter((a) => !accountsWithDeals.has(a.id)).length;
   const stats: Stat[] = [
-    { label: "Kunden gesamt", value: accountList.length },
-    { label: "Ohne aktiven Deal", value: without, tone: without > 0 ? "warn" : "default" },
+    { label: "Total customers", value: accountList.length },
+    { label: "Without an active deal", value: without, tone: without > 0 ? "warn" : "default" },
   ];
   return <StatRow stats={stats} loading={loading} />;
 }
@@ -69,10 +69,10 @@ function DealsLive() {
   const totalOpenValue = open.reduce((sum, d) => sum + (d.value ?? 0), 0);
   const eur = new Intl.NumberFormat("de-DE", { style: "currency", currency: "EUR", maximumFractionDigits: 0 });
   const stats: Stat[] = [
-    { label: "Offene Deals", value: open.length },
-    { label: "Im Closing", value: closing, tone: closing > 0 ? "success" : "default" },
-    { label: "Pipeline-Wert", value: eur.format(totalOpenValue) },
-    { label: "Gesamt erfasst", value: list.length },
+    { label: "Open deals", value: open.length },
+    { label: "In closing", value: closing, tone: closing > 0 ? "success" : "default" },
+    { label: "Pipeline value", value: eur.format(totalOpenValue) },
+    { label: "Total captured", value: list.length },
   ];
   return <StatRow stats={stats} />;
 }
@@ -85,10 +85,10 @@ function ApprovalsLive() {
   const approved = list.filter((a) => a.status === "approved").length;
   const rejected = list.filter((a) => a.status === "rejected").length;
   const stats: Stat[] = [
-    { label: "Offen", value: pending, tone: pending > 0 ? "warn" : "default" },
-    { label: "Genehmigt", value: approved, tone: "success" },
-    { label: "Abgelehnt", value: rejected },
-    { label: "Gesamt", value: list.length },
+    { label: "Pending", value: pending, tone: pending > 0 ? "warn" : "default" },
+    { label: "Approved", value: approved, tone: "success" },
+    { label: "Rejected", value: rejected },
+    { label: "Total", value: list.length },
   ];
   return <StatRow stats={stats} />;
 }
@@ -101,10 +101,10 @@ function SignaturesLive() {
   const completed = list.filter((s) => s.status === "completed").length;
   const blocked = list.filter((s) => s.status === "blocked").length;
   const stats: Stat[] = [
-    { label: "Aktiv unterwegs", value: inProgress, tone: inProgress > 0 ? "warn" : "default" },
-    { label: "Vollständig signiert", value: completed, tone: "success" },
-    { label: "Blockiert", value: blocked, tone: blocked > 0 ? "warn" : "default" },
-    { label: "Gesamt", value: list.length },
+    { label: "In progress", value: inProgress, tone: inProgress > 0 ? "warn" : "default" },
+    { label: "Fully signed", value: completed, tone: "success" },
+    { label: "Blocked", value: blocked, tone: blocked > 0 ? "warn" : "default" },
+    { label: "Total", value: list.length },
   ];
   return <StatRow stats={stats} />;
 }
@@ -117,10 +117,10 @@ function ContractsLive() {
   const outForSig = list.filter((c) => c.status === "out_for_signature").length;
   const signed = list.filter((c) => c.status === "signed" || c.status === "executed").length;
   const stats: Stat[] = [
-    { label: "In Review", value: inReview, tone: inReview > 0 ? "warn" : "default" },
-    { label: "Bei Unterschrift", value: outForSig },
-    { label: "Signiert", value: signed, tone: "success" },
-    { label: "Gesamt", value: list.length },
+    { label: "In review", value: inReview, tone: inReview > 0 ? "warn" : "default" },
+    { label: "Out for signature", value: outForSig },
+    { label: "Signed", value: signed, tone: "success" },
+    { label: "Total", value: list.length },
   ];
   return <StatRow stats={stats} />;
 }
@@ -133,10 +133,10 @@ function QuotesLive() {
   const sent = list.filter((c) => c.status === "sent").length;
   const accepted = list.filter((c) => c.status === "accepted").length;
   const stats: Stat[] = [
-    { label: "Entwürfe", value: draft },
-    { label: "Versandt", value: sent, tone: sent > 0 ? "warn" : "default" },
-    { label: "Akzeptiert", value: accepted, tone: "success" },
-    { label: "Gesamt", value: list.length },
+    { label: "Drafts", value: draft },
+    { label: "Sent", value: sent, tone: sent > 0 ? "warn" : "default" },
+    { label: "Accepted", value: accepted, tone: "success" },
+    { label: "Total", value: list.length },
   ];
   return <StatRow stats={stats} />;
 }
@@ -145,7 +145,7 @@ function NegotiationsLive() {
   const q = useListNegotiations();
   if (q.isLoading) return <StatRow stats={[]} loading />;
   const list = q.data ?? [];
-  const stats: Stat[] = [{ label: "Verhandlungen erfasst", value: list.length }];
+  const stats: Stat[] = [{ label: "Negotiations captured", value: list.length }];
   return <StatRow stats={stats} />;
 }
 
@@ -158,9 +158,9 @@ function HomeLive() {
   const open = dealList.filter((d) => d.stage !== "won" && d.stage !== "lost").length;
   const pending = (approvals.data ?? []).filter((a) => a.status === "pending").length;
   const stats: Stat[] = [
-    { label: "Kunden", value: (accounts.data ?? []).length },
-    { label: "Offene Deals", value: open },
-    { label: "Pending Approvals", value: pending, tone: pending > 0 ? "warn" : "default" },
+    { label: "Customers", value: (accounts.data ?? []).length },
+    { label: "Open deals", value: open },
+    { label: "Pending approvals", value: pending, tone: pending > 0 ? "warn" : "default" },
   ];
   return <StatRow stats={stats} />;
 }
@@ -198,7 +198,7 @@ export function PageHelpDrawer() {
             <div>
               <SheetTitle>{entry.title}</SheetTitle>
               <SheetDescription>
-                {currentStep ? `Schritt im Workflow: ${currentStep.title}` : "Allgemeine Übersicht"}
+                {currentStep ? `Workflow step: ${currentStep.title}` : "General overview"}
               </SheetDescription>
             </div>
           </div>
@@ -209,7 +209,7 @@ export function PageHelpDrawer() {
             <section data-testid="page-help-live">
               <div className="flex items-center gap-2 text-sm font-semibold mb-2">
                 <BarChart3 className="h-4 w-4 text-primary" />
-                Aus deinen Daten
+                From your data
               </div>
               {live}
             </section>
@@ -218,14 +218,14 @@ export function PageHelpDrawer() {
           <section>
             <div className="flex items-center gap-2 text-sm font-semibold mb-2">
               <Compass className="h-4 w-4 text-primary" />
-              Wozu dient diese Seite?
+              What is this page for?
             </div>
             <p className="text-sm text-muted-foreground leading-relaxed">{entry.purpose}</p>
           </section>
 
           {entry.prerequisites && entry.prerequisites.length > 0 && (
             <section>
-              <div className="text-sm font-semibold mb-2">Voraussetzungen</div>
+              <div className="text-sm font-semibold mb-2">Prerequisites</div>
               <ul className="text-sm text-muted-foreground list-disc pl-5 space-y-1">
                 {entry.prerequisites.map((p, i) => <li key={i}>{p}</li>)}
               </ul>
@@ -235,7 +235,7 @@ export function PageHelpDrawer() {
           <section>
             <div className="flex items-center gap-2 text-sm font-semibold mb-2">
               <ListChecks className="h-4 w-4 text-primary" />
-              So gehst du vor
+              How to proceed
             </div>
             <ol className="text-sm text-muted-foreground list-decimal pl-5 space-y-1.5">
               {entry.howTo.map((s, i) => <li key={i}>{s}</li>)}
@@ -253,7 +253,7 @@ export function PageHelpDrawer() {
 
           {entry.nextSteps && entry.nextSteps.length > 0 && (
             <section>
-              <div className="text-sm font-semibold mb-2">Sinnvoll als nächstes</div>
+              <div className="text-sm font-semibold mb-2">Suggested next steps</div>
               <div className="flex flex-wrap gap-2">
                 {entry.nextSteps.map((n, i) => (
                   <Button key={i} asChild variant="outline" size="sm" onClick={closeHelp}>
@@ -273,7 +273,7 @@ export function PageHelpDrawer() {
 
           <div className="pt-3 border-t">
             <Button variant="ghost" size="sm" onClick={resetOnboarding} className="text-xs text-muted-foreground">
-              Tour zurücksetzen
+              Reset tour
             </Button>
           </div>
         </div>

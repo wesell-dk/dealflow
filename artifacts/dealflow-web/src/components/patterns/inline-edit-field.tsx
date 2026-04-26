@@ -71,7 +71,7 @@ export function InlineEditField({
       await onSubmit(next);
       setEditing(false);
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Speichern fehlgeschlagen");
+      setError(e instanceof Error ? e.message : "Save failed");
     } finally {
       setSaving(false);
     }
@@ -93,7 +93,7 @@ export function InlineEditField({
         type="button"
         disabled={disabled}
         onClick={() => !disabled && setEditing(true)}
-        aria-label={`${ariaLabel} bearbeiten`}
+        aria-label={`Edit ${ariaLabel}`}
         data-testid={testId}
         className={cn(
           "group inline-flex items-center gap-2 rounded px-1 py-0.5 -mx-1 text-left",
@@ -168,7 +168,7 @@ export function InlineEditField({
             variant="ghost"
             className="h-7 w-7"
             onMouseDown={(e) => { e.preventDefault(); void commit(); }}
-            aria-label="Speichern"
+            aria-label="Save"
           >
             <Check className="h-3.5 w-3.5" />
           </Button>
@@ -178,7 +178,7 @@ export function InlineEditField({
             variant="ghost"
             className="h-7 w-7"
             onMouseDown={(e) => { e.preventDefault(); stop(); }}
-            aria-label="Abbrechen"
+            aria-label="Cancel"
           >
             <X className="h-3.5 w-3.5" />
           </Button>

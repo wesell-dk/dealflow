@@ -27,7 +27,7 @@ export function FieldHint(props: FieldHintProps) {
   if ("term" in props && props.term) {
     const entry: GlossaryEntry | null = getEntry(props.term.group, props.term.value);
     title = props.title ?? entry?.label ?? props.term.value;
-    body = entry?.long ?? entry?.short ?? "Keine Beschreibung verfügbar.";
+    body = entry?.long ?? entry?.short ?? "No description available.";
   } else {
     title = props.title;
     body = props.text;
@@ -38,7 +38,7 @@ export function FieldHint(props: FieldHintProps) {
       <PopoverTrigger asChild>
         <button
           type="button"
-          aria-label={label ?? `Erklärung zu ${title}`}
+          aria-label={label ?? `Help for ${title}`}
           className={cn(
             "inline-flex h-4 w-4 items-center justify-center rounded-full text-muted-foreground transition-colors hover:text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring",
             className,

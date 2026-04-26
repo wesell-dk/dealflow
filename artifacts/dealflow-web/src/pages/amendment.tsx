@@ -27,10 +27,10 @@ import { Breadcrumbs } from "@/components/patterns/breadcrumbs";
 
 function amendmentTypeLabel(type: string): string {
   switch (type) {
-    case "price-change": return "Preisänderung";
-    case "scope-change": return "Leistungsänderung";
-    case "term-extension": return "Laufzeitverlängerung";
-    case "renewal": return "Verlängerung";
+    case "price-change": return "Price change";
+    case "scope-change": return "Scope change";
+    case "term-extension": return "Term extension";
+    case "renewal": return "Renewal";
     default: return type;
   }
 }
@@ -52,9 +52,9 @@ function statusClass(status: string): string {
 
 function opLabel(op: string): string {
   switch (op) {
-    case "add": return "Hinzugefügt";
-    case "modify": return "Geändert";
-    case "remove": return "Entfernt";
+    case "add": return "Added";
+    case "modify": return "Modified";
+    case "remove": return "Removed";
     default: return op;
   }
 }
@@ -92,7 +92,7 @@ export default function Amendment() {
   const { data: signatures } = useListSignaturePackages({ amendmentId: id });
 
   if (isLoading) return <div className="p-8"><Skeleton className="h-64 w-full" /></div>;
-  if (!a) return <div className="p-8 text-center text-muted-foreground">Nicht gefunden</div>;
+  if (!a) return <div className="p-8 text-center text-muted-foreground">Not found</div>;
 
   const nextOptions = NEXT_STATUS[a.status] ?? [];
 
@@ -105,7 +105,7 @@ export default function Amendment() {
       ]);
       toast({ title: `Status: ${next}` });
     } catch (e) {
-      toast({ title: "Fehler", description: String(e), variant: "destructive" });
+      toast({ title: "Error", description: String(e), variant: "destructive" });
     }
   }
 
@@ -123,7 +123,7 @@ export default function Amendment() {
           href={`/contracts/${a.originalContractId}`}
           className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground w-fit"
         >
-          <ArrowLeft className="h-4 w-4" /> Zurück zum Vertrag
+          <ArrowLeft className="h-4 w-4" /> Back to contract
         </Link>
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
@@ -139,13 +139,13 @@ export default function Amendment() {
           </div>
         </div>
         <div className="flex items-center gap-4 text-muted-foreground mt-2 text-sm">
-          {a.createdBy && <span>erstellt von {a.createdBy}</span>}
+          {a.createdBy && <span>created by {a.createdBy}</span>}
           <span>·</span>
           <span>{new Date(a.createdAt).toLocaleDateString()}</span>
           {a.effectiveFrom && (
             <>
               <span>·</span>
-              <span>gültig ab {new Date(a.effectiveFrom).toLocaleDateString()}</span>
+              <span>effective from {new Date(a.effectiveFrom).toLocaleDateString()}</span>
             </>
           )}
         </div>
@@ -161,13 +161,13 @@ export default function Amendment() {
         <Card>
           <CardHeader className="py-3">
             <CardTitle className="text-sm flex items-center gap-2">
-              <ClipboardList className="h-4 w-4" /> Nächster Schritt
+              <ClipboardList className="h-4 w-4" /> Next step
             </CardTitle>
           </CardHeader>
           <CardContent className="flex items-center gap-3 pt-0">
             <Select onValueChange={onStatusChange}>
               <SelectTrigger className="w-[280px]" data-testid="select-amendment-next-status">
-                <SelectValue placeholder="Status ändern..." />
+                <SelectValue placeholder="Change status..." />
               </SelectTrigger>
               <SelectContent>
                 {nextOptions.map(s => (
@@ -182,7 +182,7 @@ export default function Amendment() {
               disabled={patch.isPending}
               data-testid="button-amendment-advance"
             >
-              Weiter zu: {nextOptions[0]}
+              Advance to: {nextOptions[0]}
             </Button>
           </CardContent>
         </Card>
@@ -191,13 +191,13 @@ export default function Amendment() {
       <div className="space-y-3">
         <div className="flex items-center gap-2 pb-2 border-b">
           <GitCompare className="h-5 w-5 text-muted-foreground" />
-          <h2 className="text-xl font-semibold">Änderungen</h2>
+          <h2 className="text-xl font-semibold">Changes</h2>
           <Badge variant="outline" className="ml-2">{a.changes.length}</Badge>
         </div>
 
         {a.changes.length === 0 ? (
           <div className="p-6 text-center border rounded-md text-muted-foreground bg-muted/10 text-sm">
-            Keine Klausel-Änderungen erfasst.
+            No clause changes recorded.
           </div>
         ) : (
           <div className="grid gap-3">
@@ -215,13 +215,13 @@ export default function Amendment() {
                 <CardContent className="pt-0">
                   <div className="grid grid-cols-2 gap-3">
                     <div className="space-y-1">
-                      <div className="text-xs font-semibold text-muted-foreground uppercase">Vorher</div>
+                      <div className="text-xs font-semibold text-muted-foreground uppercase">Before</div>
                       <div className="p-3 border rounded text-sm bg-rose-500/5 min-h-[60px]">
                         {ch.beforeSummary ?? <span className="text-muted-foreground italic">—</span>}
                       </div>
                     </div>
                     <div className="space-y-1">
-                      <div className="text-xs font-semibold text-muted-foreground uppercase">Nachher</div>
+                      <div className="text-xs font-semibold text-muted-foreground uppercase">After</div>
                       <div className="p-3 border rounded text-sm bg-emerald-500/5 min-h-[60px]">
                         {ch.afterSummary ?? <span className="text-muted-foreground italic">—</span>}
                       </div>
@@ -242,7 +242,7 @@ export default function Amendment() {
         </div>
         {!approvals || approvals.length === 0 ? (
           <div className="p-4 text-center border rounded-md text-muted-foreground bg-muted/10 text-sm">
-            Kein Approval-Fall verknüpft. Wird beim Status „In Prüfung" automatisch erzeugt.
+            No approval case linked. Created automatically when status becomes "In review".
           </div>
         ) : (
           <div className="grid gap-2">
@@ -266,12 +266,12 @@ export default function Amendment() {
       <div className="space-y-3">
         <div className="flex items-center gap-2 pb-2 border-b">
           <PenLine className="h-5 w-5 text-muted-foreground" />
-          <h2 className="text-xl font-semibold">Unterschriften</h2>
+          <h2 className="text-xl font-semibold">Signatures</h2>
           <Badge variant="outline" className="ml-2">{signatures?.length ?? 0}</Badge>
         </div>
         {!signatures || signatures.length === 0 ? (
           <div className="p-4 text-center border rounded-md text-muted-foreground bg-muted/10 text-sm">
-            Kein Signatur-Paket verknüpft. Wird beim Status „Zur Unterschrift" automatisch erzeugt.
+            No signature package linked. Created automatically when status becomes "Out for signature".
           </div>
         ) : (
           <div className="grid gap-2">
@@ -282,7 +282,7 @@ export default function Amendment() {
                     <div className="flex flex-col gap-0.5">
                       <div className="text-sm font-medium">{sg.title}</div>
                       <div className="text-xs text-muted-foreground font-mono">
-                        {sg.id} · {sg.signedCount}/{sg.totalSigners} signiert
+                        {sg.id} · {sg.signedCount}/{sg.totalSigners} signed
                       </div>
                     </div>
                     <Badge variant="outline" className={statusClass(sg.status)}>{sg.status}</Badge>

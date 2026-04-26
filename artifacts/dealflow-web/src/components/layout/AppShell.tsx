@@ -322,10 +322,10 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               onClick={() => setPaletteOpen(true)}
               className="group flex w-full items-center gap-2 rounded-md border bg-background px-3 h-9 text-sm text-muted-foreground hover:border-foreground/30 transition-colors md:w-2/3 lg:w-1/3 text-left"
               data-testid="header-cmdk-trigger"
-              aria-label="Suche öffnen (Cmd+K)"
+              aria-label="Open search (Cmd+K)"
             >
               <Search className="h-4 w-4" />
-              <span className="flex-1 truncate">Suchen oder Befehl ausführen…</span>
+              <span className="flex-1 truncate">Search or run a command…</span>
               <kbd className="hidden md:inline-flex items-center gap-0.5 rounded border bg-muted/60 px-1.5 py-0.5 text-[10px] font-mono">
                 ⌘ K
               </kbd>
@@ -344,7 +344,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               className="h-8 gap-1.5"
               onClick={openWelcome}
               data-testid="header-tour-button"
-              title="Workflow-Übersicht öffnen"
+              title="Open workflow overview"
             >
               <Compass className="h-4 w-4" />
               <span className="hidden lg:inline text-xs">Tour</span>
@@ -355,10 +355,10 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               className="h-8 gap-1.5"
               onClick={openHelp}
               data-testid="header-help-button"
-              title="Hilfe zur aktuellen Seite (Was kann ich hier?)"
+              title="Help for the current page (What can I do here?)"
             >
               <HelpCircle className="h-4 w-4" />
-              <span className="hidden lg:inline text-xs">Hilfe</span>
+              <span className="hidden lg:inline text-xs">Help</span>
             </Button>
             <DropdownMenu>
               <DropdownMenuTrigger asChild>

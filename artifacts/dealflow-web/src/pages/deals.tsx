@@ -37,11 +37,11 @@ const COLUMNS: ColumnDef[] = [
   { key: "name",        label: "Deal",         required: true },
   { key: "account",     label: "Account" },
   { key: "stage",       label: "Stage" },
-  { key: "value",       label: "Wert" },
+  { key: "value",       label: "Value" },
   { key: "owner",       label: "Owner" },
-  { key: "closeDate",   label: "Close-Datum" },
+  { key: "closeDate",   label: "Close date" },
   { key: "probability", label: "Wahrsch." },
-  { key: "risk",        label: "Risiko" },
+  { key: "risk",        label: "Risk" },
 ];
 
 const DEFAULT_VIEW: ViewState = {
@@ -68,10 +68,10 @@ export default function Deals() {
   const stageOptions = useMemo(() => (pipeline?.stages ?? []).map((s) => ({ value: s.stage, label: s.label })), [pipeline]);
 
   const builtIns: BuiltInView[] = useMemo(() => [
-    { id: "all",   name: "Alle Deals",     isBuiltIn: true, state: { ...DEFAULT_VIEW, filters: {} } },
-    { id: "mine",  name: "Meine Deals",    isBuiltIn: true, state: { ...DEFAULT_VIEW, filters: { ownerId: user?.id ?? "" } } },
-    { id: "open",  name: "Aktive Pipeline", isBuiltIn: true, state: { ...DEFAULT_VIEW, filters: { activePipeline: true } } },
-    { id: "closing", name: "Closing < 30 Tage", isBuiltIn: true, state: { ...DEFAULT_VIEW, sortBy: "expectedCloseDate", sortDir: "asc", filters: { closingSoon: true } } },
+    { id: "all",   name: "All deals",     isBuiltIn: true, state: { ...DEFAULT_VIEW, filters: {} } },
+    { id: "mine",  name: "My deals",    isBuiltIn: true, state: { ...DEFAULT_VIEW, filters: { ownerId: user?.id ?? "" } } },
+    { id: "open",  name: "Activee Pipeline", isBuiltIn: true, state: { ...DEFAULT_VIEW, filters: { activePipeline: true } } },
+    { id: "closing", name: "Closing < 30 days", isBuiltIn: true, state: { ...DEFAULT_VIEW, sortBy: "expectedCloseDate", sortDir: "asc", filters: { closingSoon: true } } },
   ], [user?.id]);
 
   const [activeViewId, setActiveViewId] = useState<string>("all");
@@ -177,9 +177,9 @@ export default function Deals() {
         qc.invalidateQueries({ queryKey: getListDealsQueryKey() }),
         qc.invalidateQueries({ queryKey: getGetDealPipelineQueryKey() }),
       ]);
-      toast({ title: "Gespeichert" });
+      toast({ title: "Saved" });
     } catch (e) {
-      toast({ title: "Fehler", description: e instanceof Error ? e.message : "", variant: "destructive" });
+      toast({ title: "Error", description: e instanceof Error ? e.message : "", variant: "destructive" });
       throw e;
     }
   }
@@ -188,10 +188,10 @@ export default function Deals() {
     try {
       const res = await bulkOwner.mutateAsync({ data: { ids: [...selected], ownerId } });
       await qc.invalidateQueries({ queryKey: getListDealsQueryKey() });
-      toast({ title: "Owner aktualisiert", description: `${res.updated} geändert, ${res.skipped} übersprungen.` });
+      toast({ title: "Owner updated", description: `${res.updated} changed, ${res.skipped} skipped.` });
       setSelected(new Set());
     } catch (e) {
-      toast({ title: "Fehler", description: e instanceof Error ? e.message : "", variant: "destructive" });
+      toast({ title: "Error", description: e instanceof Error ? e.message : "", variant: "destructive" });
     }
   }
 
@@ -202,10 +202,10 @@ export default function Deals() {
         qc.invalidateQueries({ queryKey: getListDealsQueryKey() }),
         qc.invalidateQueries({ queryKey: getGetDealPipelineQueryKey() }),
       ]);
-      toast({ title: "Stage aktualisiert", description: `${res.updated} geändert, ${res.skipped} übersprungen.` });
+      toast({ title: "Stage updated", description: `${res.updated} changed, ${res.skipped} skipped.` });
       setSelected(new Set());
     } catch (e) {
-      toast({ title: "Fehler", description: e instanceof Error ? e.message : "", variant: "destructive" });
+      toast({ title: "Error", description: e instanceof Error ? e.message : "", variant: "destructive" });
     }
   }
 
@@ -218,10 +218,10 @@ export default function Deals() {
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
         <div>
           <h1 className="text-3xl font-bold tracking-tight">Deals</h1>
-          <p className="text-muted-foreground mt-1">Pipeline, Bewertungen und Forecast aller laufenden Deals.</p>
+          <p className="text-muted-foreground mt-1">Pipeline, valuations and forecast of all active deals.</p>
         </div>
         <Button onClick={() => setCreateOpen(true)} data-testid="deals-new-button" className="w-full sm:w-auto">
-          <Plus className="h-4 w-4 mr-1" /> Deal anlegen
+          <Plus className="h-4 w-4 mr-1" /> Create deal
         </Button>
       </div>
 
@@ -274,7 +274,7 @@ export default function Deals() {
               <Input
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                placeholder="Suche Deal-Name…"
+                placeholder="Search deal name…"
                 className="h-8 pl-8 text-sm"
                 data-testid="deals-search"
               />
@@ -305,7 +305,7 @@ export default function Deals() {
             testId="chip-account"
           />
           <FilterChip
-            label="Mindestwert"
+            label="Min value"
             value={(view.filters as Record<string, string>).minValue?.toString()}
             options={[
               { value: "10000",  label: "≥ 10 k" },
@@ -326,12 +326,12 @@ export default function Deals() {
               { key: "name", label: "Deal", value: (r) => r.name },
               { key: "account", label: "Account", value: (r) => r.accountName },
               { key: "stage", label: "Stage", value: (r) => r.stage },
-              { key: "value", label: "Wert", value: (r) => r.value },
-              { key: "currency", label: "Währung", value: (r) => r.currency },
+              { key: "value", label: "Value", value: (r) => r.value },
+              { key: "currency", label: "Currency", value: (r) => r.currency },
               { key: "owner", label: "Owner", value: (r) => r.ownerName },
               { key: "closeDate", label: "Close", value: (r) => r.expectedCloseDate?.slice(0, 10) ?? "" },
               { key: "probability", label: "Wahrsch.", value: (r) => r.probability },
-              { key: "risk", label: "Risiko", value: (r) => r.riskLevel },
+              { key: "risk", label: "Risk", value: (r) => r.riskLevel },
             ]}
             testId="deals-export"
           />
@@ -343,10 +343,10 @@ export default function Deals() {
         deals && deals.length === 0 && !search ? (
           <EmptyStateCard
             icon={Briefcase}
-            title="Noch keine Deals"
-            body="Lege deinen ersten Deal an, um die Pipeline zu starten."
+            title="No deals yet"
+            body="Create your first deal to start the pipeline."
             primaryAction={{
-              label: "Ersten Deal anlegen",
+              label: "Ersten Create deal",
               onClick: () => setCreateOpen(true),
               testId: "deals-empty-create",
             }}
@@ -355,10 +355,10 @@ export default function Deals() {
         ) : (
           <EmptyStateCard
             icon={Briefcase}
-            title="Keine Treffer"
-            body={search ? `Kein Deal entspricht „${search}".` : "Keine Deals entsprechen den aktuellen Filtern."}
+            title="No matches"
+            body={search ? `No deal matches „${search}".` : "No deals match the current filters."}
             primaryAction={{
-              label: "Filter zurücksetzen",
+              label: "Reset filters",
               onClick: () => { setView((s) => ({ ...s, filters: {} })); setSearch(""); },
             }}
             testId="deals-no-match"
@@ -373,7 +373,7 @@ export default function Deals() {
                   <Checkbox
                     checked={isAllSelected()}
                     onCheckedChange={togglePageAll}
-                    aria-label="Alle auf dieser Seite auswählen"
+                    aria-label="Select all on this page"
                   />
                 </TableHead>
                 {COLUMNS.filter((c) => colVis.visible.has(c.key)).map((c, idx) => (
@@ -421,9 +421,9 @@ export default function Deals() {
 
       <BulkActionBar count={selected.size} onClear={() => setSelected(new Set())}>
         <Select value="" onValueChange={(v) => void doBulkOwner(v)}>
-          <SelectTrigger className="h-8 w-44" aria-label="Owner zuweisen" data-testid="bulk-owner-trigger">
+          <SelectTrigger className="h-8 w-44" aria-label="Assign owner" data-testid="bulk-owner-trigger">
             <span className="inline-flex items-center gap-1.5 text-xs">
-              <UserCog className="h-3.5 w-3.5" /> Owner zuweisen
+              <UserCog className="h-3.5 w-3.5" /> Assign owner
             </span>
           </SelectTrigger>
           <SelectContent>
@@ -433,9 +433,9 @@ export default function Deals() {
           </SelectContent>
         </Select>
         <Select value="" onValueChange={(v) => void doBulkStage(v)}>
-          <SelectTrigger className="h-8 w-44" aria-label="Stage ändern" data-testid="bulk-stage-trigger">
+          <SelectTrigger className="h-8 w-44" aria-label="Change stage" data-testid="bulk-stage-trigger">
             <span className="inline-flex items-center gap-1.5 text-xs">
-              <Workflow className="h-3.5 w-3.5" /> Stage ändern
+              <Workflow className="h-3.5 w-3.5" /> Change stage
             </span>
           </SelectTrigger>
           <SelectContent>
@@ -465,7 +465,7 @@ function DealRow({
   return (
     <TableRow data-state={selected ? "selected" : undefined} className={selected ? "bg-muted/40" : undefined}>
       <TableCell className="sticky left-0 bg-background z-10 md:static md:bg-transparent">
-        <Checkbox checked={selected} onCheckedChange={onToggle} aria-label={`${deal.name} auswählen`} />
+        <Checkbox checked={selected} onCheckedChange={onToggle} aria-label={`Select ${deal.name}`} />
       </TableCell>
       {visible.has("name") && (
         <TableCell className="font-medium sticky left-10 bg-background z-10 md:static md:bg-transparent">
@@ -497,7 +497,7 @@ function DealRow({
       {visible.has("value") && (
         <TableCell className="tabular-nums">
           <InlineEditField
-            ariaLabel="Wert"
+            ariaLabel="Value"
             kind="currency"
             value={deal.value}
             display={`${deal.value.toLocaleString("de-DE")} ${deal.currency}`}
@@ -510,7 +510,7 @@ function DealRow({
       {visible.has("closeDate") && (
         <TableCell className="tabular-nums">
           <InlineEditField
-            ariaLabel="Close-Datum"
+            ariaLabel="Close date"
             kind="date"
             value={deal.expectedCloseDate?.slice(0, 10) ?? ""}
             display={new Date(deal.expectedCloseDate).toLocaleDateString("de-DE")}

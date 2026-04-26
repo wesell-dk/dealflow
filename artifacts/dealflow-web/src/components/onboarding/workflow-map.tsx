@@ -24,7 +24,7 @@ export function WorkflowMap({ onNavigate, variant = "full", mode = "navigate" }:
 
   return (
     <div className={variant === "full" ? "rounded-lg border bg-card p-4" : ""}>
-      <div className="text-sm font-semibold mb-3">Roter Faden – B2B Commercial Workflow</div>
+      <div className="text-sm font-semibold mb-3">Workflow guide – B2B commercial flow</div>
       <ol className="space-y-1">
         {WORKFLOW_STEPS.map((step, idx) => {
           const isCurrent = current?.key === step.key;
@@ -107,7 +107,7 @@ export function WorkflowMap({ onNavigate, variant = "full", mode = "navigate" }:
                       className="inline-flex items-center gap-1 text-xs font-medium text-primary hover:underline"
                       data-testid={`workflow-step-${step.key}-open`}
                     >
-                      Jetzt öffnen <ArrowRight className="h-3 w-3" />
+                      Open now <ArrowRight className="h-3 w-3" />
                     </Link>
                   </div>
                 </div>

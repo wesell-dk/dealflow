@@ -13,9 +13,9 @@ interface TourBannerProps {
 }
 
 export function TourBanner({
-  title = "Willkommen bei DealFlow.One",
-  body = "B2B Commercial Execution — Accounts, Deals, Verträge & Approvals an einem Ort. In 90 Sekunden orientiert.",
-  ctaLabel = "Tour starten",
+  title = "Welcome to DealFlow.One",
+  body = "B2B Commercial Execution — Accounts, deals, contracts & approvals in one place. Get oriented in 90 seconds.",
+  ctaLabel = "Start tour",
   onStartTour,
   className,
 }: TourBannerProps) {
@@ -43,7 +43,7 @@ export function TourBanner({
           className="text-xs text-muted-foreground hover:text-foreground inline-flex items-center gap-1"
           data-testid="tour-banner-restart"
         >
-          <Compass className="h-3 w-3" /> Tour erneut anzeigen
+          <Compass className="h-3 w-3" /> Show tour again
         </button>
       </div>
     );
@@ -56,7 +56,7 @@ export function TourBanner({
         (className ?? "")
       }
       role="region"
-      aria-label="Onboarding-Banner"
+      aria-label="Onboarding banner"
       data-testid="tour-banner"
     >
       <div className="flex items-start gap-3">
@@ -79,7 +79,7 @@ export function TourBanner({
               onClick={dismiss}
               data-testid="tour-banner-dismiss"
             >
-              Verstanden
+              Got it
             </Button>
           </div>
         </div>
@@ -87,7 +87,7 @@ export function TourBanner({
       <button
         type="button"
         onClick={dismiss}
-        aria-label="Banner schließen"
+        aria-label="Close banner"
         className="absolute right-3 top-3 rounded p-1 hover:bg-background/60"
       >
         <X className="h-4 w-4" />

@@ -27,13 +27,13 @@ export function PaginationBar({
   return (
     <div className="flex items-center justify-between gap-4 px-2 py-2 text-xs text-muted-foreground">
       <div className="tabular-nums">
-        {total === 0 ? "0 Einträge" : `${start.toLocaleString()}–${end.toLocaleString()} von ${total.toLocaleString()}`}
+        {total === 0 ? "0 entries" : `${start.toLocaleString()}–${end.toLocaleString()} of ${total.toLocaleString()}`}
       </div>
       <div className="flex items-center gap-3">
         <div className="flex items-center gap-2">
-          <span>Pro Seite</span>
+          <span>Per page</span>
           <Select value={String(pageSize)} onValueChange={(v) => onPageSizeChange(Number(v))}>
-            <SelectTrigger className="h-7 w-20 text-xs" aria-label="Einträge pro Seite">
+            <SelectTrigger className="h-7 w-20 text-xs" aria-label="Entries per page">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
@@ -50,12 +50,12 @@ export function PaginationBar({
             className="h-7 w-7"
             disabled={safePage <= 1}
             onClick={() => onPageChange(safePage - 1)}
-            aria-label="Vorherige Seite"
+            aria-label="Previous page"
           >
             <ChevronLeft className="h-3.5 w-3.5" />
           </Button>
           <span className="px-2 tabular-nums">
-            Seite {safePage} / {totalPages}
+            Page {safePage} / {totalPages}
           </span>
           <Button
             variant="outline"
@@ -63,7 +63,7 @@ export function PaginationBar({
             className="h-7 w-7"
             disabled={safePage >= totalPages}
             onClick={() => onPageChange(safePage + 1)}
-            aria-label="Nächste Seite"
+            aria-label="Next page"
           >
             <ChevronRight className="h-3.5 w-3.5" />
           </Button>

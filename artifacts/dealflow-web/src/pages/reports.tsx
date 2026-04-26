@@ -219,7 +219,7 @@ export default function Reports() {
     const series = [
       ...top.map((t, i) => ({ key: t.key, name: t.name, color: `hsl(var(--chart-${(i % 5) + 1}))` })),
     ];
-    if (otherKeys.size) series.push({ key: "__other__", name: "Weitere", color: "hsl(var(--muted-foreground))" });
+    if (otherKeys.size) series.push({ key: "__other__", name: "Other", color: "hsl(var(--muted-foreground))" });
     return { series, otherKeys };
   }, [renewalTrend, trendMode]);
 
@@ -388,25 +388,25 @@ export default function Reports() {
         </Card>
         <Card data-testid="kpi-renewal-this-month">
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium">Renewals diesen Monat</CardTitle>
+            <CardTitle className="text-sm font-medium">Renewals this month</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">{renewalSummary?.thisMonth.count ?? 0}</div>
-            <div className="text-xs text-muted-foreground mt-1">Notice-Frist im aktuellen Monat</div>
+            <div className="text-xs text-muted-foreground mt-1">Notice deadline in current month</div>
           </CardContent>
         </Card>
         <Card data-testid="kpi-renewal-next90">
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium">Renewals nächste 90 Tage</CardTitle>
+            <CardTitle className="text-sm font-medium">Renewals next 90 days</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">{renewalSummary?.next90.count ?? 0}</div>
-            <div className="text-xs text-muted-foreground mt-1">Aktion erforderlich</div>
+            <div className="text-xs text-muted-foreground mt-1">Action required</div>
           </CardContent>
         </Card>
         <Card data-testid="kpi-renewal-at-risk">
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium">Renewals mit Risiko</CardTitle>
+            <CardTitle className="text-sm font-medium">Renewals with risk</CardTitle>
           </CardHeader>
           <CardContent>
             <div className={`text-2xl font-bold ${(renewalSummary?.atRisk.count ?? 0) > 0 ? TONE_TEXT_CLASSES.warning : ""}`}>
@@ -422,9 +422,9 @@ export default function Reports() {
         <CardHeader>
           <div className="flex items-start justify-between gap-3">
             <div>
-              <CardTitle>Renewal-Pipeline (12 Monate)</CardTitle>
+              <CardTitle>Renewal pipeline (12 months)</CardTitle>
               <p className="text-sm text-muted-foreground mt-1">
-                Volumen pro Monat über die nächsten 12 Monate. Im Modus „Gesamt" zeigt der gestapelte rote Anteil Renewals mit Risiko ≥ 70; in den Modi „nach Brand" / „nach Owner" wird das Volumen je Monat nach den Top-Brands bzw. ‑Ownern aufgeschlüsselt. Klick auf einen Monat öffnet die Aktions-Liste — snoozen, als erledigt markieren oder Owner direkt benachrichtigen.
+                Volume per month over the next 12 months. In "Total" mode the stacked red portion shows renewals with risk ≥ 70; in "by Brand" / "by Owner" modes the volume per month is broken down by top brands or owners. Click a month to open the action list — snooze, mark as done, or notify the owner directly.
               </p>
             </div>
             <Select value={trendMode} onValueChange={(v) => setTrendMode(v as "total" | "brand" | "owner")}>
@@ -492,14 +492,14 @@ export default function Reports() {
                     <Bar
                       dataKey="safeValue"
                       stackId="value"
-                      name="Volumen (Risiko < 70)"
+                      name="Volume (Risk < 70)"
                       fill="hsl(var(--chart-1))"
                       cursor="pointer"
                     />
                     <Bar
                       dataKey="atRiskValue"
                       stackId="value"
-                      name="Volumen (Risiko ≥ 70)"
+                      name="Volume (Risk ≥ 70)"
                       fill="hsl(var(--chart-2))"
                       cursor="pointer"
                     />
@@ -682,7 +682,7 @@ export default function Reports() {
         </CardContent>
       </Card>
 
-      {/* Vertragswesen MVP — KPI-Kacheln */}
+      {/* Contractswesen MVP — KPI-Kacheln */}
       <div className="grid gap-4 md:grid-cols-4" data-testid="kpi-row-contracts">
         <Card data-testid="kpi-time-to-signature">
           <CardHeader className="pb-2">
@@ -697,24 +697,24 @@ export default function Reports() {
         </Card>
         <Card data-testid="kpi-open-deviations">
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium">Offene Klausel-Abweichungen</CardTitle>
+            <CardTitle className="text-sm font-medium">Offene Clause-Abweichungen</CardTitle>
           </CardHeader>
           <CardContent>
             <div className={`text-2xl font-bold ${(dashboard?.openDeviationsCount ?? 0) > 0 ? TONE_TEXT_CLASSES.warning : ""}`}>
               {dashboard?.openDeviationsCount ?? 0}
             </div>
-            <div className="text-xs text-muted-foreground mt-1">Im sichtbaren Scope</div>
+            <div className="text-xs text-muted-foreground mt-1">In visible scope</div>
           </CardContent>
         </Card>
         <Card data-testid="kpi-overdue-obligations">
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium">Überfällige Pflichten</CardTitle>
+            <CardTitle className="text-sm font-medium">Overdue obligations</CardTitle>
           </CardHeader>
           <CardContent>
             <div className={`text-2xl font-bold ${(dashboard?.overdueObligationsCount ?? 0) > 0 ? TONE_TEXT_CLASSES.danger : ""}`}>
               {dashboard?.overdueObligationsCount ?? 0}
             </div>
-            <div className="text-xs text-muted-foreground mt-1">aus signierten Verträgen</div>
+            <div className="text-xs text-muted-foreground mt-1">from signed contracts</div>
           </CardContent>
         </Card>
         <Card data-testid="kpi-approval-duration">

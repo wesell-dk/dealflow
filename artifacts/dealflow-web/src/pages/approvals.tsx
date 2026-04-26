@@ -102,57 +102,57 @@ function MyDelegationsCard() {
       <CardHeader className="pb-2 flex flex-row items-start justify-between">
         <div>
           <CardTitle className="text-base flex items-center gap-2">
-            <UserCog className="h-4 w-4" /> Meine Vertretung
+            <UserCog className="h-4 w-4" /> My delegation
           </CardTitle>
           <CardDescription>
-            Während Ihrer Abwesenheit darf ein Kollege Ihre Approvals entscheiden.
+            While you are away, a colleague may decide your approvals.
           </CardDescription>
         </div>
         <Button variant="outline" size="sm" onClick={() => setOpen(o => !o)} data-testid="button-toggle-delegation-form">
-          {open ? "Abbrechen" : "Neue Vertretung"}
+          {open ? "Cancel" : "New delegation"}
         </Button>
       </CardHeader>
       <CardContent className="space-y-3 text-sm">
         {open && (
           <div className="grid grid-cols-1 md:grid-cols-4 gap-2 border rounded p-3 bg-muted/20">
             <div>
-              <Label className="text-xs">Vertreten durch</Label>
+              <Label className="text-xs">Delegated to</Label>
               <select
                 className="w-full border rounded h-9 px-2 bg-background"
                 value={toUserId}
                 onChange={e => setToUserId(e.target.value)}
                 data-testid="select-delegation-to-user"
               >
-                <option value="">— wählen —</option>
+                <option value="">— select —</option>
                 {(users ?? []).map(u => (
                   <option key={u.id} value={u.id}>{u.name} ({u.role})</option>
                 ))}
               </select>
             </div>
             <div>
-              <Label className="text-xs">Von</Label>
+              <Label className="text-xs">From</Label>
               <Input type="datetime-local" value={validFrom} onChange={e => setValidFrom(e.target.value)} data-testid="input-delegation-from" />
             </div>
             <div>
-              <Label className="text-xs">Bis</Label>
+              <Label className="text-xs">To</Label>
               <Input type="datetime-local" value={validUntil} onChange={e => setValidUntil(e.target.value)} data-testid="input-delegation-until" />
             </div>
             <div>
-              <Label className="text-xs">Grund (optional)</Label>
+              <Label className="text-xs">Reason (optional)</Label>
               <Input value={reason} onChange={e => setReason(e.target.value)} placeholder="Urlaub, Reise..." data-testid="input-delegation-reason" />
             </div>
             <div className="md:col-span-4 flex justify-end">
               <Button size="sm" onClick={handleCreate} disabled={!toUserId || !validFrom || !validUntil} data-testid="button-create-delegation">
-                Vertretung anlegen
+                Create delegation
               </Button>
             </div>
           </div>
         )}
         {out.length === 0 ? (
-          <div className="text-muted-foreground text-xs">Sie haben keine aktive Vertretung eingerichtet.</div>
+          <div className="text-muted-foreground text-xs">You have no active delegation set up.</div>
         ) : (
           <div className="space-y-2">
-            <div className="text-xs font-medium text-muted-foreground">Sie werden vertreten durch:</div>
+            <div className="text-xs font-medium text-muted-foreground">You are delegated to:</div>
             {out.map((d: UserDelegation) => (
               <div key={d.id} className="flex items-center justify-between border rounded px-3 py-2" data-testid={`delegation-out-${d.id}`}>
                 <div className="text-sm">
@@ -161,7 +161,7 @@ function MyDelegationsCard() {
                     {new Date(d.validFrom).toLocaleString()} – {new Date(d.validUntil).toLocaleString()}
                   </span>
                   {d.reason && <span className="ml-2 italic text-xs text-muted-foreground">({d.reason})</span>}
-                  {!d.active && <Badge variant="outline" className="ml-2">inaktiv</Badge>}
+                  {!d.active && <Badge variant="outline" className="ml-2">inactive</Badge>}
                 </div>
                 <div className="flex gap-1">
                   <Button
@@ -169,7 +169,7 @@ function MyDelegationsCard() {
                     onClick={() => updateDelegation.mutate({ id: d.id, data: { active: !d.active } }, { onSuccess: refresh })}
                     data-testid={`button-toggle-delegation-${d.id}`}
                   >
-                    {d.active ? "Deaktivieren" : "Aktivieren"}
+                    {d.active ? "Deactivate" : "Activate"}
                   </Button>
                   <Button
                     variant="ghost" size="sm"
@@ -185,14 +185,14 @@ function MyDelegationsCard() {
         )}
         {inc.length > 0 && (
           <div className="space-y-2 pt-2 border-t">
-            <div className="text-xs font-medium text-muted-foreground">Sie vertreten:</div>
+            <div className="text-xs font-medium text-muted-foreground">You are deputizing for:</div>
             {inc.map((d: UserDelegation) => (
               <div key={d.id} className="text-sm" data-testid={`delegation-in-${d.id}`}>
                 <span className="font-medium">{d.fromUserName ?? d.fromUserId}</span>
                 <span className="text-muted-foreground ml-2 text-xs">
                   {new Date(d.validFrom).toLocaleString()} – {new Date(d.validUntil).toLocaleString()}
                 </span>
-                {!d.active && <Badge variant="outline" className="ml-2">inaktiv</Badge>}
+                {!d.active && <Badge variant="outline" className="ml-2">inactive</Badge>}
               </div>
             ))}
           </div>
@@ -443,12 +443,12 @@ export default function Approvals() {
                   <CardFooter className="pt-3 border-t bg-muted/10 flex flex-col items-stretch gap-3">
                     {!canDecide && hasStages && (
                       <div className="text-xs text-muted-foreground italic" data-testid={`hint-cannot-decide-${approval.id}`}>
-                        Sie sind für die aktuelle Stage nicht entscheidungsberechtigt.
+                        You are not authorized to decide on the current stage.
                       </div>
                     )}
                     {canDecide && onBehalfOf && (
                       <div className="text-xs text-amber-700 italic" data-testid={`hint-on-behalf-${approval.id}`}>
-                        Sie entscheiden im Auftrag eines vertretenen Kollegen.
+                        You are deciding on behalf of a delegating colleague.
                       </div>
                     )}
                     {canDecide && rejectingId === approval.id ? (

@@ -120,13 +120,13 @@ export function SavedViewTabs({
           sortDir: currentState.sortDir ?? null,
         },
       });
-      toast({ title: "Ansicht gespeichert", description: created.name });
+      toast({ title: "View saved", description: created.name });
       setCreateOpen(false);
       setName("");
       await invalidate();
       onSelect(created.id, toState(created));
     } catch (e) {
-      toast({ title: "Speichern fehlgeschlagen", description: e instanceof Error ? e.message : "", variant: "destructive" });
+      toast({ title: "Save failed", description: e instanceof Error ? e.message : "", variant: "destructive" });
     }
   }
 
@@ -141,23 +141,23 @@ export function SavedViewTabs({
           sortDir: currentState.sortDir ?? null,
         },
       });
-      toast({ title: "Ansicht aktualisiert", description: updated.name });
+      toast({ title: "View updated", description: updated.name });
       await invalidate();
     } catch (e) {
-      toast({ title: "Update fehlgeschlagen", description: e instanceof Error ? e.message : "", variant: "destructive" });
+      toast({ title: "Update failed", description: e instanceof Error ? e.message : "", variant: "destructive" });
     }
   }
 
   async function handleDelete(id: string) {
-    if (!confirm("Diese Ansicht wirklich löschen?")) return;
+    if (!confirm("Really delete this view?")) return;
     try {
       await remove.mutateAsync({ id });
       await invalidate();
       const fallback = builtIns[0];
       if (fallback) onSelect(fallback.id, fallback.state);
-      toast({ title: "Ansicht gelöscht" });
+      toast({ title: "View deleted" });
     } catch (e) {
-      toast({ title: "Löschen fehlgeschlagen", description: e instanceof Error ? e.message : "", variant: "destructive" });
+      toast({ title: "Delete failed", description: e instanceof Error ? e.message : "", variant: "destructive" });
     }
   }
 
@@ -193,19 +193,19 @@ export function SavedViewTabs({
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="start">
                   <DropdownMenuItem onClick={() => handleUpdate(v.id)} disabled={!dirty || v.id !== activeViewId}>
-                    <Save className="h-3.5 w-3.5 mr-2" /> Änderungen speichern
+                    <Save className="h-3.5 w-3.5 mr-2" /> Save changes
                   </DropdownMenuItem>
                   <DropdownMenuItem onClick={() => {
-                    const newName = prompt("Neuer Name", v.name);
+                    const newName = prompt("New name", v.name);
                     if (newName && newName.trim()) {
                       void update.mutateAsync({ id: v.id, data: { name: newName.trim() } }).then(invalidate);
                     }
                   }}>
-                    <Pencil className="h-3.5 w-3.5 mr-2" /> Umbenennen
+                    <Pencil className="h-3.5 w-3.5 mr-2" /> Rename
                   </DropdownMenuItem>
                   <DropdownMenuSeparator />
                   <DropdownMenuItem onClick={() => handleDelete(v.id)} className="text-destructive">
-                    <X className="h-3.5 w-3.5 mr-2" /> Löschen
+                    <X className="h-3.5 w-3.5 mr-2" /> Delete
                   </DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>
@@ -223,7 +223,7 @@ export function SavedViewTabs({
             onClick={() => activeServer && handleUpdate(activeServer.id)}
             data-testid="save-view-changes"
           >
-            <Save className="h-3.5 w-3.5" /> Änderungen speichern
+            <Save className="h-3.5 w-3.5" /> Save changes
           </Button>
         )}
         <Button
@@ -233,16 +233,16 @@ export function SavedViewTabs({
           onClick={() => { setName(""); setCreateOpen(true); }}
           data-testid="save-view-as"
         >
-          <Plus className="h-3.5 w-3.5" /> Ansicht speichern
+          <Plus className="h-3.5 w-3.5" /> Save view
         </Button>
       </div>
 
       <Dialog open={createOpen} onOpenChange={setCreateOpen}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle>Neue Ansicht speichern</DialogTitle>
+            <DialogTitle>Save new view</DialogTitle>
             <DialogDescription>
-              Speichert die aktuellen Filter, Spalten und Sortierung als wiederverwendbare Ansicht.
+              Saves the current filters, columns and sort order as a reusable view.
             </DialogDescription>
           </DialogHeader>
           <div className="grid gap-2 py-2">
@@ -252,16 +252,16 @@ export function SavedViewTabs({
               autoFocus
               value={name}
               onChange={(e) => setName(e.target.value)}
-              placeholder="z. B. Meine offenen Deals"
+              placeholder="e.g. My open deals"
               maxLength={80}
               onKeyDown={(e) => { if (e.key === "Enter") void handleSaveAs(); }}
               data-testid="save-view-name-input"
             />
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setCreateOpen(false)}>Abbrechen</Button>
+            <Button variant="outline" onClick={() => setCreateOpen(false)}>Cancel</Button>
             <Button onClick={handleSaveAs} disabled={!name.trim()} data-testid="save-view-confirm">
-              Speichern
+              Save
             </Button>
           </DialogFooter>
         </DialogContent>

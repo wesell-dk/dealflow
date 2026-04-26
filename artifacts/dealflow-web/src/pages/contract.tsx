@@ -234,7 +234,7 @@ export default function Contract() {
               </Select>
             </div>
             <Button variant="outline" size="sm" onClick={() => window.open(`/api/contracts/${id}/pdf`, '_blank')}>
-              <FileText className="h-4 w-4 mr-2" /> PDF anzeigen
+              <FileText className="h-4 w-4 mr-2" /> View PDF
             </Button>
             <Badge variant="outline" className="text-sm px-3 py-1">{contract.status}</Badge>
             <Badge
@@ -810,10 +810,10 @@ function QueueSuggestionDialog({
 
 function amendmentTypeLabel(type: string): string {
   switch (type) {
-    case "price-change": return "Preisänderung";
-    case "scope-change": return "Leistungsänderung";
-    case "term-extension": return "Laufzeitverlängerung";
-    case "renewal": return "Verlängerung";
+    case "price-change": return "Price change";
+    case "scope-change": return "Scope change";
+    case "term-extension": return "Term extension";
+    case "renewal": return "Renewal";
     default: return type;
   }
 }
@@ -845,11 +845,11 @@ function EffectiveStateSection({ contractId, contractStatus }: { contractId: str
       <div className="flex items-center justify-between pb-2 border-b">
         <div className="flex items-center gap-2">
           <Library className="h-5 w-5 text-muted-foreground" />
-          <h2 className="text-xl font-semibold">Aktueller Vertragsstand</h2>
-          {data && <Badge variant="outline" className="ml-2">{data.appliedAmendments.length} Nachträge angewandt</Badge>}
+          <h2 className="text-xl font-semibold">Current contract state</h2>
+          {data && <Badge variant="outline" className="ml-2">{data.appliedAmendments.length} amendments applied</Badge>}
         </div>
         <Button variant="outline" size="sm" onClick={() => setOpen(!open)} data-testid="button-toggle-effective-state">
-          {open ? "Ausblenden" : "Anzeigen"}
+          {open ? "Hide" : "Show"}
         </Button>
       </div>
       {open && (
@@ -858,11 +858,11 @@ function EffectiveStateSection({ contractId, contractStatus }: { contractId: str
         ) : (
           <div className="space-y-2">
             <p className="text-sm text-muted-foreground">
-              Klausel-Bestand inkl. aller aktiven Nachträge ({data.appliedAmendments.length} angewandt).
+              Clause set including all active amendments ({data.appliedAmendments.length} applied).
             </p>
             {data.clauses.length === 0 ? (
               <div className="p-4 text-center border rounded-md text-muted-foreground bg-muted/10 text-sm">
-                Keine Klauseln vorhanden.
+                No clauses present.
               </div>
             ) : (
               <div className="grid gap-2">
@@ -910,9 +910,9 @@ function AmendmentsSection({ contractId, contractStatus }: { contractId: string;
       setOpen(false);
       setTitle("");
       setDescription("");
-      toast({ title: "Nachtrag angelegt" });
+      toast({ title: "Amendment created" });
     } catch (e) {
-      toast({ title: "Fehler", description: String(e), variant: "destructive" });
+      toast({ title: "Error", description: String(e), variant: "destructive" });
     }
   }
 
@@ -921,12 +921,12 @@ function AmendmentsSection({ contractId, contractStatus }: { contractId: string;
       <div className="flex items-center justify-between pb-2 border-b">
         <div className="flex items-center gap-2">
           <FileStack className="h-5 w-5 text-muted-foreground" />
-          <h2 className="text-xl font-semibold">Nachträge (Amendments)</h2>
+          <h2 className="text-xl font-semibold">Amendments</h2>
           <Badge variant="outline" className="ml-2">{amendments?.length ?? 0}</Badge>
         </div>
         {canAmend && (
           <Button size="sm" variant="outline" onClick={() => setOpen(true)} data-testid="button-new-amendment">
-            <Plus className="h-4 w-4 mr-1" /> Neuer Nachtrag
+            <Plus className="h-4 w-4 mr-1" /> New amendment
           </Button>
         )}
       </div>
@@ -935,7 +935,7 @@ function AmendmentsSection({ contractId, contractStatus }: { contractId: string;
         <Skeleton className="h-24 w-full" />
       ) : (amendments?.length ?? 0) === 0 ? (
         <div className="p-6 text-center border rounded-md text-muted-foreground bg-muted/10 text-sm">
-          {canAmend ? "Keine Nachträge vorhanden." : `Nachträge sind erst ab Vertragsstatus "signed" möglich.`}
+          {canAmend ? "No amendments." : `Amendments are only available once the contract status is "signed".`}
         </div>
       ) : (
         <div className="grid gap-2">
@@ -951,7 +951,7 @@ function AmendmentsSection({ contractId, contractStatus }: { contractId: string;
                       {a.effectiveFrom && (
                         <>
                           <span>·</span>
-                          <span>gültig ab {new Date(a.effectiveFrom).toLocaleDateString()}</span>
+                          <span>valid from {new Date(a.effectiveFrom).toLocaleDateString()}</span>
                         </>
                       )}
                     </div>
@@ -973,49 +973,49 @@ function AmendmentsSection({ contractId, contractStatus }: { contractId: string;
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Neuer Nachtrag</DialogTitle>
+            <DialogTitle>New amendment</DialogTitle>
             <DialogDescription>
-              Nachtrag zum aktiven Vertrag. Eigener Approval- und Signaturprozess.
+              Amendment to the active contract. Has its own approval and signature process.
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-3 pt-2">
             <div>
-              <label className="text-xs font-medium text-muted-foreground uppercase">Typ</label>
+              <label className="text-xs font-medium text-muted-foreground uppercase">Type</label>
               <Select value={type} onValueChange={setType}>
                 <SelectTrigger data-testid="select-amendment-type"><SelectValue /></SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="price-change">Preisänderung</SelectItem>
-                  <SelectItem value="scope-change">Leistungsänderung</SelectItem>
-                  <SelectItem value="term-extension">Laufzeitverlängerung</SelectItem>
-                  <SelectItem value="renewal">Verlängerung</SelectItem>
+                  <SelectItem value="price-change">Price change</SelectItem>
+                  <SelectItem value="scope-change">Scope change</SelectItem>
+                  <SelectItem value="term-extension">Term extension</SelectItem>
+                  <SelectItem value="renewal">Renewal</SelectItem>
                 </SelectContent>
               </Select>
             </div>
             <div>
-              <label className="text-xs font-medium text-muted-foreground uppercase">Titel</label>
+              <label className="text-xs font-medium text-muted-foreground uppercase">Title</label>
               <input
                 type="text"
                 className="w-full px-3 py-2 border rounded-md text-sm bg-background"
                 value={title}
                 onChange={e => setTitle(e.target.value)}
-                placeholder="z.B. Preisanpassung Q2 2026"
+                placeholder="e.g. Price adjustment Q2 2026"
                 data-testid="input-amendment-title"
               />
             </div>
             <div>
-              <label className="text-xs font-medium text-muted-foreground uppercase">Beschreibung</label>
+              <label className="text-xs font-medium text-muted-foreground uppercase">Description</label>
               <textarea
                 className="w-full px-3 py-2 border rounded-md text-sm bg-background min-h-[80px]"
                 value={description}
                 onChange={e => setDescription(e.target.value)}
-                placeholder="Begründung und Umfang der Änderung"
+                placeholder="Justification and scope of the change"
                 data-testid="textarea-amendment-description"
               />
             </div>
             <div className="flex justify-end gap-2 pt-2">
               <Button variant="outline" onClick={() => setOpen(false)}>{t("common.cancel")}</Button>
               <Button onClick={onCreate} disabled={!title.trim() || create.isPending} data-testid="button-create-amendment">
-                Anlegen
+                Create
               </Button>
             </div>
           </div>
@@ -1040,21 +1040,21 @@ function severityBadge(sev: string) {
 
 function deviationTypeLabel(t: string): string {
   return ({
-    missing_required: "Pflicht-Klausel fehlt",
-    forbidden_used: "Verbotene Klausel verwendet",
-    variant_change: "Variante außerhalb Playbook",
-    text_edit: "Text-Edit (Redline)",
-    threshold_breach: "Schwellwert verletzt",
+    missing_required: "Required clause missing",
+    forbidden_used: "Forbidden clause used",
+    variant_change: "Variant outside playbook",
+    text_edit: "Text edit (Redline)",
+    threshold_breach: "Threshold breached",
   } as Record<string, string>)[t] ?? t;
 }
 
 function obligationTypeLabel(t: string): string {
   return ({
-    delivery: "Lieferung",
+    delivery: "Delivery",
     reporting: "Reporting",
     sla: "SLA",
-    payment: "Zahlung",
-    notice: "Mitteilung",
+    payment: "Payment",
+    notice: "Notice",
     audit: "Audit",
   } as Record<string, string>)[t] ?? t;
 }
@@ -1108,13 +1108,13 @@ function CuadCoverageSection({ contractId }: { contractId: string }) {
         id: contractId,
         data: { contractTypeId: pendingContractTypeId },
       });
-      toast({ title: "Vertragstyp zugeordnet", description: "CUAD-Coverage wird neu berechnet." });
+      toast({ title: "Contract type assigned", description: "CUAD coverage will be recalculated." });
       await qc.invalidateQueries({ queryKey: getGetContractQueryKey(contractId) });
       await qc.invalidateQueries();
       setPendingContractTypeId("");
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : "Bitte versuche es erneut.";
-      toast({ title: "Zuordnung fehlgeschlagen", description: msg, variant: "destructive" });
+      const msg = err instanceof Error ? err.message : "Please try again.";
+      toast({ title: "Assignment failed", description: msg, variant: "destructive" });
     }
   }
 
@@ -1135,12 +1135,12 @@ function CuadCoverageSection({ contractId }: { contractId: string }) {
         qc.invalidateQueries({ queryKey: getGetContractQueryKey(contractId) }),
       ]);
       toast({
-        title: "Klausel hinzugefügt",
+        title: "Clause added",
         description: `${res.clause.family} → ${res.clause.variant}`,
       });
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : "Unbekannter Fehler";
-      toast({ title: "Hinzufügen fehlgeschlagen", description: msg, variant: "destructive" });
+      const msg = err instanceof Error ? err.message : "Unknown error";
+      toast({ title: "Add failed", description: msg, variant: "destructive" });
     } finally {
       setPendingFamilyId(null);
     }
@@ -1180,7 +1180,7 @@ function CuadCoverageSection({ contractId }: { contractId: string }) {
                 data-testid={`cuad-add-${cuadCategoryId}-${fid}`}
               >
                 <Plus className="h-3 w-3" />
-                {isPending ? "…" : "Hinzufügen"}
+                {isPending ? "…" : "Add"}
               </Button>
             </div>
           );
@@ -1199,10 +1199,10 @@ function CuadCoverageSection({ contractId }: { contractId: string }) {
         },
       });
       toast({
-        title: opts.override ? "Freigabe via Override angefordert" : "Freigabe angefordert",
+        title: opts.override ? "Approval requested via override" : "Approval requested",
         description: opts.override
-          ? `Override im Audit-Log protokolliert · ${missingExpectedCount} Pflicht-Baustein${missingExpectedCount === 1 ? "" : "e"} fehlt(en)`
-          : "Approval-Hub geöffnet…",
+          ? `Override logged in audit log · ${missingExpectedCount} required component${missingExpectedCount === 1 ? "" : "s"} missing`
+          : "Opening approval hub…",
         variant: opts.override ? "destructive" : "default",
       });
       setOverrideOpen(false);
@@ -1214,16 +1214,16 @@ function CuadCoverageSection({ contractId }: { contractId: string }) {
         const data = err.data as { code?: string; missingExpectedCount?: number; approvalId?: string } | null;
         if (data?.code === "cuad_required_missing") {
           toast({
-            title: "Freigabe blockiert",
-            description: `Pflicht-CUAD-Bausteine fehlen (${data.missingExpectedCount ?? 0}). Bitte ergänzen oder Override anfordern.`,
+            title: "Approval blocked",
+            description: `Required CUAD components missing (${data.missingExpectedCount ?? 0}). Please add them or request an override.`,
             variant: "destructive",
           });
           return;
         }
         if (data?.approvalId) {
           toast({
-            title: "Bereits angefordert",
-            description: "Es existiert bereits eine offene Freigabe für diesen Vertrag.",
+            title: "Already requested",
+            description: "An open approval already exists for this contract.",
           });
           setLocation(`/approvals?highlight=${encodeURIComponent(data.approvalId)}`);
           return;
@@ -1231,14 +1231,14 @@ function CuadCoverageSection({ contractId }: { contractId: string }) {
       }
       if (err instanceof ApiError && err.status === 403) {
         toast({
-          title: "Override nicht erlaubt",
-          description: "Nur Tenant-Admins dürfen die CUAD-Vorprüfung umgehen.",
+          title: "Override not allowed",
+          description: "Only tenant admins may bypass the CUAD pre-check.",
           variant: "destructive",
         });
         return;
       }
       toast({
-        title: "Freigabe konnte nicht angefordert werden",
+        title: "Could not request approval",
         description: err instanceof Error ? err.message : String(err),
         variant: "destructive",
       });
@@ -1250,15 +1250,15 @@ function CuadCoverageSection({ contractId }: { contractId: string }) {
       <div className="flex items-center justify-between gap-2 pb-2 border-b flex-wrap">
         <div className="flex items-center gap-2">
           <Library className="h-5 w-5 text-muted-foreground" />
-          <h2 className="text-xl font-semibold">Typische Bausteine (CUAD)</h2>
+          <h2 className="text-xl font-semibold">Typical components (CUAD)</h2>
           {cov && (
             <Badge variant="outline" className="ml-2">
-              {coveredRequired}/{totalRequired} Pflicht
+              {coveredRequired}/{totalRequired} required
             </Badge>
           )}
           {cov && cov.missingExpectedCount > 0 && (
             <Badge variant="outline" className="border-amber-300 text-amber-700 bg-amber-50">
-              {cov.missingExpectedCount} fehlt
+              {cov.missingExpectedCount} missing
             </Badge>
           )}
         </div>
@@ -1272,17 +1272,17 @@ function CuadCoverageSection({ contractId }: { contractId: string }) {
                 onClick={() => { setOverrideReason(""); setOverrideOpen(true); }}
                 data-testid="button-request-approval-override"
               >
-                <ShieldAlert className="h-4 w-4 mr-2" /> Trotzdem anfordern
+                <ShieldAlert className="h-4 w-4 mr-2" /> Request anyway
               </Button>
             ) : (
               <Button
                 size="sm"
                 variant="outline"
                 disabled
-                title="Pflicht-Bausteine fehlen — Override nur für Tenant-Admins"
+                title="Required components missing — override only for tenant admins"
                 data-testid="button-request-approval-blocked"
               >
-                <ShieldAlert className="h-4 w-4 mr-2" /> Freigabe blockiert
+                <ShieldAlert className="h-4 w-4 mr-2" /> Approval blocked
               </Button>
             )
           ) : (
@@ -1293,7 +1293,7 @@ function CuadCoverageSection({ contractId }: { contractId: string }) {
               data-testid="button-request-approval"
             >
               <ShieldCheck className="h-4 w-4 mr-2" />
-              {requestApproval.isPending ? "Sende…" : "Freigabe anfordern"}
+              {requestApproval.isPending ? "Sending…" : "Request approval"}
             </Button>
           )}
         </div>
@@ -1306,11 +1306,11 @@ function CuadCoverageSection({ contractId }: { contractId: string }) {
         >
           <div className="flex items-center gap-2 text-red-800 font-medium text-sm">
             <ShieldAlert className="h-4 w-4" />
-            Freigabe blockiert: Pflicht-Bausteine fehlen ({missingExpectedCount})
+            Approval blocked: Required clauses missing ({missingExpectedCount})
           </div>
           <div className="text-xs text-red-900/80">
-            Für den Vertragstyp <strong>{cov?.contractTypeName ?? cov?.contractTypeId}</strong> sind folgende
-            CUAD-Pflichtkategorien noch nicht abgedeckt:
+            For contract type <strong>{cov?.contractTypeName ?? cov?.contractTypeId}</strong> the following
+            mandatory CUAD categories are not yet covered:
           </div>
           <ul className="text-xs text-red-900 list-disc pl-5 space-y-0.5" data-testid="cuad-block-missing-list">
             {missingExpected.map(m => (
@@ -1322,7 +1322,7 @@ function CuadCoverageSection({ contractId }: { contractId: string }) {
           </ul>
           {!isTenantAdmin && (
             <div className="text-xs text-red-900/80 pt-1">
-              Bitte ergänze die fehlenden Klauselfamilien unten oder bitte einen Tenant-Admin um Override.
+              Please add the missing clause families below or ask a tenant admin for an override.
             </div>
           )}
         </div>
@@ -1331,32 +1331,32 @@ function CuadCoverageSection({ contractId }: { contractId: string }) {
       <Dialog open={overrideOpen} onOpenChange={(o) => { if (!o) setOverrideOpen(false); }}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Freigabe trotz fehlender Pflicht-Bausteine?</DialogTitle>
+            <DialogTitle>Request approval despite missing required clauses?</DialogTitle>
             <DialogDescription>
-              {missingExpectedCount} Pflicht-CUAD-Kategorie{missingExpectedCount === 1 ? "" : "n"}{" "}
-              ({missingExpected.map(m => m.code).join(", ")}) fehlen für{" "}
-              <strong>{cov?.contractTypeName ?? cov?.contractTypeId}</strong>. Der Override
-              landet im Audit-Log und ist Compliance-relevant — bitte gib eine nachvollziehbare
-              Begründung an.
+              {missingExpectedCount} required CUAD categor{missingExpectedCount === 1 ? "y" : "ies"}{" "}
+              ({missingExpected.map(m => m.code).join(", ")}) {missingExpectedCount === 1 ? "is" : "are"} missing for{" "}
+              <strong>{cov?.contractTypeName ?? cov?.contractTypeId}</strong>. The override
+              is recorded in the audit log and is compliance-relevant — please provide a clear,
+              traceable justification.
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-2">
-            <Label htmlFor="override-reason">Begründung (Pflicht, ≥10 Zeichen)</Label>
+            <Label htmlFor="override-reason">Justification (required, ≥10 characters)</Label>
             <Textarea
               id="override-reason"
               value={overrideReason}
               onChange={(e) => setOverrideReason(e.target.value)}
-              placeholder="z. B. Parties+Governing Law werden im beigefügten Side Letter geregelt — Freigabe-Eskalation an Legal-Lead per Mail."
+              placeholder="e.g. Parties + Governing Law are covered in the attached side letter — approval escalation to Legal Lead via email."
               rows={4}
               data-testid="textarea-override-reason"
             />
             <div className="text-xs text-muted-foreground">
-              {overrideReason.trim().length}/10 Zeichen
+              {overrideReason.trim().length}/10 characters
             </div>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setOverrideOpen(false)} data-testid="button-override-cancel">
-              Abbrechen
+              Cancel
             </Button>
             <Button
               variant="destructive"
@@ -1364,7 +1364,7 @@ function CuadCoverageSection({ contractId }: { contractId: string }) {
               onClick={() => submitApproval({ override: true, overrideReason: overrideReason.trim() })}
               data-testid="button-override-confirm"
             >
-              {requestApproval.isPending ? "Sende…" : "Override anwenden & Freigabe anfordern"}
+              {requestApproval.isPending ? "Sending…" : "Apply override & request approval"}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -1378,8 +1378,8 @@ function CuadCoverageSection({ contractId }: { contractId: string }) {
           data-testid="cuad-bind-contract-type"
         >
           <p className="text-muted-foreground">
-            Kein Vertragstyp zugeordnet — ohne Bindung kann die CUAD-Coverage nicht berechnet werden.
-            Wähle einen Vertragstyp, um die typischen Bausteine sofort zu prüfen.
+            No contract type assigned — without it, CUAD coverage cannot be calculated.
+            Select a contract type to check the typical clauses immediately.
           </p>
           <div className="flex flex-wrap items-center gap-2">
             <Select
@@ -1390,7 +1390,7 @@ function CuadCoverageSection({ contractId }: { contractId: string }) {
                 className="w-72"
                 data-testid="select-bind-contract-type"
               >
-                <SelectValue placeholder="Vertragstyp wählen…" />
+                <SelectValue placeholder="Select contract type…" />
               </SelectTrigger>
               <SelectContent>
                 {(contractTypes ?? [])
@@ -1410,7 +1410,7 @@ function CuadCoverageSection({ contractId }: { contractId: string }) {
               disabled={!pendingContractTypeId || patchContract.isPending}
               data-testid="button-bind-contract-type"
             >
-              Vertragstyp zuordnen
+              Assign contract type
             </Button>
           </div>
         </div>
@@ -1422,9 +1422,9 @@ function CuadCoverageSection({ contractId }: { contractId: string }) {
                 <div>
                   <div className="text-sm font-medium">{cov.contractTypeName ?? cov.contractTypeId}</div>
                   <div className="text-xs text-muted-foreground">
-                    {coveredRequired} von {totalRequired} Pflicht-Kategorien abgedeckt
+                    {coveredRequired} of {totalRequired} required categories covered
                     {cov.totalRecommended > 0 && (
-                      <> · {cov.coveredRecommended}/{cov.totalRecommended} empfohlen</>
+                      <> · {cov.coveredRecommended}/{cov.totalRecommended} recommended</>
                     )}
                   </div>
                 </div>
@@ -1441,7 +1441,7 @@ function CuadCoverageSection({ contractId }: { contractId: string }) {
           {cov.missing.length > 0 && (
             <div className="space-y-2" data-testid="cuad-missing-list">
               <div className="text-sm font-medium text-amber-700">
-                Typische Bausteine fehlen
+                Typical clauses missing
               </div>
               {cov.missing.map(m => (
                 <div
@@ -1458,7 +1458,7 @@ function CuadCoverageSection({ contractId }: { contractId: string }) {
                             ? "border-amber-300 text-amber-700 bg-amber-50"
                             : "border-slate-300 text-slate-600"}
                         >
-                          {m.requirement === "expected" ? "Pflicht" : "Empfohlen"}
+                          {m.requirement === "expected" ? "Required" : "Recommended"}
                         </Badge>
                         <span className="text-sm font-medium">{m.name}</span>
                         <span className="text-xs text-muted-foreground font-mono">{m.code}</span>
@@ -1466,7 +1466,7 @@ function CuadCoverageSection({ contractId }: { contractId: string }) {
                       {m.suggestedFamilyIds.length > 0 && (
                         <div className="mt-1.5">
                           <div className="text-xs text-muted-foreground">
-                            Vorschläge — Klauselfamilie hinzufügen:
+                            Suggestions — add clause family:
                           </div>
                           {renderSuggestedFamilies(m.suggestedFamilyIds, m.cuadCategoryId)}
                         </div>
@@ -1486,7 +1486,7 @@ function CuadCoverageSection({ contractId }: { contractId: string }) {
                 className="text-xs text-muted-foreground hover:underline"
                 data-testid="cuad-toggle-covered"
               >
-                {showAll ? "▾" : "▸"} Abgedeckte Kategorien ({cov.covered.length})
+                {showAll ? "▾" : "▸"} Covered categories ({cov.covered.length})
               </button>
               {showAll && (
                 <div className="grid gap-2" data-testid="cuad-covered-list">
@@ -1498,7 +1498,7 @@ function CuadCoverageSection({ contractId }: { contractId: string }) {
                     >
                       <div className="flex items-center gap-2 flex-wrap">
                         <Badge variant="outline" className="border-emerald-300 text-emerald-700 bg-emerald-50">
-                          {c.requirement === "expected" ? "Pflicht" : "Empf."}
+                          {c.requirement === "expected" ? "Required" : "Rec."}
                         </Badge>
                         <span className="font-medium">{c.name}</span>
                         <span className="text-xs text-muted-foreground font-mono">{c.code}</span>
@@ -1528,23 +1528,23 @@ function DeviationsSection({ contractId }: { contractId: string }) {
       const res = await evaluate.mutateAsync({ id: contractId });
       await qc.invalidateQueries({ queryKey: getListContractDeviationsQueryKey(contractId) });
       toast({
-        title: "Klausel-Prüfung abgeschlossen",
-        description: `Offen: ${res.summary.open} · Gesamt: ${res.summary.total}`,
+        title: "Clause check completed",
+        description: `Open: ${res.summary.open} · Total: ${res.summary.total}`,
       });
     } catch {
-      toast({ title: "Prüfung fehlgeschlagen", variant: "destructive" });
+      toast({ title: "Check failed", variant: "destructive" });
     }
   };
 
   const onResolve = async (dev: ClauseDeviation, label: string) => {
-    const note = window.prompt(`Begründung für ${label}:`, label);
+    const note = window.prompt(`Reason for ${label}:`, label);
     if (!note?.trim()) return;
     try {
       await resolve.mutateAsync({ id: dev.id, data: { resolutionNote: note.trim() } });
       await qc.invalidateQueries({ queryKey: getListContractDeviationsQueryKey(contractId) });
-      toast({ title: "Abweichung aufgelöst" });
+      toast({ title: "Deviation resolved" });
     } catch {
-      toast({ title: "Aktion fehlgeschlagen", variant: "destructive" });
+      toast({ title: "Action failed", variant: "destructive" });
     }
   };
 
@@ -1556,10 +1556,10 @@ function DeviationsSection({ contractId }: { contractId: string }) {
       <div className="flex items-center justify-between gap-2 pb-2 border-b">
         <div className="flex items-center gap-2">
           <AlertTriangle className="h-5 w-5 text-muted-foreground" />
-          <h2 className="text-xl font-semibold">Klausel-Abweichungen</h2>
+          <h2 className="text-xl font-semibold">Clause deviations</h2>
           {open.length > 0 && (
             <Badge variant="outline" className="border-amber-300 text-amber-700 bg-amber-50">
-              {open.length} offen
+              {open.length} open
             </Badge>
           )}
         </div>
@@ -1570,7 +1570,7 @@ function DeviationsSection({ contractId }: { contractId: string }) {
           disabled={evaluate.isPending}
           data-testid="button-evaluate-deviations"
         >
-          {evaluate.isPending ? "Prüfe…" : "Gegen Playbook prüfen"}
+          {evaluate.isPending ? "Checking…" : "Check against playbook"}
         </Button>
       </div>
 
@@ -1578,7 +1578,7 @@ function DeviationsSection({ contractId }: { contractId: string }) {
         <Skeleton className="h-24 w-full" />
       ) : (deviations?.length ?? 0) === 0 ? (
         <div className="p-6 text-center border rounded-md text-sm text-muted-foreground bg-muted/10">
-          Keine Abweichungen erfasst. Klick auf „Gegen Playbook prüfen", um zu evaluieren.
+          No deviations recorded. Click "Check against playbook" to evaluate.
         </div>
       ) : (
         <div className="space-y-2">
@@ -1655,11 +1655,11 @@ function ObligationsSection({ contractId, contractStatus }: { contractId: string
       const res = await derive.mutateAsync({ id: contractId });
       await qc.invalidateQueries({ queryKey: getListObligationsQueryKey({ contractId }) });
       toast({
-        title: "Pflichten abgeleitet",
-        description: `Neu: ${res.created} · Gesamt: ${res.total}`,
+        title: "Obligations derived",
+        description: `New: ${res.created} · Total: ${res.total}`,
       });
     } catch {
-      toast({ title: "Ableitung fehlgeschlagen", variant: "destructive" });
+      toast({ title: "Derivation failed", variant: "destructive" });
     }
   };
 
@@ -1667,9 +1667,9 @@ function ObligationsSection({ contractId, contractStatus }: { contractId: string
     try {
       await update.mutateAsync({ id: ob.id, data: { status } });
       await qc.invalidateQueries({ queryKey: getListObligationsQueryKey({ contractId }) });
-      toast({ title: "Pflicht aktualisiert", description: `Status: ${status}` });
+      toast({ title: "Obligation updated", description: `Status: ${status}` });
     } catch {
-      toast({ title: "Aktion fehlgeschlagen", variant: "destructive" });
+      toast({ title: "Action failed", variant: "destructive" });
     }
   };
 
@@ -1683,10 +1683,10 @@ function ObligationsSection({ contractId, contractStatus }: { contractId: string
       <div className="flex items-center justify-between gap-2 pb-2 border-b">
         <div className="flex items-center gap-2">
           <Activity className="h-5 w-5 text-muted-foreground" />
-          <h2 className="text-xl font-semibold">Vertragspflichten</h2>
+          <h2 className="text-xl font-semibold">Contract obligations</h2>
           {overdueCount > 0 && (
             <Badge variant="outline" className="border-red-300 text-red-700 bg-red-50">
-              {overdueCount} überfällig
+              {overdueCount} overdue
             </Badge>
           )}
         </div>
@@ -1696,9 +1696,9 @@ function ObligationsSection({ contractId, contractStatus }: { contractId: string
           onClick={onDerive}
           disabled={derive.isPending || contractStatus !== "signed"}
           data-testid="button-derive-obligations"
-          title={contractStatus !== "signed" ? "Nur für signierte Verträge" : undefined}
+          title={contractStatus !== "signed" ? "Only available for signed contracts" : undefined}
         >
-          {derive.isPending ? "Ableite…" : "Aus Klauseln ableiten"}
+          {derive.isPending ? "Deriving…" : "Derive from clauses"}
         </Button>
       </div>
 
@@ -1707,19 +1707,19 @@ function ObligationsSection({ contractId, contractStatus }: { contractId: string
       ) : items.length === 0 ? (
         <div className="p-6 text-center border rounded-md text-sm text-muted-foreground bg-muted/10">
           {contractStatus === "signed"
-            ? 'Noch keine Pflichten — klick auf „Aus Klauseln ableiten".'
-            : "Pflichten werden bei Signatur automatisch erzeugt."}
+            ? 'No obligations yet — click "Derive from clauses".'
+            : "Obligations are generated automatically on signature."}
         </div>
       ) : (
         <div className="border rounded-md overflow-hidden">
           <table className="w-full text-sm">
             <thead className="bg-muted/30 text-xs uppercase text-muted-foreground">
               <tr>
-                <th className="text-left px-3 py-2">Titel</th>
-                <th className="text-left px-3 py-2">Typ</th>
-                <th className="text-left px-3 py-2">Fällig</th>
+                <th className="text-left px-3 py-2">Title</th>
+                <th className="text-left px-3 py-2">Type</th>
+                <th className="text-left px-3 py-2">Due</th>
                 <th className="text-left px-3 py-2">Status</th>
-                <th className="text-right px-3 py-2">Aktion</th>
+                <th className="text-right px-3 py-2">Action</th>
               </tr>
             </thead>
             <tbody>
@@ -1761,7 +1761,7 @@ function ObligationsSection({ contractId, contractStatus }: { contractId: string
                             disabled={update.isPending}
                             data-testid={`button-done-${ob.id}`}
                           >
-                            Erledigt
+                            Done
                           </Button>
                           <Button
                             size="sm"
@@ -1770,7 +1770,7 @@ function ObligationsSection({ contractId, contractStatus }: { contractId: string
                             disabled={update.isPending}
                             data-testid={`button-waive-ob-${ob.id}`}
                           >
-                            Verzicht
+                            Waive
                           </Button>
                         </div>
                       )}

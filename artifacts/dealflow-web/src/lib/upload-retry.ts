@@ -65,25 +65,25 @@ export async function withUploadUrlRetry<T>(fn: () => Promise<T>): Promise<T> {
 export function describeUploadError(err: unknown): string {
   if (err instanceof ApiError) {
     if (err.status === 502 || err.status === 504) {
-      return "Server kurz nicht erreichbar. Bitte in wenigen Sekunden erneut versuchen.";
+      return "Server temporarily unreachable. Please try again in a few seconds.";
     }
     if (err.status === 503) {
-      return "Datei-Speicher ist gerade nicht erreichbar. Bitte in wenigen Sekunden erneut versuchen.";
+      return "File storage is currently unavailable. Please try again in a few seconds.";
     }
     if (err.status === 401) {
-      return "Sitzung abgelaufen — bitte neu anmelden.";
+      return "Session expired — please sign in again.";
     }
     if (err.status === 403) {
-      return "Du hast keine Berechtigung für diese Aktion.";
+      return "You do not have permission for this action.";
     }
     if (err.status === 413) {
-      return "Datei ist zu groß (max. 25 MB).";
+      return "File is too large (max. 25 MB).";
     }
     const data = err.data as { message?: string; error?: string } | null;
     return data?.message ?? data?.error ?? err.message;
   }
   if (err instanceof TypeError) {
-    return "Netzwerk nicht erreichbar. Bitte Verbindung prüfen und erneut versuchen.";
+    return "Network unreachable. Please check your connection and try again.";
   }
   return err instanceof Error ? err.message : String(err);
 }

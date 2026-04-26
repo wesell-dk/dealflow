@@ -413,10 +413,10 @@ router.put('/orgs/tenant/inbound-email', async (req, res) => {
     entityId: scope.tenantId,
     action: 'update',
     summary: body.rotateToken
-      ? 'Inbound-E-Mail-Token rotiert'
+      ? 'Inbound email token rotated'
       : body.disable
-        ? 'Inbound-E-Mail-Pipeline deaktiviert'
-        : 'Inbound-E-Mail-Konfiguration aktualisiert',
+        ? 'Inbound email pipeline disabled'
+        : 'Inbound email configuration updated',
     before: {
       inboundEmailDefaultOwnerId: t.inboundEmailDefaultOwnerId,
       inboundEmailAddressMap: t.inboundEmailAddressMap,
@@ -527,7 +527,7 @@ router.post('/orgs/companies', async (req, res) => {
     entityId: newId,
     action: 'create',
     actor: scope.user.name,
-    summary: `Gesellschaft "${name}" angelegt`,
+    summary: `Company "${name}" created`,
     after: row,
   });
   res.status(201).json(row);
@@ -576,7 +576,7 @@ router.patch('/orgs/companies/:id', async (req, res) => {
     entityId: existing.id,
     action: 'update',
     actor: scope.user.name,
-    summary: `Gesellschaft "${existing.name}" aktualisiert`,
+    summary: `Company "${existing.name}" updated`,
     before: existing,
     after: updated,
   });
@@ -616,7 +616,7 @@ router.delete('/orgs/companies/:id', async (req, res) => {
     entityId: existing.id,
     action: 'delete',
     actor: scope.user.name,
-    summary: `Gesellschaft "${existing.name}" gelöscht`,
+    summary: `Company "${existing.name}" deleted`,
     before: existing,
   });
   res.status(204).send();
@@ -705,7 +705,7 @@ router.post('/orgs/brands', async (req, res) => {
     entityId: newId,
     action: 'create',
     actor: scope.user.name,
-    summary: `Brand "${name}" für Gesellschaft "${company.name}" angelegt`,
+    summary: `Brand "${name}" created for company "${company.name}"`,
     after: inserted,
   });
   res.status(201).json(mapBrand(inserted!));
@@ -742,7 +742,7 @@ router.delete('/orgs/brands/:id', async (req, res) => {
     entityId: existing.id,
     action: 'delete',
     actor: scope.user.name,
-    summary: `Brand "${existing.name}" gelöscht`,
+    summary: `Brand "${existing.name}" deleted`,
     before: existing,
   });
   res.status(204).send();
@@ -1038,8 +1038,8 @@ router.post('/orgs/brands/:id/document-templates', async (req, res) => {
     action: existing.length > 0 ? 'update' : 'create',
     actor: scope.user.name,
     summary:
-      `Brand-Vorlage ${documentType} fuer "${brand.name}" ${existing.length ? 'aktualisiert' : 'angelegt'}` +
-      (status === 'failed' ? ` (Analyse fehlgeschlagen: ${errorText})` : ''),
+      `Brand template ${documentType} for "${brand.name}" ${existing.length ? 'updated' : 'created'}` +
+      (status === 'failed' ? ` (analysis failed: ${errorText})` : ''),
     after: { documentType, fileName, status, errorText },
   });
 
@@ -1085,7 +1085,7 @@ router.delete('/orgs/brands/:id/document-templates/:type', async (req, res) => {
     entityId: existing.id,
     action: 'delete',
     actor: scope.user.name,
-    summary: `Brand-Vorlage ${type} fuer "${loaded.brand.name}" geloescht`,
+    summary: `Brand template ${type} for "${loaded.brand.name}" deleted`,
     before: { documentType: type, fileName: existing.fileName },
   });
   res.status(204).send();
@@ -1410,8 +1410,8 @@ router.patch('/orgs/me/active-scope', async (req, res) => {
     entityId: scope.user.id,
     action: 'scope.switch',
     summary: reqCompanies === null && reqBrands === null
-      ? 'Aktiver Scope zurückgesetzt'
-      : `Aktiver Scope geändert: ${reqCompanies?.length ?? 0} Companies, ${reqBrands?.length ?? 0} Brands`,
+      ? 'Active scope reset'
+      : `Active scope changed: ${reqCompanies?.length ?? 0} Companies, ${reqBrands?.length ?? 0} Brands`,
     after: { companyIds: reqCompanies, brandIds: reqBrands },
     actor: scope.user.name,
     activeScope: {
@@ -1596,7 +1596,7 @@ router.post('/leads', async (req, res) => {
     entityType: 'lead',
     entityId: id,
     action: 'create',
-    summary: `Lead "${created.name}" angelegt (Quelle: ${created.source})`,
+    summary: `Lead "${created.name}" created (source: ${created.source})`,
     after: created,
   });
   const userMap = await getUserMap(scope.tenantId);
@@ -1637,7 +1637,7 @@ router.patch('/leads/:id', async (req, res) => {
   // Wechsel wäre fachlich verwirrend (der Account hat dann längst eigene
   // Owner-Geschichte). Stattdessen einen neuen Lead anlegen.
   if (existing.status === 'converted') {
-    res.status(409).json({ error: 'lead converted', message: 'Konvertierte Leads sind read-only.' });
+    res.status(409).json({ error: 'lead converted', message: 'Converted leads are read-only.' });
     return;
   }
   const b = req.body as {
@@ -1702,7 +1702,7 @@ router.patch('/leads/:id', async (req, res) => {
     entityType: 'lead',
     entityId: req.params.id,
     action: 'update',
-    summary: `Lead "${after.name}" aktualisiert${b.status ? ` → Status ${b.status}` : ''}`,
+    summary: `Lead "${after.name}" updated${b.status ? ` → status ${b.status}` : ''}`,
     before: existing,
     after,
   });
@@ -1718,7 +1718,7 @@ router.delete('/leads/:id', async (req, res) => {
   const [existing] = await db.select().from(leadsTable).where(eq(leadsTable.id, req.params.id));
   if (!existing) { res.status(404).json({ error: 'not found' }); return; }
   if (existing.status === 'converted') {
-    res.status(409).json({ error: 'lead converted', message: 'Konvertierte Leads können nicht gelöscht werden — der angelegte Account bleibt erhalten.' });
+    res.status(409).json({ error: 'lead converted', message: 'Converted leads cannot be deleted — the created account is preserved.' });
     return;
   }
   await db.delete(leadsTable).where(eq(leadsTable.id, req.params.id));
@@ -1726,7 +1726,7 @@ router.delete('/leads/:id', async (req, res) => {
     entityType: 'lead',
     entityId: req.params.id,
     action: 'delete',
-    summary: `Lead "${existing.name}" gelöscht`,
+    summary: `Lead "${existing.name}" deleted`,
     before: existing,
   });
   res.status(204).end();
@@ -1745,7 +1745,7 @@ router.post('/leads/:id/convert', async (req, res) => {
     return;
   }
   if (lead.status === 'disqualified') {
-    res.status(422).json({ error: 'invalid lead status', message: 'Disqualifizierte Leads können nicht konvertiert werden.' });
+    res.status(422).json({ error: 'invalid lead status', message: 'Disqualified leads cannot be converted.' });
     return;
   }
   const scope = getScope(req);
@@ -1822,7 +1822,7 @@ router.post('/leads/:id/convert', async (req, res) => {
           entityType: 'account',
           entityId: accountId,
           action: 'create',
-          summary: `Account "${na.name}" aus Lead "${lead.name}" angelegt`,
+          summary: `Account "${na.name}" created from lead "${lead.name}"`,
           after: { id: accountId, name: na.name, industry: na.industry, country: na.country },
         });
       }
@@ -1841,13 +1841,13 @@ router.post('/leads/:id/convert', async (req, res) => {
           brandId: nd.brandId,
           companyId: nd.companyId,
           riskLevel: 'low',
-          nextStep: 'Erste Schritte aus Lead-Konvertierung',
+          nextStep: 'Initial steps from lead conversion',
         });
         auditEntries.push({
           entityType: 'deal',
           entityId: dealId,
           action: 'create',
-          summary: `Deal "${nd.name}" aus Lead "${lead.name}" angelegt`,
+          summary: `Deal "${nd.name}" created from lead "${lead.name}"`,
           after: { id: dealId, name: nd.name, accountId, value: nd.value, currency: nd.currency },
         });
       }
@@ -1875,7 +1875,7 @@ router.post('/leads/:id/convert', async (req, res) => {
     entityType: 'lead',
     entityId: lead.id,
     action: 'convert',
-    summary: `Lead "${lead.name}" konvertiert zu Account ${accountId}${dealId ? ` + Deal ${dealId}` : ''}`,
+    summary: `Lead "${lead.name}" converted to account ${accountId}${dealId ? ` + deal ${dealId}` : ''}`,
     before: lead,
     after,
   });
@@ -2087,7 +2087,7 @@ router.patch('/accounts/:id', async (req, res) => {
   const [archCheck] = await db.select({ archivedAt: accountsTable.archivedAt })
     .from(accountsTable).where(eq(accountsTable.id, req.params.id));
   if (archCheck?.archivedAt) {
-    res.status(409).json({ error: 'account archived', message: 'Der Account ist archiviert. Bitte zuerst wiederherstellen, um Änderungen vorzunehmen.' });
+    res.status(409).json({ error: 'account archived', message: 'The account is archived. Please restore it first to make changes.' });
     return;
   }
   const b = req.body as {
@@ -2208,7 +2208,7 @@ router.post('/accounts/:id/contacts', async (req, res) => {
     entityType: 'contact',
     entityId: id,
     action: 'create',
-    summary: `Kontakt "${row.name}" am Kunden angelegt`,
+    summary: `Contact "${row.name}" created on customer`,
     after: { ...row },
   });
   res.status(201).json(row);
@@ -2251,7 +2251,7 @@ router.patch('/contacts/:id', async (req, res) => {
     entityType: 'contact',
     entityId: req.params.id,
     action: 'update',
-    summary: `Kontakt "${after?.name ?? existing.name}" aktualisiert`,
+    summary: `Contact "${after?.name ?? existing.name}" updated`,
     before: existing,
     after: after ?? null,
   });
@@ -2273,7 +2273,7 @@ router.delete('/contacts/:id', async (req, res) => {
     entityType: 'contact',
     entityId: req.params.id,
     action: 'delete',
-    summary: `Kontakt "${existing.name}" gelöscht`,
+    summary: `Contact "${existing.name}" deleted`,
     before: existing,
   });
   res.status(204).send();
@@ -2644,7 +2644,7 @@ router.post('/deals', async (req, res) => {
   const [accCheck] = await db.select({ archivedAt: accountsTable.archivedAt })
     .from(accountsTable).where(eq(accountsTable.id, b.accountId));
   if (accCheck?.archivedAt) {
-    res.status(422).json({ error: 'account archived', message: 'Der Account ist archiviert. Bitte zuerst wiederherstellen.' });
+    res.status(422).json({ error: 'account archived', message: 'The account is archived. Please restore it first.' });
     return;
   }
   // Owner muss innerhalb des Tenants liegen (Cross-Tenant-Owner-Assignment verhindern).
@@ -3217,7 +3217,7 @@ router.post('/quotes/:id/send', async (req, res) => {
     await writeAuditFromReq(req, {
       entityType: 'quote', entityId: q.id, action: 'send_failed',
       actor: scope.user.name,
-      summary: `E-Mail-Versand fehlgeschlagen (PDF-Erzeugung): ${errMsg}`,
+      summary: `Email send failed (PDF generation): ${errMsg}`,
       after: { to, cc, error: errMsg, stage: 'pdf_render' },
     });
     res.status(500).json({ error: 'failed to render quote PDF', detail: errMsg });
@@ -3244,7 +3244,7 @@ router.post('/quotes/:id/send', async (req, res) => {
     await writeAuditFromReq(req, {
       entityType: 'quote', entityId: q.id, action: 'send_failed',
       actor: scope.user.name,
-      summary: `E-Mail-Versand an ${recipientsLabel} fehlgeschlagen (${result.provider})`,
+      summary: `Email send to ${recipientsLabel} failed (${result.provider})`,
       after: { to, cc, provider: result.provider, error: result.error ?? null },
     });
     res.status(502).json({ error: 'email send failed', detail: result.error ?? null, provider: result.provider });
@@ -3263,7 +3263,7 @@ router.post('/quotes/:id/send', async (req, res) => {
   await writeAuditFromReq(req, {
     entityType: 'quote', entityId: q.id, action: 'sent',
     actor: scope.user.name,
-    summary: `Angebot ${q.number} per E-Mail an ${recipientsLabel} versendet (${result.provider})`,
+    summary: `Quote ${q.number} sent via email to ${recipientsLabel} (${result.provider})`,
     before: { status: q.status, sentAt: iso(q.sentAt), sentTo: q.sentTo ?? null },
     after: {
       status: patch.status ?? q.status,
@@ -3447,7 +3447,7 @@ router.patch('/quotes/:id', async (req, res) => {
       patch.language = body.language as SupportedLocale;
       auditEntries.push({
         action: 'language_changed',
-        summary: `Angebotssprache: ${q.language ?? 'de'} → ${patch.language}`,
+        summary: `Quote language: ${q.language ?? 'de'} → ${patch.language}`,
         before: { language: q.language }, after: { language: patch.language },
       });
     }
@@ -3475,13 +3475,13 @@ router.patch('/quotes/:id', async (req, res) => {
     if (body.archived && !wasArchived) {
       patch.archivedAt = new Date();
       auditEntries.push({
-        action: 'archived', summary: `Angebot ${q.number} archiviert.`,
+        action: 'archived', summary: `Quote ${q.number} archived.`,
         before: { archivedAt: null }, after: { archivedAt: iso(patch.archivedAt) },
       });
     } else if (!body.archived && wasArchived) {
       patch.archivedAt = null;
       auditEntries.push({
-        action: 'unarchived', summary: `Angebot ${q.number} wiederhergestellt.`,
+        action: 'unarchived', summary: `Quote ${q.number} restored.`,
         before: { archivedAt: iso(q.archivedAt) }, after: { archivedAt: null },
       });
     }
@@ -3589,17 +3589,17 @@ router.post('/quotes/:id/convert-to-order', async (req, res) => {
   await db.insert(orderConfirmationChecksTable).values({
     id: `ocx_${randomUUID().slice(0, 8)}`,
     orderConfirmationId: ocId,
-    label: 'Übernahme aus angenommenem Angebot',
+    label: 'Taken from accepted quote',
     status: 'pending',
-    detail: `Aus Angebot ${q.number} (Version ${latestVersion?.version ?? q.currentVersion}) angelegt.`,
+    detail: `Created from quote ${q.number} (version ${latestVersion?.version ?? q.currentVersion}).`,
   });
 
   await db.insert(timelineEventsTable).values({
     id: `tl_${randomUUID().slice(0, 8)}`,
     tenantId: getScope(req).tenantId,
     type: 'handover',
-    title: 'Auftragsbestätigung aus Angebot angelegt',
-    description: `Angebot ${q.number} → Auftragsbestätigung OC-${year}-${seq}.${force && existingForQuote.length > 0 ? ' Trotz vorhandener Folgebestätigung erneut angelegt.' : ''}`,
+    title: 'Order confirmation created from quote',
+    description: `Quote ${q.number} → order confirmation OC-${year}-${seq}.${force && existingForQuote.length > 0 ? ' Recreated despite existing follow-up confirmation.' : ''}`,
     actor: getScope(req).user.name,
     dealId: q.dealId,
   });
@@ -3608,7 +3608,7 @@ router.post('/quotes/:id/convert-to-order', async (req, res) => {
     entityType: 'order_confirmation',
     entityId: ocId,
     action: 'created_from_quote',
-    summary: `Auftragsbestätigung OC-${year}-${seq} aus Angebot ${q.number} erstellt`,
+    summary: `Order confirmation OC-${year}-${seq} created from quote ${q.number}`,
     after: {
       sourceQuoteId: q.id,
       sourceQuoteVersionId: latestVersion?.id ?? null,
@@ -3654,7 +3654,7 @@ async function applyQuoteAccepted(
         .where(eq(dealsTable.id, d.id));
       await writeAuditFromReq(req, {
         entityType: 'deal', entityId: d.id, action: 'value_autofill',
-        summary: `Deal-Wert automatisch aus akzeptiertem Angebot übernommen: ${total.toLocaleString('de-DE')} €`,
+        summary: `Deal value taken from accepted quote: ${total.toLocaleString('de-DE')} €`,
         before: { value: d.value },
         after: { value: total },
       });
@@ -3675,7 +3675,7 @@ router.post('/quotes/:id/accept', async (req, res) => {
   const q = await applyQuoteAccepted(req, q0);
   await writeAuditFromReq(req, {
     entityType: 'quote', entityId: q.id, action: 'status_changed',
-    summary: `Angebotsstatus: ${before} → accepted`,
+    summary: `Quote status: ${before} → accepted`,
     before: { status: before }, after: { status: 'accepted' },
   });
   const [d] = await db.select().from(dealsTable).where(eq(dealsTable.id, q.dealId));
@@ -3709,7 +3709,7 @@ router.post('/quotes/:id/transition', async (req, res) => {
   }
 
   let q: typeof quotesTable.$inferSelect;
-  let auditSummary = `Angebotsstatus: ${q0.status} → ${body.status}`;
+  let auditSummary = `Quote status: ${q0.status} → ${body.status}`;
   const beforeSnap: { status: string; rejectionReason?: string | null } = { status: q0.status };
   const afterSnap: { status: string; rejectionReason?: string | null } = { status: body.status };
 
@@ -3724,7 +3724,7 @@ router.post('/quotes/:id/transition', async (req, res) => {
     q = updated!;
     beforeSnap.rejectionReason = q0.rejectionReason ?? null;
     afterSnap.rejectionReason = reason;
-    if (reason) auditSummary += ` (Grund: ${reason})`;
+    if (reason) auditSummary += ` (reason: ${reason})`;
     void emitEvent(getScope(req).tenantId, 'quote.rejected', {
       quoteId: q.id, dealId: q.dealId, rejectionReason: reason,
     });
@@ -4103,7 +4103,7 @@ router.delete('/industry-profiles/:id', async (req, res) => {
   await db.delete(industryProfilesTable).where(eq(industryProfilesTable.id, req.params.id));
   await writeAuditFromReq(req, {
     entityType: 'industry_profile', entityId: req.params.id, action: 'deleted',
-    summary: `Branchen-Profil "${existing.label}" gelöscht`,
+    summary: `Industry profile "${existing.label}" deleted`,
   });
   res.status(204).end();
 });
@@ -4544,7 +4544,7 @@ router.patch('/price-positions/:id', async (req, res) => {
   }
   await writeAuditFromReq(req, {
     entityType: 'price_position', entityId: req.params.id, action: 'updated',
-    summary: `Preis ${existing.sku} aktualisiert`,
+    summary: `Price ${existing.sku} updated`,
   });
   const [p] = await db.select().from(pricePositionsTable).where(eq(pricePositionsTable.id, req.params.id));
   const brands = await getBrandMap();
@@ -4561,7 +4561,7 @@ router.delete('/price-positions/:id', async (req, res) => {
   await db.delete(pricePositionsTable).where(eq(pricePositionsTable.id, req.params.id));
   await writeAuditFromReq(req, {
     entityType: 'price_position', entityId: req.params.id, action: 'deleted',
-    summary: `Preis ${existing.sku} gelöscht`,
+    summary: `Price ${existing.sku} deleted`,
   });
   res.status(204).end();
 });
@@ -4635,7 +4635,7 @@ router.post('/price-rules', async (req, res) => {
   });
   await writeAuditFromReq(req, {
     entityType: 'price_rule', entityId: id, action: 'created',
-    summary: `Pricing-Regel "${b.name}" angelegt`,
+    summary: `Pricing rule "${b.name}" created`,
   });
   const [r] = await db.select().from(priceRulesTable).where(eq(priceRulesTable.id, id));
   res.status(201).json(r);
@@ -4669,7 +4669,7 @@ router.patch('/price-rules/:id', async (req, res) => {
   }
   await writeAuditFromReq(req, {
     entityType: 'price_rule', entityId: req.params.id, action: 'updated',
-    summary: `Pricing-Regel "${existing.name}" aktualisiert`,
+    summary: `Pricing rule "${existing.name}" updated`,
   });
   const [r] = await db.select().from(priceRulesTable).where(eq(priceRulesTable.id, req.params.id));
   res.json(r);
@@ -4686,7 +4686,7 @@ router.delete('/price-rules/:id', async (req, res) => {
   await db.delete(priceRulesTable).where(eq(priceRulesTable.id, req.params.id));
   await writeAuditFromReq(req, {
     entityType: 'price_rule', entityId: req.params.id, action: 'deleted',
-    summary: `Pricing-Regel "${existing.name}" gelöscht`,
+    summary: `Pricing rule "${existing.name}" deleted`,
   });
   res.status(204).end();
 });
@@ -5556,7 +5556,7 @@ router.patch('/contracts/:id', async (req, res) => {
       patch.language = body.language as SupportedLocale;
       auditEntries.push({
         action: 'language_changed',
-        summary: `Vertragssprache: ${c.language ?? 'de'} → ${patch.language}`,
+        summary: `Contract language: ${c.language ?? 'de'} → ${patch.language}`,
         before: { language: c.language }, after: { language: patch.language },
       });
     }
@@ -5592,8 +5592,8 @@ router.patch('/contracts/:id', async (req, res) => {
       auditEntries.push({
         action: 'contract_type_bound',
         summary: nextContractTypeId
-          ? `Vertragstyp gesetzt: ${c.contractTypeId ?? '∅'} → ${nextContractTypeId}`
-          : `Vertragstyp entfernt: ${c.contractTypeId ?? '∅'} → ∅`,
+          ? `Contract type set: ${c.contractTypeId ?? '∅'} → ${nextContractTypeId}`
+          : `Contract type removed: ${c.contractTypeId ?? '∅'} → ∅`,
         before: { contractTypeId: c.contractTypeId ?? null, tenantId: c.tenantId ?? null, playbookId: c.playbookId ?? null },
         after: {
           contractTypeId: nextContractTypeId,
@@ -5789,7 +5789,7 @@ router.patch('/brands/:id', async (req, res) => {
     entityId: existing.id,
     action: 'update',
     actor: scope.user.name,
-    summary: `Brand "${existing.name}" aktualisiert`,
+    summary: `Brand "${existing.name}" updated`,
     before: existing,
     after: updated,
   });
@@ -5821,7 +5821,7 @@ router.patch('/brands/:id/default-clauses', async (req, res) => {
     .set({ defaultClauseVariants: defaults })
     .where(eq(brandsTable.id, req.params.id));
   await writeAuditFromReq(req, {    entityType: 'brand', entityId: req.params.id, action: 'default_clauses_updated',
-    summary: `Brand defaults aktualisiert (${Object.keys(defaults).length} Familien)`,
+    summary: `Brand defaults updated (${Object.keys(defaults).length} families)`,
     before: existing.defaultClauseVariants, after: defaults,
   });
   const [updated] = await db.select().from(brandsTable).where(eq(brandsTable.id, req.params.id));
@@ -6026,7 +6026,7 @@ router.post('/contracts/:id/amendments', async (req, res) => {
     });
   }
   await writeAuditFromReq(req, {    entityType: 'contract_amendment', entityId: id, action: 'create',
-    summary: `Amendment ${number} (${b.type}) angelegt`,
+    summary: `Amendment ${number} (${b.type}) created`,
     after: { number, type: b.type, title: b.title },
   });
   const [created] = await db.select().from(contractAmendmentsTable).where(eq(contractAmendmentsTable.id, id));
@@ -6081,7 +6081,7 @@ router.patch('/amendments/:id', async (req, res) => {
   if (Object.keys(patch).length > 0) {
     await db.update(contractAmendmentsTable).set(patch).where(eq(contractAmendmentsTable.id, a.id));
     await writeAuditFromReq(req, {      entityType: 'contract_amendment', entityId: a.id, action: 'update',
-      summary: `Amendment ${a.number} aktualisiert`,
+      summary: `Amendment ${a.number} updated`,
       before: { status: a.status }, after: patch,
     });
     // Lifecycle side effects on status transitions
@@ -6098,7 +6098,7 @@ router.patch('/amendments/:id', async (req, res) => {
           dealId: c.dealId,
           amendmentId: a.id,
           type: 'amendment',
-          reason: `Nachtrag ${a.number}: ${a.title}`,
+          reason: `Amendment ${a.number}: ${a.title}`,
           requestedBy: scope.user?.id ?? null,
           status: 'pending',
           priority: a.type === 'price-change' ? 'high' : 'medium',
@@ -6109,7 +6109,7 @@ router.patch('/amendments/:id', async (req, res) => {
           currentStageIdx: chainFields.currentStageIdx,
         });
         await writeAuditFromReq(req, {          entityType: 'contract_amendment', entityId: a.id, action: 'approval_created',
-          summary: `Approval angelegt für Nachtrag ${a.number}${chainFields.chainTemplateId ? ` — ${chainFields.stages.length}-Stage Chain` : ''}`,
+          summary: `Approval created for amendment ${a.number}${chainFields.chainTemplateId ? ` — ${chainFields.stages.length}-Stage Chain` : ''}`,
           after: { approvalId, chainTemplateId: chainFields.chainTemplateId },
         });
       }
@@ -6122,7 +6122,7 @@ router.patch('/amendments/:id', async (req, res) => {
           id: pkgId,
           dealId: c.dealId,
           amendmentId: a.id,
-          title: `Nachtrag ${a.number}: ${a.title}`,
+          title: `Amendment ${a.number}: ${a.title}`,
           status: 'in_progress',
           mode: 'sequential',
           reminderIntervalHours: 48,
@@ -6130,7 +6130,7 @@ router.patch('/amendments/:id', async (req, res) => {
           deadline: null,
         });
         await writeAuditFromReq(req, {          entityType: 'contract_amendment', entityId: a.id, action: 'signature_created',
-          summary: `Signatur-Paket angelegt für Nachtrag ${a.number}`,
+          summary: `Signature package created for amendment ${a.number}`,
           after: { packageId: pkgId },
         });
       }
@@ -6372,7 +6372,7 @@ router.post('/contract-types', async (req, res) => {
   const [saved] = await db.select().from(contractTypesTable).where(eq(contractTypesTable.id, newId));
   await writeAuditFromReq(req, {
     entityType: 'contract_type', entityId: newId, action: 'create',
-    summary: `Vertragsart "${code}" angelegt`, after: saved,
+    summary: `Contract type "${code}" created`, after: saved,
   });
   res.status(201).json(mapContractType(saved!));
 });
@@ -6400,7 +6400,7 @@ router.patch('/contract-types/:id', async (req, res) => {
   const [updated] = await db.select().from(contractTypesTable).where(eq(contractTypesTable.id, existing.id));
   await writeAuditFromReq(req, {
     entityType: 'contract_type', entityId: existing.id, action: 'update',
-    summary: `Vertragsart "${existing.code}" aktualisiert`, before: existing, after: updated,
+    summary: `Contract type "${existing.code}" updated`, before: existing, after: updated,
   });
   res.json(mapContractType(updated!));
 });
@@ -6420,7 +6420,7 @@ router.delete('/contract-types/:id', async (req, res) => {
   await db.delete(contractTypesTable).where(eq(contractTypesTable.id, existing.id));
   await writeAuditFromReq(req, {
     entityType: 'contract_type', entityId: existing.id, action: 'delete',
-    summary: `Vertragsart "${existing.code}" gelöscht`, before: existing,
+    summary: `Contract type "${existing.code}" deleted`, before: existing,
   });
   res.status(204).end();
 });
@@ -6468,7 +6468,7 @@ router.post('/contract-playbooks', async (req, res) => {
   const [saved] = await db.select().from(contractPlaybooksTable).where(eq(contractPlaybooksTable.id, newId));
   await writeAuditFromReq(req, {
     entityType: 'contract_playbook', entityId: newId, action: 'create',
-    summary: `Playbook "${row.name}" angelegt`, after: saved,
+    summary: `Playbook "${row.name}" created`, after: saved,
   });
   res.status(201).json(mapPlaybook(saved!));
 });
@@ -6498,7 +6498,7 @@ router.patch('/contract-playbooks/:id', async (req, res) => {
   const [updated] = await db.select().from(contractPlaybooksTable).where(eq(contractPlaybooksTable.id, existing.id));
   await writeAuditFromReq(req, {
     entityType: 'contract_playbook', entityId: existing.id, action: 'update',
-    summary: `Playbook "${existing.name}" aktualisiert`, before: existing, after: updated,
+    summary: `Playbook "${existing.name}" updated`, before: existing, after: updated,
   });
   res.json(mapPlaybook(updated!));
 });
@@ -6514,7 +6514,7 @@ router.delete('/contract-playbooks/:id', async (req, res) => {
   await db.delete(contractPlaybooksTable).where(eq(contractPlaybooksTable.id, existing.id));
   await writeAuditFromReq(req, {
     entityType: 'contract_playbook', entityId: existing.id, action: 'delete',
-    summary: `Playbook "${existing.name}" gelöscht`, before: existing,
+    summary: `Playbook "${existing.name}" deleted`, before: existing,
   });
   res.status(204).end();
 });
@@ -6580,7 +6580,7 @@ async function evaluateDeviations(contractId: string, tenantId: string): Promise
         familyId: cl.familyId,
         deviationType: 'variant_change',
         severity: cl.severity === 'high' ? 'high' : 'medium',
-        description: `Klausel-Variante ${cl.activeVariantId} liegt außerhalb des Playbooks.`,
+        description: `Clause variant ${cl.activeVariantId} is outside the playbook.`,
         evidence: { playbookId, actualVariantId: cl.activeVariantId },
         policyId: playbookId,
         requiresApproval: true,
@@ -6737,7 +6737,7 @@ router.patch('/clause-deviations/:id', async (req, res) => {
   await db.update(contractsTable).set({ openDeviationsCount: openCount }).where(eq(contractsTable.id, c.id));
   await writeAuditFromReq(req, {
     entityType: 'clause_deviation', entityId: d.id, action: 'resolve',
-    summary: `Deviation aufgelöst: ${b.resolutionNote.trim().slice(0, 80)}`,
+    summary: `Deviation resolved: ${b.resolutionNote.trim().slice(0, 80)}`,
     before: d, after: updated,
   });
   const families = await db.select().from(clauseFamiliesTable);
@@ -7177,7 +7177,7 @@ router.post('/contracts/:id/request-approval', async (req, res) => {
     if (!requireAdmin(req, res)) return;
     const reasonText = (body.overrideReason ?? '').trim();
     if (reasonText.length < 10) {
-      res.status(422).json({ error: 'overrideReason ist Pflicht (≥10 Zeichen) für Override' });
+      res.status(422).json({ error: 'overrideReason is required (≥10 chars) for override' });
       return;
     }
   }
@@ -7233,8 +7233,8 @@ router.post('/contracts/:id/request-approval', async (req, res) => {
     entityId: c.id,
     action: 'approval_requested',
     summary: wantOverride && missingExpectedCount > 0
-      ? `Freigabe angefordert mit OVERRIDE — ${missingExpectedCount} Pflicht-Baustein(e) fehlen`
-      : `Freigabe angefordert für Vertrag ${c.title}`,
+      ? `Approval requested with OVERRIDE — ${missingExpectedCount} required clause(s) missing`
+      : `Approval requested for contract ${c.title}`,
     after: {
       approvalId,
       override: wantOverride && missingExpectedCount > 0,
@@ -7316,7 +7316,7 @@ router.put('/contract-types/:id/cuad-expectations', async (req, res) => {
   }
   await writeAuditFromReq(req, {
     entityType: 'contract_type', entityId: ct.id, action: 'update_cuad_expectations',
-    summary: `CUAD-Erwartungen für ${ct.code} aktualisiert (${cleaned.length} Kategorien)`,
+    summary: `CUAD expectations for ${ct.code} updated (${cleaned.length} categories)`,
   });
   res.json({ contractTypeId: ct.id, items: cleaned });
 });
@@ -7377,7 +7377,7 @@ router.put('/clause-families/:id/cuad-categories', async (req, res) => {
   }
   await writeAuditFromReq(req, {
     entityType: 'clause_family', entityId: fam.id, action: 'update_cuad_mapping',
-    summary: `CUAD-Mapping für Klauselfamilie ${fam.name} aktualisiert (${ids.length} Kategorien)`,
+    summary: `CUAD mapping for clause family ${fam.name} updated (${ids.length} categories)`,
   });
   res.json({ familyId: fam.id, isTenantOverride: ids.length > 0, cuadCategoryIds: ids.sort() });
 });
@@ -7580,7 +7580,7 @@ router.put('/clause-variants/:variantId/translations/:locale', async (req, res) 
   ));
   await writeAuditFromReq(req, {
     entityType: 'clause_variant', entityId: variantId, action: 'translation_upserted',
-    summary: `Übersetzung [${locale}] für Variante ${v.name} ${existing ? 'aktualisiert' : 'angelegt'}`,
+    summary: `Translation [${locale}] for variant ${v.name} ${existing ? 'updated' : 'created'}`,
     after: { locale, name },
   });
   res.json({
@@ -7608,7 +7608,7 @@ router.delete('/clause-variants/:variantId/translations/:locale', async (req, re
   await db.delete(clauseVariantTranslationsTable).where(eq(clauseVariantTranslationsTable.id, existing.id));
   await writeAuditFromReq(req, {
     entityType: 'clause_variant', entityId: variantId, action: 'translation_deleted',
-    summary: `Übersetzung [${locale}] für Variante ${v.name} entfernt`,
+    summary: `Translation [${locale}] for variant ${v.name} removed`,
     before: { locale, name: existing.name },
   });
   res.status(204).end();
@@ -7734,12 +7734,12 @@ router.post('/contracts/:id/clauses', async (req, res) => {
   const actor = getScope(req).user;
   await writeAuditFromReq(req, {
     entityType: 'contract', entityId: c.id, action: 'clause_added',
-    summary: `Klausel hinzugefügt: ${fam.name} → ${chosen.name}`,
+    summary: `Clause added: ${fam.name} → ${chosen.name}`,
     after: { clauseId: newClauseId, familyId: fam.id, variantId: chosen.id, name: chosen.name },
   });
   await db.insert(timelineEventsTable).values({
     id: `tl_${randomUUID().slice(0, 8)}`, tenantId, type: 'contract',
-    title: `Klausel hinzugefügt: ${fam.name}`,
+    title: `Clause added: ${fam.name}`,
     description: chosen.name,
     actor: actor.name, dealId: c.dealId,
   });
@@ -7960,7 +7960,7 @@ router.patch('/contract-clauses/:id', async (req, res) => {
   });
   await db.insert(timelineEventsTable).values({
     id: `tl_${randomUUID().slice(0, 8)}`, tenantId: getScope(req).tenantId, type: 'contract',
-    title: `Klausel geändert: ${cl.family}`,
+    title: `Clause changed: ${cl.family}`,
     description: `${prevVar?.name ?? '—'} → ${nextVar.name}`,
     actor: actor.name, dealId: ctr.dealId,
   });
@@ -7984,7 +7984,7 @@ router.patch('/contract-clauses/:id', async (req, res) => {
       currentStageIdx: chainFields.currentStageIdx,
     });
     await writeAuditFromReq(req, {      entityType: 'contract', entityId: ctr.id, action: 'approval_created',
-      summary: `Approval angelegt für ${cl.family} (weichere Variante, Δ ${deltaScore})${chainFields.chainTemplateId ? ` — ${chainFields.stages.length}-Stage Chain` : ''}`,
+      summary: `Approval created for ${cl.family} (softer variant, Δ ${deltaScore})${chainFields.chainTemplateId ? ` — ${chainFields.stages.length}-Stage Chain` : ''}`,
       after: { approvalId, dealId: ctr.dealId, chainTemplateId: chainFields.chainTemplateId, stageCount: chainFields.stages.length },
     });
   }
@@ -8357,7 +8357,7 @@ router.post('/clause-suggestions', async (req, res) => {
   await writeAuditFromReq(req, {
     entityType: 'clause_suggestion', entityId: result.row.id,
     action: result.created ? 'created' : (result.revived ? 'revived' : 'incremented'),
-    summary: `Klausel-Vorschlag (${fam.name}) ${result.created ? 'angelegt' : result.revived ? 'reaktiviert' : `auf ${result.row.occurrenceCount}× hochgezählt`}`,
+    summary: `Clause suggestion (${fam.name}) ${result.created ? 'created' : result.revived ? 'reactivated' : `incremented to ${result.row.occurrenceCount}×`}`,
     after: { occurrenceCount: result.row.occurrenceCount, status: result.row.status, sourceType },
   });
   const [baseVariant] = result.row.baseVariantId
@@ -8467,10 +8467,10 @@ router.patch('/clause-suggestions/:id', async (req, res) => {
       severityScore: score,
     }).where(eq(clauseVariantsTable.id, target.id));
     createdVariantId = target.id;
-    summaryLine = `Variante "${target.name}" überschrieben`;
+    summaryLine = `Variant "${target.name}" overwritten`;
     await writeAuditFromReq(req, {
       entityType: 'clause_variant', entityId: target.id, action: 'replaced_from_suggestion',
-      summary: `Variante "${target.name}" durch Vorschlag ersetzt`,
+      summary: `Variant "${target.name}" replaced by suggestion`,
       before, after: { name: s.proposedName, summary: s.proposedSummary, body: s.proposedBody },
     });
   } else if (action === 'add_translation') {
@@ -8504,9 +8504,9 @@ router.patch('/clause-suggestions/:id', async (req, res) => {
       });
     }
     createdVariantId = variantId;
-    summaryLine = `Übersetzung [${locale}] für "${v.name}" gespeichert`;
+    summaryLine = `Translation [${locale}] for "${v.name}" saved`;
   } else {
-    summaryLine = 'Vorschlag verworfen';
+    summaryLine = 'Suggestion discarded';
   }
 
   const newStatus = action === 'discard' ? 'rejected' : 'accepted';
@@ -8994,18 +8994,18 @@ async function maybeCompletePackageAndCreateOC(
   await db.insert(orderConfirmationChecksTable).values({
     id: `ocx_${randomUUID().slice(0, 8)}`,
     orderConfirmationId: ocId,
-    label: 'Erstprüfung aus Signatur-Abschluss',
+    label: 'Initial check from signature completion',
     status: 'pending',
-    detail: `Automatisch aus Signature-Package ${pkg.id} erzeugt.`,
+    detail: `Automatically created from signature package ${pkg.id}.`,
   });
   await db.update(signaturePackagesTable).set({
     status: 'completed', orderConfirmationId: ocId,
   }).where(eq(signaturePackagesTable.id, pkg.id));
   await db.insert(timelineEventsTable).values({
     id: `tl_${randomUUID().slice(0, 8)}`, tenantId: ctxTenantId, type: 'signature',
-    title: 'Alle Unterschriften vollständig',
-    description: `${pkg.title} abgeschlossen; Auftragsbestätigung ${ocId} erstellt.`,
-    actor: externalCtx ? 'System (Magic-Link)' : 'System', dealId: pkg.dealId,
+    title: 'All signatures complete',
+    description: `${pkg.title} completed; order confirmation ${ocId} created.`,
+    actor: externalCtx ? 'System (Magic Link)' : 'System', dealId: pkg.dealId,
   });
   if (externalCtx) {
     await writeAudit({
@@ -9013,14 +9013,14 @@ async function maybeCompletePackageAndCreateOC(
       entityType: 'signature_package',
       entityId: pkg.id,
       action: 'completed',
-      summary: `Signature-Package ${pkg.title} vollständig; OC ${ocId} erzeugt.`,
+      summary: `Signature package ${pkg.title} complete; OC ${ocId} created.`,
       actor: externalCtx.actor,
       activeScope: null,
     });
   } else {
     await writeAuditFromReq(req, {    entityType: 'signature_package', entityId: pkg.id,
       action: 'completed',
-      summary: `Signature-Package ${pkg.title} vollständig; OC ${ocId} erzeugt.`,
+      summary: `Signature package ${pkg.title} complete; OC ${ocId} created.`,
     });
   }
   // Fire webhook — contract.signed (tenant-scoped via deal→company).
@@ -9166,12 +9166,12 @@ router.post('/signatures/:id/send-reminder', async (req, res) => {
     .where(eq(signersTable.id, waiting.id));
   await db.insert(timelineEventsTable).values({
     id: `tl_${randomUUID().slice(0, 8)}`, tenantId: getScope(req).tenantId, type: 'signature',
-    title: 'Reminder gesendet',
-    description: `Reminder an ${waiting.name} für ${s.title}.`,
+    title: 'Reminder sent',
+    description: `Reminder to ${waiting.name} for ${s.title}.`,
     actor: 'Priya Raman', dealId: s.dealId,
   });
   await writeAuditFromReq(req, {    entityType: 'signature_package', entityId: s.id, action: 'reminder_sent',
-    summary: `Reminder an ${waiting.name} (${waiting.email}) gesendet.`,
+    summary: `Reminder sent to ${waiting.name} (${waiting.email}).`,
   });
   const [fresh] = await db.select().from(signaturePackagesTable).where(eq(signaturePackagesTable.id, s.id));
   res.json(await buildSignatureDetail(fresh!));
@@ -9242,12 +9242,12 @@ router.post('/signatures/:id/escalate', async (req, res) => {
     .where(eq(signaturePackagesTable.id, s.id));
   await db.insert(timelineEventsTable).values({
     id: `tl_${randomUUID().slice(0, 8)}`, tenantId: getScope(req).tenantId, type: 'signature',
-    title: 'Eskalation: Fallback-Signer aktiviert',
-    description: `${name} übernimmt für ${replaced.name} bei ${s.title}.`,
+    title: 'Escalation: fallback signer activated',
+    description: `${name} takes over for ${replaced.name} on ${s.title}.`,
     actor: 'Priya Raman', dealId: s.dealId,
   });
   await writeAuditFromReq(req, {    entityType: 'signature_package', entityId: s.id, action: 'escalated',
-    summary: `Fallback ${name} aktiviert statt ${replaced.name}.`,
+    summary: `Fallback ${name} activated instead of ${replaced.name}.`,
     after: { fallbackSignerId: newId, replacesSignerId: replaced.id },
   });
   const [fresh] = await db.select().from(signaturePackagesTable).where(eq(signaturePackagesTable.id, s.id));
@@ -9369,7 +9369,7 @@ router.post('/price-increases', async (req, res) => {
   });
   await writeAuditFromReq(req, {
     entityType: 'price_increase', entityId: campaignId, action: 'campaign_created',
-    summary: `Preiserhöhungs-Kampagne angelegt: ${b.name} (${requested.length} Accounts, +${b.defaultUpliftPct}%)`,
+    summary: `Price increase campaign created: ${b.name} (${requested.length} accounts, +${b.defaultUpliftPct}%)`,
     after: { name: b.name, effectiveDate: b.effectiveDate, defaultUpliftPct: b.defaultUpliftPct, accountCount: requested.length },
   });
   const [campaign] = await db.select().from(priceIncreaseCampaignsTable).where(eq(priceIncreaseCampaignsTable.id, campaignId));
@@ -9821,8 +9821,8 @@ router.post('/copilot/insights/:id/execute', async (req, res) => {
       if (!isAccountAllowed(accIds, l.accountId)) throw new Error('letter/account forbidden');
       await db.insert(timelineEventsTable).values({
         id: `tl_${randomUUID().slice(0, 8)}`, tenantId: getScope(req).tenantId, type: 'reminder',
-        title: 'Reminder gesendet',
-        description: `Erinnerung an Preiserhöhung (Letter ${l.id}) an Kunde gesendet.`,
+        title: 'Reminder sent',
+        description: `Reminder for price increase (letter ${l.id}) sent to customer.`,
         actor, dealId: null,
       });
       result['letterId'] = letterId;
@@ -9845,7 +9845,7 @@ router.post('/copilot/insights/:id/execute', async (req, res) => {
       status: 'resolved', resolvedAt: new Date(),
     }).where(eq(copilotInsightsTable.id, c.id));
     await writeAuditFromReq(req, {      entityType: 'copilot_insight', entityId: c.id, action: `execute_${c.actionType}`,
-      summary: `Insight "${c.title}" ausgeführt (${c.actionType})`,
+      summary: `Insight "${c.title}" executed (${c.actionType})`,
       after: result, actor,
     });
     res.json({ ok: true, insightId: c.id, result });
@@ -10300,8 +10300,8 @@ router.post('/price-increases/:id/letters/:letterId/respond', async (req, res) =
   if (newStatus === 'accepted') {
     await db.insert(timelineEventsTable).values({
       id: `tl_${randomUUID().slice(0, 8)}`, tenantId: getScope(req).tenantId, type: 'price_increase',
-      title: 'Preiserhöhung angenommen',
-      description: `${accName} akzeptierte +${num(l.upliftPct)}%. Vertragsanpassung wird angestoßen.`,
+      title: 'Price increase accepted',
+      description: `${accName} accepted +${num(l.upliftPct)}%. Contract adjustment will be triggered.`,
       actor: 'System', dealId: null,
     });
     // Only consider contracts tied to deals the caller can access.
@@ -10321,14 +10321,14 @@ router.post('/price-increases/:id/letters/:letterId/respond', async (req, res) =
         originalContractId: target.id,
         number,
         type: 'price-change',
-        title: `Preisanpassung +${num(l.upliftPct)}%`,
-        description: `Automatisch erzeugt aus akzeptierter Preiserhöhung für ${accName}.`,
+        title: `Price adjustment +${num(l.upliftPct)}%`,
+        description: `Automatically generated from accepted price increase for ${accName}.`,
         status: 'proposed',
         effectiveFrom: null,
         createdBy: 'System',
       });
       await writeAuditFromReq(req, {        entityType: 'contract_amendment', entityId: aid, action: 'create',
-        summary: `Amendment ${number} automatisch aus Preiserhöhung erzeugt`,
+        summary: `Amendment ${number} automatically generated from price increase`,
         after: { from: 'price_increase_letter', letterId: l.id, upliftPct: num(l.upliftPct) },
       });
     }
@@ -10568,13 +10568,13 @@ router.post('/order-confirmations/:id/handover', async (req, res) => {
     handoverCriticalNotes: criticalNotes ?? null,
   }).where(eq(orderConfirmationsTable.id, o.id));
   await writeAuditFromReq(req, {    entityType: 'order_confirmation', entityId: o.id, action: 'handover_completed',
-    summary: `Auftragsbestätigung ${o.number} an ${owner.name} (Onboarding) übergeben`,
+    summary: `Order confirmation ${o.number} handed over to ${owner.name} (onboarding)`,
     after: { onboardingOwnerId: owner.id, contactName, contactEmail, deliveryDate, slaDays: o.slaDays },
   });
   await db.insert(timelineEventsTable).values({
     id: `tl_${randomUUID().slice(0, 8)}`, tenantId: getScope(req).tenantId, type: 'handover',
-    title: 'Übergabe an Onboarding',
-    description: `Auftragsbestätigung ${o.number} an ${owner.name} übergeben. SLA ${o.slaDays} Tage läuft.`,
+    title: 'Handover to onboarding',
+    description: `Order confirmation ${o.number} handed over to ${owner.name}. SLA of ${o.slaDays} days is running.`,
     actor: 'Priya Raman', dealId: o.dealId,
   });
   await respondOcDetail(req, res, o.id);
@@ -10592,12 +10592,12 @@ router.post('/order-confirmations/:id/complete', async (req, res) => {
     status: 'completed', completedAt: new Date(),
   }).where(eq(orderConfirmationsTable.id, o.id));
   await writeAuditFromReq(req, {    entityType: 'order_confirmation', entityId: o.id, action: 'completed',
-    summary: `Onboarding für ${o.number} abgeschlossen`,
+    summary: `Onboarding for ${o.number} completed`,
   });
   await db.insert(timelineEventsTable).values({
     id: `tl_${randomUUID().slice(0, 8)}`, tenantId: getScope(req).tenantId, type: 'handover',
-    title: 'Onboarding abgeschlossen',
-    description: `Auftragsbestätigung ${o.number} ist produktiv übergeben.`,
+    title: 'Onboarding completed',
+    description: `Order confirmation ${o.number} has been handed over to production.`,
     actor: 'Priya Raman', dealId: o.dealId,
   });
   await respondOcDetail(req, res, o.id);
@@ -10627,21 +10627,21 @@ router.get('/copilot/threads/:id/messages', async (req, res) => {
 function craftAssistantReply(userText: string): string {
   const t = userText.toLowerCase();
   if (t.includes('rabatt') || t.includes('discount')) {
-    return 'Bei Rabatten >8% greift die Margenkontrolle automatisch und legt eine Freigabe in der Approval-Pipeline an. Vorschlag: gegenüber dem Kunden mit Multi-Year-Bindung kontern, dann sinkt der nötige Rabatt im Schnitt um 3 Prozentpunkte.';
+    return 'For discounts >8% margin control kicks in automatically and creates an approval in the approval pipeline. Suggestion: counter the customer with a multi-year commitment — that lowers the required discount by 3 percentage points on average.';
   }
   if (t.includes('preiserhöhung') || t.includes('uplift') || t.includes('price increase')) {
-    return 'Die Preiserhöhungs-Kampagne läuft mit einem Ø Uplift von 6,8%. Top-Account-Risiko liegt bei Vorwerk und BlueRiver — dort empfehle ich ein persönliches Briefing vor Versand.';
+    return 'The price increase campaign is running at an average uplift of 6.8%. Top account risk lies with Vorwerk and BlueRiver — I recommend a personal briefing before sending there.';
   }
   if (t.includes('vertrag') || t.includes('contract') || t.includes('klausel')) {
-    return 'Im Standard-Master sind alle Klauseln auf grün. Erhöhtes Risiko entsteht erst, sobald Liability-Caps oder Auto-Renewal entfernt werden — beides erzeugt automatisch einen Approval-Eintrag.';
+    return 'In the standard master all clauses are green. Increased risk only arises once liability caps or auto-renewal are removed — both automatically create an approval entry.';
   }
   if (t.includes('forecast') || t.includes('prognose')) {
-    return 'Committed Forecast für das laufende Quartal liegt bei EUR 1,8 Mio, Best Case bei EUR 3,1 Mio. Hauptrisiken: Vorwerk-Add-On (9 Tage offen) und Castell-Renewal (Champion gewechselt).';
+    return 'Committed forecast for the current quarter is EUR 1.8M, best case EUR 3.1M. Main risks: Vorwerk add-on (9 days open) and Castell renewal (champion changed).';
   }
   if (t.includes('hilfe') || t.includes('help') || t.includes('wie')) {
-    return 'Ich bin dein Commercial-Copilot. Ich kann Deals priorisieren, Verhandlungstaktiken vorschlagen, Vertragsklauseln einordnen und Reports erklären. Welcher Bereich interessiert dich gerade?';
+    return 'I am your commercial copilot. I can prioritize deals, suggest negotiation tactics, classify contract clauses and explain reports. Which area are you interested in right now?';
   }
-  return 'Verstanden. Ich analysiere die aktuellen Deals und Verhandlungen und melde mich gleich mit einer konkreten Empfehlung.';
+  return 'Understood. I will analyze the current deals and negotiations and come back shortly with a concrete recommendation.';
 }
 
 router.post('/copilot/threads/:id/messages', async (req, res) => {
@@ -10986,7 +10986,7 @@ router.post('/copilot/pricing-review/:quoteId', async (req, res) => {
 
     const insightId = await persistAiInsight(scope.tenantId, {
       kind: 'ai_pricing_review',
-      title: `Pricing-Review für ${ctx.quote.number}`,
+      title: `Pricing review for ${ctx.quote.number}`,
       summary: result.output.summary,
       severity: severityToInsight(finalSev),
       dealId: ctx.deal.id,
@@ -11068,7 +11068,7 @@ router.post('/copilot/approval-readiness/:approvalId', async (req, res) => {
       const families = Array.from(new Set(ctx.missingTranslations.map((m) => m.family))).sort();
       const existing = new Set(result.output.missingInformation.map((s) => s.toLowerCase()));
       for (const fam of families) {
-        const line = `Übersetzung [${locale}] fehlt: ${fam}`;
+        const line = `Translation [${locale}] missing: ${fam}`;
         if (!existing.has(line.toLowerCase()) && result.output.missingInformation.length < 8) {
           result.output.missingInformation.push(line);
         }
@@ -11203,57 +11203,57 @@ router.post('/copilot/contract-risk/:contractId', async (req, res) => {
 const helpRules: Array<{ match: RegExp; reply: string; suggestions: { label: string; path: string }[] }> = [
   {
     match: /(deal|opportunity|pipeline)/i,
-    reply: "Im Bereich Deals findest du die gesamte Pipeline pro Stage. Klick auf einen Deal, um Angebote, Verträge, Verhandlungen und Approvals dazu zu sehen. Über Neuer Deal legst du eine Opportunity an.",
-    suggestions: [{ label: 'Zur Deal-Pipeline', path: '/deals' }, { label: 'Reports öffnen', path: '/reports' }],
+    reply: "In the Deals section you find the full pipeline per stage. Click a deal to see its quotes, contracts, negotiations and approvals. Use New Deal to create an opportunity.",
+    suggestions: [{ label: 'Go to deal pipeline', path: '/deals' }, { label: 'Open reports', path: '/reports' }],
   },
   {
     match: /(angebot|quote)/i,
-    reply: "Angebote sind versioniert. Auf jeder Quote-Seite siehst du links die Versions-Historie — über Neue Version entsteht eine neue Variante mit eigenem Rabatt und eigener Marge.",
-    suggestions: [{ label: 'Alle Angebote', path: '/quotes' }],
+    reply: "Quotes are versioned. On each quote page you see the version history on the left — New Version creates a new variant with its own discount and margin.",
+    suggestions: [{ label: 'All quotes', path: '/quotes' }],
   },
   {
     match: /(rabatt|approval|freigabe)/i,
-    reply: 'Sobald ein Rabatt über der Schwelle liegt, landet automatisch ein Eintrag im Approval Hub. Dort kannst du Freigeben oder Ablehnen (mit Kommentar). Jede Entscheidung wird im Audit-Log protokolliert.',
-    suggestions: [{ label: 'Approval Hub', path: '/approvals' }, { label: 'Audit-Log', path: '/audit' }],
+    reply: 'As soon as a discount exceeds the threshold, an entry lands automatically in the Approval Hub. There you can approve or reject (with a comment). Every decision is recorded in the audit log.',
+    suggestions: [{ label: 'Approval Hub', path: '/approvals' }, { label: 'Audit log', path: '/audit' }],
   },
   {
     match: /(vertrag|klausel|contract)/i,
-    reply: "Verträge nutzen Klauselfamilien. Jede Variante hat eine Severity (grün/gelb/rot). Den Risiko-Score gesamthaft siehst du oben rechts auf der Vertragsseite. Über Neue Vertragsversion entsteht eine vollständige Snapshot-Version.",
-    suggestions: [{ label: 'Verträge', path: '/contracts' }],
+    reply: "Contracts use clause families. Each variant has a severity (green/yellow/red). The overall risk score is shown at the top right of the contract page. New Contract Version creates a complete snapshot version.",
+    suggestions: [{ label: 'Contracts', path: '/contracts' }],
   },
   {
     match: /(verhandlung|negotiation|reaktion)/i,
-    reply: 'Verhandlungen werden als strukturierte Kundenreaktionen erfasst (Frage, Einwand, Gegenvorschlag, Zustimmung). So baut sich Round für Round eine echte Historie auf — ideal für AI-Vorschläge.',
-    suggestions: [{ label: 'Verhandlungen', path: '/negotiations' }],
+    reply: 'Negotiations are captured as structured customer reactions (question, objection, counterproposal, agreement). This builds up a real history round by round — ideal for AI suggestions.',
+    suggestions: [{ label: 'Negotiations', path: '/negotiations' }],
   },
   {
     match: /(unterschrift|signatur|signature)/i,
-    reply: "Unterschriftspakete laufen sequenziell durch alle Signer. Beim Status Läuft kannst du jederzeit auf Erinnern klicken — das wird auch im Audit-Log dokumentiert.",
-    suggestions: [{ label: 'Unterschriften', path: '/signatures' }],
+    reply: "Signature packages run sequentially through all signers. While the status is Running you can click Remind at any time — this is also documented in the audit log.",
+    suggestions: [{ label: 'Signatures', path: '/signatures' }],
   },
   {
     match: /(preiserhöhung|uplift|kampagne)/i,
-    reply: 'Die Preiserhöhungs-Kampagnen zeigen die Annahme-Quote pro Account. Bei Annahme erzeugt das System automatisch einen Vertragsanpassungs-Hinweis im Audit-Log.',
-    suggestions: [{ label: 'Preiserhöhungen', path: '/price-increases' }],
+    reply: 'The price increase campaigns show the acceptance rate per account. On acceptance the system automatically creates a contract adjustment note in the audit log.',
+    suggestions: [{ label: 'Price increases', path: '/price-increases' }],
   },
   {
     match: /(report|auswertung|forecast)/i,
-    reply: 'Reports zeigen Win-Rate, Margendisziplin, Ø Cycle Time und einen 6-Monats-Forecast (Committed/Best Case/Pipeline). Über die Filter oben kannst du nach Brand und Zeitraum eingrenzen.',
+    reply: 'Reports show win rate, margin discipline, average cycle time and a 6-month forecast (committed/best case/pipeline). Use the filters at the top to narrow by brand and time range.',
     suggestions: [{ label: 'Reports', path: '/reports' }],
   },
   {
     match: /(audit|historie|protokoll)/i,
-    reply: 'Im Audit-Log siehst du jede wichtige Änderung — wer hat wann was getan. Du kannst nach Entitäts-Typ und ID filtern.',
-    suggestions: [{ label: 'Audit-Log', path: '/audit' }],
+    reply: 'In the audit log you see every important change — who changed what and when. You can filter by entity type and id.',
+    suggestions: [{ label: 'Audit log', path: '/audit' }],
   },
   {
     match: /(handover|order confirmation|auftragsbestätigung)/i,
-    reply: 'Sobald alle Handover-Checks grün sind, wird die Auftragsbestätigung formal an die Lieferung übergeben. Der Readiness-Score zeigt dir auf einen Blick, was noch fehlt.',
-    suggestions: [{ label: 'Auftragsbestätigungen', path: '/order-confirmations' }],
+    reply: 'Once all handover checks are green, the order confirmation is formally handed over to delivery. The readiness score shows at a glance what is still missing.',
+    suggestions: [{ label: 'Order confirmations', path: '/order-confirmations' }],
   },
   {
     match: /(sprache|language)/i,
-    reply: 'Oben rechts findest du den Sprachumschalter (DE / EN). Die Wahl wird im Browser gespeichert.',
+    reply: 'At the top right you find the language switcher (DE / EN). The choice is stored in your browser.',
     suggestions: [],
   },
 ];
@@ -11261,22 +11261,22 @@ const helpRules: Array<{ match: RegExp; reply: string; suggestions: { label: str
 // Statisches Routen-Inventar — wird dem KI-Assistenten als Kontext gegeben,
 // damit er Navigation und Hilfetexte sinnvoll vorschlagen kann.
 const HELP_ROUTES: Array<{ path: string; title: string; purpose: string }> = [
-  { path: '/', title: 'Startseite', purpose: 'Tagesüberblick, Pipeline-Snapshot, Aufgaben' },
-  { path: '/accounts', title: 'Kunden', purpose: 'Alle Accounts mit Health-Score, Deals und Kontakten' },
-  { path: '/contacts', title: 'Kontakte', purpose: 'Personen pro Kunde mit Rollen' },
-  { path: '/deals', title: 'Deals', purpose: 'Pipeline-Ansicht aller Verkaufschancen' },
-  { path: '/quotes', title: 'Angebote', purpose: 'Versionsbasierte Angebote, Rabatt + Marge' },
-  { path: '/pricing', title: 'Pricing', purpose: 'Preislisten und Pricing-Workspace' },
-  { path: '/approvals', title: 'Approvals', purpose: 'Freigaben für Rabatte oder Sonderkonditionen' },
-  { path: '/contracts', title: 'Verträge', purpose: 'Verträge mit Klauseln und Risiko-Score' },
-  { path: '/negotiations', title: 'Verhandlungen', purpose: 'Strukturierte Kundenreaktionen, Counterproposals' },
-  { path: '/signatures', title: 'Unterschriften', purpose: 'Sequenzielle Signature-Pakete' },
-  { path: '/order-confirmations', title: 'Auftragsbestätigungen', purpose: 'Handover-Checks und Übergabe' },
-  { path: '/price-increases', title: 'Preiserhöhungen', purpose: 'Kampagnen mit Annahme-Quote' },
-  { path: '/reports', title: 'Reports', purpose: 'Win-Rate, Margendisziplin, Forecast' },
-  { path: '/audit', title: 'Audit-Log', purpose: 'Wer hat wann was geändert' },
-  { path: '/copilot', title: 'AI Copilot', purpose: 'Geführte AI-Modi für Zusammenfassungen, Pricing, Approvals' },
-  { path: '/admin', title: 'Tenant Admin', purpose: 'User-, Rollen- und Scope-Verwaltung' },
+  { path: '/', title: 'Home', purpose: 'Daily overview, pipeline snapshot, tasks' },
+  { path: '/accounts', title: 'Customers', purpose: 'All accounts with health score, deals and contacts' },
+  { path: '/contacts', title: 'Contacts', purpose: 'People per customer with roles' },
+  { path: '/deals', title: 'Deals', purpose: 'Pipeline view of all opportunities' },
+  { path: '/quotes', title: 'Quotes', purpose: 'Version-based quotes, discount + margin' },
+  { path: '/pricing', title: 'Pricing', purpose: 'Price lists and pricing workspace' },
+  { path: '/approvals', title: 'Approvals', purpose: 'Approvals for discounts or special terms' },
+  { path: '/contracts', title: 'Contracts', purpose: 'Contracts with clauses and risk score' },
+  { path: '/negotiations', title: 'Negotiations', purpose: 'Structured customer responses, counterproposals' },
+  { path: '/signatures', title: 'Signatures', purpose: 'Sequential signature packages' },
+  { path: '/order-confirmations', title: 'Order confirmations', purpose: 'Handover checks and handover' },
+  { path: '/price-increases', title: 'Price increases', purpose: 'Campaigns with acceptance rate' },
+  { path: '/reports', title: 'Reports', purpose: 'Win rate, margin discipline, forecast' },
+  { path: '/audit', title: 'Audit log', purpose: 'Who changed what and when' },
+  { path: '/copilot', title: 'AI Copilot', purpose: 'Guided AI modes for summaries, pricing, approvals' },
+  { path: '/admin', title: 'Tenant Admin', purpose: 'User, role and scope management' },
 ];
 
 // Fallback ohne KI: navigiert nur, legt nichts mehr an. Anlegen ist im
@@ -11284,9 +11284,9 @@ const HELP_ROUTES: Array<{ path: string; title: string; purpose: string }> = [
 // nicht mit "ich öffne den Dialog" anlügen, sondern in den richtigen
 // Bereich lotsen, wo er den Dialog selbst aufrufen kann.
 const HelpFallbackResponses: Array<{ test: RegExp; reply: string; action?: { kind: string; path?: string } }> = [
-  { test: /(kunde|account).*(anlegen|erstellen|neu)/i, reply: 'Lege Kunden hier an: rechts oben "Kunde anlegen". Ich kann das im KI-Modus auch direkt für dich tun, sobald der Assistent wieder erreichbar ist.', action: { kind: 'navigate', path: '/accounts' } },
-  { test: /(deal|opportunity).*(anlegen|erstellen|neu)/i, reply: 'Deals legst du hier an: rechts oben "Deal anlegen".', action: { kind: 'navigate', path: '/deals' } },
-  { test: /(zeig.*pipeline|wo.*pipeline|alle deals)/i, reply: 'Hier geht\'s zur Pipeline.', action: { kind: 'navigate', path: '/deals' } },
+  { test: /(kunde|account).*(anlegen|erstellen|neu)/i, reply: 'You can create customers here: top right "Create customer". I can also do this for you directly in AI mode once the assistant is reachable again.', action: { kind: 'navigate', path: '/accounts' } },
+  { test: /(deal|opportunity).*(anlegen|erstellen|neu)/i, reply: 'You can create deals here: top right "Create deal".', action: { kind: 'navigate', path: '/deals' } },
+  { test: /(zeig.*pipeline|wo.*pipeline|alle deals)/i, reply: 'Here is the pipeline.', action: { kind: 'navigate', path: '/deals' } },
 ];
 
 function helpFallback(question: string) {
@@ -11301,9 +11301,9 @@ function helpFallback(question: string) {
   }
   // Letzter Fallback: kein KI-Provider verfügbar.
   return {
-    reply: 'Der KI-Assistent ist gerade nicht erreichbar. Ich kann dich aber zu den passenden Bereichen lotsen — wonach suchst du?',
+    reply: 'The AI assistant is currently unavailable. I can still guide you to the right areas — what are you looking for?',
     suggestions: [
-      { label: 'Kunden', path: '/accounts' },
+      { label: 'Customers', path: '/accounts' },
       { label: 'Deals', path: '/deals' },
       { label: 'Reports', path: '/reports' },
     ],
@@ -11319,22 +11319,22 @@ const HELP_BOT_AGENT_SYSTEM = (ctx: {
   user: { name: string; role: string; tenantWide: boolean };
   routes: Array<{ path: string; title: string; purpose: string }>;
 }) =>
-  `Du bist der Hilfe-Assistent von DealFlow.One — einer B2B Commercial Execution ` +
-  `Platform. Antworte kurz, sachlich, auf Deutsch (max. 4 Sätze pro Antwort, ` +
-  `keine Marketingsprache, keine Emojis).\n\n` +
-  `Aktueller Nutzer: ${ctx.user.name} (${ctx.user.role}${ctx.user.tenantWide ? ', tenant-weit' : ', eingeschränkter Scope'}). ` +
-  `Aktuelle Seite: ${ctx.currentPath}.\n\n` +
-  `Du hast Werkzeuge, um Daten zu lesen UND zu schreiben:\n` +
-  `- search_accounts / search_deals / pipeline_stats / recent_activity → Daten nachschlagen.\n` +
-  `- create_account / create_contact / create_deal → echte Datensätze anlegen.\n\n` +
-  `Verhalten:\n` +
-  `1. Bei Fragen zu Zahlen oder Datensätzen RUFE ein Lese-Tool auf, statt zu raten.\n` +
-  `2. Bei Anlege-Wünschen: prüfe Pflichtfelder. Wenn alle Angaben da sind, lege es ` +
-  `direkt an und bestätige. Fehlt etwas, frage präzise nach EINEM Feld.\n` +
-  `3. Bei reinen Navigationsfragen erkläre kurz und nenne den passenden Bereich. ` +
-  `Verfügbare Routen: ${ctx.routes.map(r => `${r.path} (${r.title})`).join(', ')}.\n` +
-  `4. Schließe Antworten auf erledigte Anlegungen z.B. mit "Habe Kunde 'X' (id) angelegt." ab.\n` +
-  `5. Wenn du etwas nicht sicher weißt, sage das ehrlich.`;
+  `You are the help assistant of DealFlow.One — a B2B Commercial Execution ` +
+  `Platform. Answer briefly and factually in English (max. 4 sentences per answer, ` +
+  `no marketing language, no emojis).\n\n` +
+  `Current user: ${ctx.user.name} (${ctx.user.role}${ctx.user.tenantWide ? ', tenant-wide' : ', limited scope'}). ` +
+  `Current page: ${ctx.currentPath}.\n\n` +
+  `You have tools to READ and WRITE data:\n` +
+  `- search_accounts / search_deals / pipeline_stats / recent_activity → look up data.\n` +
+  `- create_account / create_contact / create_deal → create real records.\n\n` +
+  `Behavior:\n` +
+  `1. For questions about numbers or records, CALL a read tool rather than guess.\n` +
+  `2. For create requests: check required fields. If everything is provided, create ` +
+  `it directly and confirm. If something is missing, ask precisely for ONE field.\n` +
+  `3. For pure navigation questions, explain briefly and name the matching area. ` +
+  `Available routes: ${ctx.routes.map(r => `${r.path} (${r.title})`).join(', ')}.\n` +
+  `4. Close successful create responses with e.g. "Created customer 'X' (id).".\n` +
+  `5. If you are unsure about something, say so honestly.`;
 
 router.post('/copilot/help', async (req, res) => {
   if (!validateInline(req, res, { body: Z.AskHelpBotBody })) return;
@@ -11342,7 +11342,7 @@ router.post('/copilot/help', async (req, res) => {
   const question = (b.question ?? '').trim();
   if (!question) {
     res.json({
-      reply: 'Stell mir gerne eine Frage — z.B. "Wie lege ich einen neuen Deal an?" oder "Was sind meine 3 größten offenen Deals?"',
+      reply: 'Ask me a question — e.g. "How do I create a new deal?" or "What are my 3 largest open deals?"',
       suggestions: [],
       action: { kind: 'none' },
       traces: [],
@@ -11637,22 +11637,22 @@ router.patch('/admin/users/:id', async (req, res) => {
 // System-Rollen haben implizit alle (oder eine kuratierte Untermenge); siehe
 // `SYSTEM_ROLE_PERMISSIONS` weiter unten.
 const PERMISSION_CATALOG: ReadonlyArray<{ key: string; label: string; group: string; description?: string }> = [
-  { key: 'deal:read',         label: 'Deals einsehen',                 group: 'Deals' },
-  { key: 'deal:write',        label: 'Deals anlegen & bearbeiten',     group: 'Deals' },
-  { key: 'deal:delete',       label: 'Deals löschen',                  group: 'Deals' },
-  { key: 'account:read',      label: 'Kunden einsehen',                group: 'Stammdaten' },
-  { key: 'account:write',     label: 'Kunden anlegen & bearbeiten',    group: 'Stammdaten' },
-  { key: 'quote:read',        label: 'Angebote einsehen',              group: 'Angebote' },
-  { key: 'quote:write',       label: 'Angebote anlegen & bearbeiten',  group: 'Angebote' },
-  { key: 'quote:approve',     label: 'Angebote freigeben',             group: 'Angebote' },
-  { key: 'contract:read',     label: 'Verträge einsehen',              group: 'Verträge' },
-  { key: 'contract:write',    label: 'Verträge anlegen & bearbeiten',  group: 'Verträge' },
-  { key: 'approval:approve',  label: 'Freigaben erteilen',             group: 'Approvals',  description: 'Stage-Approvals in Approval-Chains.' },
-  { key: 'admin:tenant',      label: 'Tenant-Administration',          group: 'Admin',      description: 'Vollzugriff auf Admin-Bereich.' },
-  { key: 'admin:users',       label: 'Nutzer & Rollen verwalten',      group: 'Admin' },
-  { key: 'admin:branding',    label: 'Marken & Klauseln pflegen',      group: 'Admin' },
-  { key: 'admin:pricing',     label: 'Preise & Bundles pflegen',       group: 'Admin' },
-  { key: 'reports:read',      label: 'Reports & Dashboards',           group: 'Analytics' },
+  { key: 'deal:read',         label: 'View deals',                     group: 'Deals' },
+  { key: 'deal:write',        label: 'Create & edit deals',            group: 'Deals' },
+  { key: 'deal:delete',       label: 'Delete deals',                   group: 'Deals' },
+  { key: 'account:read',      label: 'View customers',                 group: 'Master data' },
+  { key: 'account:write',     label: 'Create & edit customers',        group: 'Master data' },
+  { key: 'quote:read',        label: 'View quotes',                    group: 'Quotes' },
+  { key: 'quote:write',       label: 'Create & edit quotes',           group: 'Quotes' },
+  { key: 'quote:approve',     label: 'Approve quotes',                 group: 'Quotes' },
+  { key: 'contract:read',     label: 'View contracts',                 group: 'Contracts' },
+  { key: 'contract:write',    label: 'Create & edit contracts',        group: 'Contracts' },
+  { key: 'approval:approve',  label: 'Grant approvals',                group: 'Approvals',  description: 'Stage approvals in approval chains.' },
+  { key: 'admin:tenant',      label: 'Tenant administration',          group: 'Admin',      description: 'Full access to admin area.' },
+  { key: 'admin:users',       label: 'Manage users & roles',           group: 'Admin' },
+  { key: 'admin:branding',    label: 'Maintain brands & clauses',      group: 'Admin' },
+  { key: 'admin:pricing',     label: 'Maintain prices & bundles',      group: 'Admin' },
+  { key: 'reports:read',      label: 'Reports & dashboards',           group: 'Analytics' },
 ];
 
 router.get('/admin/permissions/catalog', async (req, res) => {
@@ -11762,7 +11762,7 @@ router.delete('/admin/roles/:id', async (req, res) => {
   if (userWithRole) { res.status(400).json({ error: 'role is in use by users' }); return; }
   await db.delete(rolesTable).where(eq(rolesTable.id, r.id));
   await writeAuditFromReq(req, {    entityType: 'role', entityId: r.id, action: 'delete',
-    summary: `Rolle gelöscht: ${r.name}`,
+    summary: `Role deleted: ${r.name}`,
     before: { name: r.name, description: r.description },
     actor: scope.user.name,
   });
@@ -12053,7 +12053,7 @@ router.post('/gdpr/retention/run', async (req, res) => {
     entityId: scope.tenantId,
     action: 'retention.run',
     actor: scope.user.name,
-    summary: 'GDPR Retention-Lauf manuell ausgeführt',
+    summary: 'GDPR retention run executed manually',
     after: result.applied,
   });
   res.json(result);
@@ -12799,7 +12799,7 @@ async function cascadeDeleteAccounts(req: Request, accountIds: string[]): Promis
   ]);
 
   for (const id of accountIds) {
-    await writeAuditFromReq(req, { entityType: 'account', entityId: id, action: 'cascade_delete', summary: 'Kunde inkl. abhängiger Daten gelöscht' });
+    await writeAuditFromReq(req, { entityType: 'account', entityId: id, action: 'cascade_delete', summary: 'Customer deleted including dependent data' });
   }
 }
 
@@ -12825,7 +12825,7 @@ router.post('/accounts/bulk/delete', async (req, res) => {
       await cascadeDeleteAccounts(req, targetIds);
       await db.delete(accountsTable).where(inArray(accountsTable.id, targetIds));
       for (const id of targetIds) {
-        await writeAuditFromReq(req, { entityType: 'account', entityId: id, action: 'bulk_purge', summary: 'Kunde endgültig gelöscht (mit allen Daten)' });
+        await writeAuditFromReq(req, { entityType: 'account', entityId: id, action: 'bulk_purge', summary: 'Customer permanently deleted (with all data)' });
       }
     }
     res.json({
@@ -12917,7 +12917,7 @@ router.post('/deals/bulk/stage', async (req, res) => {
     .set({ stage: parsed.data.stage, updatedAt: new Date() })
     .where(inArray(dealsTable.id, targetIds));
   for (const id of targetIds) {
-    await writeAuditFromReq(req, { entityType: 'deal', entityId: id, action: 'bulk_stage', summary: `Stage geändert auf ${parsed.data.stage}` });
+    await writeAuditFromReq(req, { entityType: 'deal', entityId: id, action: 'bulk_stage', summary: `Stage changed to ${parsed.data.stage}` });
   }
   res.json({ updated: targetIds.length, skipped: skipped.length, skippedIds: skipped });
 });
@@ -13105,9 +13105,9 @@ router.post('/platform/tenants', async (req, res) => {
         isPlatformAdmin: false,
       });
       await tx.insert(rolesTable).values([
-        { id: `ro_tenant_admin_${tenantId.slice(3)}`, name: 'Tenant Admin', description: 'Volle Rechte innerhalb des Mandanten.', isSystem: true, tenantId },
-        { id: `ro_account_exec_${tenantId.slice(3)}`, name: 'Account Executive', description: 'Klassische Sales-Rolle für Deal-Ownership.', isSystem: true, tenantId },
-        { id: `ro_deal_desk_${tenantId.slice(3)}`,    name: 'Deal Desk',         description: 'Pricing- und Deal-Support, tenant-weite Sicht.', isSystem: true, tenantId },
+        { id: `ro_tenant_admin_${tenantId.slice(3)}`, name: 'Tenant Admin', description: 'Full rights within the tenant.', isSystem: true, tenantId },
+        { id: `ro_account_exec_${tenantId.slice(3)}`, name: 'Account Executive', description: 'Classic sales role for deal ownership.', isSystem: true, tenantId },
+        { id: `ro_deal_desk_${tenantId.slice(3)}`,    name: 'Deal Desk',         description: 'Pricing and deal support, tenant-wide visibility.', isSystem: true, tenantId },
       ]);
     });
   } catch (e: unknown) {
@@ -13678,7 +13678,7 @@ router.delete('/price-bundles/:id', async (req, res) => {
   await db.delete(pricePositionBundlesTable).where(eq(pricePositionBundlesTable.id, existing.id));
   await writeAuditFromReq(req, {
     entityType: 'price_bundle', entityId: existing.id, action: 'delete',
-    summary: `Bundle gelöscht: ${existing.name}`,
+    summary: `Bundle deleted: ${existing.name}`,
     actor: getScope(req).user.name,
   });
   res.status(204).end();
@@ -13942,7 +13942,7 @@ router.post('/external-contracts/extract', async (req, res) => {
     identifiedClauseFamilies: [] as Array<{ name: string; confidence: number }>,
     confidence: {} as Record<string, number>,
     overallConfidence: 'low' as 'low' | 'medium' | 'high',
-    overallConfidenceReason: 'Keine KI-Extraktion verfügbar — Felder bitte manuell prüfen.',
+    overallConfidenceReason: 'No AI extraction available — please check fields manually.',
     notes: [] as string[],
   };
 
@@ -13974,7 +13974,7 @@ router.post('/external-contracts/extract', async (req, res) => {
       truncated: false,
       charCount: 0,
       errorCode: 'text_extraction_failed',
-      suggestion: { ...emptySuggestion, notes: ['Aus dem Dokument konnte kein Text extrahiert werden (gescanntes PDF? OCR ist out-of-scope).'] },
+      suggestion: { ...emptySuggestion, notes: ['No text could be extracted from the document (scanned PDF? OCR is out of scope).'] },
     });
     return;
   }
@@ -13986,7 +13986,7 @@ router.post('/external-contracts/extract', async (req, res) => {
       truncated,
       charCount,
       errorCode: 'config_error',
-      suggestion: { ...emptySuggestion, notes: ['KI-Provider ist nicht konfiguriert — bitte Felder manuell ausfüllen.'] },
+      suggestion: { ...emptySuggestion, notes: ['AI provider is not configured — please fill in fields manually.'] },
     });
     return;
   }
@@ -14053,7 +14053,7 @@ router.post('/external-contracts/extract', async (req, res) => {
         truncated,
         charCount,
         errorCode: err.code,
-        suggestion: { ...emptySuggestion, notes: ['KI-Extraktion fehlgeschlagen — bitte Felder manuell prüfen.'] },
+        suggestion: { ...emptySuggestion, notes: ['AI extraction failed — please check fields manually.'] },
       });
       return;
     }
@@ -14304,7 +14304,7 @@ router.delete('/external-contracts/:id', async (req, res) => {
     entityType: 'external_contract',
     entityId: existing.id,
     action: 'delete',
-    summary: `Bestandsvertrag „${existing.title}" gelöscht`,
+    summary: `Existing contract "${existing.title}" deleted`,
     actor: scope.user?.name,
     before: existing,
   });
@@ -15026,8 +15026,8 @@ router.patch('/clause-imports/:id/suggestions/:sid', async (req, res) => {
     entityId: suggestion.id,
     action: 'accept',
     summary: createdTranslationId
-      ? `Klausel-Vorschlag „${name}" als Übersetzung angenommen (${job.language})`
-      : `Klausel-Vorschlag „${name}" als Variante angelegt (Familie ${familyRow.name})`,
+      ? `Clause suggestion "${name}" accepted as translation (${job.language})`
+      : `Clause suggestion "${name}" created as variant (family ${familyRow.name})`,
     actor: scope.user?.name,
     after: { createdVariantId, createdTranslationId, familyId },
   });
@@ -15060,7 +15060,7 @@ router.delete('/clause-imports/:id', async (req, res) => {
     entityType: 'clause_import_job',
     entityId: existing.id,
     action: 'delete',
-    summary: `Klausel-Import „${existing.fileName}" gelöscht`,
+    summary: `Clause import "${existing.fileName}" deleted`,
     actor: scope.user?.name,
     before: existing,
   });
@@ -15811,7 +15811,7 @@ router.post('/renewals/run', async (req, res) => {
       entityType: 'tenant',
       entityId: scope.tenantId,
       action: 'renewal_run',
-      summary: `Renewal-Engine ausgeführt: ${result.created} neu, ${result.updated} aktualisiert, ${result.dueSoon} fällig`,
+      summary: `Renewal engine executed: ${result.created} new, ${result.updated} updated, ${result.dueSoon} due soon`,
       actor: scope.user?.name,
       after: result,
     });
@@ -16089,13 +16089,13 @@ router.post('/renewals/:id/notify-owner', async (req, res) => {
   const contractLabel = contract?.title ?? existing.contractId;
   const dueDate = existing.dueDate;
   const noticeDeadline = existing.noticeDeadline;
-  const summary = `Renewal-Reminder an ${owner.ownerName} für ${accountLabel} (${contractLabel}, fällig ${dueDate})`;
+  const summary = `Renewal reminder to ${owner.ownerName} for ${accountLabel} (${contractLabel}, due ${dueDate})`;
   await db.insert(timelineEventsTable).values({
     id: `tl_${randomUUID().slice(0, 8)}`,
     tenantId: scope.tenantId,
     type: 'reminder',
-    title: 'Renewal-Reminder gesendet',
-    description: `Reminder an ${owner.ownerName}${owner.ownerEmail ? ` (${owner.ownerEmail})` : ''} für ${accountLabel} — Vertrag "${contractLabel}", Notice-Frist ${noticeDeadline}, fällig ${dueDate}.`,
+    title: 'Renewal reminder sent',
+    description: `Reminder to ${owner.ownerName}${owner.ownerEmail ? ` (${owner.ownerEmail})` : ''} for ${accountLabel} — contract "${contractLabel}", notice deadline ${noticeDeadline}, due ${dueDate}.`,
     actor: scope.user?.name ?? 'System',
     dealId: contract?.dealId ?? null,
   });
@@ -16169,8 +16169,8 @@ router.post('/renewals/_bulk', async (req, res) => {
         id: `tl_${randomUUID().slice(0, 8)}`,
         tenantId: scope.tenantId,
         type: 'reminder',
-        title: 'Renewal-Reminder gesendet',
-        description: `Reminder an ${owner.ownerName}${owner.ownerEmail ? ` (${owner.ownerEmail})` : ''} für ${acc?.name ?? existing.accountId} — fällig ${existing.dueDate}.`,
+        title: 'Renewal reminder sent',
+        description: `Reminder to ${owner.ownerName}${owner.ownerEmail ? ` (${owner.ownerEmail})` : ''} for ${acc?.name ?? existing.accountId} — due ${existing.dueDate}.`,
         actor: scope.user?.name ?? 'System',
         dealId: contract?.dealId ?? null,
       });
@@ -16408,7 +16408,7 @@ router.delete('/brands/:brandId/clause-overrides/:baseVariantId', async (req, re
   await db.delete(brandClauseVariantOverridesTable).where(eq(brandClauseVariantOverridesTable.id, existing.id));
   await writeAuditFromReq(req, {
     entityType: 'brand', entityId: brand.id, action: 'clause_override_deleted',
-    summary: `Brand-Override gelöscht: ${existing.baseVariantId}`,
+    summary: `Brand override deleted: ${existing.baseVariantId}`,
     before: { id: existing.id, baseVariantId: existing.baseVariantId },
   });
   res.status(204).end();
@@ -16454,7 +16454,7 @@ router.post('/clause-compatibility', async (req, res) => {
   }
   await writeAuditFromReq(req, {
     entityType: 'clause_compatibility', entityId: id, action: 'created',
-    summary: `Kompatibilitäts-Regel: ${fromV.name} ${kind} ${toV.name}`,
+    summary: `Compatibility rule: ${fromV.name} ${kind} ${toV.name}`,
     after: { id, fromVariantId, toVariantId, kind, note: body.note ?? null },
   });
   const [after] = await db.select().from(clauseVariantCompatibilityTable).where(eq(clauseVariantCompatibilityTable.id, id));
@@ -16473,7 +16473,7 @@ router.delete('/clause-compatibility/:id', async (req, res) => {
   await db.delete(clauseVariantCompatibilityTable).where(eq(clauseVariantCompatibilityTable.id, row.id));
   await writeAuditFromReq(req, {
     entityType: 'clause_compatibility', entityId: row.id, action: 'deleted',
-    summary: `Kompatibilitäts-Regel entfernt`,
+    summary: `Compatibility rule removed`,
     before: { id: row.id, fromVariantId: row.fromVariantId, toVariantId: row.toVariantId, kind: row.kind },
   });
   res.status(204).end();
@@ -16928,7 +16928,7 @@ router.post('/contracts/:id/external-collaborators', async (req, res) => {
   }, req);
   await writeAuditFromReq(req, {
     entityType: 'contract', entityId: c.id, action: 'external_collaborator_created',
-    summary: `Magic-Link erstellt für ${email}`,
+    summary: `Magic link created for ${email}`,
     after: {
       collaboratorId: id,
       capabilities: caps,
@@ -16959,7 +16959,7 @@ router.post('/contracts/:id/external-collaborators', async (req, res) => {
       await writeAuditFromReq(req, {
         entityType: 'contract', entityId: c.id,
         action: 'external_collaborator_email_failed',
-        summary: `Einladungs-E-Mail an ${email} fehlgeschlagen (invalid magicLinkBaseUrl)`,
+        summary: `Invitation email to ${email} failed (invalid magicLinkBaseUrl)`,
         after: {
           collaboratorId: id,
           provider: 'log',
@@ -16994,8 +16994,8 @@ router.post('/contracts/:id/external-collaborators', async (req, res) => {
         entityType: 'contract', entityId: c.id,
         action: result.ok ? 'external_collaborator_email_sent' : 'external_collaborator_email_failed',
         summary: result.ok
-          ? `Einladungs-E-Mail an ${email} verschickt (${result.provider})`
-          : `Einladungs-E-Mail an ${email} fehlgeschlagen (${result.provider})`,
+          ? `Invitation email to ${email} sent (${result.provider})`
+          : `Invitation email to ${email} failed (${result.provider})`,
         after: {
           collaboratorId: id,
           provider: result.provider,
@@ -17114,7 +17114,7 @@ router.delete('/external-collaborators/:id', async (req, res) => {
   await recordCollabEvent(row!, 'revoked', { revokedBy: scope.user.id }, req);
   await writeAuditFromReq(req, {
     entityType: 'contract', entityId: c.id, action: 'external_collaborator_revoked',
-    summary: `Magic-Link widerrufen für ${collab.email}`,
+    summary: `Magic link revoked for ${collab.email}`,
     after: { collaboratorId: collab.id },
   });
   res.json(mapCollab(row!));
@@ -17640,8 +17640,8 @@ router.post('/external/:token/sign', async (req, res) => {
         : 'external_collaborator_sign_confirmation_failed',
       actor: magicLinkActor(collab),
       summary: collabResult.ok
-        ? `Bestätigungs-E-Mail an ${collab.email} verschickt (${collabResult.provider})`
-        : `Bestätigungs-E-Mail an ${collab.email} fehlgeschlagen (${collabResult.provider})`,
+        ? `Confirmation email sent to ${collab.email} (${collabResult.provider})`
+        : `Confirmation email to ${collab.email} failed (${collabResult.provider})`,
       after: {
         collaboratorId: collab.id,
         provider: collabResult.provider,
@@ -17699,8 +17699,8 @@ router.post('/external/:token/sign', async (req, res) => {
           : 'external_signature_owner_notify_failed',
         actor: magicLinkActor(collab),
         summary: ownerResult.ok
-          ? `Owner ${ownerForNotify.email} über externe Mitzeichnung informiert (${ownerResult.provider})`
-          : `Owner ${ownerForNotify.email} konnte nicht informiert werden (${ownerResult.provider})`,
+          ? `Owner ${ownerForNotify.email} notified about external counter-signature (${ownerResult.provider})`
+          : `Owner ${ownerForNotify.email} could not be notified (${ownerResult.provider})`,
         after: {
           collaboratorId: collab.id,
           ownerUserId: ownerForNotify.id,

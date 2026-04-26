@@ -66,7 +66,7 @@ export async function apiUpdateActiveScope(input: {
   });
   if (!r.ok) {
     const body = (await r.json().catch(() => ({}))) as { error?: string };
-    throw new Error(body.error ?? "Scope-Update fehlgeschlagen");
+    throw new Error(body.error ?? "Scope update failed");
   }
   return (await r.json()) as { activeScope: ActiveScope; allowedScope: AllowedScope };
 }
@@ -82,7 +82,7 @@ export async function apiLogin(email: string, password: string): Promise<Current
   });
   if (!r.ok) {
     const body = (await r.json().catch(() => ({}))) as { error?: string };
-    throw new Error(body.error ?? "Login fehlgeschlagen");
+    throw new Error(body.error ?? "Login failed");
   }
   const data = (await r.json()) as { user: CurrentUser };
   return data.user;

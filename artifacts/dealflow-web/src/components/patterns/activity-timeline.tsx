@@ -17,52 +17,52 @@ interface ActivityTimelineProps {
 }
 
 const ACTION_META: Record<string, { icon: typeof Activity; label: string; tone: string }> = {
-  create:           { icon: Plus,        label: "Angelegt",      tone: "text-emerald-600" },
-  update:           { icon: Edit,        label: "Geändert",      tone: "text-blue-600" },
-  delete:           { icon: Trash2,      label: "Gelöscht",      tone: "text-destructive" },
-  bulk_owner:       { icon: RefreshCw,   label: "Owner geändert", tone: "text-blue-600" },
-  bulk_stage:       { icon: RefreshCw,   label: "Stage geändert", tone: "text-blue-600" },
-  bulk_delete:      { icon: Trash2,      label: "Gelöscht (Bulk)", tone: "text-destructive" },
-  bulk_archive:     { icon: Trash2,      label: "Archiviert", tone: "text-muted-foreground" },
-  bulk_restore:     { icon: RefreshCw,   label: "Wiederhergestellt", tone: "text-emerald-600" },
-  bulk_purge:       { icon: Trash2,      label: "Endgültig gelöscht", tone: "text-destructive" },
-  approval_created: { icon: ShieldCheck, label: "Approval angelegt", tone: "text-amber-600" },
-  approval_decided: { icon: ShieldCheck, label: "Approval entschieden", tone: "text-amber-600" },
-  signature_created:{ icon: PenTool,     label: "Signatur angelegt", tone: "text-violet-600" },
-  contract_created: { icon: FileText,    label: "Vertrag angelegt", tone: "text-indigo-600" },
-  comment:          { icon: MessageSquare, label: "Kommentar",   tone: "text-muted-foreground" },
+  create:           { icon: Plus,        label: "Created",       tone: "text-emerald-600" },
+  update:           { icon: Edit,        label: "Updated",       tone: "text-blue-600" },
+  delete:           { icon: Trash2,      label: "Deleted",       tone: "text-destructive" },
+  bulk_owner:       { icon: RefreshCw,   label: "Owner changed", tone: "text-blue-600" },
+  bulk_stage:       { icon: RefreshCw,   label: "Stage changed", tone: "text-blue-600" },
+  bulk_delete:      { icon: Trash2,      label: "Deleted (bulk)", tone: "text-destructive" },
+  bulk_archive:     { icon: Trash2,      label: "Archived", tone: "text-muted-foreground" },
+  bulk_restore:     { icon: RefreshCw,   label: "Restored", tone: "text-emerald-600" },
+  bulk_purge:       { icon: Trash2,      label: "Permanently deleted", tone: "text-destructive" },
+  approval_created: { icon: ShieldCheck, label: "Approval created", tone: "text-amber-600" },
+  approval_decided: { icon: ShieldCheck, label: "Approval decided", tone: "text-amber-600" },
+  signature_created:{ icon: PenTool,     label: "Signature created", tone: "text-violet-600" },
+  contract_created: { icon: FileText,    label: "Contract created", tone: "text-indigo-600" },
+  comment:          { icon: MessageSquare, label: "Comment",     tone: "text-muted-foreground" },
   // Quote-spezifische Aktionen
-  status_changed:   { icon: RefreshCw,   label: "Statuswechsel", tone: "text-blue-600" },
-  sent:             { icon: Send,        label: "Versendet",     tone: "text-sky-600" },
-  send_failed:      { icon: AlertTriangle, label: "Versand fehlgeschlagen", tone: "text-destructive" },
-  language_changed: { icon: Languages,   label: "Sprache geändert", tone: "text-muted-foreground" },
-  archived:         { icon: Archive,     label: "Archiviert", tone: "text-muted-foreground" },
-  unarchived:       { icon: ArchiveRestore, label: "Wiederhergestellt", tone: "text-emerald-600" },
-  expired:          { icon: Clock,       label: "Abgelaufen",    tone: "text-muted-foreground" },
-  rejected:         { icon: XCircle,     label: "Abgelehnt",     tone: "text-rose-600" },
-  duplicate:        { icon: Copy,        label: "Dupliziert",    tone: "text-blue-600" },
-  value_autofill:   { icon: Edit,        label: "Wert übernommen", tone: "text-emerald-600" },
-  version_created:  { icon: FileText,    label: "Version angelegt", tone: "text-indigo-600" },
+  status_changed:   { icon: RefreshCw,   label: "Status changed", tone: "text-blue-600" },
+  sent:             { icon: Send,        label: "Sent",          tone: "text-sky-600" },
+  send_failed:      { icon: AlertTriangle, label: "Send failed", tone: "text-destructive" },
+  language_changed: { icon: Languages,   label: "Language changed", tone: "text-muted-foreground" },
+  archived:         { icon: Archive,     label: "Archived", tone: "text-muted-foreground" },
+  unarchived:       { icon: ArchiveRestore, label: "Restored", tone: "text-emerald-600" },
+  expired:          { icon: Clock,       label: "Expired",       tone: "text-muted-foreground" },
+  rejected:         { icon: XCircle,     label: "Rejected",      tone: "text-rose-600" },
+  duplicate:        { icon: Copy,        label: "Duplicated",    tone: "text-blue-600" },
+  value_autofill:   { icon: Edit,        label: "Value applied", tone: "text-emerald-600" },
+  version_created:  { icon: FileText,    label: "Version created", tone: "text-indigo-600" },
   // Lead-Aktivitäten (note|call|email|meeting|task) + convert.
-  note:             { icon: MessageSquare, label: "Notiz",        tone: "text-slate-600" },
-  call:             { icon: Phone,         label: "Anruf",        tone: "text-emerald-600" },
-  email:            { icon: Mail,          label: "E-Mail",       tone: "text-sky-600" },
+  note:             { icon: MessageSquare, label: "Note",         tone: "text-slate-600" },
+  call:             { icon: Phone,         label: "Call",         tone: "text-emerald-600" },
+  email:            { icon: Mail,          label: "Email",        tone: "text-sky-600" },
   meeting:          { icon: CalendarClock, label: "Meeting",      tone: "text-violet-600" },
-  task:             { icon: ClipboardList, label: "Folgeaufgabe", tone: "text-amber-600" },
-  convert:          { icon: RefreshCw,     label: "Konvertiert",  tone: "text-violet-600" },
+  task:             { icon: ClipboardList, label: "Follow-up task", tone: "text-amber-600" },
+  convert:          { icon: RefreshCw,     label: "Converted",    tone: "text-violet-600" },
 };
 
 type FilterKey = "all" | "activity" | "create" | "update" | "status" | "approval" | "signature" | "contract";
 
 const FILTER_LABELS: Record<FilterKey, string> = {
-  all: "Alle",
-  activity: "Aktivitäten",
-  create: "Neu",
-  update: "Änderung",
+  all: "All",
+  activity: "Activities",
+  create: "New",
+  update: "Change",
   status: "Status",
   approval: "Approvals",
-  signature: "Signaturen",
-  contract: "Verträge",
+  signature: "Signatures",
+  contract: "Contracts",
 };
 
 const STATUS_ACTIONS = new Set([
@@ -82,11 +82,11 @@ function classify(action: string): FilterKey {
 }
 
 const QUOTE_STATUS_LABEL: Record<string, string> = {
-  draft: "Entwurf",
-  sent: "Versendet",
-  accepted: "Angenommen",
-  rejected: "Abgelehnt",
-  expired: "Abgelaufen",
+  draft: "Draft",
+  sent: "Sent",
+  accepted: "Accepted",
+  rejected: "Rejected",
+  expired: "Expired",
 };
 
 function safeParse(json: string | null | undefined): Record<string, unknown> | null {
@@ -129,13 +129,13 @@ function timeAgo(iso: string | undefined): string {
   const d = new Date(iso);
   const diff = Date.now() - d.getTime();
   const m = Math.floor(diff / 60000);
-  if (m < 1) return "gerade eben";
-  if (m < 60) return `vor ${m} Min`;
+  if (m < 1) return "just now";
+  if (m < 60) return `${m} min ago`;
   const h = Math.floor(m / 60);
-  if (h < 24) return `vor ${h} Std`;
+  if (h < 24) return `${h} h ago`;
   const dys = Math.floor(h / 24);
-  if (dys < 7) return `vor ${dys} Tg`;
-  return d.toLocaleDateString("de-DE");
+  if (dys < 7) return `${dys} d ago`;
+  return d.toLocaleDateString("en-US");
 }
 
 export function ActivityTimeline({ entityType, entityId, limit = 50 }: ActivityTimelineProps) {
@@ -155,7 +155,7 @@ export function ActivityTimeline({ entityType, entityId, limit = 50 }: ActivityT
   if (!data || data.length === 0) {
     return (
       <div className="text-center py-8 text-sm text-muted-foreground">
-        Noch keine Aktivität für diesen Eintrag.
+        No activity yet for this entry.
       </div>
     );
   }
@@ -210,7 +210,7 @@ export function ActivityTimeline({ entityType, entityId, limit = 50 }: ActivityT
                       className="text-xs text-rose-700 dark:text-rose-300 mt-1"
                       data-testid={`activity-item-${e.id}-reason`}
                     >
-                      <span className="font-medium">Grund:</span> {statusInfo.reason}
+                      <span className="font-medium">Reason:</span> {statusInfo.reason}
                     </p>
                   )}
                   {e.summary && !statusInfo && (

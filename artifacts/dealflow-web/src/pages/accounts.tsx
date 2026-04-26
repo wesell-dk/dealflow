@@ -41,12 +41,12 @@ import { useToast } from "@/hooks/use-toast";
 
 const COLUMNS: ColumnDef[] = [
   { key: "name",        label: "Name",       required: true },
-  { key: "industry",    label: "Branche" },
-  { key: "country",     label: "Land" },
+  { key: "industry",    label: "Industry" },
+  { key: "country",     label: "Country" },
   { key: "owner",       label: "Owner" },
   { key: "healthScore", label: "Health" },
-  { key: "openDeals",   label: "Offene Deals" },
-  { key: "totalValue",  label: "Volumen" },
+  { key: "openDeals",   label: "Open deals" },
+  { key: "totalValue",  label: "Volume" },
 ];
 
 const DEFAULT_VIEW: ViewState = {
@@ -71,22 +71,22 @@ export default function Accounts() {
   const [createOpen, setCreateOpen] = useState(false);
 
   const builtIns: BuiltInView[] = useMemo(() => [
-    { id: "all", name: "Alle Accounts", isBuiltIn: true, state: { ...DEFAULT_VIEW, filters: {} } },
+    { id: "all", name: "All accounts", isBuiltIn: true, state: { ...DEFAULT_VIEW, filters: {} } },
     {
       id: "mine",
-      name: "Meine Accounts",
+      name: "My accounts",
       isBuiltIn: true,
       state: { ...DEFAULT_VIEW, filters: { ownerId: user?.id ?? "" } },
     },
     {
       id: "active",
-      name: "Mit offenen Deals",
+      name: "With open deals",
       isBuiltIn: true,
       state: { ...DEFAULT_VIEW, filters: { hasDeals: true } },
     },
     {
       id: "atrisk",
-      name: "Risiko (Health < 60)",
+      name: "At risk (Health < 60)",
       isBuiltIn: true,
       state: { ...DEFAULT_VIEW, filters: { riskOnly: true } },
     },
@@ -191,9 +191,9 @@ export default function Accounts() {
     try {
       await updateAccount.mutateAsync({ id, data: patch });
       await qc.invalidateQueries({ queryKey: getListAccountsQueryKey() });
-      toast({ title: "Gespeichert" });
+      toast({ title: "Saved" });
     } catch (e) {
-      toast({ title: "Fehler", description: e instanceof Error ? e.message : "", variant: "destructive" });
+      toast({ title: "Error", description: e instanceof Error ? e.message : "", variant: "destructive" });
       throw e;
     }
   }
@@ -202,11 +202,11 @@ export default function Accounts() {
     try {
       const res = await bulkOwner.mutateAsync({ data: { ids: [...selected], ownerId } });
       await qc.invalidateQueries({ queryKey: getListAccountsQueryKey() });
-      toast({ title: "Owner aktualisiert", description: `${res.updated} geändert, ${res.skipped} übersprungen.` });
+      toast({ title: "Owner updated", description: `${res.updated} changed, ${res.skipped} skipped.` });
       setSelected(new Set());
       setBulkOwnerOpen(false);
     } catch (e) {
-      toast({ title: "Fehler", description: e instanceof Error ? e.message : "", variant: "destructive" });
+      toast({ title: "Error", description: e instanceof Error ? e.message : "", variant: "destructive" });
     }
   }
 
@@ -249,16 +249,16 @@ export default function Accounts() {
         id => res.skippedReasons?.[id] === "no_permission",
       ).length;
       const isPurge = cascade || res.mode === "purged";
-      const action = isPurge ? "Endgültig gelöscht" : "Archiviert";
-      const verb = isPurge ? "gelöscht" : "archiviert";
+      const action = isPurge ? "Permanently deleted" : "Archived";
+      const verb = isPurge ? "deleted" : "archived";
       const desc = noPermission > 0
-        ? `${res.updated} ${verb}, ${noPermission} ohne Berechtigung übersprungen.`
+        ? `${res.updated} ${verb}, ${noPermission} skipped due to missing permission.`
         : `${res.updated} ${verb}.`;
       toast({ title: action, description: desc });
       setSelected(new Set());
       setDeleteDialog(null);
     } catch (e) {
-      toast({ title: "Fehler", description: e instanceof Error ? e.message : "", variant: "destructive" });
+      toast({ title: "Error", description: e instanceof Error ? e.message : "", variant: "destructive" });
     }
   }
 
@@ -267,14 +267,14 @@ export default function Accounts() {
       const res = await bulkRestore.mutateAsync({ data: { ids } });
       await qc.invalidateQueries({ queryKey: getListAccountsQueryKey() });
       toast({
-        title: "Wiederhergestellt",
+        title: "Restored",
         description: res.skipped > 0
-          ? `${res.updated} wiederhergestellt, ${res.skipped} ohne Berechtigung übersprungen.`
-          : `${res.updated} wiederhergestellt.`,
+          ? `${res.updated} restored, ${res.skipped} skipped due to missing permission.`
+          : `${res.updated} restored.`,
       });
       setSelected(new Set());
     } catch (e) {
-      toast({ title: "Fehler", description: e instanceof Error ? e.message : "", variant: "destructive" });
+      toast({ title: "Error", description: e instanceof Error ? e.message : "", variant: "destructive" });
     }
   }
 
@@ -285,12 +285,12 @@ export default function Accounts() {
   function describeRefs(r: BlockedRefs): string {
     const parts: string[] = [];
     if (r.deals) parts.push(`${r.deals} Deal${r.deals === 1 ? "" : "s"}`);
-    if (r.contacts) parts.push(`${r.contacts} Kontakt${r.contacts === 1 ? "" : "e"}`);
-    if (r.contracts) parts.push(`${r.contracts} Vertrag${r.contracts === 1 ? "" : "/Verträge"}`);
-    if (r.letters) parts.push(`${r.letters} Preisanpassungs-Schreiben`);
-    if (r.renewals) parts.push(`${r.renewals} Verlängerung${r.renewals === 1 ? "" : "en"}`);
-    if (r.obligations) parts.push(`${r.obligations} Verpflichtung${r.obligations === 1 ? "" : "en"}`);
-    if (r.externalContracts) parts.push(`${r.externalContracts} externe Verträge`);
+    if (r.contacts) parts.push(`${r.contacts} Contact${r.contacts === 1 ? "" : "s"}`);
+    if (r.contracts) parts.push(`${r.contracts} Contract${r.contracts === 1 ? "" : "s"}`);
+    if (r.letters) parts.push(`${r.letters} price-adjustment letter${r.letters === 1 ? "" : "s"}`);
+    if (r.renewals) parts.push(`${r.renewals} Renewal${r.renewals === 1 ? "" : "s"}`);
+    if (r.obligations) parts.push(`${r.obligations} Obligation${r.obligations === 1 ? "" : "s"}`);
+    if (r.externalContracts) parts.push(`${r.externalContracts} external contracts`);
     return parts.join(", ");
   }
 
@@ -305,10 +305,10 @@ export default function Accounts() {
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
         <div>
           <h1 className="text-3xl font-bold tracking-tight">Accounts</h1>
-          <p className="text-muted-foreground mt-1">Kunden, Verteilung und Pipeline-Anteil pro Account.</p>
+          <p className="text-muted-foreground mt-1">Customers, distribution and pipeline share per account.</p>
         </div>
         <Button onClick={() => setCreateOpen(true)} data-testid="accounts-new-button" className="w-full sm:w-auto">
-          <Plus className="h-4 w-4 mr-1" /> Kunde anlegen
+          <Plus className="h-4 w-4 mr-1" /> Create customer
         </Button>
       </div>
 
@@ -320,7 +320,7 @@ export default function Accounts() {
         onSelect={selectView}
       />
 
-      <div className="inline-flex items-center gap-1 p-1 rounded-md border bg-muted/30 self-start" role="tablist" aria-label="Archiv-Status">
+      <div className="inline-flex items-center gap-1 p-1 rounded-md border bg-muted/30 self-start" role="tablist" aria-label="Archive status">
         <button
           type="button"
           role="tab"
@@ -332,7 +332,7 @@ export default function Accounts() {
           onClick={() => { setArchiveStatus("active"); setSelected(new Set()); setPage(1); }}
           data-testid="status-tab-active"
         >
-          Aktiv
+          Active
         </button>
         <button
           type="button"
@@ -345,7 +345,7 @@ export default function Accounts() {
           onClick={() => { setArchiveStatus("archived"); setSelected(new Set()); setPage(1); }}
           data-testid="status-tab-archived"
         >
-          <Archive className="h-3.5 w-3.5" /> Archiv
+          <Archive className="h-3.5 w-3.5" /> Archive
         </button>
       </div>
 
@@ -355,7 +355,7 @@ export default function Accounts() {
           onClearAll={() => setView((s) => ({ ...s, filters: {} }))}
         >
           <FilterChip
-            label="Branche"
+            label="Industry"
             value={(view.filters as Record<string, string>).industry as string | undefined}
             options={industries.map((v) => ({ value: v, label: v }))}
             onChange={(v) => setFilter("industry", v)}
@@ -363,7 +363,7 @@ export default function Accounts() {
             testId="chip-industry"
           />
           <FilterChip
-            label="Land"
+            label="Country"
             value={(view.filters as Record<string, string>).country as string | undefined}
             options={countries.map((v) => ({ value: v, label: v }))}
             onChange={(v) => setFilter("country", v)}
@@ -379,9 +379,9 @@ export default function Accounts() {
             testId="chip-owner"
           />
           <FilterChip
-            label="Mit Deals"
+            label="With deals"
             value={(view.filters as Record<string, unknown>).hasDeals ? "yes" : undefined}
-            options={[{ value: "yes", label: "Nur mit offenen Deals" }]}
+            options={[{ value: "yes", label: "Only with open deals" }]}
             onChange={(v) => setFilter("hasDeals", v === "yes" ? true : null)}
             testId="chip-hasdeals"
           />
@@ -393,33 +393,33 @@ export default function Accounts() {
             columns={[
               { key: "id", label: "ID", value: (r) => r.id },
               { key: "name", label: "Name", value: (r) => r.name },
-              { key: "industry", label: "Branche", value: (r) => r.industry },
-              { key: "country", label: "Land", value: (r) => r.country },
+              { key: "industry", label: "Industry", value: (r) => r.industry },
+              { key: "country", label: "Country", value: (r) => r.country },
               { key: "owner", label: "OwnerId", value: (r) => r.ownerId ?? "" },
               { key: "health", label: "Health", value: (r) => r.healthScore },
-              { key: "openDeals", label: "Offene Deals", value: (r) => r.openDeals },
-              { key: "totalValue", label: "Volumen", value: (r) => r.totalValue },
+              { key: "openDeals", label: "Open deals", value: (r) => r.openDeals },
+              { key: "totalValue", label: "Volume", value: (r) => r.totalValue },
             ]}
             testId="accounts-export"
           />
           <CSVImportDialog
             triggerLabel="Import"
-            title="Accounts aus CSV importieren"
+            title="Import accounts from CSV"
             fields={[
               { key: "name", label: "Name", required: true },
-              { key: "industry", label: "Branche", required: true },
-              { key: "country", label: "Land", required: true },
+              { key: "industry", label: "Industry", required: true },
+              { key: "country", label: "Country", required: true },
             ]}
             templateExample={[
-              { name: "Helix Logistics GmbH", industry: "Logistik", country: "DE" },
-              { name: "Nova Retail AG", industry: "Handel", country: "CH" },
+              { name: "Helix Logistics GmbH", industry: "Logistics", country: "DE" },
+              { name: "Nova Retail AG", industry: "Retail", country: "CH" },
             ]}
-            templateFilename="accounts-vorlage.csv"
+            templateFilename="accounts-template.csv"
             buildRow={(m): AccountInput | null => {
               if (!m.name?.trim()) return null;
               return {
                 name: m.name.trim(),
-                industry: (m.industry || "Sonstiges").trim(),
+                industry: (m.industry || "Other").trim(),
                 country: (m.country || "DE").trim(),
               };
             }}
@@ -436,15 +436,15 @@ export default function Accounts() {
         accounts && accounts.length === 0 ? (
           <EmptyStateCard
             icon={Building}
-            title="Noch keine Kunden"
-            body="Lege deinen ersten Account an, um Kontakte und Deals zu verknüpfen."
+            title="No customers yet"
+            body="Create your first account to link contacts and deals."
             primaryAction={{
-              label: "Ersten Kunden anlegen",
+              label: "Create first customer",
               onClick: () => setCreateOpen(true),
               testId: "accounts-empty-create",
             }}
             secondaryAction={{
-              label: "Per CSV importieren",
+              label: "Import via CSV",
               onClick: () => document.querySelector<HTMLButtonElement>('[data-testid="accounts-import"]')?.click(),
             }}
             testId="accounts-empty"
@@ -452,10 +452,10 @@ export default function Accounts() {
         ) : (
           <EmptyStateCard
             icon={Building}
-            title="Keine Treffer"
-            body="Keine Accounts entsprechen den aktuellen Filtern."
+            title="No matches"
+            body="No accounts match the current filters."
             primaryAction={{
-              label: "Filter zurücksetzen",
+              label: "Reset filters",
               onClick: () => setView((s) => ({ ...s, filters: {} })),
             }}
             testId="accounts-no-match"
@@ -470,7 +470,7 @@ export default function Accounts() {
                   <Checkbox
                     checked={isAllSelected()}
                     onCheckedChange={togglePageAll}
-                    aria-label="Alle auf dieser Seite auswählen"
+                    aria-label="Select all on this page"
                   />
                 </TableHead>
                 {COLUMNS.filter((c) => colVis.visible.has(c.key)).map((c, idx) => (
@@ -525,9 +525,9 @@ export default function Accounts() {
               value=""
               onValueChange={(v) => void doBulkOwner(v)}
             >
-              <SelectTrigger className="h-8 w-44" aria-label="Owner zuweisen" data-testid="bulk-owner-trigger">
+              <SelectTrigger className="h-8 w-44" aria-label="Assign owner" data-testid="bulk-owner-trigger">
                 <span className="inline-flex items-center gap-1.5 text-xs">
-                  <UserCog className="h-3.5 w-3.5" /> Owner zuweisen
+                  <UserCog className="h-3.5 w-3.5" /> Assign owner
                 </span>
               </SelectTrigger>
               <SelectContent>
@@ -537,7 +537,7 @@ export default function Accounts() {
               </SelectContent>
             </Select>
             <Button size="sm" variant="ghost" className="h-8 gap-1" onClick={openBulkDelete} data-testid="bulk-delete">
-              <Archive className="h-3.5 w-3.5" /> Archivieren
+              <Archive className="h-3.5 w-3.5" /> Archive
             </Button>
           </>
         ) : (
@@ -549,10 +549,10 @@ export default function Accounts() {
               onClick={() => void runBulkRestore([...selected])}
               data-testid="bulk-restore"
             >
-              <ArchiveRestore className="h-3.5 w-3.5" /> Wiederherstellen
+              <ArchiveRestore className="h-3.5 w-3.5" /> Restore
             </Button>
             <Button size="sm" variant="ghost" className="h-8 gap-1 text-destructive" onClick={openBulkDelete} data-testid="bulk-purge">
-              <Trash2 className="h-3.5 w-3.5" /> Endgültig löschen
+              <Trash2 className="h-3.5 w-3.5" /> Delete permanently
             </Button>
           </>
         )}
@@ -570,16 +570,16 @@ export default function Accounts() {
               {(() => {
                 if (deleteDialog?.stage !== "confirm") return "";
                 const isPurge = archiveStatus === "archived" || deleteDialog.cascade;
-                const verb = isPurge ? "endgültig löschen" : "archivieren";
+                const verb = isPurge ? "delete permanently" : "archive";
                 return deleteDialog.ids.length === 1
-                  ? `Account "${nameOf(deleteDialog.ids[0])}" ${verb}?`
-                  : `${deleteDialog.ids.length} Account(s) ${verb}?`;
+                  ? `${verb.charAt(0).toUpperCase() + verb.slice(1)} account "${nameOf(deleteDialog.ids[0])}"?`
+                  : `${verb.charAt(0).toUpperCase() + verb.slice(1)} ${deleteDialog.ids.length} account(s)?`;
               })()}
             </AlertDialogTitle>
             <AlertDialogDescription>
               {archiveStatus === "archived"
-                ? "Diese Accounts sind bereits archiviert. Beim endgültigen Löschen werden auch alle verknüpften Deals, Kontakte, Angebote und Schreiben entfernt. Verträge und Verpflichtungen bleiben mit geleerter Zuordnung erhalten. Diese Aktion ist nicht umkehrbar."
-                : "Archivierte Accounts verschwinden aus den Standardlisten und sind im Archiv-Tab jederzeit wiederherstellbar. Verknüpfte Daten bleiben unangetastet."}
+                ? "These accounts are already archived. Deleting them permanently will also remove all linked deals, contacts, quotes and letters. Contracts and obligations remain, but with their account link cleared. This action cannot be undone."
+                : "Archived accounts disappear from the standard lists and can be restored at any time from the Archive tab. Linked data remains untouched."}
             </AlertDialogDescription>
           </AlertDialogHeader>
           {archiveStatus === "active" && (
@@ -594,15 +594,15 @@ export default function Accounts() {
                 data-testid="delete-cascade-toggle"
               />
               <span>
-                <span className="font-medium text-destructive">Stattdessen endgültig löschen</span>
+                <span className="font-medium text-destructive">Delete permanently instead</span>
                 <span className="block text-xs text-muted-foreground mt-0.5">
-                  Account und alle verknüpften Deals, Kontakte, Angebote, Renewals und Schreiben werden unwiderruflich gelöscht. Verträge und Verpflichtungen bleiben erhalten — nur die Account-Zuordnung wird geleert.
+                  The account and all linked deals, contacts, quotes, renewals and letters will be permanently deleted. Contracts and obligations are kept — only the account link is cleared.
                 </span>
               </span>
             </label>
           )}
           <AlertDialogFooter>
-            <AlertDialogCancel>Abbrechen</AlertDialogCancel>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
             <AlertDialogAction
               className={
                 (archiveStatus === "archived" || (deleteDialog?.stage === "confirm" && deleteDialog.cascade))
@@ -619,8 +619,8 @@ export default function Accounts() {
               data-testid="delete-confirm"
             >
               {(archiveStatus === "archived" || (deleteDialog?.stage === "confirm" && deleteDialog.cascade))
-                ? "Endgültig löschen"
-                : "Archivieren"}
+                ? "Delete permanently"
+                : "Archive"}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
@@ -635,13 +635,13 @@ export default function Accounts() {
             <AlertDialogTitle className="flex items-center gap-2">
               <AlertTriangle className="h-4 w-4 text-amber-500" />
               {deleteDialog?.stage === "blocked" && deleteDialog.ids.length === 1
-                ? `"${nameOf(deleteDialog.ids[0])}" hat noch verknüpfte Daten`
-                : `${deleteDialog?.stage === "blocked" ? deleteDialog.ids.length : 0} Account(s) haben noch verknüpfte Daten`}
+                ? `"${nameOf(deleteDialog.ids[0])}" still has linked data`
+                : `${deleteDialog?.stage === "blocked" ? deleteDialog.ids.length : 0} account(s) still have linked data`}
             </AlertDialogTitle>
             <AlertDialogDescription>
               {deleteDialog?.stage === "blocked" && deleteDialog.deletedCount > 0
-                ? `${deleteDialog.deletedCount} Account(s) wurden bereits gelöscht. Folgende konnten wegen verknüpfter Daten nicht entfernt werden:`
-                : "Der Account konnte nicht gelöscht werden, weil noch verknüpfte Daten existieren:"}
+                ? `${deleteDialog.deletedCount} account(s) were already deleted. The following could not be removed due to linked data:`
+                : "The account could not be deleted because linked data still exists:"}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <ul className="text-sm space-y-1.5 max-h-48 overflow-auto pr-2">
@@ -653,7 +653,7 @@ export default function Accounts() {
             ))}
           </ul>
           <AlertDialogFooter>
-            <AlertDialogCancel>Abbrechen</AlertDialogCancel>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
             <AlertDialogAction
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
               onClick={(e) => {
@@ -664,7 +664,7 @@ export default function Accounts() {
               }}
               data-testid="delete-cascade-confirm"
             >
-              Inkl. abhängiger Daten löschen
+              Delete with dependent data
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
@@ -693,7 +693,7 @@ function AccountRow({
   return (
     <TableRow data-state={selected ? "selected" : undefined} className={selected ? "bg-muted/40" : undefined}>
       <TableCell className="sticky left-0 bg-background z-10 md:static md:bg-transparent">
-        <Checkbox checked={selected} onCheckedChange={onToggle} aria-label={`${account.name} auswählen`} />
+        <Checkbox checked={selected} onCheckedChange={onToggle} aria-label={`Select ${account.name}`} />
       </TableCell>
       {visible.has("name") && (
         <TableCell className="font-medium sticky left-10 bg-background z-10 md:static md:bg-transparent">
@@ -705,7 +705,7 @@ function AccountRow({
       {visible.has("industry") && (
         <TableCell>
           <InlineEditField
-            ariaLabel="Branche"
+            ariaLabel="Industry"
             value={account.industry}
             onSubmit={(v) => onPatch({ industry: v })}
             testId={`inline-industry-${account.id}`}
@@ -715,7 +715,7 @@ function AccountRow({
       {visible.has("country") && (
         <TableCell>
           <InlineEditField
-            ariaLabel="Land"
+            ariaLabel="Country"
             value={account.country}
             onSubmit={(v) => onPatch({ country: v })}
             testId={`inline-country-${account.id}`}
@@ -729,7 +729,7 @@ function AccountRow({
             kind="select"
             options={users.map((u) => ({ value: u.id, label: u.name }))}
             value={account.ownerId ?? ""}
-            display={<span className={ownerName ? "" : "text-muted-foreground italic"}>{ownerName ?? "Nicht zugewiesen"}</span>}
+            display={<span className={ownerName ? "" : "text-muted-foreground italic"}>{ownerName ?? "Unassigned"}</span>}
             onSubmit={(v) => onPatch({ ownerId: v || null })}
             testId={`inline-owner-${account.id}`}
           />

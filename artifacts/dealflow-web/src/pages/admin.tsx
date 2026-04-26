@@ -122,7 +122,7 @@ export default function Admin() {
     try {
       await deleteCompanyMut.mutateAsync({ id: companyToDelete.id });
       await qc.invalidateQueries({ queryKey: getListCompaniesQueryKey() });
-      toast({ title: "Gesellschaft gelöscht", description: companyToDelete.name });
+      toast({ title: "Company deleted", description: companyToDelete.name });
       setCompanyToDelete(null);
     } catch (e: unknown) {
       const status = (e as { response?: { status?: number } })?.response?.status;
@@ -131,7 +131,7 @@ export default function Admin() {
         setDeleteConflict({ kind: "company", name: companyToDelete.name, blockers: body.blockers });
         setCompanyToDelete(null);
       } else {
-        toast({ title: "Löschen fehlgeschlagen", description: body?.error ?? "Unbekannt", variant: "destructive" });
+        toast({ title: "Delete failed", description: body?.error ?? "Unknown", variant: "destructive" });
       }
     }
   };
@@ -223,10 +223,10 @@ export default function Admin() {
                     Plan
                     <Tooltip>
                       <TooltipTrigger asChild>
-                        <Lock className="h-3 w-3 text-muted-foreground cursor-help" aria-label="Plattform-verwaltet" />
+                        <Lock className="h-3 w-3 text-muted-foreground cursor-help" aria-label={t("pages.admin.platformManagedTooltip")} />
                       </TooltipTrigger>
                       <TooltipContent side="top">
-                        Plattform-verwaltet — nur Plattform-Administratoren ändern den Tarif.
+                        {t("pages.admin.planTooltip")}
                       </TooltipContent>
                     </Tooltip>
                   </div>
@@ -237,10 +237,10 @@ export default function Admin() {
                     Region
                     <Tooltip>
                       <TooltipTrigger asChild>
-                        <Lock className="h-3 w-3 text-muted-foreground cursor-help" aria-label="Plattform-verwaltet" />
+                        <Lock className="h-3 w-3 text-muted-foreground cursor-help" aria-label={t("pages.admin.platformManagedTooltip")} />
                       </TooltipTrigger>
                       <TooltipContent side="top">
-                        Plattform-verwaltet — Datenresidenz wird nach dem Anlegen nicht mehr geändert.
+                        {t("pages.admin.regionTooltip")}
                       </TooltipContent>
                     </Tooltip>
                   </div>
@@ -254,7 +254,7 @@ export default function Admin() {
             </TooltipProvider>
             <p className="mt-3 text-xs text-muted-foreground flex items-center gap-1">
               <Lock className="h-3 w-3" />
-              Plan und Region werden zentral durch Plattform-Administratoren gepflegt. Tenant-Stammdaten wie Name, Gesellschaften, Brands, Benutzer und Webhooks bleiben in deiner Verantwortung.
+              {t("pages.admin.tenantStewardshipNote")}
             </p>
           </CardContent>
         </Card>
@@ -269,7 +269,7 @@ export default function Admin() {
             </div>
             <Button size="sm" onClick={() => { setCompanyToEdit(null); setCompanyDialogOpen(true); }} data-testid="button-new-company">
               <Plus className="h-4 w-4 mr-1" />
-              Neue Gesellschaft
+              {t("pages.admin.newCompany")}
             </Button>
           </CardHeader>
           <CardContent>
@@ -281,7 +281,7 @@ export default function Admin() {
                     <TableHead>{t("pages.admin.legalEntity")}</TableHead>
                     <TableHead>{t("common.country")}</TableHead>
                     <TableHead>{t("common.currency")}</TableHead>
-                    <TableHead className="text-right">Aktionen</TableHead>
+                    <TableHead className="text-right">{t("pages.admin.actionsCol")}</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -294,7 +294,7 @@ export default function Admin() {
                       <TableCell className="text-right">
                         <div className="flex justify-end gap-1">
                           <Button size="sm" variant="ghost" onClick={() => { setCompanyToEdit(company); setCompanyDialogOpen(true); }} data-testid={`button-edit-company-${company.id}`}>
-                            Bearbeiten
+                            {t("pages.admin.edit")}
                           </Button>
                           <Button size="sm" variant="ghost" className="text-destructive hover:text-destructive" onClick={() => setCompanyToDelete(company)} data-testid={`button-delete-company-${company.id}`}>
                             <Trash2 className="h-4 w-4" />
@@ -304,7 +304,7 @@ export default function Admin() {
                     </TableRow>
                   ))}
                   {!companies?.length && (
-                    <TableRow><TableCell colSpan={5} className="text-center h-16">No companies configured</TableCell></TableRow>
+                    <TableRow><TableCell colSpan={5} className="text-center h-16">{t("pages.admin.noCompanies")}</TableCell></TableRow>
                   )}
                 </TableBody>
               </Table>
@@ -319,11 +319,11 @@ export default function Admin() {
                 <div className="h-5 w-5 rounded-full bg-blue-500 ring-2 ring-background"></div>
                 <div className="h-5 w-5 rounded-full bg-red-500 ring-2 ring-background"></div>
               </div>
-              <CardTitle>Brands</CardTitle>
+              <CardTitle>{t("pages.admin.brands")}</CardTitle>
             </div>
             <Button size="sm" onClick={() => setBrandDialogOpen(true)} disabled={!companies?.length} data-testid="button-new-brand">
               <Plus className="h-4 w-4 mr-1" />
-              Neuer Brand
+              {t("pages.admin.newBrand")}
             </Button>
           </CardHeader>
           <CardContent>
@@ -331,9 +331,9 @@ export default function Admin() {
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Brand</TableHead>
-                    <TableHead>Parent Company</TableHead>
-                    <TableHead>Voice</TableHead>
+                    <TableHead>{t("pages.admin.brand")}</TableHead>
+                    <TableHead>{t("pages.admin.parentCompany")}</TableHead>
+                    <TableHead>{t("pages.admin.voice")}</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -341,7 +341,7 @@ export default function Admin() {
                     <BrandRow key={brand.id} brand={brand} />
                   ))}
                   {!brands?.length && (
-                    <TableRow><TableCell colSpan={3} className="text-center h-16">No brands configured</TableCell></TableRow>
+                    <TableRow><TableCell colSpan={3} className="text-center h-16">{t("pages.admin.noBrands")}</TableCell></TableRow>
                   )}
                 </TableBody>
               </Table>
@@ -364,16 +364,15 @@ export default function Admin() {
       <AlertDialog open={!!companyToDelete} onOpenChange={(v) => { if (!v) setCompanyToDelete(null); }}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Gesellschaft löschen?</AlertDialogTitle>
+            <AlertDialogTitle>{t("pages.admin.deleteCompanyTitle")}</AlertDialogTitle>
             <AlertDialogDescription>
-              <span className="font-medium text-foreground">{companyToDelete?.name}</span> wird unwiderruflich entfernt.
-              Falls Brands, Deals oder Preispositionen daran hängen, blockiert die Plattform die Löschung — bitte zuerst aufräumen.
+              <span className="font-medium text-foreground">{companyToDelete?.name}</span> {t("pages.admin.deleteCompanyBodySuffix")}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel disabled={deleteCompanyMut.isPending}>Abbrechen</AlertDialogCancel>
+            <AlertDialogCancel disabled={deleteCompanyMut.isPending}>{t("common.cancel")}</AlertDialogCancel>
             <AlertDialogAction onClick={onDeleteCompanyConfirm} disabled={deleteCompanyMut.isPending} className="bg-destructive text-destructive-foreground hover:bg-destructive/90" data-testid="button-confirm-delete-company">
-              Löschen
+              {t("common.delete")}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
@@ -382,24 +381,24 @@ export default function Admin() {
       <AlertDialog open={!!deleteConflict} onOpenChange={(v) => { if (!v) setDeleteConflict(null); }}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Löschen blockiert</AlertDialogTitle>
+            <AlertDialogTitle>{t("pages.admin.deleteBlockedTitle")}</AlertDialogTitle>
             <AlertDialogDescription asChild>
               <div className="space-y-2">
                 <p>
-                  {deleteConflict?.kind === "company" ? "Gesellschaft" : "Brand"}{" "}
-                  <span className="font-medium text-foreground">{deleteConflict?.name}</span> hat noch verknüpfte Datensätze:
+                  {deleteConflict?.kind === "company" ? t("pages.admin.kindCompany") : t("pages.admin.kindBrand")}{" "}
+                  <span className="font-medium text-foreground">{deleteConflict?.name}</span> {t("pages.admin.deleteBlockedBodySuffix")}
                 </p>
                 <ul className="list-disc pl-5 text-sm">
                   {deleteConflict && Object.entries(deleteConflict.blockers).filter(([, n]) => n > 0).map(([k, n]) => (
                     <li key={k}><span className="font-medium">{n}</span> {k}</li>
                   ))}
                 </ul>
-                <p className="text-sm">Bitte diese Datensätze zuerst archivieren oder neu zuordnen.</p>
+                <p className="text-sm">{t("pages.admin.deleteBlockedFooter")}</p>
               </div>
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogAction onClick={() => setDeleteConflict(null)}>Verstanden</AlertDialogAction>
+            <AlertDialogAction onClick={() => setDeleteConflict(null)}>{t("common.understood")}</AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
@@ -459,7 +458,7 @@ export default function Admin() {
                     <TableHead>{t("common.name")}</TableHead>
                     <TableHead>E-Mail</TableHead>
                     <TableHead>Status</TableHead>
-                    <TableHead className="text-right">Aktionen</TableHead>
+                    <TableHead className="text-right">Actions</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -471,7 +470,7 @@ export default function Admin() {
                         {s.deletedAt ? (
                           <Badge variant="destructive">{t("pages.admin.gdpr.deletedBadge")}</Badge>
                         ) : (
-                          <Badge variant="outline">Aktiv</Badge>
+                          <Badge variant="outline">Active</Badge>
                         )}
                       </TableCell>
                       <TableCell className="text-right">
@@ -546,17 +545,17 @@ export default function Admin() {
           )}
 
           {/* Retention policy — Defaults sind serverseitig hinterlegt
-              (3J Kontakte, 2J Korrespondenz, 7J Audit, 1J Access-Log) und
-              werden automatisch angewendet. Eigene Werte überschreiben sie. */}
+              (3J Contacts, 2J Korrespondenz, 7J Audit, 1J Access-Log) und
+              werden automatisch angewendet. Eigene Valuee überschreiben sie. */}
           <div className="flex flex-col gap-3">
             <div className="flex items-center gap-2">
               <div className="font-medium">{t("pages.admin.gdpr.retention")}</div>
-              <Badge variant="outline" className="text-[10px]">Defaults aktiv</Badge>
+              <Badge variant="outline" className="text-[10px]">Defaults active</Badge>
             </div>
             <p className="text-xs text-muted-foreground">
-              Ohne eigene Eingabe gelten gesetzeskonforme Default-Aufbewahrungsfristen
-              (HGB/BGB- und steuerliche Vorgaben). Du musst hier nur eingreifen,
-              wenn du davon abweichen willst.
+              Without your own input, statutory default retention periods apply
+              (German HGB/BGB and tax requirements). You only need to intervene
+              here if you want to deviate from them.
             </p>
             <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
               {(["contactInactiveDays", "letterRespondedDays", "auditLogDays", "accessLogDays"] as const).map((k) => {
@@ -572,7 +571,7 @@ export default function Admin() {
                       placeholder={defaultVal ? String(defaultVal) : "—"}
                     />
                     {defaultVal !== undefined && (
-                      <span className="text-[11px] text-muted-foreground">Default: {defaultVal} Tage</span>
+                      <span className="text-[11px] text-muted-foreground">Default: {defaultVal} days</span>
                     )}
                   </div>
                 );
@@ -580,7 +579,7 @@ export default function Admin() {
             </div>
             <div className="flex gap-2">
               <Button onClick={onSavePolicy} disabled={Object.keys(policyDraft).length === 0}>
-                {t("common.save", "Speichern")}
+                {t("common.save", "Save")}
               </Button>
               <Button variant="outline" onClick={onRunSweep}>
                 <Play className="h-4 w-4 mr-1" />
@@ -644,8 +643,8 @@ function AdvancedSettingsSection({ children }: { children: React.ReactNode }) {
       <CollapsibleTrigger className="w-full flex items-center justify-between gap-2 px-4 py-3 hover:bg-muted/40 rounded-t-lg" data-testid="advanced-settings-trigger">
         <div className="flex items-center gap-2">
           <Settings className="h-4 w-4 text-muted-foreground" />
-          <span className="font-medium text-sm">Erweiterte Einstellungen</span>
-          <span className="text-xs text-muted-foreground">— Webhooks und DSGVO (Defaults wirken bereits)</span>
+          <span className="font-medium text-sm">Advanced settings</span>
+          <span className="text-xs text-muted-foreground">— Webhooks and GDPR (defaults already in effect)</span>
         </div>
         <ChevronDown className={`h-4 w-4 text-muted-foreground transition-transform ${open ? "rotate-180" : ""}`} />
       </CollapsibleTrigger>
@@ -704,7 +703,7 @@ function BrandRow({ brand }: { brand: Brand }) {
     try {
       await del.mutateAsync({ id: brand.id });
       await qc.invalidateQueries({ queryKey: getListBrandsQueryKey() });
-      toast({ title: "Brand gelöscht", description: brand.name });
+      toast({ title: "Brand deleted", description: brand.name });
       setConfirmDelete(false);
     } catch (e: unknown) {
       const status = (e as { response?: { status?: number } })?.response?.status;
@@ -713,7 +712,7 @@ function BrandRow({ brand }: { brand: Brand }) {
         setConfirmDelete(false);
         setConflict(body.blockers);
       } else {
-        toast({ title: "Löschen fehlgeschlagen", description: body?.error ?? "Unbekannt", variant: "destructive" });
+        toast({ title: "Delete failed", description: body?.error ?? "Unknown", variant: "destructive" });
       }
     }
   };
@@ -739,8 +738,8 @@ function BrandRow({ brand }: { brand: Brand }) {
   const save = async () => {
     if (primaryInvalid || secondaryInvalid) {
       toast({
-        title: "Ungültige Farbe",
-        description: "Bitte Hex-Format #RRGGBB verwenden (z. B. #2D6CDF) oder leer lassen.",
+        title: "Invalid color",
+        description: "Please use hex format #RRGGBB (e.g. #2D6CDF) or leave empty.",
         variant: "destructive",
       });
       return;
@@ -754,8 +753,8 @@ function BrandRow({ brand }: { brand: Brand }) {
       const status = (e as { response?: { status?: number } })?.response?.status;
       const body = (e as { response?: { data?: { error?: string } } })?.response?.data;
       toast({
-        title: status === 409 ? "Name bereits vergeben" : "Speichern fehlgeschlagen",
-        description: body?.error ?? (e instanceof Error ? e.message : "Unbekannter Fehler"),
+        title: status === 409 ? "Name already taken" : "Save failed",
+        description: body?.error ?? (e instanceof Error ? e.message : "Unknown error"),
         variant: "destructive",
       });
     }
@@ -763,11 +762,11 @@ function BrandRow({ brand }: { brand: Brand }) {
   const onUpload = async (file: File) => {
     const ALLOWED = ["image/png", "image/jpeg", "image/svg+xml", "image/webp"];
     if (!ALLOWED.includes(file.type)) {
-      setUploadError("Format nicht unterstützt — PNG/JPEG/SVG/WebP.");
+      setUploadError("Format not supported — PNG/JPEG/SVG/WebP.");
       return;
     }
     if (file.size > 5 * 1024 * 1024) {
-      setUploadError(`Datei zu groß (${(file.size / 1024 / 1024).toFixed(1)} MB) — Maximum 5 MB.`);
+      setUploadError(`File too large (${(file.size / 1024 / 1024).toFixed(1)} MB) — maximum 5 MB.`);
       return;
     }
     setUploading(true); setUploadError(null);
@@ -799,16 +798,16 @@ function BrandRow({ brand }: { brand: Brand }) {
           (body as { message?: string; error?: string })?.message
           ?? (body as { error?: string })?.error;
         const msg = serverMsg
-          ?? (res.status === 401 ? "Sitzung abgelaufen — bitte neu anmelden."
-              : res.status === 403 ? "Nur Tenant-Admins dürfen Logos hochladen."
+          ?? (res.status === 401 ? "Session expired — please sign in again."
+              : res.status === 403 ? "Only tenant admins are allowed to upload logos."
               : (res.status === 502 || res.status === 503 || res.status === 504)
-                ? "Server kurz nicht erreichbar. Bitte in wenigen Sekunden erneut versuchen."
-                : `Upload-URL fehlgeschlagen (${res.status})`);
+                ? "Server briefly unavailable. Please try again in a few seconds."
+                : `Upload URL failed (${res.status})`);
         throw new Error(msg);
       }
       const { uploadURL, objectPath } = await res.json();
       const put = await fetch(uploadURL, { method: "PUT", headers: { "Content-Type": file.type }, body: file });
-      if (!put.ok) throw new Error(`Upload fehlgeschlagen (${put.status})`);
+      if (!put.ok) throw new Error(`Upload failed (${put.status})`);
       if (myToken === uploadTokenRef.current) {
         setDraft(d => ({ ...d, logoUrl: `/api/storage${objectPath}` }));
       }
@@ -840,7 +839,7 @@ function BrandRow({ brand }: { brand: Brand }) {
             {brand.parentBrandId && (() => {
               const parent = (allBrandsQ.data ?? []).find(b => b.id === brand.parentBrandId);
               return parent ? (
-                <span className="text-[11px] text-muted-foreground pl-6">↳ Sub-Marke unter <span className="font-medium">{parent.name}</span></span>
+                <span className="text-[11px] text-muted-foreground pl-6">↳ Sub-Brand unter <span className="font-medium">{parent.name}</span></span>
               ) : null;
             })()}
           </div>
@@ -850,7 +849,7 @@ function BrandRow({ brand }: { brand: Brand }) {
           <div className="flex items-center gap-2">
             <Badge variant="secondary">{brand.tone ?? brand.voice}</Badge>
             <Button size="sm" variant="ghost" onClick={() => setEditing(v => !v)}>
-              {editing ? "Schließen" : "Bearbeiten"}
+              {editing ? "Close" : "Edit"}
             </Button>
             <Button size="sm" variant="ghost" className="text-destructive hover:text-destructive" onClick={() => setConfirmDelete(true)} data-testid={`button-delete-brand-${brand.id}`}>
               <Trash2 className="h-4 w-4" />
@@ -887,7 +886,7 @@ function BrandRow({ brand }: { brand: Brand }) {
                       // Großes Preview damit das Logo wirklich erkennbar ist —
                       // klein war's vorher kaum aussagekräftig (User-Feedback).
                       <div className="flex-shrink-0 h-24 w-24 rounded-md border bg-white p-2 flex items-center justify-center">
-                        <img src={toAssetSrc(draft.logoUrl)} alt="Logo-Vorschau" className="max-h-full max-w-full object-contain" />
+                        <img src={toAssetSrc(draft.logoUrl)} alt="Logo preview" className="max-h-full max-w-full object-contain" />
                       </div>
                     ) : (
                       <div className="flex-shrink-0 h-24 w-24 rounded-md bg-muted flex items-center justify-center text-muted-foreground">
@@ -896,27 +895,27 @@ function BrandRow({ brand }: { brand: Brand }) {
                     )}
                     <div className="flex-1 min-w-0 text-sm">
                       {uploading ? (
-                        <span className="text-muted-foreground">Wird hochgeladen…</span>
+                        <span className="text-muted-foreground">Uploading…</span>
                       ) : draft.logoUrl ? (
                         <>
-                          <div className="font-medium">Datei ziehen oder klicken zum Ersetzen</div>
-                          <div className="text-xs text-muted-foreground mt-1">Aktuelles Logo wird unten in der Vorschau gegen Weiß und Dunkelgrau geprüft.</div>
+                          <div className="font-medium">Drag a file or click to replace</div>
+                          <div className="text-xs text-muted-foreground mt-1">The current logo is checked against white and dark grey in the preview below.</div>
                         </>
                       ) : (
                         <>
-                          <div className="font-medium">Datei hierher ziehen oder klicken</div>
-                          <div className="text-xs text-muted-foreground mt-1">PNG, JPEG, SVG, WebP — bis 5 MB</div>
+                          <div className="font-medium">Drag a file here or click</div>
+                          <div className="text-xs text-muted-foreground mt-1">PNG, JPEG, SVG, WebP — up to 5 MB</div>
                         </>
                       )}
                     </div>
                     {draft.logoUrl && !uploading && (
-                      <Button size="sm" variant="ghost" onClick={(e) => { e.stopPropagation(); setDraft(d => ({ ...d, logoUrl: "" })); setColorsExtracted(false); }} aria-label="Logo entfernen">
+                      <Button size="sm" variant="ghost" onClick={(e) => { e.stopPropagation(); setDraft(d => ({ ...d, logoUrl: "" })); setColorsExtracted(false); }} aria-label="Remove logo">
                         <X className="h-4 w-4" />
                       </Button>
                     )}
                     {!draft.logoUrl && !uploading && (
                       <Button size="sm" variant="outline" onClick={(e) => { e.stopPropagation(); fileInputRef.current?.click(); }}>
-                        <Upload className="h-4 w-4 mr-1" />Hochladen
+                        <Upload className="h-4 w-4 mr-1" />Upload
                       </Button>
                     )}
                   </div>
@@ -926,16 +925,16 @@ function BrandRow({ brand }: { brand: Brand }) {
                       eine helle Primärfarbe auf einem Ausdruck verschwindet. */}
                   {draft.logoUrl && !uploading && (
                     <div className="border-t grid grid-cols-2 gap-px bg-muted/30">
-                      <div className="bg-white p-3 flex items-center justify-center gap-3" title="Wirkung auf weißem Papier (DIN A4 / Briefkopf)">
+                      <div className="bg-white p-3 flex items-center justify-center gap-3" title="Effect on white paper (DIN A4 / letterhead)">
                         <img src={toAssetSrc(draft.logoUrl)} alt="" className="h-10 w-10 object-contain" />
                         <span className="px-2 py-1 rounded text-xs font-medium" style={{ background: draft.primaryColor || "#ffffff", color: foregroundFor(draft.primaryColor || "#ffffff") }}>
-                          Primär · auf Weiß
+                          Primary · on white
                         </span>
                       </div>
-                      <div className="bg-slate-900 p-3 flex items-center justify-center gap-3" title="Wirkung auf dunklem Header (App / Web)">
+                      <div className="bg-slate-900 p-3 flex items-center justify-center gap-3" title="Effect on dark header (App / Web)">
                         <img src={toAssetSrc(draft.logoUrl)} alt="" className="h-10 w-10 object-contain" />
                         <span className="px-2 py-1 rounded text-xs font-medium" style={{ background: draft.primaryColor || "#ffffff", color: foregroundFor(draft.primaryColor || "#ffffff") }}>
-                          Primär · auf Dunkel
+                          Primary · on dark
                         </span>
                       </div>
                     </div>
@@ -951,35 +950,35 @@ function BrandRow({ brand }: { brand: Brand }) {
                 {colorsExtracted && (
                   <p className="text-xs text-muted-foreground mt-1 flex items-center gap-1">
                     <Sparkles className="h-3 w-3 text-primary" />
-                    Farben aus Logo abgeleitet — kannst du unten anpassen.
+                    Colors derived from logo — you can adjust them below.
                   </p>
                 )}
               </div>
               <div className="col-span-2">
-                <Label>Eltern-Marke</Label>
+                <Label>Parent brand</Label>
                 <Select
                   value={draft.parentBrandId ?? NO_PARENT}
                   onValueChange={(v) => setDraft({ ...draft, parentBrandId: v === NO_PARENT ? null : v })}
                 >
                   <SelectTrigger data-testid={`select-brand-parent-${brand.id}`}><SelectValue /></SelectTrigger>
                   <SelectContent>
-                    <SelectItem value={NO_PARENT}>— Keine (Top-Level) —</SelectItem>
+                    <SelectItem value={NO_PARENT}>— None (top level) —</SelectItem>
                     {parentCandidates.map(b => (
                       <SelectItem key={b.id} value={b.id} textValue={b.name}>{b.name}</SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
-                <p className="text-xs text-muted-foreground mt-1">Optional — Sub-Brand unter einer übergeordneten Marke.</p>
+                <p className="text-xs text-muted-foreground mt-1">Optional — sub-brand under a parent brand.</p>
               </div>
               <div className="col-span-2">
-                <Label>Standard-Vertragstyp</Label>
+                <Label>Default contract type</Label>
                 <Select
                   value={draft.defaultContractTypeId ?? NO_PARENT}
                   onValueChange={(v) => setDraft({ ...draft, defaultContractTypeId: v === NO_PARENT ? null : v })}
                 >
                   <SelectTrigger data-testid={`select-brand-default-contract-type-${brand.id}`}><SelectValue /></SelectTrigger>
                   <SelectContent>
-                    <SelectItem value={NO_PARENT}>— Heuristik aus Template-Name —</SelectItem>
+                    <SelectItem value={NO_PARENT}>— Heuristic from template name —</SelectItem>
                     {(contractTypesQ.data ?? []).filter(ct => ct.active !== false).map(ct => (
                       <SelectItem key={ct.id} value={ct.id} textValue={ct.name}>
                         <div className="flex flex-col">
@@ -991,8 +990,8 @@ function BrandRow({ brand }: { brand: Brand }) {
                   </SelectContent>
                 </Select>
                 <p className="text-xs text-muted-foreground mt-1">
-                  Wird in „Vertrag erstellen" verwendet, wenn kein Vertragstyp explizit gewählt wurde — vor der
-                  Schlagwort-Heuristik aus dem Templatenamen.
+                  Used in "Create contract" when no contract type is explicitly chosen — before the
+                  keyword heuristic on the template name.
                 </p>
               </div>
               <div>
@@ -1000,38 +999,38 @@ function BrandRow({ brand }: { brand: Brand }) {
                 <Input value={draft.tone ?? ""} onChange={e => setDraft({ ...draft, tone: e.target.value })} />
               </div>
               <div>
-                <Label>Primärfarbe</Label>
+                <Label>Primary color</Label>
                 <div className="flex gap-2">
                   <Input type="color" className="w-14 p-1" value={HEX_RE.test(draft.primaryColor || "") ? (draft.primaryColor as string) : "#2D6CDF"} onChange={e => { setDraft({ ...draft, primaryColor: e.target.value }); setPrimaryTouched(true); primaryTouchedRef.current = true; }} />
                   <Input className={`flex-1 font-mono text-xs ${primaryInvalid ? "border-destructive" : ""}`} value={draft.primaryColor ?? ""} onChange={e => { setDraft({ ...draft, primaryColor: e.target.value }); setPrimaryTouched(true); primaryTouchedRef.current = true; }} placeholder="#2D6CDF" data-testid={`input-brand-primary-${brand.id}`} />
                 </div>
                 {primaryInvalid && (
-                  <p className="mt-1 text-xs text-destructive">Bitte Hex-Format #RRGGBB eingeben.</p>
+                  <p className="mt-1 text-xs text-destructive">Please enter hex format #RRGGBB.</p>
                 )}
                 {/* Wenn die Primärfarbe nahezu Weiß ist, würde sie auf weißem
                     Briefkopf untergehen → wir warnen aktiv und bieten eine
                     sichere Alternative (Slate-900) an. */}
                 {isTooLightForPaper(draft.primaryColor || "#ffffff") && (
                   <div className="mt-1 flex items-start gap-2 rounded-md border border-amber-300 bg-amber-50 p-2 text-xs text-amber-900">
-                    <span className="font-medium">⚠ Sehr hell:</span>
+                    <span className="font-medium">⚠ Very light:</span>
                     <span className="flex-1">
-                      Auf weißem Papier (z. B. Vertragsausdruck) ist diese Farbe kaum sichtbar.
-                      Wähle einen dunkleren Ton.
+                      On white paper (e.g. printed contract) this color is barely visible.
+                      Choose a darker shade.
                     </span>
                     <button type="button" className="underline whitespace-nowrap" onClick={() => { setDraft(d => ({ ...d, primaryColor: "#0f172a" })); setPrimaryTouched(true); primaryTouchedRef.current = true; }}>
-                      auf Slate-900 setzen
+                      Set to Slate-900
                     </button>
                   </div>
                 )}
               </div>
               <div>
-                <Label>Sekundärfarbe</Label>
+                <Label>Secondary color</Label>
                 <div className="flex gap-2">
                   <Input type="color" className="w-14 p-1" value={HEX_RE.test(draft.secondaryColor || "") ? (draft.secondaryColor as string) : "#000000"} onChange={e => { setDraft({ ...draft, secondaryColor: e.target.value }); setSecondaryTouched(true); secondaryTouchedRef.current = true; }} />
-                  <Input className={`flex-1 font-mono text-xs ${secondaryInvalid ? "border-destructive" : ""}`} value={draft.secondaryColor ?? ""} onChange={e => { setDraft({ ...draft, secondaryColor: e.target.value }); setSecondaryTouched(true); secondaryTouchedRef.current = true; }} placeholder="leer = nur Primärfarbe" data-testid={`input-brand-secondary-${brand.id}`} />
+                  <Input className={`flex-1 font-mono text-xs ${secondaryInvalid ? "border-destructive" : ""}`} value={draft.secondaryColor ?? ""} onChange={e => { setDraft({ ...draft, secondaryColor: e.target.value }); setSecondaryTouched(true); secondaryTouchedRef.current = true; }} placeholder="empty = primary color only" data-testid={`input-brand-secondary-${brand.id}`} />
                 </div>
                 {secondaryInvalid && (
-                  <p className="mt-1 text-xs text-destructive">Bitte Hex-Format #RRGGBB oder leer lassen.</p>
+                  <p className="mt-1 text-xs text-destructive">Please enter hex format #RRGGBB or leave empty.</p>
                 )}
               </div>
               <div>
@@ -1039,34 +1038,34 @@ function BrandRow({ brand }: { brand: Brand }) {
                 <Input value={draft.legalEntityName ?? ""} onChange={e => setDraft({ ...draft, legalEntityName: e.target.value })} />
               </div>
               <div>
-                <Label>Adresse (Impressum)</Label>
+                <Label>Address (legal notice)</Label>
                 <Input
                   value={street}
                   onChange={e => setStreet(e.target.value)}
-                  placeholder="Straße / Hausnummer (z. B. Musterstraße 1)"
+                  placeholder="Street / house number (e.g. Sample St. 1)"
                   data-testid={`input-brand-street-${brand.id}`}
-                  aria-label="Straße und Hausnummer"
+                  aria-label="Street and house number"
                 />
                 <div className="mt-2 grid grid-cols-[1fr_2fr] gap-2">
                   <Input
                     value={postalCode}
                     onChange={e => setPostalCode(e.target.value)}
-                    placeholder="PLZ"
+                    placeholder="ZIP"
                     data-testid={`input-brand-postal-code-${brand.id}`}
-                    aria-label="Postleitzahl"
+                    aria-label="Postal code"
                     inputMode="numeric"
                   />
                   <Input
                     value={city}
                     onChange={e => setCity(e.target.value)}
-                    placeholder="Ort"
+                    placeholder="City"
                     data-testid={`input-brand-city-${brand.id}`}
-                    aria-label="Ort"
+                    aria-label="City"
                   />
                 </div>
               </div>
               <div className="col-span-2 flex justify-end gap-2">
-                <Button size="sm" onClick={save} disabled={update.isPending || primaryInvalid || secondaryInvalid} data-testid={`button-brand-save-${brand.id}`}>Speichern</Button>
+                <Button size="sm" onClick={save} disabled={update.isPending || primaryInvalid || secondaryInvalid} data-testid={`button-brand-save-${brand.id}`}>Save</Button>
               </div>
             </div>
           </TableCell>
@@ -1075,16 +1074,16 @@ function BrandRow({ brand }: { brand: Brand }) {
       <AlertDialog open={confirmDelete} onOpenChange={setConfirmDelete}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Brand löschen?</AlertDialogTitle>
+            <AlertDialogTitle>Brand delete?</AlertDialogTitle>
             <AlertDialogDescription>
-              <span className="font-medium text-foreground">{brand.name}</span> wird unwiderruflich entfernt.
-              Falls Deals oder Preispositionen daran hängen, blockiert die Plattform die Löschung.
+              <span className="font-medium text-foreground">{brand.name}</span> will be permanently removed.
+              If deals or price positions are linked to it, the platform blocks deletion.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel disabled={del.isPending}>Abbrechen</AlertDialogCancel>
+            <AlertDialogCancel disabled={del.isPending}>Cancel</AlertDialogCancel>
             <AlertDialogAction onClick={onDelete} disabled={del.isPending} className="bg-destructive text-destructive-foreground hover:bg-destructive/90" data-testid={`button-confirm-delete-brand-${brand.id}`}>
-              Löschen
+              Delete
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
@@ -1092,21 +1091,21 @@ function BrandRow({ brand }: { brand: Brand }) {
       <AlertDialog open={!!conflict} onOpenChange={(v) => { if (!v) setConflict(null); }}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Löschen blockiert</AlertDialogTitle>
+            <AlertDialogTitle>Delete blocked</AlertDialogTitle>
             <AlertDialogDescription asChild>
               <div className="space-y-2">
-                <p>Brand <span className="font-medium text-foreground">{brand.name}</span> hat noch verknüpfte Datensätze:</p>
+                <p>Brand <span className="font-medium text-foreground">{brand.name}</span> still has linked records:</p>
                 <ul className="list-disc pl-5 text-sm">
                   {conflict && Object.entries(conflict).filter(([, n]) => n > 0).map(([k, n]) => (
                     <li key={k}><span className="font-medium">{n}</span> {k}</li>
                   ))}
                 </ul>
-                <p className="text-sm">Bitte zuerst archivieren oder neu zuordnen.</p>
+                <p className="text-sm">Please archive or reassign them first.</p>
               </div>
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogAction onClick={() => setConflict(null)}>Verstanden</AlertDialogAction>
+            <AlertDialogAction onClick={() => setConflict(null)}>Got it</AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
@@ -1154,11 +1153,11 @@ function ScopeTreeEditor(props: {
     <div className="space-y-3 border rounded-md p-3">
       <label className="flex items-center gap-2 text-sm font-medium">
         <input type="checkbox" checked={tenantWide} onChange={e => onTenantWideChange(e.target.checked)} />
-        Tenant-weit (vollständiger Zugriff)
+        Tenant-wide (full access)
       </label>
       <div className={tenantWide ? "opacity-40 pointer-events-none" : ""}>
         <div className="text-xs text-muted-foreground mb-2">
-          Wähle Companies (voller Zugriff auf alle zugehörigen Brands) und/oder einzelne Brands.
+          Choose companies (full access to all associated brands) and/or individual brands.
         </div>
         <div className="space-y-3 max-h-72 overflow-auto">
           {companies.map(c => (
@@ -1210,11 +1209,11 @@ function UserRolesCard() {
   const submitCreate = async () => {
     setError(null);
     if (!draft.name.trim() || !draft.email.trim() || !draft.role || !draft.password) {
-      setError("Bitte Name, E-Mail, Rolle und Passwort angeben.");
+      setError("Please provide name, email, role and password.");
       return;
     }
     if (draft.password.length < 8) {
-      setError("Passwort muss mindestens 8 Zeichen haben.");
+      setError("Password must be at least 8 characters.");
       return;
     }
     try {
@@ -1232,7 +1231,7 @@ function UserRolesCard() {
       setDialogOpen(false);
       users.refetch();
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Anlegen fehlgeschlagen.");
+      setError(e instanceof Error ? e.message : "Create failed.");
     }
   };
 
@@ -1271,20 +1270,20 @@ function UserRolesCard() {
       <CardHeader className="flex flex-row items-center justify-between">
         <div className="flex items-center gap-2">
           <Users className="h-5 w-5 text-primary" />
-          <CardTitle>Benutzer & Rechte</CardTitle>
+          <CardTitle>Users & permissions</CardTitle>
         </div>
-        <Button size="sm" onClick={openCreate}>Neuer Benutzer</Button>
+        <Button size="sm" onClick={openCreate}>New user</Button>
       </CardHeader>
       <CardContent>
         <div className="border rounded-md">
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Benutzer</TableHead>
-                <TableHead>Rolle</TableHead>
-                <TableHead>Sichtbarkeit</TableHead>
+                <TableHead>User</TableHead>
+                <TableHead>Role</TableHead>
+                <TableHead>Visibility</TableHead>
                 <TableHead>Status</TableHead>
-                <TableHead className="text-right">Aktionen</TableHead>
+                <TableHead className="text-right">Actions</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -1304,7 +1303,7 @@ function UserRolesCard() {
                 />
               ))}
               {!users.data?.length && (
-                <TableRow><TableCell colSpan={5} className="text-center h-24">Keine Benutzer</TableCell></TableRow>
+                <TableRow><TableCell colSpan={5} className="text-center h-24">No users</TableCell></TableRow>
               )}
             </TableBody>
           </Table>
@@ -1316,8 +1315,8 @@ function UserRolesCard() {
           <div className="bg-background rounded-lg shadow-lg max-w-2xl w-full max-h-[90vh] overflow-auto" onClick={e => e.stopPropagation()}>
             <div className="p-6 space-y-4">
               <div className="flex items-center justify-between">
-                <h2 className="text-lg font-semibold">Neuen Benutzer anlegen</h2>
-                <Button size="sm" variant="ghost" onClick={() => setDialogOpen(false)}>Abbrechen</Button>
+                <h2 className="text-lg font-semibold">Create new user</h2>
+                <Button size="sm" variant="ghost" onClick={() => setDialogOpen(false)}>Cancel</Button>
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>
@@ -1325,17 +1324,17 @@ function UserRolesCard() {
                   <Input value={draft.name} onChange={e => setDraft({ ...draft, name: e.target.value })} />
                 </div>
                 <div>
-                  <Label>E-Mail</Label>
+                  <Label>Email</Label>
                   <Input type="email" value={draft.email} onChange={e => setDraft({ ...draft, email: e.target.value })} />
                 </div>
                 <div>
-                  <Label>Rolle</Label>
+                  <Label>Role</Label>
                   <select
                     className="w-full border rounded-md px-2 py-1.5 bg-background"
                     value={draft.role}
                     onChange={e => setDraft({ ...draft, role: e.target.value })}
                   >
-                    <option value="">— Bitte wählen —</option>
+                    <option value="">— Please choose —</option>
                     {roleOptions.map(r => (
                       <option key={r.id} value={r.name}>{r.name}</option>
                     ))}
@@ -1347,12 +1346,12 @@ function UserRolesCard() {
                   )}
                 </div>
                 <div>
-                  <Label>Passwort (min. 8 Zeichen)</Label>
+                  <Label>Password (min. 8 characters)</Label>
                   <Input type="password" value={draft.password} onChange={e => setDraft({ ...draft, password: e.target.value })} />
                 </div>
               </div>
               <div>
-                <Label className="mb-2 block">Sichtbarkeit</Label>
+                <Label className="mb-2 block">Visibility</Label>
                 <ScopeTreeEditor
                   tenantWide={draft.tenantWide}
                   onTenantWideChange={v => setDraft({ ...draft, tenantWide: v })}
@@ -1364,9 +1363,9 @@ function UserRolesCard() {
               </div>
               {error && <p className="text-sm text-destructive">{error}</p>}
               <div className="flex justify-end gap-2">
-                <Button variant="outline" onClick={() => setDialogOpen(false)}>Abbrechen</Button>
+                <Button variant="outline" onClick={() => setDialogOpen(false)}>Cancel</Button>
                 <Button onClick={submitCreate} disabled={createUser.isPending}>
-                  {createUser.isPending ? "Anlegen…" : "Anlegen"}
+                  {createUser.isPending ? "Creating…" : "Create"}
                 </Button>
               </div>
             </div>
@@ -1410,16 +1409,16 @@ function UserAdminRow(props: {
         <TableCell className="text-sm text-muted-foreground max-w-xs">{u.scopeSummary}</TableCell>
         <TableCell>
           {u.isActive
-            ? <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200">Aktiv</Badge>
-            : <Badge variant="outline" className="bg-gray-100 text-gray-600">Deaktiviert</Badge>}
+            ? <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200">Active</Badge>
+            : <Badge variant="outline" className="bg-gray-100 text-gray-600">Deactivated</Badge>}
         </TableCell>
         <TableCell className="text-right">
           <div className="flex justify-end gap-2">
             <Button size="sm" variant="outline" onClick={isEditing ? onCancelEdit : onOpenEdit}>
-              {isEditing ? "Schließen" : "Bearbeiten"}
+              {isEditing ? "Close" : "Edit"}
             </Button>
             <Button size="sm" variant="outline" onClick={onToggleActive} disabled={savePending}>
-              {u.isActive ? "Deaktivieren" : "Aktivieren"}
+              {u.isActive ? "Deactivate" : "Activate"}
             </Button>
           </div>
         </TableCell>
@@ -1429,7 +1428,7 @@ function UserAdminRow(props: {
           <TableCell colSpan={5} className="bg-muted/30">
             <div className="grid md:grid-cols-2 gap-4 py-3">
               <div>
-                <Label className="mb-1 block">Rolle</Label>
+                <Label className="mb-1 block">Role</Label>
                 <select
                   className="w-full border rounded-md px-2 py-1.5 bg-background"
                   value={editDraft.role ?? u.role}
@@ -1441,7 +1440,7 @@ function UserAdminRow(props: {
                 </select>
               </div>
               <div>
-                <Label className="mb-1 block">Sichtbarkeit</Label>
+                <Label className="mb-1 block">Visibility</Label>
                 <ScopeTreeEditor
                   tenantWide={editDraft.tenantWide ?? u.tenantWide}
                   onTenantWideChange={v => onEditDraftChange({ ...editDraft, tenantWide: v })}
@@ -1452,8 +1451,8 @@ function UserAdminRow(props: {
                 />
               </div>
               <div className="md:col-span-2 flex justify-end gap-2">
-                <Button size="sm" variant="outline" onClick={onCancelEdit}>Abbrechen</Button>
-                <Button size="sm" onClick={onSaveEdit} disabled={savePending}>Speichern</Button>
+                <Button size="sm" variant="outline" onClick={onCancelEdit}>Cancel</Button>
+                <Button size="sm" onClick={onSaveEdit} disabled={savePending}>Save</Button>
               </div>
             </div>
           </TableCell>
@@ -1508,29 +1507,29 @@ function RolesCard() {
   };
   const onSave = async () => {
     setError(null);
-    if (!name.trim()) { setError("Name ist erforderlich."); return; }
+    if (!name.trim()) { setError("Name is required."); return; }
     try {
       if (editingId) {
         await updateRole.mutateAsync({ id: editingId, data: { name: name.trim(), description: desc.trim() || "—", permissions: perms } });
-        toast({ title: "Rolle aktualisiert", description: name.trim() });
+        toast({ title: "Role updated", description: name.trim() });
       } else {
         await createRole.mutateAsync({ data: { name: name.trim(), description: desc.trim() || "—", permissions: perms } });
-        toast({ title: "Rolle angelegt", description: name.trim() });
+        toast({ title: "Role created", description: name.trim() });
       }
       roles.refetch();
       setOpen(false); reset();
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Speichern fehlgeschlagen.");
+      setError(e instanceof Error ? e.message : "Save failed.");
     }
   };
   const onDelete = async (r: { id: string; name: string }) => {
-    if (!window.confirm(`Rolle "${r.name}" löschen?`)) return;
+    if (!window.confirm(`Delete role "${r.name}"?`)) return;
     try {
       await deleteRole.mutateAsync({ id: r.id });
       roles.refetch();
-      toast({ title: "Rolle gelöscht", description: r.name });
+      toast({ title: "Role deleted", description: r.name });
     } catch (e) {
-      toast({ title: "Löschen fehlgeschlagen", description: e instanceof Error ? e.message : "Rolle evtl. in Benutzung.", variant: "destructive" });
+      toast({ title: "Delete failed", description: e instanceof Error ? e.message : "Role may still be in use.", variant: "destructive" });
     }
   };
 
@@ -1540,17 +1539,17 @@ function RolesCard() {
         <div>
           <div className="flex items-center gap-2">
             <Shield className="h-5 w-5 text-primary" />
-            <CardTitle>Rollen-Definitionen</CardTitle>
+            <CardTitle>Role definitions</CardTitle>
           </div>
           <p className="text-sm text-muted-foreground mt-1">
-            Rollen gelten innerhalb deines Mandanten. <span className="font-medium">System-Rollen</span> (Tenant Admin,
-            Account Executive, Deal Desk) sind fix verdrahtet — sie tragen Berechtigungen und können nicht editiert
-            oder gelöscht werden. Lege bei Bedarf eigene <span className="font-medium">Custom-Rollen</span> an
-            (z. B. „Sales Lead DACH" oder „Legal Reviewer") und weise ihnen feingranulare Berechtigungen zu.
+            Roles apply within your tenant. <span className="font-medium">System roles</span> (Tenant Admin,
+            Account Executive, Deal Desk) are hard-wired — they carry permissions and cannot be edited
+            or deleted. If needed, create your own <span className="font-medium">custom roles</span>
+            (e.g. "Sales Lead DACH" or "Legal Reviewer") and assign them fine-grained permissions.
           </p>
         </div>
         <Button size="sm" onClick={openCreate} data-testid="button-create-role">
-          <Plus className="h-4 w-4 mr-1" /> Neue Rolle
+          <Plus className="h-4 w-4 mr-1" /> New role
         </Button>
       </CardHeader>
       <CardContent className="space-y-4">
@@ -1559,10 +1558,10 @@ function RolesCard() {
             <TableHeader>
               <TableRow>
                 <TableHead>Name</TableHead>
-                <TableHead>Beschreibung</TableHead>
-                <TableHead>Berechtigungen</TableHead>
-                <TableHead>Typ</TableHead>
-                <TableHead className="text-right">Aktionen</TableHead>
+                <TableHead>Description</TableHead>
+                <TableHead>Permissions</TableHead>
+                <TableHead>Type</TableHead>
+                <TableHead className="text-right">Actions</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -1572,11 +1571,11 @@ function RolesCard() {
                   <TableCell className="text-sm text-muted-foreground">{r.description}</TableCell>
                   <TableCell className="text-xs">
                     {r.isSystem ? (
-                      <Badge variant="outline" className="text-muted-foreground">implizit (System)</Badge>
+                      <Badge variant="outline" className="text-muted-foreground">implicit (system)</Badge>
                     ) : (r.permissions?.length ?? 0) === 0 ? (
-                      <span className="text-amber-700 dark:text-amber-400">— keine —</span>
+                      <span className="text-amber-700 dark:text-amber-400">— none —</span>
                     ) : (
-                      <span>{r.permissions!.length} Berechtigung{r.permissions!.length === 1 ? "" : "en"}</span>
+                      <span>{r.permissions!.length} permission{r.permissions!.length === 1 ? "" : "s"}</span>
                     )}
                   </TableCell>
                   <TableCell>
@@ -1586,18 +1585,18 @@ function RolesCard() {
                   </TableCell>
                   <TableCell className="text-right">
                     <div className="flex justify-end gap-2">
-                      <span title={r.isSystem ? "System-Rolle — Berechtigungen sind fest verdrahtet." : ""}>
-                        <Button size="sm" variant="outline" onClick={() => openEdit(r)} disabled={r.isSystem} data-testid={`button-edit-role-${r.id}`}>Bearbeiten</Button>
+                      <span title={r.isSystem ? "System role — permissions are hard-wired." : ""}>
+                        <Button size="sm" variant="outline" onClick={() => openEdit(r)} disabled={r.isSystem} data-testid={`button-edit-role-${r.id}`}>Edit</Button>
                       </span>
-                      <span title={r.isSystem ? "System-Rolle — nicht löschbar." : ""}>
-                        <Button size="sm" variant="outline" onClick={() => onDelete(r)} disabled={r.isSystem} data-testid={`button-delete-role-${r.id}`}>Löschen</Button>
+                      <span title={r.isSystem ? "System role — cannot be deleted." : ""}>
+                        <Button size="sm" variant="outline" onClick={() => onDelete(r)} disabled={r.isSystem} data-testid={`button-delete-role-${r.id}`}>Delete</Button>
                       </span>
                     </div>
                   </TableCell>
                 </TableRow>
               ))}
               {!roles.data?.length && (
-                <TableRow><TableCell colSpan={5} className="text-center h-16">Keine Rollen</TableCell></TableRow>
+                <TableRow><TableCell colSpan={5} className="text-center h-16">No roles</TableCell></TableRow>
               )}
             </TableBody>
           </Table>
@@ -1607,26 +1606,26 @@ function RolesCard() {
       <AlertDialog open={open} onOpenChange={setOpen}>
         <AlertDialogContent className="max-w-3xl max-h-[85vh] overflow-y-auto">
           <AlertDialogHeader>
-            <AlertDialogTitle>{editingId ? "Rolle bearbeiten" : "Neue Rolle"}</AlertDialogTitle>
+            <AlertDialogTitle>{editingId ? "Edit role" : "New role"}</AlertDialogTitle>
             <AlertDialogDescription>
-              Wähle Berechtigungen aus dem Katalog. Diese werden vom Backend bei jedem Request gegen den eingeloggten User geprüft.
+              Select permissions from the catalog. These are checked by the backend on every request against the signed-in user.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <div className="space-y-3">
             <div className="grid md:grid-cols-2 gap-3">
               <div className="space-y-1">
                 <Label>Name</Label>
-                <Input value={name} onChange={e => setName(e.target.value)} placeholder="z. B. Sales Lead DACH" disabled={editingIsSystem} data-testid="input-role-name" />
+                <Input value={name} onChange={e => setName(e.target.value)} placeholder="e.g. Sales Lead DACH" disabled={editingIsSystem} data-testid="input-role-name" />
               </div>
               <div className="space-y-1">
-                <Label>Beschreibung <span className="text-xs text-muted-foreground">(optional)</span></Label>
-                <Input value={desc} onChange={e => setDesc(e.target.value)} placeholder="Wofür ist diese Rolle zuständig?" disabled={editingIsSystem} data-testid="input-role-desc" />
+                <Label>Description <span className="text-xs text-muted-foreground">(optional)</span></Label>
+                <Input value={desc} onChange={e => setDesc(e.target.value)} placeholder="What is this role responsible for?" disabled={editingIsSystem} data-testid="input-role-desc" />
               </div>
             </div>
             <div>
-              <Label>Berechtigungen</Label>
+              <Label>Permissions</Label>
               <p className="text-xs text-muted-foreground mb-2">
-                {perms.length} von {catalog?.length ?? 0} ausgewählt.
+                {perms.length} of {catalog?.length ?? 0} selected.
               </p>
               {!catalog?.length ? (
                 <Skeleton className="h-32 w-full" />
@@ -1666,9 +1665,9 @@ function RolesCard() {
             {error && <p className="text-sm text-destructive" data-testid="text-role-error">{error}</p>}
           </div>
           <AlertDialogFooter>
-            <AlertDialogCancel>Abbrechen</AlertDialogCancel>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
             <AlertDialogAction onClick={onSave} disabled={editingIsSystem || !name.trim() || createRole.isPending || updateRole.isPending} data-testid="button-save-role">
-              Speichern
+              Save
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
@@ -1798,7 +1797,7 @@ function WebhooksSection() {
         <Webhook className="h-5 w-5 text-primary" />
         <div>
           <CardTitle>Webhooks</CardTitle>
-          <p className="text-sm text-muted-foreground">Abonnements und Zustellungs-Historie</p>
+          <p className="text-sm text-muted-foreground">Subscriptions and delivery history</p>
         </div>
       </CardHeader>
       <CardContent className="space-y-6">
@@ -1809,9 +1808,9 @@ function WebhooksSection() {
         )}
         {lastSecret && (
           <div className="text-sm border border-amber-400 bg-amber-50 text-amber-900 px-3 py-2 rounded">
-            <div className="font-medium">Neues Secret — jetzt kopieren (wird nur einmal angezeigt):</div>
+            <div className="font-medium">New secret — copy now (shown only once):</div>
             <code className="block mt-1 font-mono text-xs break-all">{lastSecret}</code>
-            <Button size="sm" variant="outline" className="mt-2" onClick={() => setLastSecret(null)}>Schließen</Button>
+            <Button size="sm" variant="outline" className="mt-2" onClick={() => setLastSecret(null)}>Close</Button>
           </div>
         )}
 
@@ -1821,11 +1820,11 @@ function WebhooksSection() {
             <Input type="url" value={url} onChange={(e) => setUrl(e.target.value)} placeholder="https://example.com/webhooks/dealflow" required />
           </div>
           <div>
-            <Label>Beschreibung</Label>
+            <Label>Description</Label>
             <Input value={desc} onChange={(e) => setDesc(e.target.value)} placeholder="optional" />
           </div>
           <Button type="submit" disabled={busy || !url || selectedEvents.size === 0}>
-            <Plus className="h-4 w-4 mr-1" />Anlegen
+            <Plus className="h-4 w-4 mr-1" />Create
           </Button>
           <div className="md:col-span-3 flex flex-wrap gap-2">
             {ALLOWED_EVENTS.map((ev) => {
@@ -1851,9 +1850,9 @@ function WebhooksSection() {
 
         <div>
           <div className="flex items-center justify-between mb-2">
-            <h3 className="font-medium">Abonnements</h3>
+            <h3 className="font-medium">Subscriptions</h3>
             <Button size="sm" variant="outline" onClick={() => void reloadHooks()}>
-              <RefreshCw className="h-3 w-3 mr-1" />Aktualisieren
+              <RefreshCw className="h-3 w-3 mr-1" />Refresh
             </Button>
           </div>
           <Table>
@@ -1862,29 +1861,29 @@ function WebhooksSection() {
                 <TableHead>URL</TableHead>
                 <TableHead>Events</TableHead>
                 <TableHead>Status</TableHead>
-                <TableHead>Beschreibung</TableHead>
-                <TableHead className="text-right">Aktionen</TableHead>
+                <TableHead>Description</TableHead>
+                <TableHead className="text-right">Actions</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {hooks === null ? (
                 <TableRow><TableCell colSpan={5}><Skeleton className="h-6 w-full" /></TableCell></TableRow>
               ) : hooks.length === 0 ? (
-                <TableRow><TableCell colSpan={5} className="text-center h-16 text-muted-foreground">Noch keine Webhooks konfiguriert.</TableCell></TableRow>
+                <TableRow><TableCell colSpan={5} className="text-center h-16 text-muted-foreground">No webhooks configured yet.</TableCell></TableRow>
               ) : hooks.map((h) => (
                 <TableRow key={h.id}>
                   <TableCell className="font-mono text-xs break-all">{h.url}</TableCell>
                   <TableCell className="text-xs">{h.events.join(", ")}</TableCell>
                   <TableCell>
                     {h.active
-                      ? <Badge variant="outline" className="bg-green-50 text-green-700 border-green-300">aktiv</Badge>
-                      : <Badge variant="outline" className="bg-muted">pausiert</Badge>}
+                      ? <Badge variant="outline" className="bg-green-50 text-green-700 border-green-300">active</Badge>
+                      : <Badge variant="outline" className="bg-muted">paused</Badge>}
                   </TableCell>
                   <TableCell className="text-sm text-muted-foreground">{h.description ?? "—"}</TableCell>
                   <TableCell className="text-right">
                     <div className="flex justify-end gap-2">
                       <Button size="sm" variant="outline" onClick={() => void toggleActive(h)}>
-                        {h.active ? "Pausieren" : "Aktivieren"}
+                        {h.active ? "Pause" : "Activate"}
                       </Button>
                       <Button size="sm" variant="outline" onClick={() => void remove(h.id)}>
                         <Trash2 className="h-3 w-3" />
@@ -1899,27 +1898,27 @@ function WebhooksSection() {
 
         <div>
           <div className="flex items-center justify-between mb-2">
-            <h3 className="font-medium">Delivery-Log (letzte 50)</h3>
+            <h3 className="font-medium">Delivery log (last 50)</h3>
             <Button size="sm" variant="outline" onClick={() => void reloadDeliveries()}>
-              <RefreshCw className="h-3 w-3 mr-1" />Aktualisieren
+              <RefreshCw className="h-3 w-3 mr-1" />Refresh
             </Button>
           </div>
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Zeit</TableHead>
+                <TableHead>Time</TableHead>
                 <TableHead>Event</TableHead>
                 <TableHead>Status</TableHead>
-                <TableHead>Versuche</TableHead>
+                <TableHead>Attempts</TableHead>
                 <TableHead>HTTP</TableHead>
-                <TableHead>Fehler</TableHead>
+                <TableHead>Error</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {deliveries === null ? (
                 <TableRow><TableCell colSpan={6}><Skeleton className="h-6 w-full" /></TableCell></TableRow>
               ) : deliveries.length === 0 ? (
-                <TableRow><TableCell colSpan={6} className="text-center h-16 text-muted-foreground">Keine Zustellungen.</TableCell></TableRow>
+                <TableRow><TableCell colSpan={6} className="text-center h-16 text-muted-foreground">No deliveries.</TableCell></TableRow>
               ) : deliveries.map((d) => (
                 <TableRow key={d.id}>
                   <TableCell className="text-xs">{fmtDate(d.createdAt)}</TableCell>
@@ -1999,7 +1998,7 @@ function ClauseFamilyMultiSelect({
   if (families.length === 0) {
     return (
       <div className="text-sm text-muted-foreground border rounded-md p-3 bg-muted/20">
-        Noch keine Klauselfamilien gepflegt. Lege zuerst welche an, dann tauchen sie hier zur Auswahl auf.
+        No clause families maintained yet. Create some first, then they will appear here for selection.
       </div>
     );
   }
@@ -2029,7 +2028,7 @@ function ClauseFamilyMultiSelect({
               ) : null}
               {isExcl ? (
                 <div className="text-xs text-amber-700 dark:text-amber-400 mt-0.5">
-                  Bereits in der Gegenliste gewählt — hier nicht wählbar.
+                  Already selected in the opposite list — not available here.
                 </div>
               ) : null}
             </div>
@@ -2076,32 +2075,32 @@ function IndustryProfilesCard() {
     const ind = industry.trim().toLowerCase();
     const lab = label.trim();
     if (!ind || !lab) {
-      toast({ title: "Pflichtfelder fehlen", description: "Branche und Label sind erforderlich.", variant: "destructive" });
+      toast({ title: "Required fields missing", description: "Industry and label are required.", variant: "destructive" });
       return;
     }
     try {
       const body = { industry: ind, label: lab, description: description.trim() };
       if (editing) {
         await update.mutateAsync({ id: editing.id, data: body });
-        toast({ title: "Profil aktualisiert", description: lab });
+        toast({ title: "Profile updated", description: lab });
       } else {
         await create.mutateAsync({ data: body });
-        toast({ title: "Profil angelegt", description: lab });
+        toast({ title: "Profile created", description: lab });
       }
       await qc.invalidateQueries({ queryKey: getListIndustryProfilesQueryKey() });
       setOpen(false);
     } catch (e) {
-      toast({ title: "Speichern fehlgeschlagen", description: e instanceof Error ? e.message : "Unbekannt", variant: "destructive" });
+      toast({ title: "Save failed", description: e instanceof Error ? e.message : "Unknown", variant: "destructive" });
     }
   };
   const onDelete = async (p: IndustryProfile) => {
-    if (!confirm(`Profil "${p.label}" wirklich löschen?`)) return;
+    if (!confirm(`Really delete profile "${p.label}"?`)) return;
     try {
       await del.mutateAsync({ id: p.id });
       await qc.invalidateQueries({ queryKey: getListIndustryProfilesQueryKey() });
-      toast({ title: "Profil gelöscht", description: p.label });
+      toast({ title: "Profile deleted", description: p.label });
     } catch (e) {
-      toast({ title: "Löschen fehlgeschlagen", description: e instanceof Error ? e.message : "Unbekannt", variant: "destructive" });
+      toast({ title: "Delete failed", description: e instanceof Error ? e.message : "Unknown", variant: "destructive" });
     }
   };
 
@@ -2109,26 +2108,26 @@ function IndustryProfilesCard() {
     <Card data-testid="card-industry-profiles" id="industry-profiles">
       <CardHeader className="flex flex-row items-center justify-between">
         <div>
-          <CardTitle>Branchen-Profile</CardTitle>
+          <CardTitle>Industry profiles</CardTitle>
           <p className="text-sm text-muted-foreground mt-1">
-            Definiere Branchen mit Beschreibung und Default-Vorlagen — werden im Angebots-Wizard als Vorauswahl genutzt.
+            Define industries with description and default templates — used as preselection in the Quotes wizard.
           </p>
         </div>
         <Button size="sm" onClick={openCreate} data-testid="button-new-industry-profile">
-          <Plus className="h-4 w-4 mr-2" />Profil anlegen
+          <Plus className="h-4 w-4 mr-2" />Create profile
         </Button>
       </CardHeader>
       <CardContent>
         {isLoading ? <Skeleton className="h-24 w-full" /> : !profiles?.length ? (
-          <div className="text-sm text-muted-foreground py-4 text-center">Noch keine Branchen-Profile angelegt.</div>
+          <div className="text-sm text-muted-foreground py-4 text-center">No industry profiles created yet.</div>
         ) : (
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Branche</TableHead>
+                <TableHead>Industry</TableHead>
                 <TableHead>Label</TableHead>
-                <TableHead>Beschreibung</TableHead>
-                <TableHead className="w-32 text-right">Aktionen</TableHead>
+                <TableHead>Description</TableHead>
+                <TableHead className="w-32 text-right">Actions</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -2138,7 +2137,7 @@ function IndustryProfilesCard() {
                   <TableCell className="font-medium">{p.label}</TableCell>
                   <TableCell className="text-sm text-muted-foreground max-w-md truncate">{p.description || "—"}</TableCell>
                   <TableCell className="text-right">
-                    <Button size="sm" variant="ghost" onClick={() => openEdit(p)} data-testid={`button-edit-industry-${p.industry}`}>Bearbeiten</Button>
+                    <Button size="sm" variant="ghost" onClick={() => openEdit(p)} data-testid={`button-edit-industry-${p.industry}`}>Edit</Button>
                     <Button size="sm" variant="ghost" onClick={() => onDelete(p)} data-testid={`button-delete-industry-${p.industry}`}>
                       <Trash2 className="h-4 w-4" />
                     </Button>
@@ -2153,14 +2152,14 @@ function IndustryProfilesCard() {
       <AlertDialog open={open} onOpenChange={setOpen}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>{editing ? "Profil bearbeiten" : "Branchen-Profil anlegen"}</AlertDialogTitle>
+            <AlertDialogTitle>{editing ? "Edit profile" : "Create industry profile"}</AlertDialogTitle>
             <AlertDialogDescription>
-              Branche ist ein Code-Schlüssel (z. B. <code>saas</code>), Label ist der Anzeigename.
+              Industry is a code key (e.g. <code>saas</code>), label is the display name.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <div className="space-y-3">
             <div className="space-y-1">
-              <Label>Branche (Schlüssel)</Label>
+              <Label>Industry (key)</Label>
               <Input value={industry} onChange={e => setIndustry(e.target.value)} placeholder="saas" disabled={!!editing} data-testid="input-industry-key" />
             </div>
             <div className="space-y-1">
@@ -2168,14 +2167,14 @@ function IndustryProfilesCard() {
               <Input value={label} onChange={e => setLabel(e.target.value)} placeholder="Software-as-a-Service" data-testid="input-industry-label" />
             </div>
             <div className="space-y-1">
-              <Label>Beschreibung</Label>
-              <Input value={description} onChange={e => setDescription(e.target.value)} placeholder="Wofür dieses Profil typisch ist…" data-testid="input-industry-description" />
+              <Label>Description</Label>
+              <Input value={description} onChange={e => setDescription(e.target.value)} placeholder="What this profile is typically used for…" data-testid="input-industry-description" />
             </div>
           </div>
           <AlertDialogFooter>
-            <AlertDialogCancel>Abbrechen</AlertDialogCancel>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
             <AlertDialogAction onClick={onSave} disabled={!industry.trim() || !label.trim()} data-testid="button-save-industry">
-              {editing ? "Speichern" : "Anlegen"}
+              {editing ? "Save" : "Create"}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
@@ -2185,6 +2184,7 @@ function IndustryProfilesCard() {
 }
 
 function ContractTypesCard() {
+  const { t } = useTranslation();
   const { data: types, isLoading } = useListContractTypes();
   const { data: families } = useListClauseFamilies();
   const qc = useQueryClient();
@@ -2232,7 +2232,7 @@ function ContractTypesCard() {
             active,
           },
         });
-        toast({ title: "Vertragstyp aktualisiert" });
+        toast({ title: t("pages.admin.contractTypes.updated") });
       } else {
         await create.mutateAsync({
           data: {
@@ -2244,12 +2244,12 @@ function ContractTypesCard() {
             active,
           },
         });
-        toast({ title: "Vertragstyp angelegt" });
+        toast({ title: t("pages.admin.contractTypes.created") });
       }
       await qc.invalidateQueries({ queryKey: getListContractTypesQueryKey() });
       setOpen(false); reset();
     } catch (err: any) {
-      toast({ title: "Speichern fehlgeschlagen", description: err?.message, variant: "destructive" });
+      toast({ title: t("common.saveFailed"), description: err?.message, variant: "destructive" });
     }
   };
 
@@ -2257,9 +2257,9 @@ function ContractTypesCard() {
     try {
       await del.mutateAsync({ id: ct.id });
       await qc.invalidateQueries({ queryKey: getListContractTypesQueryKey() });
-      toast({ title: "Vertragstyp gelöscht" });
+      toast({ title: t("pages.admin.contractTypes.deleted") });
     } catch (err: any) {
-      toast({ title: "Löschen fehlgeschlagen", description: err?.message, variant: "destructive" });
+      toast({ title: t("common.deleteFailed"), description: err?.message, variant: "destructive" });
     }
   };
 
@@ -2271,18 +2271,20 @@ function ContractTypesCard() {
         <div className="flex items-start gap-2">
           <Shield className="h-5 w-5 text-primary mt-0.5" />
           <div>
-            <CardTitle>Vertragstypen</CardTitle>
+            <CardTitle>{t("pages.admin.contractTypes.title")}</CardTitle>
             <p className="text-sm text-muted-foreground mt-1">
-              Ein Vertragstyp ist eine Vorlage-Kategorie (z. B. <span className="font-medium">NDA</span>,
-              {" "}<span className="font-medium">MSA</span>, <span className="font-medium">Order Form</span>).
-              Du legst pro Typ fest, welche <span className="font-medium">Klauselfamilien zwingend</span> enthalten
-              sein müssen (z. B. „Vertraulichkeit" beim NDA) und welche <span className="font-medium">verboten</span>
-              {" "}sind. Die Klausel-Prüfung im Vertrag warnt automatisch bei Abweichungen.
+              {t("pages.admin.contractTypes.subtitle1")} <span className="font-medium">NDA</span>,
+              {" "}<span className="font-medium">MSA</span>, <span className="font-medium">Order Form</span>
+              {t("pages.admin.contractTypes.subtitle2")}{" "}
+              <span className="font-medium">{t("pages.admin.contractTypes.subtitle3")}</span>{" "}
+              {t("pages.admin.contractTypes.subtitle4")}{" "}
+              <span className="font-medium">{t("pages.admin.contractTypes.subtitle5")}</span>
+              {t("pages.admin.contractTypes.subtitle6")}
             </p>
           </div>
         </div>
         <Button size="sm" onClick={openCreate} data-testid="button-new-contract-type">
-          <Plus className="h-4 w-4 mr-1" /> Neuer Typ
+          <Plus className="h-4 w-4 mr-1" /> {t("pages.admin.contractTypes.newType")}
         </Button>
       </CardHeader>
       <CardContent>
@@ -2291,7 +2293,7 @@ function ContractTypesCard() {
         ) : (types?.length ?? 0) === 0 ? (
           <div className="p-6 text-center text-sm border rounded-md bg-muted/10 space-y-3">
             <p className="text-muted-foreground">
-              Noch keine Vertragstypen. Häufige Beispiele:
+              {t("pages.admin.contractTypes.emptyTitle")}
             </p>
             <div className="flex flex-wrap justify-center gap-2 text-xs">
               <Badge variant="outline" className="font-mono">NDA</Badge>
@@ -2301,19 +2303,19 @@ function ContractTypesCard() {
               <Badge variant="outline" className="font-mono">SOW</Badge>
             </div>
             <Button size="sm" onClick={openCreate} data-testid="button-new-contract-type-empty">
-              <Plus className="h-4 w-4 mr-1" /> Ersten Typ anlegen
+              <Plus className="h-4 w-4 mr-1" /> {t("pages.admin.contractTypes.firstType")}
             </Button>
           </div>
         ) : (
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Code</TableHead>
-                <TableHead>Name</TableHead>
-                <TableHead>Pflicht-Klauseln</TableHead>
-                <TableHead>Verboten</TableHead>
-                <TableHead>Aktiv</TableHead>
-                <TableHead className="text-right">Aktion</TableHead>
+                <TableHead>{t("pages.admin.contractTypes.colCode")}</TableHead>
+                <TableHead>{t("pages.admin.contractTypes.colName")}</TableHead>
+                <TableHead>{t("pages.admin.contractTypes.colMandatory")}</TableHead>
+                <TableHead>{t("pages.admin.contractTypes.colForbidden")}</TableHead>
+                <TableHead>{t("pages.admin.contractTypes.colActive")}</TableHead>
+                <TableHead className="text-right">{t("pages.admin.contractTypes.colAction")}</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -2329,13 +2331,13 @@ function ContractTypesCard() {
                   </TableCell>
                   <TableCell>
                     <Badge variant="outline" className={ct.active ? "border-emerald-300 text-emerald-700" : "border-slate-300 text-slate-500"}>
-                      {ct.active ? "ja" : "nein"}
+                      {ct.active ? t("pages.admin.ja") : t("pages.admin.nein")}
                     </Badge>
                   </TableCell>
                   <TableCell className="text-right">
                     <div className="inline-flex gap-1.5">
                       <Button size="sm" variant="outline" onClick={() => openEdit(ct)} data-testid={`button-edit-ct-${ct.id}`}>
-                        Bearbeiten
+                        {t("pages.admin.contractTypes.edit")}
                       </Button>
                       <Button size="sm" variant="outline" onClick={() => onDelete(ct)} data-testid={`button-delete-ct-${ct.id}`}>
                         <Trash2 className="h-3.5 w-3.5" />
@@ -2352,36 +2354,36 @@ function ContractTypesCard() {
       <AlertDialog open={open} onOpenChange={setOpen}>
         <AlertDialogContent className="max-w-2xl">
           <AlertDialogHeader>
-            <AlertDialogTitle>{editing ? "Vertragstyp bearbeiten" : "Neuer Vertragstyp"}</AlertDialogTitle>
+            <AlertDialogTitle>{editing ? t("pages.admin.contractTypes.dialog.titleEdit") : t("pages.admin.contractTypes.dialog.titleNew")}</AlertDialogTitle>
             <AlertDialogDescription>
-              Pflicht- und Verbots-Klauseln werden in der Klausel-Prüfung gegen Verträge ausgewertet.
+              {t("pages.admin.contractTypes.dialog.description")}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <div className="grid gap-3 py-2">
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <Label>Code</Label>
+                <Label>{t("pages.admin.contractTypes.dialog.code")}</Label>
                 <Input
                   value={code}
                   onChange={e => setCode(e.target.value)}
                   disabled={!!editing}
-                  placeholder="z.B. NDA, MSA_SUB"
+                  placeholder={t("pages.admin.contractTypes.dialog.codePlaceholder")}
                   data-testid="input-ct-code"
                 />
               </div>
               <div>
-                <Label>Name</Label>
+                <Label>{t("pages.admin.contractTypes.dialog.name")}</Label>
                 <Input value={name} onChange={e => setName(e.target.value)} data-testid="input-ct-name" />
               </div>
             </div>
             <div>
-              <Label>Beschreibung</Label>
+              <Label>{t("pages.admin.contractTypes.dialog.nameDesc")}</Label>
               <Input value={description} onChange={e => setDescription(e.target.value)} data-testid="input-ct-description" />
             </div>
             <div>
-              <Label>Pflicht-Klauselfamilien</Label>
+              <Label>{t("pages.admin.contractTypes.dialog.mandatoryFamilies")}</Label>
               <p className="text-xs text-muted-foreground mb-1.5">
-                Diese Familien müssen in jedem Vertrag dieses Typs vorkommen.
+                {t("pages.admin.contractTypes.dialog.mandatoryHint")}
               </p>
               <ClauseFamilyMultiSelect
                 families={families ?? []}
@@ -2392,9 +2394,9 @@ function ContractTypesCard() {
               />
             </div>
             <div>
-              <Label>Verbotene Klauselfamilien</Label>
+              <Label>{t("pages.admin.contractTypes.dialog.forbiddenFamilies")}</Label>
               <p className="text-xs text-muted-foreground mb-1.5">
-                Diese Familien dürfen in einem Vertrag dieses Typs nicht vorkommen.
+                {t("pages.admin.contractTypes.dialog.forbiddenHint")}
               </p>
               <ClauseFamilyMultiSelect
                 families={families ?? []}
@@ -2412,13 +2414,13 @@ function ContractTypesCard() {
                 onChange={e => setActive(e.target.checked)}
                 data-testid="checkbox-ct-active"
               />
-              <Label htmlFor="ct-active">Aktiv</Label>
+              <Label htmlFor="ct-active">{t("pages.admin.contractTypes.dialog.active")}</Label>
             </div>
           </div>
           <AlertDialogFooter>
-            <AlertDialogCancel>Abbrechen</AlertDialogCancel>
+            <AlertDialogCancel>{t("common.cancel")}</AlertDialogCancel>
             <AlertDialogAction onClick={onSave} disabled={!name.trim() || (!editing && !code.trim())} data-testid="button-save-ct">
-              Speichern
+              {t("common.save")}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
@@ -2428,6 +2430,7 @@ function ContractTypesCard() {
 }
 
 function ContractPlaybooksCard() {
+  const { t } = useTranslation();
   const { data: playbooks, isLoading } = useListContractPlaybooks();
   const { data: types } = useListContractTypes();
   const qc = useQueryClient();
@@ -2478,7 +2481,7 @@ function ContractPlaybooksCard() {
             active,
           },
         });
-        toast({ title: "Playbook aktualisiert" });
+        toast({ title: t("pages.admin.contractPlaybooks.updated") });
       } else {
         await create.mutateAsync({
           data: {
@@ -2490,12 +2493,12 @@ function ContractPlaybooksCard() {
             defaultClauseVariantIds: defaults,
           },
         });
-        toast({ title: "Playbook angelegt" });
+        toast({ title: t("pages.admin.contractPlaybooks.created") });
       }
       await qc.invalidateQueries({ queryKey: getListContractPlaybooksQueryKey() });
       setOpen(false); reset();
     } catch (err: any) {
-      toast({ title: "Speichern fehlgeschlagen", description: err?.message, variant: "destructive" });
+      toast({ title: t("common.saveFailed"), description: err?.message, variant: "destructive" });
     }
   };
 
@@ -2503,13 +2506,13 @@ function ContractPlaybooksCard() {
     try {
       await del.mutateAsync({ id: pb.id });
       await qc.invalidateQueries({ queryKey: getListContractPlaybooksQueryKey() });
-      toast({ title: "Playbook gelöscht" });
+      toast({ title: t("pages.admin.contractPlaybooks.deleted") });
     } catch (err: any) {
-      toast({ title: "Löschen fehlgeschlagen", description: err?.message, variant: "destructive" });
+      toast({ title: t("common.deleteFailed"), description: err?.message, variant: "destructive" });
     }
   };
 
-  const typeName = (id: string) => types?.find(t => t.id === id)?.name ?? id;
+  const typeName = (id: string) => types?.find(ct => ct.id === id)?.name ?? id;
 
   return (
     <Card data-testid="card-contract-playbooks">
@@ -2517,14 +2520,14 @@ function ContractPlaybooksCard() {
         <div className="flex items-center gap-2">
           <Shield className="h-5 w-5 text-primary" />
           <div>
-            <CardTitle>Vertrags-Playbooks</CardTitle>
+            <CardTitle>{t("pages.admin.contractPlaybooks.title")}</CardTitle>
             <p className="text-sm text-muted-foreground mt-1">
-              Erlaubte und Default-Klauselvarianten je Vertragstyp und Brand.
+              {t("pages.admin.contractPlaybooks.subtitle")}
             </p>
           </div>
         </div>
         <Button size="sm" onClick={openCreate} disabled={(types?.length ?? 0) === 0} data-testid="button-new-playbook">
-          <Plus className="h-4 w-4 mr-1" /> Neues Playbook
+          <Plus className="h-4 w-4 mr-1" /> {t("pages.admin.contractPlaybooks.newPlaybook")}
         </Button>
       </CardHeader>
       <CardContent>
@@ -2532,19 +2535,19 @@ function ContractPlaybooksCard() {
           <Skeleton className="h-24 w-full" />
         ) : (playbooks?.length ?? 0) === 0 ? (
           <div className="p-6 text-center text-sm text-muted-foreground border rounded-md bg-muted/10">
-            Noch keine Playbooks angelegt.
+            {t("pages.admin.contractPlaybooks.empty")}
           </div>
         ) : (
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Name</TableHead>
-                <TableHead>Vertragstyp</TableHead>
-                <TableHead>Brands</TableHead>
-                <TableHead>Erlaubte Varianten</TableHead>
-                <TableHead>Defaults</TableHead>
-                <TableHead>Aktiv</TableHead>
-                <TableHead className="text-right">Aktion</TableHead>
+                <TableHead>{t("pages.admin.contractPlaybooks.colName")}</TableHead>
+                <TableHead>{t("pages.admin.contractPlaybooks.colContractType")}</TableHead>
+                <TableHead>{t("pages.admin.contractPlaybooks.colBrands")}</TableHead>
+                <TableHead>{t("pages.admin.contractPlaybooks.colAllowed")}</TableHead>
+                <TableHead>{t("pages.admin.contractPlaybooks.colDefaults")}</TableHead>
+                <TableHead>{t("pages.admin.contractPlaybooks.colActive")}</TableHead>
+                <TableHead className="text-right">{t("pages.admin.contractPlaybooks.colAction")}</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -2553,19 +2556,19 @@ function ContractPlaybooksCard() {
                   <TableCell className="font-medium">{pb.name}</TableCell>
                   <TableCell className="text-xs">{typeName(pb.contractTypeId)}</TableCell>
                   <TableCell className="text-xs text-muted-foreground">
-                    {pb.brandIds.length === 0 ? "alle" : pb.brandIds.join(", ")}
+                    {pb.brandIds.length === 0 ? t("pages.admin.contractPlaybooks.allBrands") : pb.brandIds.join(", ")}
                   </TableCell>
                   <TableCell className="text-xs text-muted-foreground">{pb.allowedClauseVariantIds.length}</TableCell>
                   <TableCell className="text-xs text-muted-foreground">{pb.defaultClauseVariantIds.length}</TableCell>
                   <TableCell>
                     <Badge variant="outline" className={pb.active ? "border-emerald-300 text-emerald-700" : "border-slate-300 text-slate-500"}>
-                      {pb.active ? "ja" : "nein"}
+                      {pb.active ? t("pages.admin.ja") : t("pages.admin.nein")}
                     </Badge>
                   </TableCell>
                   <TableCell className="text-right">
                     <div className="inline-flex gap-1.5">
                       <Button size="sm" variant="outline" onClick={() => openEdit(pb)} data-testid={`button-edit-pb-${pb.id}`}>
-                        Bearbeiten
+                        {t("pages.admin.contractPlaybooks.edit")}
                       </Button>
                       <Button size="sm" variant="outline" onClick={() => onDelete(pb)} data-testid={`button-delete-pb-${pb.id}`}>
                         <Trash2 className="h-3.5 w-3.5" />
@@ -2582,14 +2585,14 @@ function ContractPlaybooksCard() {
       <AlertDialog open={open} onOpenChange={setOpen}>
         <AlertDialogContent className="max-w-2xl">
           <AlertDialogHeader>
-            <AlertDialogTitle>{editing ? "Playbook bearbeiten" : "Neues Playbook"}</AlertDialogTitle>
+            <AlertDialogTitle>{editing ? t("pages.admin.contractPlaybooks.dialog.titleEdit") : t("pages.admin.contractPlaybooks.dialog.titleNew")}</AlertDialogTitle>
             <AlertDialogDescription>
-              Lege fest, welche Klauselvarianten für einen Vertragstyp erlaubt und welche Default sind.
+              {t("pages.admin.contractPlaybooks.dialog.description")}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <div className="grid gap-3 py-2">
             <div>
-              <Label>Vertragstyp</Label>
+              <Label>{t("pages.admin.contractPlaybooks.dialog.contractType")}</Label>
               <select
                 className="w-full px-3 py-2 border rounded-md text-sm bg-background"
                 value={contractTypeId}
@@ -2597,30 +2600,30 @@ function ContractPlaybooksCard() {
                 disabled={!!editing}
                 data-testid="select-pb-type"
               >
-                <option value="">— wählen —</option>
-                {(types ?? []).map(t => (
-                  <option key={t.id} value={t.id}>{t.name} ({t.code})</option>
+                <option value="">{t("pages.admin.contractPlaybooks.dialog.selectFallback")}</option>
+                {(types ?? []).map(ct => (
+                  <option key={ct.id} value={ct.id}>{ct.name} ({ct.code})</option>
                 ))}
               </select>
             </div>
             <div>
-              <Label>Name</Label>
+              <Label>{t("pages.admin.contractPlaybooks.dialog.name")}</Label>
               <Input value={name} onChange={e => setName(e.target.value)} data-testid="input-pb-name" />
             </div>
             <div>
-              <Label>Beschreibung</Label>
+              <Label>{t("pages.admin.contractPlaybooks.dialog.descriptionLabel")}</Label>
               <Input value={description} onChange={e => setDescription(e.target.value)} data-testid="input-pb-description" />
             </div>
             <div>
-              <Label>Brand-IDs (leer = alle, Komma-getrennt)</Label>
+              <Label>{t("pages.admin.contractPlaybooks.dialog.brandIds")}</Label>
               <CsvTagInput value={brandIds} onChange={setBrandIds} placeholder="brd_xxx" testId="input-pb-brands" />
             </div>
             <div>
-              <Label>Erlaubte Klausel-Varianten (cv_*, Komma-getrennt)</Label>
+              <Label>{t("pages.admin.contractPlaybooks.dialog.allowedVariants")}</Label>
               <CsvTagInput value={allowed} onChange={setAllowed} placeholder="cv_xxx, cv_yyy" testId="input-pb-allowed" />
             </div>
             <div>
-              <Label>Default-Klausel-Varianten (Komma-getrennt)</Label>
+              <Label>{t("pages.admin.contractPlaybooks.dialog.defaultVariants")}</Label>
               <CsvTagInput value={defaults} onChange={setDefaults} placeholder="cv_xxx" testId="input-pb-defaults" />
             </div>
             <div className="flex items-center gap-2">
@@ -2631,17 +2634,17 @@ function ContractPlaybooksCard() {
                 onChange={e => setActive(e.target.checked)}
                 data-testid="checkbox-pb-active"
               />
-              <Label htmlFor="pb-active">Aktiv</Label>
+              <Label htmlFor="pb-active">{t("pages.admin.contractPlaybooks.dialog.active")}</Label>
             </div>
           </div>
           <AlertDialogFooter>
-            <AlertDialogCancel>Abbrechen</AlertDialogCancel>
+            <AlertDialogCancel>{t("common.cancel")}</AlertDialogCancel>
             <AlertDialogAction
               onClick={onSave}
               disabled={!name.trim() || (!editing && !contractTypeId)}
               data-testid="button-save-pb"
             >
-              Speichern
+              {t("common.save")}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

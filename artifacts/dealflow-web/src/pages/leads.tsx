@@ -374,7 +374,7 @@ export default function Leads() {
                           <DropdownMenuSeparator />
                           {lead.status !== "converted" && (
                             <DropdownMenuItem onSelect={() => setEditLead(lead)} data-testid={`item-edit-${lead.id}`}>
-                              <Pencil className="mr-2 h-3.5 w-3.5" /> {t("common.edit", { defaultValue: "Bearbeiten" })}
+                              <Pencil className="mr-2 h-3.5 w-3.5" /> {t("common.edit", { defaultValue: "Edit" })}
                             </DropdownMenuItem>
                           )}
                           {lead.status === "new" && (
@@ -708,7 +708,7 @@ export function ConvertDialog({
       setAccWebsite("");
       setAccPhone(lead.phone ?? "");
       setWithDeal(false);
-      setDealName(`${lead.companyName ?? lead.name} – Erstgeschäft`);
+      setDealName(`${lead.companyName ?? lead.name} – First deal`);
       setDealValue("0");
       setDealCurrency("EUR");
       const d = new Date();

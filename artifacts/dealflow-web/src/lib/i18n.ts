@@ -12,11 +12,11 @@ i18n
       de: { translation: de },
       en: { translation: en },
     },
-    fallbackLng: "de",
+    fallbackLng: "en",
     supportedLngs: ["de", "en"],
     interpolation: { escapeValue: false },
     detection: {
-      order: ["localStorage", "navigator"],
+      order: ["localStorage"],
       caches: ["localStorage"],
       lookupLocalStorage: "dealflow.lang",
     },

@@ -29,7 +29,7 @@ export type SubjectType = "contact";
 
 export function pseudonymFor(id: string, field: string): string {
   const h = createHash("sha256").update(`${id}:${field}`).digest("hex").slice(0, 8);
-  return `[GELÖSCHT-${h}]`;
+  return `[DELETED-${h}]`;
 }
 
 async function collectForContact(
@@ -231,7 +231,7 @@ export async function forgetSubject(
     actor,
     beforeJson: JSON.stringify(before),
     afterJson: null,
-    summary: `Kontakt pseudonymisiert (DSGVO Löschung) von ${actor}`,
+    summary: `Contact pseudonymized (GDPR erasure) by ${actor}`,
   });
 
   return { ok: true };

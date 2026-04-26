@@ -39,7 +39,7 @@ export default function Deal() {
   useTrackRecent(deal ? { kind: "deal", id: deal.id, label: deal.name, href: `/deals/${deal.id}` } : null);
 
   if (isLoading) return <div className="p-8"><Skeleton className="h-64 w-full" /></div>;
-  if (!deal) return <div className="p-8">Deal nicht gefunden.</div>;
+  if (!deal) return <div className="p-8">Deal not found.</div>;
 
   const stages = (pipeline?.stages ?? []).map((s) => ({ value: s.stage, label: s.label }));
   const stageLabel = stages.find((s) => s.value === deal.stage)?.label ?? deal.stage;
@@ -52,9 +52,9 @@ export default function Deal() {
         qc.invalidateQueries({ queryKey: getListDealsQueryKey() }),
         qc.invalidateQueries({ queryKey: getGetDealPipelineQueryKey() }),
       ]);
-      toast({ title: "Gespeichert" });
+      toast({ title: "Saved" });
     } catch (e) {
-      toast({ title: "Fehler", description: e instanceof Error ? e.message : "", variant: "destructive" });
+      toast({ title: "Error", description: e instanceof Error ? e.message : "", variant: "destructive" });
       throw e;
     }
   }
@@ -71,7 +71,7 @@ export default function Deal() {
         <div className="flex items-start justify-between gap-4">
           <h1 className="text-3xl font-bold tracking-tight">
             <InlineEditField
-              ariaLabel="Deal-Name"
+              ariaLabel="Deal name"
               value={deal.name}
               onSubmit={(v) => patch({ name: v })}
               testId="deal-name-edit"
@@ -80,10 +80,10 @@ export default function Deal() {
           </h1>
           <div className="flex items-center gap-2">
             <Button onClick={() => setWizardOpen(true)} data-testid="deal-new-quote-button">
-              <Plus className="h-4 w-4 mr-1" /> Neues Angebot
+              <Plus className="h-4 w-4 mr-1" /> Neues Quote
             </Button>
             <Badge variant={deal.riskLevel === "high" ? "destructive" : "secondary"}>
-              Risiko: {deal.riskLevel}
+              Risk: {deal.riskLevel}
             </Badge>
           </div>
         </div>
@@ -101,7 +101,7 @@ export default function Deal() {
           />
           <span aria-hidden>•</span>
           <InlineEditField
-            ariaLabel="Wert"
+            ariaLabel="Value"
             kind="currency"
             value={deal.value}
             display={`${deal.value.toLocaleString("de-DE")} ${deal.currency}`}
@@ -110,10 +110,10 @@ export default function Deal() {
           />
           <span aria-hidden>•</span>
           <InlineEditField
-            ariaLabel="Wahrscheinlichkeit"
+            ariaLabel="Probability"
             kind="number"
             value={deal.probability}
-            display={`${deal.probability}% Wahrscheinlichkeit`}
+            display={`${deal.probability}% Probability`}
             onSubmit={(v) => patch({ probability: Number(v) })}
             testId="deal-prob-edit"
           />
@@ -125,9 +125,9 @@ export default function Deal() {
           <AiPromptPanel mode="deal.summary" entityId={id} />
           <Tabs defaultValue="overview">
             <TabsList>
-              <TabsTrigger value="overview">Übersicht</TabsTrigger>
-              <TabsTrigger value="quotes">Angebote ({deal.quotes.length})</TabsTrigger>
-              <TabsTrigger value="contracts">Verträge ({deal.contracts.length})</TabsTrigger>
+              <TabsTrigger value="overview">Overview</TabsTrigger>
+              <TabsTrigger value="quotes">Quotes ({deal.quotes.length})</TabsTrigger>
+              <TabsTrigger value="contracts">Contracts ({deal.contracts.length})</TabsTrigger>
             </TabsList>
             <TabsContent value="overview" className="mt-4">
               <Card>
@@ -139,9 +139,9 @@ export default function Deal() {
                       <span className="text-muted-foreground">{deal.ownerName}</span>
                     </div>
                     <div>
-                      <span className="font-medium mr-2">Close-Datum:</span>
+                      <span className="font-medium mr-2">Close date:</span>
                       <InlineEditField
-                        ariaLabel="Close-Datum"
+                        ariaLabel="Close date"
                         kind="date"
                         value={deal.expectedCloseDate?.slice(0, 10) ?? ""}
                         display={new Date(deal.expectedCloseDate).toLocaleDateString("de-DE")}
@@ -150,9 +150,9 @@ export default function Deal() {
                       />
                     </div>
                     <div>
-                      <span className="font-medium mr-2">Nächster Schritt:</span>
+                      <span className="font-medium mr-2">Next step:</span>
                       <InlineEditField
-                        ariaLabel="Nächster Schritt"
+                        ariaLabel="Next step"
                         value={deal.nextStep ?? ""}
                         emptyText="—"
                         onSubmit={(v) => patch({ nextStep: v })}
@@ -165,9 +165,9 @@ export default function Deal() {
             </TabsContent>
             <TabsContent value="quotes" className="mt-4">
               <Card>
-                <CardHeader><CardTitle>Angebote</CardTitle></CardHeader>
+                <CardHeader><CardTitle>Quotes</CardTitle></CardHeader>
                 <CardContent>
-                  {deal.quotes.length === 0 && <div className="text-center text-sm text-muted-foreground py-4">Noch keine Angebote.</div>}
+                  {deal.quotes.length === 0 && <div className="text-center text-sm text-muted-foreground py-4">Noch keine Quotes.</div>}
                   {deal.quotes.map((q) => (
                     <div key={q.id} className="py-2 border-b last:border-0 flex justify-between text-sm">
                       <span>{q.number}</span>
@@ -179,9 +179,9 @@ export default function Deal() {
             </TabsContent>
             <TabsContent value="contracts" className="mt-4">
               <Card>
-                <CardHeader><CardTitle>Verträge</CardTitle></CardHeader>
+                <CardHeader><CardTitle>Contracts</CardTitle></CardHeader>
                 <CardContent>
-                  {deal.contracts.length === 0 && <div className="text-center text-sm text-muted-foreground py-4">Noch keine Verträge.</div>}
+                  {deal.contracts.length === 0 && <div className="text-center text-sm text-muted-foreground py-4">Noch keine Contracts.</div>}
                   {deal.contracts.map((c) => (
                     <div key={c.id} className="py-2 border-b last:border-0 flex justify-between text-sm">
                       <span>{c.title}</span>
@@ -196,7 +196,7 @@ export default function Deal() {
 
         <div className="lg:col-span-1">
           <Card>
-            <CardHeader><CardTitle>Aktivität</CardTitle></CardHeader>
+            <CardHeader><CardTitle>Activity</CardTitle></CardHeader>
             <CardContent>
               <ActivityTimeline entityType="deal" entityId={id} />
             </CardContent>

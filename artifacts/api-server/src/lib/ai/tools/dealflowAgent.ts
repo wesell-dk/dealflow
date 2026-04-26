@@ -301,10 +301,10 @@ export const createAccountTool: AgentTool<
 > = {
   name: 'create_account',
   description:
-    'Legt einen neuen Kunden (Account) an. Pflicht: name, industry, country (z.B. ' +
-    "'Deutschland', 'Schweiz'). Liefert die neue id zurück. Verwende dieses Tool, " +
-    'wenn der Nutzer einen neuen Kunden anlegen will und alle drei Felder genannt ' +
-    'oder offensichtlich abzuleiten sind. Sonst frage zuerst nach.',
+    'Creates a new customer (account). Required: name, industry, country (e.g. ' +
+    "'Germany', 'Switzerland'). Returns the new id. Use this tool when the user " +
+    'wants to create a new customer and all three fields are stated or obvious. ' +
+    'Otherwise ask first.',
   inputSchema: CreateAccountInput,
   mutating: true,
   async execute({ input, req, scope }) {
@@ -323,7 +323,7 @@ export const createAccountTool: AgentTool<
       entityId: id,
       action: 'create',
       actor: `${scope.user.name} (HelpBot)`,
-      summary: `Kunde "${input.name}" via Help-Bot angelegt`,
+      summary: `Customer "${input.name}" created via Help Bot`,
       scope: activeScopeSnapshot(scope),
       after: { id, ...input },
     });
@@ -369,7 +369,7 @@ export const createContactTool: AgentTool<
       entityId: id,
       action: 'create',
       actor: `${scope.user.name} (HelpBot)`,
-      summary: `Kontakt "${input.name}" via Help-Bot angelegt`,
+      summary: `Contact "${input.name}" created via Help Bot`,
       scope: activeScopeSnapshot(scope),
       after: { id, ...input },
     });
@@ -459,7 +459,7 @@ export const createDealTool: AgentTool<
       entityId: id,
       action: 'create',
       actor: `${scope.user.name} (HelpBot)`,
-      summary: `Deal "${input.name}" via Help-Bot angelegt (${input.value} ${company.currency})`,
+      summary: `Deal "${input.name}" created via Help Bot (${input.value} ${company.currency})`,
       scope: activeScopeSnapshot(scope),
       after: { id, name: input.name, accountId: input.accountId, value: input.value, stage, brandId, companyId },
     });

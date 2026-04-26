@@ -46,7 +46,7 @@ export function CSVExportButton<T>({ filename, rows, columns, testId, disabled }
     a.click();
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
-    toast({ title: "Export bereit", description: `${rows.length} Einträge → ${filename}` });
+    toast({ title: "Export ready", description: `${rows.length} entries → ${filename}` });
   }
 
   return (

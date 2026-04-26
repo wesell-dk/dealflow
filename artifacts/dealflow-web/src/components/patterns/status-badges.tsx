@@ -103,17 +103,17 @@ const RISK_TONE: Record<string, Tone> = {
   critical: "danger",
 };
 const RISK_LABEL: Record<string, string> = {
-  low: "Niedrig",
-  medium: "Mittel",
-  high: "Hoch",
-  critical: "Kritisch",
+  low: "Low",
+  medium: "Medium",
+  high: "High",
+  critical: "Critical",
 };
 export function RiskBadge({ risk, className, testId }: { risk: string | null | undefined; className?: string; testId?: string }) {
   const k = (risk ?? "medium").toLowerCase();
   const tone = RISK_TONE[k] ?? "neutral";
   const label = RISK_LABEL[k] ?? risk ?? "—";
   return (
-    <ToneBadge tone={tone} className={className} testId={testId} title={`Risiko: ${label}`}>
+    <ToneBadge tone={tone} className={className} testId={testId} title={`Risk: ${label}`}>
       {label}
     </ToneBadge>
   );
@@ -154,14 +154,14 @@ const CONTRACT_STATUS_TONE: Record<string, Tone> = {
   archived: "muted",
 };
 const CONTRACT_STATUS_LABEL: Record<string, string> = {
-  draft: "Entwurf",
-  in_review: "In Prüfung",
-  pending_signature: "Wartet auf Signatur",
-  signed: "Signiert",
-  active: "Aktiv",
-  expired: "Abgelaufen",
-  terminated: "Gekündigt",
-  archived: "Archiviert",
+  draft: "Draft",
+  in_review: "In review",
+  pending_signature: "Awaiting signature",
+  signed: "Signed",
+  active: "Active",
+  expired: "Expired",
+  terminated: "Terminated",
+  archived: "Archived",
 };
 export function ContractStatusBadge({ status, className, testId }: { status: string | null | undefined; className?: string; testId?: string }) {
   const k = (status ?? "").toLowerCase();
@@ -186,14 +186,14 @@ const QUOTE_STATUS_TONE: Record<string, Tone> = {
   superseded: "muted",
 };
 const QUOTE_STATUS_LABEL: Record<string, string> = {
-  draft: "Entwurf",
-  in_review: "In Prüfung",
-  approved: "Freigegeben",
-  sent: "Versandt",
-  accepted: "Akzeptiert",
-  rejected: "Abgelehnt",
-  expired: "Abgelaufen",
-  superseded: "Ersetzt",
+  draft: "Draft",
+  in_review: "In review",
+  approved: "Approved",
+  sent: "Sent",
+  accepted: "Accepted",
+  rejected: "Rejected",
+  expired: "Expired",
+  superseded: "Superseded",
 };
 export function QuoteStatusBadge({ status, className, testId }: { status: string | null | undefined; className?: string; testId?: string }) {
   const k = (status ?? "").toLowerCase();
@@ -216,12 +216,12 @@ const APPROVAL_STATUS_TONE: Record<string, Tone> = {
   expired: "danger",
 };
 const APPROVAL_STATUS_LABEL: Record<string, string> = {
-  pending: "Offen",
-  in_review: "In Prüfung",
-  approved: "Freigegeben",
-  rejected: "Abgelehnt",
-  withdrawn: "Zurückgezogen",
-  expired: "Abgelaufen",
+  pending: "Pending",
+  in_review: "In review",
+  approved: "Approved",
+  rejected: "Rejected",
+  withdrawn: "Withdrawn",
+  expired: "Expired",
 };
 export function ApprovalStatusBadge({ status, className, testId }: { status: string | null | undefined; className?: string; testId?: string }) {
   const k = (status ?? "").toLowerCase();
@@ -245,13 +245,13 @@ const SIGNATURE_STATUS_TONE: Record<string, Tone> = {
   cancelled: "muted",
 };
 const SIGNATURE_STATUS_LABEL: Record<string, string> = {
-  draft: "Entwurf",
-  in_progress: "Läuft",
-  pending: "Wartet",
-  completed: "Abgeschlossen",
-  declined: "Abgelehnt",
-  expired: "Abgelaufen",
-  cancelled: "Abgebrochen",
+  draft: "Draft",
+  in_progress: "In progress",
+  pending: "Awaiting",
+  completed: "Completed",
+  declined: "Declined",
+  expired: "Expired",
+  cancelled: "Cancelled",
 };
 export function SignatureStatusBadge({ status, className, testId }: { status: string | null | undefined; className?: string; testId?: string }) {
   const k = (status ?? "").toLowerCase();
@@ -273,11 +273,11 @@ const OBLIGATION_STATUS_TONE: Record<string, Tone> = {
   waived: "muted",
 };
 const OBLIGATION_STATUS_LABEL: Record<string, string> = {
-  open: "Offen",
-  in_progress: "In Arbeit",
-  completed: "Erfüllt",
-  overdue: "Überfällig",
-  waived: "Entfallen",
+  open: "Open",
+  in_progress: "In progress",
+  completed: "Completed",
+  overdue: "Overdue",
+  waived: "Waived",
 };
 export function ObligationStatusBadge({ status, className, testId }: { status: string | null | undefined; className?: string; testId?: string }) {
   const k = (status ?? "").toLowerCase();
@@ -298,10 +298,10 @@ const NEGOTIATION_STATUS_TONE: Record<string, Tone> = {
   lost: "danger",
 };
 const NEGOTIATION_STATUS_LABEL: Record<string, string> = {
-  active: "Aktiv",
-  on_hold: "Pausiert",
-  concluded: "Abgeschlossen",
-  lost: "Verloren",
+  active: "Active",
+  on_hold: "On hold",
+  concluded: "Concluded",
+  lost: "Lost",
 };
 export function NegotiationStatusBadge({ status, className, testId }: { status: string | null | undefined; className?: string; testId?: string }) {
   const k = (status ?? "").toLowerCase();
@@ -323,11 +323,11 @@ const PI_STATUS_TONE: Record<string, Tone> = {
   cancelled: "muted",
 };
 const PI_STATUS_LABEL: Record<string, string> = {
-  draft: "Entwurf",
-  active: "Aktiv",
-  in_progress: "Läuft",
-  completed: "Abgeschlossen",
-  cancelled: "Abgebrochen",
+  draft: "Draft",
+  active: "Active",
+  in_progress: "In progress",
+  completed: "Completed",
+  cancelled: "Cancelled",
 };
 export function PriceIncreaseStatusBadge({ status, className, testId }: { status: string | null | undefined; className?: string; testId?: string }) {
   const k = (status ?? "").toLowerCase();
@@ -350,12 +350,12 @@ const OC_STATUS_TONE: Record<string, Tone> = {
   blocked: "danger",
 };
 const OC_STATUS_LABEL: Record<string, string> = {
-  pending: "Offen",
-  in_progress: "In Arbeit",
-  ready: "Bereit",
-  handover: "Übergabe",
-  completed: "Abgeschlossen",
-  blocked: "Blockiert",
+  pending: "Pending",
+  in_progress: "In progress",
+  ready: "Ready",
+  handover: "Handover",
+  completed: "Completed",
+  blocked: "Blocked",
 };
 export function OrderConfirmationStatusBadge({ status, className, testId }: { status: string | null | undefined; className?: string; testId?: string }) {
   const k = (status ?? "").toLowerCase();
@@ -378,12 +378,12 @@ const RENEWAL_BUCKET_TONE: Record<string, Tone> = {
   later: "muted",
 };
 const RENEWAL_BUCKET_LABEL: Record<string, string> = {
-  overdue: "Überfällig",
-  this_month: "Diesen Monat",
-  next_month: "Nächster Monat",
-  this_quarter: "Dieses Quartal",
-  next_quarter: "Nächstes Quartal",
-  later: "Später",
+  overdue: "Overdue",
+  this_month: "This month",
+  next_month: "Next month",
+  this_quarter: "This quarter",
+  next_quarter: "Next quarter",
+  later: "Later",
 };
 export function RenewalBucketBadge({ bucket, className, testId }: { bucket: string | null | undefined; className?: string; testId?: string }) {
   const k = (bucket ?? "").toLowerCase();
@@ -409,15 +409,15 @@ const NEGOTIATION_REACTION_TONE: Record<string, Tone> = {
   deferred: "muted",
 };
 const NEGOTIATION_REACTION_LABEL: Record<string, string> = {
-  question: "Frage",
-  objection: "Einwand",
-  counterproposal: "Gegenvorschlag",
-  acceptance: "Akzeptiert",
-  partial: "Teilweise",
-  price_rejected: "Preis abgelehnt",
-  clause_rejected: "Klausel abgelehnt",
-  term_change: "Laufzeit-Änderung",
-  deferred: "Vertagt",
+  question: "Question",
+  objection: "Objection",
+  counterproposal: "Counterproposal",
+  acceptance: "Accepted",
+  partial: "Partial",
+  price_rejected: "Price rejected",
+  clause_rejected: "Clause rejected",
+  term_change: "Term change",
+  deferred: "Deferred",
 };
 export function NegotiationReactionBadge({ type, className, testId }: { type: string | null | undefined; className?: string; testId?: string }) {
   const k = (type ?? "").toLowerCase();

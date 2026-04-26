@@ -90,12 +90,12 @@ router.post("/login", async (req, res) => {
   const email = (b?.email ?? "").trim().toLowerCase();
   const password = b?.password ?? "";
   if (!email || !password) {
-    res.status(400).json({ error: "email und password erforderlich" });
+    res.status(400).json({ error: "email and password are required" });
     return;
   }
   const [u] = await db.select().from(usersTable).where(eq(usersTable.email, email));
   if (!u || !u.isActive || !verifyPassword(password, u.passwordHash)) {
-    res.status(401).json({ error: "Login fehlgeschlagen" });
+    res.status(401).json({ error: "Login failed" });
     return;
   }
   const sid = await createSession(u.id);

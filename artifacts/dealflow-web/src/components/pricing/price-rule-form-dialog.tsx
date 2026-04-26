@@ -31,9 +31,9 @@ interface Props {
 }
 
 const STATUS_OPTIONS: Array<{ value: "draft" | "active" | "archived"; label: string }> = [
-  { value: "draft", label: "Entwurf" },
-  { value: "active", label: "Aktiv" },
-  { value: "archived", label: "Archiviert" },
+  { value: "draft", label: "Draft" },
+  { value: "active", label: "Active" },
+  { value: "archived", label: "Archived" },
 ];
 
 const SCOPE_GLOBAL = "global";
@@ -105,19 +105,19 @@ export function PriceRuleFormDialog({ open, onOpenChange, rule }: Props) {
     const trimmedEffect = effect.trim();
     const prio = Number(priority);
     if (!trimmedName) {
-      toast({ title: "Name fehlt", variant: "destructive" });
+      toast({ title: "Name missing", variant: "destructive" });
       return;
     }
     if (scopeKind !== "global" && !scopeTarget) {
-      toast({ title: "Scope-Ziel fehlt", description: "Bitte Marke oder Gesellschaft wählen.", variant: "destructive" });
+      toast({ title: "Scope target missing", description: "Please choose a brand or company.", variant: "destructive" });
       return;
     }
     if (!trimmedCondition || !trimmedEffect) {
-      toast({ title: "Bedingung & Effekt erforderlich", variant: "destructive" });
+      toast({ title: "Condition & effect required", variant: "destructive" });
       return;
     }
     if (!Number.isFinite(prio) || prio < 0) {
-      toast({ title: "Ungültige Priorität", description: "Ganze nicht-negative Zahl.", variant: "destructive" });
+      toast({ title: "Invalid priority", description: "Whole, non-negative number.", variant: "destructive" });
       return;
     }
     try {
@@ -131,7 +131,7 @@ export function PriceRuleFormDialog({ open, onOpenChange, rule }: Props) {
           status,
         };
         await updateMut.mutateAsync({ id: rule.id, data: patch });
-        toast({ title: "Pricing-Regel aktualisiert", description: trimmedName });
+        toast({ title: "Pricing rule updated", description: trimmedName });
       } else {
         const body: PriceRuleInput = {
           name: trimmedName,
@@ -142,7 +142,7 @@ export function PriceRuleFormDialog({ open, onOpenChange, rule }: Props) {
           status,
         };
         await createMut.mutateAsync({ data: body });
-        toast({ title: "Pricing-Regel angelegt", description: trimmedName });
+        toast({ title: "Pricing rule created", description: trimmedName });
       }
       await qc.invalidateQueries({ queryKey: getListPriceRulesQueryKey() });
       onOpenChange(false);
@@ -150,8 +150,8 @@ export function PriceRuleFormDialog({ open, onOpenChange, rule }: Props) {
       const st = (e as { response?: { status?: number } })?.response?.status;
       const body = (e as { response?: { data?: { error?: string } } })?.response?.data;
       toast({
-        title: st === 403 ? "Keine Berechtigung" : "Speichern fehlgeschlagen",
-        description: body?.error ?? (e instanceof Error ? e.message : "Unbekannter Fehler"),
+        title: st === 403 ? "Not authorized" : "Save failed",
+        description: body?.error ?? (e instanceof Error ? e.message : "Unknown error"),
         variant: "destructive",
       });
     }
@@ -163,10 +163,10 @@ export function PriceRuleFormDialog({ open, onOpenChange, rule }: Props) {
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-2xl">
         <DialogHeader>
-          <DialogTitle>{isEdit ? "Pricing-Regel bearbeiten" : "Neue Pricing-Regel"}</DialogTitle>
+          <DialogTitle>{isEdit ? "Edit pricing rule" : "New pricing rule"}</DialogTitle>
           <DialogDescription>
-            Regeln greifen in der Reihenfolge ihrer Priorität (niedrigere Zahl = früher).
-            Scope bestimmt, wofür die Regel gilt — global, eine Marke oder eine Gesellschaft.
+            Rules apply in order of their priority (lower number = earlier).
+            Scope determines what the rule applies to — global, a brand or a company.
           </DialogDescription>
         </DialogHeader>
 
@@ -178,23 +178,23 @@ export function PriceRuleFormDialog({ open, onOpenChange, rule }: Props) {
 
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1.5">
-              <Label>Scope-Typ</Label>
+              <Label>Scope type</Label>
               <Select value={scopeKind} onValueChange={(v) => { setScopeKind(v as typeof scopeKind); setScopeTarget(""); }}>
                 <SelectTrigger data-testid="select-pr-scope-kind"><SelectValue /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value={SCOPE_GLOBAL}>Global</SelectItem>
-                  <SelectItem value={SCOPE_COMPANY}>Gesellschaft</SelectItem>
-                  <SelectItem value={SCOPE_BRAND}>Marke</SelectItem>
+                  <SelectItem value={SCOPE_COMPANY}>Company</SelectItem>
+                  <SelectItem value={SCOPE_BRAND}>Brand</SelectItem>
                 </SelectContent>
               </Select>
             </div>
             <div className="space-y-1.5">
-              <Label>Scope-Ziel{scopeKind === "global" ? "" : " *"}</Label>
+              <Label>Scope target{scopeKind === "global" ? "" : " *"}</Label>
               {scopeKind === "global" ? (
-                <Input value="Alle Marken & Gesellschaften" disabled />
+                <Input value="All brands & companies" disabled />
               ) : scopeKind === "_company_" ? (
                 <Select value={scopeTarget} onValueChange={setScopeTarget}>
-                  <SelectTrigger data-testid="select-pr-scope-company"><SelectValue placeholder={companiesQ.isLoading ? "Lade …" : "Wählen"} /></SelectTrigger>
+                  <SelectTrigger data-testid="select-pr-scope-company"><SelectValue placeholder={companiesQ.isLoading ? "Loading…" : "Choose"} /></SelectTrigger>
                   <SelectContent>
                     {(companiesQ.data ?? []).map(c => (
                       <SelectItem key={c.id} value={c.id} textValue={c.name}>{c.name}</SelectItem>
@@ -203,7 +203,7 @@ export function PriceRuleFormDialog({ open, onOpenChange, rule }: Props) {
                 </Select>
               ) : (
                 <Select value={scopeTarget} onValueChange={setScopeTarget}>
-                  <SelectTrigger data-testid="select-pr-scope-brand"><SelectValue placeholder={brandsQ.isLoading ? "Lade …" : "Wählen"} /></SelectTrigger>
+                  <SelectTrigger data-testid="select-pr-scope-brand"><SelectValue placeholder={brandsQ.isLoading ? "Loading…" : "Choose"} /></SelectTrigger>
                   <SelectContent>
                     {(brandsQ.data ?? []).map(b => (
                       <SelectItem key={b.id} value={b.id} textValue={b.name}>{b.name}</SelectItem>
@@ -216,7 +216,7 @@ export function PriceRuleFormDialog({ open, onOpenChange, rule }: Props) {
 
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1.5">
-              <Label htmlFor="pr-condition">Bedingung *</Label>
+              <Label htmlFor="pr-condition">Condition *</Label>
               <Textarea
                 id="pr-condition"
                 value={condition}
@@ -227,12 +227,12 @@ export function PriceRuleFormDialog({ open, onOpenChange, rule }: Props) {
                 data-testid="input-pr-condition"
               />
               <p className="text-[11px] text-muted-foreground">
-                Frei-Text — z. B. <code className="font-mono">quantity {">"}= 10</code> oder
+                Free text — e.g. <code className="font-mono">quantity {">"}= 10</code> or
                 <code className="font-mono"> total {">"} 50000 EUR</code>.
               </p>
             </div>
             <div className="space-y-1.5">
-              <Label htmlFor="pr-effect">Effekt *</Label>
+              <Label htmlFor="pr-effect">Effect *</Label>
               <Textarea
                 id="pr-effect"
                 value={effect}
@@ -243,14 +243,14 @@ export function PriceRuleFormDialog({ open, onOpenChange, rule }: Props) {
                 data-testid="input-pr-effect"
               />
               <p className="text-[11px] text-muted-foreground">
-                z. B. <code className="font-mono">apply 5% discount</code>.
+                e.g. <code className="font-mono">apply 5% discount</code>.
               </p>
             </div>
           </div>
 
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1.5">
-              <Label htmlFor="pr-priority">Priorität *</Label>
+              <Label htmlFor="pr-priority">Priority *</Label>
               <Input
                 id="pr-priority"
                 type="number"
@@ -260,7 +260,7 @@ export function PriceRuleFormDialog({ open, onOpenChange, rule }: Props) {
                 onChange={e => setPriority(e.target.value)}
                 data-testid="input-pr-priority"
               />
-              <p className="text-[11px] text-muted-foreground">Niedrigere Zahl wird zuerst evaluiert.</p>
+              <p className="text-[11px] text-muted-foreground">Lower number is evaluated first.</p>
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="pr-status">Status</Label>
@@ -275,10 +275,10 @@ export function PriceRuleFormDialog({ open, onOpenChange, rule }: Props) {
         </div>
 
         <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)} disabled={busy}>Abbrechen</Button>
+          <Button variant="outline" onClick={() => onOpenChange(false)} disabled={busy}>Cancel</Button>
           <Button onClick={submit} disabled={busy} data-testid="button-pr-submit">
             {busy && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-            {isEdit ? "Speichern" : "Anlegen"}
+            {isEdit ? "Save" : "Create"}
           </Button>
         </DialogFooter>
       </DialogContent>

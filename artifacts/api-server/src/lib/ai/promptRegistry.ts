@@ -79,17 +79,17 @@ export const diagnosticPing: PromptDefinition<
   // Haiku — günstig, schnell, ausreichend für einen Health-Roundtrip.
   model: 'claude-haiku-4-5',
   system:
-    'Du bist der Health-Probe für DealFlow.One. Antworte ausschließlich über ' +
-    'das bereitgestellte Tool. Setze ok=true, kopiere echoed exakt aus dem ' +
-    'Input und schreibe einen einzigen kurzen deutschen Satz (max. 80 Zeichen) ' +
-    'in note, der bestätigt, dass die AI-Verbindung funktioniert. Keine ' +
-    'weiteren Felder. Keine Marketing-Sprache.',
+    'You are the health probe for DealFlow.One. Respond exclusively via the ' +
+    'provided tool. Set ok=true, copy echoed exactly from the input, and write ' +
+    'a single short English sentence (max. 80 characters) in note confirming ' +
+    'that the AI connection is working. No additional fields. No marketing ' +
+    'language.',
   buildUser: (input) =>
-    `Bitte führe einen Health-Check aus.\nInput-Echo: "${input.echo}"`,
+    `Please run a health check.\nInput echo: "${input.echo}"`,
   outputSchema: DiagnosticPingOutput,
   toolDescription:
-    'Bestätigt erfolgreichen AI-Roundtrip. Setzt ok=true, echoed = Input-Echo, ' +
-    'note = kurzer deutscher Bestätigungssatz.',
+    'Confirms a successful AI roundtrip. Sets ok=true, echoed = input echo, ' +
+    'note = short English confirmation sentence.',
   toolName: 'report_health',
 };
 

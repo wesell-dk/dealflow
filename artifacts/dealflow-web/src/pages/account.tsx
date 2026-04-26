@@ -61,7 +61,7 @@ export default function Account() {
   }
 
   if (!account) {
-    return <div className="p-8">Account nicht gefunden.</div>;
+    return <div className="p-8">Account not found.</div>;
   }
 
   const ownerName = users.find((u) => u.id === account.ownerId)?.name;
@@ -73,9 +73,9 @@ export default function Account() {
         qc.invalidateQueries({ queryKey: getGetAccountQueryKey(id) }),
         qc.invalidateQueries({ queryKey: getListAccountsQueryKey() }),
       ]);
-      toast({ title: "Gespeichert" });
+      toast({ title: "Saved" });
     } catch (e) {
-      toast({ title: "Fehler", description: e instanceof Error ? e.message : "", variant: "destructive" });
+      toast({ title: "Error", description: e instanceof Error ? e.message : "", variant: "destructive" });
       throw e;
     }
   }
@@ -104,17 +104,17 @@ export default function Account() {
             </h1>
             <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-muted-foreground">
               <span className="inline-flex items-center gap-1"><Building className="h-3.5 w-3.5" />
-                <InlineEditField ariaLabel="Branche" value={account.industry} onSubmit={(v) => patch({ industry: v })} testId="account-industry-edit" />
+                <InlineEditField ariaLabel="Industry" value={account.industry} onSubmit={(v) => patch({ industry: v })} testId="account-industry-edit" />
               </span>
               <span aria-hidden>•</span>
-              <InlineEditField ariaLabel="Land" value={account.country} onSubmit={(v) => patch({ country: v })} testId="account-country-edit" />
+              <InlineEditField ariaLabel="Country" value={account.country} onSubmit={(v) => patch({ country: v })} testId="account-country-edit" />
               <span aria-hidden>•</span>
               <span>Owner: <InlineEditField
                 ariaLabel="Owner"
                 kind="select"
                 options={users.map((u) => ({ value: u.id, label: u.name }))}
                 value={account.ownerId ?? ""}
-                display={<span className={ownerName ? "" : "text-muted-foreground italic"}>{ownerName ?? "Nicht zugewiesen"}</span>}
+                display={<span className={ownerName ? "" : "text-muted-foreground italic"}>{ownerName ?? "Unassigned"}</span>}
                 onSubmit={(v) => patch({ ownerId: v || null })}
                 testId="account-owner-edit"
               /></span>
@@ -123,10 +123,10 @@ export default function Account() {
           <div className="flex flex-col items-end gap-3">
             <div className="flex gap-2">
               <Button size="sm" variant="outline" onClick={() => setEditOpen(true)} data-testid="account-edit-button">
-                <Pencil className="h-4 w-4 mr-1" /> Bearbeiten
+                <Pencil className="h-4 w-4 mr-1" /> Edit
               </Button>
               <Button size="sm" onClick={() => setDealOpen(true)} data-testid="account-new-deal-button">
-                <Plus className="h-4 w-4 mr-1" /> Deal anlegen
+                <Plus className="h-4 w-4 mr-1" /> Create deal
               </Button>
             </div>
             <div className="text-sm font-medium text-muted-foreground">Health Score</div>
@@ -141,11 +141,11 @@ export default function Account() {
 
         <div className="flex flex-wrap gap-6 mt-2">
           <div>
-            <div className="text-sm text-muted-foreground">Offene Deals</div>
+            <div className="text-sm text-muted-foreground">Open deals</div>
             <div className="text-xl font-semibold tabular-nums">{account.openDeals}</div>
           </div>
           <div>
-            <div className="text-sm text-muted-foreground">Volumen</div>
+            <div className="text-sm text-muted-foreground">Volume</div>
             <div className="text-xl font-semibold tabular-nums">{account.totalValue.toLocaleString("de-DE")}</div>
           </div>
           {account.website && (
@@ -160,20 +160,20 @@ export default function Account() {
           )}
           {account.phone && (
             <div>
-              <div className="text-sm text-muted-foreground flex items-center gap-1"><Phone className="h-3.5 w-3.5" /> Telefon</div>
+              <div className="text-sm text-muted-foreground flex items-center gap-1"><Phone className="h-3.5 w-3.5" /> Phone</div>
               <div className="text-sm font-medium">{account.phone}</div>
             </div>
           )}
           {account.vatId && (
             <div>
-              <div className="text-sm text-muted-foreground flex items-center gap-1"><Receipt className="h-3.5 w-3.5" /> USt-IdNr.</div>
+              <div className="text-sm text-muted-foreground flex items-center gap-1"><Receipt className="h-3.5 w-3.5" /> VAT ID</div>
               <div className="text-sm font-medium">{account.vatId}</div>
             </div>
           )}
           {account.sizeBracket && (
             <div>
-              <div className="text-sm text-muted-foreground flex items-center gap-1"><Users className="h-3.5 w-3.5" /> Größe</div>
-              <div className="text-sm font-medium">{account.sizeBracket} MA</div>
+              <div className="text-sm text-muted-foreground flex items-center gap-1"><Users className="h-3.5 w-3.5" /> Size</div>
+              <div className="text-sm font-medium">{account.sizeBracket} employees</div>
             </div>
           )}
         </div>
@@ -189,7 +189,7 @@ export default function Account() {
         <div className="lg:col-span-2 space-y-6">
           <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0">
-              <CardTitle>Kontakte</CardTitle>
+              <CardTitle>Contacts</CardTitle>
               <div className="flex gap-2">
                 <Button
                   variant="outline"
@@ -197,14 +197,14 @@ export default function Account() {
                   onClick={() => setScrapeOpen(true)}
                   data-testid="contacts-scrape-button"
                 >
-                  <Sparkles className="h-3.5 w-3.5 mr-1" /> Aus Website vorschlagen
+                  <Sparkles className="h-3.5 w-3.5 mr-1" /> Suggest from website
                 </Button>
                 <Button
                   size="sm"
                   onClick={() => { setContactEdit(null); setContactOpen(true); }}
                   data-testid="contacts-add-button"
                 >
-                  <Plus className="h-3.5 w-3.5 mr-1" /> Kontakt hinzufügen
+                  <Plus className="h-3.5 w-3.5 mr-1" /> Contact add
                 </Button>
               </div>
             </CardHeader>
@@ -221,14 +221,14 @@ export default function Account() {
                         </div>
                       </div>
                       <div className="flex items-center gap-2">
-                        {contact.isDecisionMaker && <Badge variant="secondary">Entscheider</Badge>}
+                        {contact.isDecisionMaker && <Badge variant="secondary">Decision maker</Badge>}
                         <DropdownMenu>
                           <DropdownMenuTrigger asChild>
                             <Button
                               variant="ghost"
                               size="icon"
                               className="h-7 w-7"
-                              aria-label="Aktionen"
+                              aria-label="Actions"
                               data-testid={`contact-actions-${contact.id}`}
                             >
                               <MoreHorizontal className="h-4 w-4" />
@@ -249,7 +249,7 @@ export default function Account() {
                               }}
                               data-testid={`contact-edit-${contact.id}`}
                             >
-                              <Pencil className="h-3.5 w-3.5 mr-2" /> Bearbeiten
+                              <Pencil className="h-3.5 w-3.5 mr-2" /> Edit
                             </DropdownMenuItem>
                             <DropdownMenuSeparator />
                             <DropdownMenuItem
@@ -264,7 +264,7 @@ export default function Account() {
                               })}
                               data-testid={`contact-delete-${contact.id}`}
                             >
-                              <Trash2 className="h-3.5 w-3.5 mr-2" /> Löschen
+                              <Trash2 className="h-3.5 w-3.5 mr-2" /> Delete
                             </DropdownMenuItem>
                           </DropdownMenuContent>
                         </DropdownMenu>
@@ -278,7 +278,7 @@ export default function Account() {
                 ))}
                 {!account.contacts?.length && (
                   <div className="text-center py-6 text-muted-foreground text-sm" data-testid="contacts-empty">
-                    Noch keine Kontakte hinterlegt. Lege einen Kontakt an oder lass aus der Website Vorschläge ableiten.
+                    No contacts yet. Add a contact or let suggestions be derived from the website.
                   </div>
                 )}
               </div>
@@ -299,12 +299,12 @@ export default function Account() {
                     </div>
                     <div className="flex justify-between text-sm mt-1">
                       <span className="font-semibold tabular-nums">{deal.value.toLocaleString("de-DE")} {deal.currency}</span>
-                      <span className="text-muted-foreground tabular-nums">{deal.probability}% Wahrscheinlichkeit</span>
+                      <span className="text-muted-foreground tabular-nums">{deal.probability}% Probability</span>
                     </div>
                   </div>
                 ))}
                 {!account.deals?.length && (
-                  <div className="text-center py-6 text-muted-foreground text-sm">Noch keine Deals.</div>
+                  <div className="text-center py-6 text-muted-foreground text-sm">No deals yet.</div>
                 )}
               </div>
             </CardContent>
@@ -313,7 +313,7 @@ export default function Account() {
 
         <div className="lg:col-span-1">
           <Card>
-            <CardHeader><CardTitle>Aktivität</CardTitle></CardHeader>
+            <CardHeader><CardTitle>Activity</CardTitle></CardHeader>
             <CardContent>
               <ActivityTimeline entityType="account" entityId={id} />
             </CardContent>
@@ -356,18 +356,18 @@ export default function Account() {
       >
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Kontakt löschen</AlertDialogTitle>
+            <AlertDialogTitle>Contact delete</AlertDialogTitle>
             <AlertDialogDescription>
               {contactToDelete && (
                 <>
-                  „{contactToDelete.name}" wird endgültig vom Kunden entfernt.
-                  Diese Aktion kann nicht rückgängig gemacht werden.
+                  "{contactToDelete.name}" will be permanently removed from the customer.
+                  This action cannot be undone.
                 </>
               )}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel disabled={deleteContact.isPending}>Abbrechen</AlertDialogCancel>
+            <AlertDialogCancel disabled={deleteContact.isPending}>Cancel</AlertDialogCancel>
             <AlertDialogAction
               data-testid="contact-delete-confirm"
               disabled={deleteContact.isPending}
@@ -380,18 +380,18 @@ export default function Account() {
                     qc.invalidateQueries({ queryKey: getGetAccountQueryKey(id) }),
                     qc.invalidateQueries({ queryKey: getListContactsQueryKey({ accountId: id }) }),
                   ]);
-                  toast({ title: "Kontakt gelöscht", description: contactToDelete.name });
+                  toast({ title: "Contact deleted", description: contactToDelete.name });
                   setContactToDelete(null);
                 } catch (err) {
                   toast({
-                    title: "Löschen fehlgeschlagen",
+                    title: "Delete failed",
                     description: err instanceof Error ? err.message : "",
                     variant: "destructive",
                   });
                 }
               }}
             >
-              Löschen
+              Delete
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

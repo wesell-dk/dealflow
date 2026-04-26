@@ -56,7 +56,7 @@ const CONFIDENCE_REASON = z
   .min(2)
   .max(280)
   .describe(
-    "Ein knapper Satz, warum die Konfidenz so eingestuft ist (z.B. 'Vollständige Daten, klare Signale' oder 'Wenig Verhandlungs-Historie, Schätzung').",
+    "A brief sentence explaining why the confidence is rated this way (e.g. 'Complete data, clear signals' or 'Little negotiation history, estimate').",
   );
 
 // Gemeinsame Action-Empfehlung. Die strings entsprechen UI-Buttons im
@@ -71,9 +71,9 @@ const ACTION_TYPE = z.union([
 ]);
 
 const SAFE_GERMAN_HINT =
-  "Sprache: deutsch. Formuliere klar, faktisch, geschäftstauglich. Keine " +
-  "Marketing-Phrasen. Keine Emojis. Keine Halluzinationen — wenn der Kontext " +
-  "kein eindeutiges Signal enthält, vermerke das explizit.";
+  "Language: English. Write clearly, factually, and business-ready. No " +
+  "marketing phrases. No emojis. No hallucinations — if the context does " +
+  "not contain a clear signal, note that explicitly.";
 
 // ───────────────────────── 1. Deal Summary ─────────────────────────
 
@@ -96,18 +96,18 @@ export const dealSummary: PromptDefinition<
   key: "deal.summary",
   model: "claude-sonnet-4-6",
   system:
-    "Du bist DealFlow-Copilot im Modus Deal Summary. Du erhältst einen " +
-    "vollständigen Deal-Kontext (Stammdaten, aktuelles Angebot, offene " +
-    "Approvals, Verträge, Timeline) und lieferst eine prägnante, faktenbasierte " +
-    "Übersicht für Sales/RevOps. " +
+    "You are the DealFlow Copilot in Deal Summary mode. You receive a " +
+    "complete deal context (master data, current quote, open approvals, " +
+    "contracts, timeline) and produce a concise, fact-based overview for " +
+    "Sales/RevOps. " +
     SAFE_GERMAN_HINT,
   buildUser: (ctx) =>
-    `Erzeuge eine Deal-Zusammenfassung für folgenden Kontext (JSON):\n${JSON.stringify(ctx)}`,
+    `Generate a deal summary for the following context (JSON):\n${JSON.stringify(ctx)}`,
   outputSchema: DealSummaryOutput,
   toolDescription:
-    "Liefert headline (1 Satz), status, health-Einschätzung, 3-8 keyFacts, " +
-    "blockers, 1-5 nextSteps, recommendedAction und confidence (low/medium/" +
-    "high) plus einen Satz confidenceReason.",
+    "Returns headline (1 sentence), status, health assessment, 3-8 keyFacts, " +
+    "blockers, 1-5 nextSteps, recommendedAction and confidence (low/medium/" +
+    "high) plus a single confidenceReason sentence.",
   toolName: "report_deal_summary",
 };
 
@@ -143,17 +143,17 @@ export const negotiationSupport: PromptDefinition<
   key: "negotiation.support",
   model: "claude-sonnet-4-6",
   system:
-    "Du bist DealFlow-Copilot im Modus Negotiation Support. Auf Basis des " +
-    "Deal-Kontextes (inkl. Timeline, Approvals, aktuelles Angebot) " +
-    "klassifizierst du die offenen Verhandlungsthemen, schätzt deren Impact " +
-    "und schlägst Antwortentwürfe (intern + extern) vor. " +
+    "You are the DealFlow Copilot in Negotiation Support mode. Based on the " +
+    "deal context (incl. timeline, approvals, current quote) you classify " +
+    "the open negotiation topics, estimate their impact, and propose draft " +
+    "replies (internal + external). " +
     SAFE_GERMAN_HINT,
   buildUser: (ctx) =>
-    `Analysiere die Verhandlungslage und antworte strukturiert. Kontext (JSON):\n${JSON.stringify(ctx)}`,
+    `Analyze the negotiation situation and respond in a structured way. Context (JSON):\n${JSON.stringify(ctx)}`,
   outputSchema: NegotiationOutput,
   toolDescription:
-    "Liefert customerStance, klassifizierte openTopics mit Impact, einen " +
-    "internen und einen externen Antwortentwurf sowie eine recommendedAction.",
+    "Returns customerStance, classified openTopics with impact, an internal " +
+    "and an external draft reply, and a recommendedAction.",
   toolName: "report_negotiation",
 };
 
@@ -189,17 +189,17 @@ export const pricingReview: PromptDefinition<
   key: "pricing.review",
   model: "claude-sonnet-4-6",
   system:
-    "Du bist DealFlow-Copilot im Modus Pricing Review. Auf Basis von Quote, " +
-    "aktiver Version, Line-Items und der Brand-/Company-eigenen Preispositionen " +
-    "bewertest du Marge, Rabatt und Policy-Konformität. " +
+    "You are the DealFlow Copilot in Pricing Review mode. Based on the quote, " +
+    "active version, line items, and the brand/company-specific price " +
+    "positions, you assess margin, discount, and policy compliance. " +
     SAFE_GERMAN_HINT,
   buildUser: (ctx) =>
-    `Bewerte das Pricing dieses Angebots. Kontext (JSON):\n${JSON.stringify(ctx)}`,
+    `Assess the pricing of this quote. Context (JSON):\n${JSON.stringify(ctx)}`,
   outputSchema: PricingReviewOutput,
   toolDescription:
-    "Liefert summary, marginAssessment, discountAssessment, policyFlags " +
-    "(severity-eingestuft), approvalRelevance, recommendedAction sowie " +
-    "confidence (low/medium/high) plus einen Satz confidenceReason.",
+    "Returns summary, marginAssessment, discountAssessment, policyFlags " +
+    "(with severity), approvalRelevance, recommendedAction, and " +
+    "confidence (low/medium/high) plus a single confidenceReason sentence.",
   toolName: "report_pricing",
 };
 
@@ -236,10 +236,10 @@ export const approvalReadiness: PromptDefinition<
   key: "approval.readiness",
   model: "claude-sonnet-4-6",
   system:
-    "Du bist DealFlow-Copilot im Modus Approval Readiness. Du bewertest, ob " +
-    "ein Approval-Fall entscheidungsreif ist, formulierst eine prägnante " +
-    "Entscheidungsempfehlung (approve / approve_with_conditions / request_info / " +
-    "reject), nennst fehlende Informationen und Schlüssel-Abweichungen. " +
+    "You are the DealFlow Copilot in Approval Readiness mode. You assess " +
+    "whether an approval case is ready for a decision, formulate a concise " +
+    "decision recommendation (approve / approve_with_conditions / request_info / " +
+    "reject), and name missing information and key deviations. " +
     SAFE_GERMAN_HINT,
   buildUser: (ctx) => {
     const missingHints: string[] = [];
@@ -247,18 +247,18 @@ export const approvalReadiness: PromptDefinition<
       const locale = ctx.contract?.language ?? 'en';
       const families = Array.from(new Set(ctx.missingTranslations.map((m) => m.family))).sort();
       missingHints.push(
-        `Übersetzungen für Vertragssprache "${locale}" fehlen für Klauselfamilien: ${families.join(', ')}. ` +
-        `Bitte explizit in missingInformation aufnehmen ("Übersetzung [${locale}] fehlt: <Familie>").`,
+        `Translations for contract language "${locale}" are missing for clause families: ${families.join(', ')}. ` +
+        `Please explicitly include in missingInformation ("Translation [${locale}] missing: <family>").`,
       );
     }
-    const hintsBlock = missingHints.length > 0 ? `\nDeterministische Hinweise:\n- ${missingHints.join('\n- ')}\n` : '';
-    return `Bewerte die Entscheidungsreife dieses Approval-Falls.${hintsBlock}Kontext (JSON):\n${JSON.stringify(ctx)}`;
+    const hintsBlock = missingHints.length > 0 ? `\nDeterministic hints:\n- ${missingHints.join('\n- ')}\n` : '';
+    return `Assess the decision readiness of this approval case.${hintsBlock}Context (JSON):\n${JSON.stringify(ctx)}`;
   },
   outputSchema: ApprovalReadinessOutput,
   toolDescription:
-    "Liefert decisionReady, recommendation, rationale, missingInformation, " +
-    "keyDeviations, eine recommendedAction sowie confidence (low/medium/high) " +
-    "plus einen Satz confidenceReason.",
+    "Returns decisionReady, recommendation, rationale, missingInformation, " +
+    "keyDeviations, a recommendedAction, and confidence (low/medium/high) " +
+    "plus a single confidenceReason sentence.",
   toolName: "report_approval_readiness",
 };
 
@@ -300,17 +300,17 @@ export const contractDrafting: PromptDefinition<
   key: "contract.draft",
   model: "claude-sonnet-4-6",
   system:
-    "Du bist DealFlow-Copilot im Modus Contract Drafting. Du leitest aus dem " +
-    "kommerziellen Status (Deal, Brand, Quote, Account) eine Vorbelegung für " +
-    "einen Vertragsentwurf ab — Template-Empfehlung, Feld-Vorbelegung mit " +
-    "Quellen, sowie Klausel-Empfehlungen mit soft/standard/hard-Variante. " +
+    "You are the DealFlow Copilot in Contract Drafting mode. From the " +
+    "commercial state (deal, brand, quote, account) you derive a prefill " +
+    "for a contract draft — template recommendation, field prefill with " +
+    "sources, and clause recommendations with soft/standard/hard variants. " +
     SAFE_GERMAN_HINT,
   buildUser: (ctx) =>
-    `Schlage einen Vertragsentwurf für diesen Deal vor. Kontext (JSON):\n${JSON.stringify(ctx)}`,
+    `Propose a contract draft for this deal. Context (JSON):\n${JSON.stringify(ctx)}`,
   outputSchema: ContractDraftOutput,
   toolDescription:
-    "Liefert draftTitle, recommendedTemplate, prefillSuggestions mit Quelle, " +
-    "clauseRecommendations (soft/standard/hard) und openQuestions.",
+    "Returns draftTitle, recommendedTemplate, prefillSuggestions with source, " +
+    "clauseRecommendations (soft/standard/hard), and openQuestions.",
   toolName: "report_contract_draft",
 };
 
@@ -343,19 +343,19 @@ export const contractRisk: PromptDefinition<
   key: "contract.risk",
   model: "claude-sonnet-4-6",
   system:
-    "Du bist DealFlow-Copilot im Modus Contract Risk Review. Du analysierst " +
-    "die Klausel-Lage des Vertrages, vergleichst mit dem zugehörigen Deal/" +
-    "Quote-Kontext, und lieferst Risikosignale mit Klausel-Bezug, Schweregrad " +
-    "und konkreter Empfehlung. " +
+    "You are the DealFlow Copilot in Contract Risk Review mode. You analyze " +
+    "the contract's clause situation, compare it with the associated deal/" +
+    "quote context, and deliver risk signals with clause reference, severity, " +
+    "and a concrete recommendation. " +
     SAFE_GERMAN_HINT,
   buildUser: (ctx) =>
-    `Bewerte das Vertragsrisiko für folgenden Vertrag. Kontext (JSON):\n${JSON.stringify(ctx)}`,
+    `Assess the contract risk for the following contract. Context (JSON):\n${JSON.stringify(ctx)}`,
   outputSchema: ContractRiskOutput,
   toolDescription:
-    "Liefert overallRisk, overallScore (0-100), summary, riskSignals mit " +
-    "Klausel/Severity/Finding/Recommendation, approvalRelevant, " +
-    "recommendedAction sowie confidence (low/medium/high) plus einen Satz " +
-    "confidenceReason.",
+    "Returns overallRisk, overallScore (0-100), summary, riskSignals with " +
+    "clause/severity/finding/recommendation, approvalRelevant, " +
+    "recommendedAction, and confidence (low/medium/high) plus a single " +
+    "confidenceReason sentence.",
   toolName: "report_contract_risk",
 };
 
@@ -403,19 +403,19 @@ export const contractRedline: PromptDefinition<
   key: "contract.redline",
   model: "claude-sonnet-4-6",
   system:
-    "Du bist DealFlow-Copilot im Modus External Paper / Redline Analysis. Du " +
-    "vergleichst ein extern geliefertes Vertragsdokument mit dem internen " +
-    "Vertrags-Stand, identifizierst bekannte Klauseln samt Abweichung, listest " +
-    "unbekannte Themen und schlägst einen Review-Pfad vor. " +
+    "You are the DealFlow Copilot in External Paper / Redline Analysis mode. " +
+    "You compare an externally provided contract document with the internal " +
+    "contract state, identify known clauses including deviations, list " +
+    "unknown topics, and propose a review path. " +
     SAFE_GERMAN_HINT,
   buildUser: (input) =>
-    `Vergleiche das folgende externe Dokument mit unserem Vertragsstand.\n\n` +
-    `Interner Kontext (JSON):\n${JSON.stringify(input.contract)}\n\n` +
-    `Externes Dokument (Rohtext):\n"""${input.externalText}"""`,
+    `Compare the following external document with our contract state.\n\n` +
+    `Internal context (JSON):\n${JSON.stringify(input.contract)}\n\n` +
+    `External document (raw text):\n"""${input.externalText}"""`,
   outputSchema: RedlineOutput,
   toolDescription:
-    "Liefert documentSummary, identifiedClauses mit Abweichungs-Klassifikation, " +
-    "unknownTopics, recommendedReviewPath und executiveSummary.",
+    "Returns documentSummary, identifiedClauses with deviation classification, " +
+    "unknownTopics, recommendedReviewPath, and executiveSummary.",
   toolName: "report_redline_analysis",
 };
 
@@ -447,17 +447,16 @@ export const priceIncreaseSupport: PromptDefinition<
   key: "price-increase.support",
   model: "claude-sonnet-4-6",
   system:
-    "Du bist DealFlow-Copilot im Modus Price Increase Support. Auf Basis des " +
-    "Deal-Kontextes (Account, Brand, aktuelles Angebot) entwirfst du ein " +
-    "Preisänderungsschreiben, schätzt das Churn-Risiko und schlägst Folge-" +
-    "Aktionen vor. " +
+    "You are the DealFlow Copilot in Price Increase Support mode. Based on " +
+    "the deal context (account, brand, current quote) you draft a price " +
+    "change letter, estimate churn risk, and propose follow-up actions. " +
     SAFE_GERMAN_HINT,
   buildUser: (ctx) =>
-    `Bereite einen Price-Increase-Vorgang für diesen Deal vor. Kontext (JSON):\n${JSON.stringify(ctx)}`,
+    `Prepare a price-increase process for this deal. Context (JSON):\n${JSON.stringify(ctx)}`,
   outputSchema: PriceIncreaseOutput,
   toolDescription:
-    "Liefert affectedPositions, letterDraft, churnRisk, recommendedFollowUps " +
-    "und eine recommendedAction.",
+    "Returns affectedPositions, letterDraft, churnRisk, recommendedFollowUps, " +
+    "and a recommendedAction.",
   toolName: "report_price_increase",
 };
 
@@ -478,15 +477,15 @@ export const executiveBrief: PromptDefinition<
   key: "executive.brief",
   model: "claude-haiku-4-5",
   system:
-    "Du bist DealFlow-Copilot im Modus Executive Briefing. Du fasst den Deal " +
-    "in einer Form zusammen, die in einem 60-Sekunden-Management-Briefing " +
-    "passt — präzise, ohne Fachjargon-Overload. " +
+    "You are the DealFlow Copilot in Executive Briefing mode. You summarize " +
+    "the deal in a form that fits a 60-second management briefing — precise, " +
+    "without jargon overload. " +
     SAFE_GERMAN_HINT,
   buildUser: (ctx) =>
-    `Erzeuge ein Executive Briefing zu diesem Deal. Kontext (JSON):\n${JSON.stringify(ctx)}`,
+    `Generate an executive briefing for this deal. Context (JSON):\n${JSON.stringify(ctx)}`,
   outputSchema: ExecutiveBriefOutput,
   toolDescription:
-    "Liefert headline, oneLiner, 2-6 highlights, bis zu 6 risks und bis zu 4 asks.",
+    "Returns headline, oneLiner, 2-6 highlights, up to 6 risks, and up to 4 asks.",
   toolName: "report_executive_brief",
 };
 
@@ -507,15 +506,15 @@ export const commercialHealthCheck: PromptDefinition<
   key: "deal.health",
   model: "claude-sonnet-4-6",
   system:
-    "Du bist DealFlow-Copilot im Modus Commercial Health Check. Du bewertest " +
-    "die kommerzielle Gesundheit des Deals (Pipeline, Risiko, Engpässe) und " +
-    "leitest konkrete nächste Schritte ab. " +
+    "You are the DealFlow Copilot in Commercial Health Check mode. You assess " +
+    "the commercial health of the deal (pipeline, risk, bottlenecks) and " +
+    "derive concrete next steps. " +
     SAFE_GERMAN_HINT,
   buildUser: (ctx) =>
-    `Bewerte die Commercial Health dieses Deals. Kontext (JSON):\n${JSON.stringify(ctx)}`,
+    `Assess the commercial health of this deal. Context (JSON):\n${JSON.stringify(ctx)}`,
   outputSchema: HealthCheckOutput,
   toolDescription:
-    "Liefert overallHealth, pipelineSignals, riskSignals, bottlenecks und " +
+    "Returns overallHealth, pipelineSignals, riskSignals, bottlenecks, and " +
     "recommendedActions.",
   toolName: "report_health_check",
 };
@@ -558,41 +557,41 @@ export const helpAssistant: PromptDefinition<
   key: "assistant.help",
   model: "claude-haiku-4-5",
   system:
-    "Du bist der Hilfe-Assistent von DealFlow.One — einer B2B Commercial " +
-    "Execution Platform. Beantworte Fragen kurz, konkret und auf Deutsch. " +
-    "Du kennst die Plattform-Struktur (siehe routes im Input) und kannst " +
-    "über das Tool eine optionale UI-Aktion vorschlagen.\n\n" +
-    "Regeln für action.kind:\n" +
-    " - 'open_create_account' wenn der Nutzer einen Kunden/Account anlegen will. " +
-    "Sage in reply z.B. 'Klar, ich öffne den Dialog – fülle Name, Branche und Land aus.'\n" +
-    " - 'open_create_deal' wenn ein Deal/Opportunity angelegt werden soll. " +
-    "Wenn der Nutzer einen Kunden namentlich nennt und du ihn in recentAccounts findest, " +
-    "setze accountId. Sage in reply z.B. 'Alles klar, ich öffne den Deal-Dialog.'\n" +
-    " - 'navigate' nur wenn der Nutzer explizit zu einem Bereich gehen will " +
-    "(z.B. 'zeig mir die Pipeline'). Setze path auf eine Route aus dem Input.\n" +
-    " - 'none' für reine Fragen-Beantwortung.\n\n" +
-    "suggestions: 0–3 weiterführende Klick-Vorschläge (Label + Pfad aus routes).\n\n" +
-    "Halte reply prägnant (max. 3 Sätze). Keine Marketing-Phrasen, keine Emojis. " +
-    "Wenn du die Antwort nicht weißt, sag das ehrlich und schlage einen passenden " +
-    "Bereich vor. Beziehe dich bei Bedarf auf currentPath, um die Antwort zu " +
-    "kontextualisieren ('Auf dieser Seite siehst du…').",
+    "You are the help assistant of DealFlow.One — a B2B Commercial " +
+    "Execution Platform. Answer questions briefly, specifically, and in English. " +
+    "You know the platform structure (see routes in the input) and can " +
+    "propose an optional UI action via the tool.\n\n" +
+    "Rules for action.kind:\n" +
+    " - 'open_create_account' when the user wants to create a customer/account. " +
+    "In reply say e.g. 'Sure, I'll open the dialog – fill in name, industry, and country.'\n" +
+    " - 'open_create_deal' when a deal/opportunity should be created. " +
+    "If the user names a customer and you find them in recentAccounts, " +
+    "set accountId. In reply say e.g. 'Got it, I'll open the deal dialog.'\n" +
+    " - 'navigate' only when the user explicitly wants to go to an area " +
+    "(e.g. 'show me the pipeline'). Set path to a route from the input.\n" +
+    " - 'none' for pure question answering.\n\n" +
+    "suggestions: 0–3 follow-up click suggestions (label + path from routes).\n\n" +
+    "Keep reply concise (max. 3 sentences). No marketing phrases, no emojis. " +
+    "If you don't know the answer, say so honestly and suggest a suitable " +
+    "area. Refer to currentPath when helpful to contextualize the answer " +
+    "('On this page you see…').",
   buildUser: (input) => {
     const recentHistory = input.history.slice(-6);
     return [
       `currentPath: ${input.currentPath}`,
-      `user: ${input.user.name} (${input.user.role}${input.user.tenantWide ? ", tenant-weit" : ", eingeschränkter Scope"})`,
-      `Plattform-Daten: ${input.counts.accounts} Kunden, ${input.counts.deals} Deals, ${input.counts.quotes} Angebote, ${input.counts.contracts} Verträge, ${input.counts.approvals} Approvals`,
-      `verfügbare Routen (Auswahl):\n${input.routes.map(r => `  - ${r.path} — ${r.title}: ${r.purpose}`).join("\n")}`,
-      `letzte Kunden:\n${input.recentAccounts.map(a => `  - ${a.id}: ${a.name}`).join("\n") || "  (keine)"}`,
-      `letzte Deals:\n${input.recentDeals.map(d => `  - ${d.id}: ${d.name} → ${d.accountName} (${d.stage})`).join("\n") || "  (keine)"}`,
-      recentHistory.length > 0 ? `\nGesprächsverlauf:\n${recentHistory.map(m => `  ${m.role}: ${m.content}`).join("\n")}` : "",
-      `\nFrage: ${input.question}`,
+      `user: ${input.user.name} (${input.user.role}${input.user.tenantWide ? ", tenant-wide" : ", restricted scope"})`,
+      `Platform data: ${input.counts.accounts} accounts, ${input.counts.deals} deals, ${input.counts.quotes} quotes, ${input.counts.contracts} contracts, ${input.counts.approvals} approvals`,
+      `available routes (selection):\n${input.routes.map(r => `  - ${r.path} — ${r.title}: ${r.purpose}`).join("\n")}`,
+      `recent accounts:\n${input.recentAccounts.map(a => `  - ${a.id}: ${a.name}`).join("\n") || "  (none)"}`,
+      `recent deals:\n${input.recentDeals.map(d => `  - ${d.id}: ${d.name} → ${d.accountName} (${d.stage})`).join("\n") || "  (none)"}`,
+      recentHistory.length > 0 ? `\nConversation history:\n${recentHistory.map(m => `  ${m.role}: ${m.content}`).join("\n")}` : "",
+      `\nQuestion: ${input.question}`,
     ].filter(Boolean).join("\n");
   },
   outputSchema: HelpAssistantOutput,
   toolDescription:
-    "Antwort des Hilfe-Assistenten. reply = kurze deutsche Antwort. " +
-    "suggestions = 0-3 weiterführende Links. action = optionale UI-Aktion " +
+    "Help assistant response. reply = brief English answer. " +
+    "suggestions = 0-3 follow-up links. action = optional UI action " +
     "(none / navigate / open_create_account / open_create_deal).",
   toolName: "help_assistant_reply",
 };
@@ -680,26 +679,26 @@ export const externalContractExtract: PromptDefinition<
   key: 'external.contract.extract',
   model: 'claude-sonnet-4-6',
   system:
-    'Du bist DealFlow-Copilot im Modus External Contract Intake. Du erhaelst ' +
-    'den extrahierten Rohtext eines hochgeladenen Bestandsvertrags (PDF/DOCX) ' +
-    'und identifizierst die strukturellen Kerndaten. Datumsangaben gibst du ' +
-    'als ISO-8601 (YYYY-MM-DD) zurueck; Betraege als reine Dezimalzahl ohne ' +
-    'Tausendertrennzeichen. Konfidenz pro Feld als 0..1, wobei 0 = kein ' +
-    'Signal im Text, 1 = explizit benannt. Felder, fuer die der Text keinen ' +
-    'klaren Beleg liefert, lieferst du als null. Niemals raten. ' +
+    'You are the DealFlow Copilot in External Contract Intake mode. You ' +
+    'receive the extracted raw text of an uploaded existing contract ' +
+    '(PDF/DOCX) and identify the structural core data. Return dates as ' +
+    'ISO-8601 (YYYY-MM-DD); amounts as a plain decimal number without ' +
+    'thousands separators. Confidence per field as 0..1, where 0 = no ' +
+    'signal in the text, 1 = explicitly named. Fields for which the text ' +
+    'provides no clear evidence are returned as null. Never guess. ' +
     SAFE_GERMAN_HINT,
   buildUser: (input) =>
-    `Extrahiere die Kerndaten aus folgendem Vertrags-Rohtext.\n` +
-    `Dateiname: ${input.fileName}\n\n` +
-    `Rohtext (gekuerzt):\n"""${input.rawText}"""`,
+    `Extract the core data from the following contract raw text.\n` +
+    `File name: ${input.fileName}\n\n` +
+    `Raw text (truncated):\n"""${input.rawText}"""`,
   outputSchema: ExternalContractExtractOutput,
   toolDescription:
-    'Liefert title, contractTypeGuess, parties (role+name), currency, ' +
+    'Returns title, contractTypeGuess, parties (role+name), currency, ' +
     'valueAmount, effectiveFrom/To (ISO), autoRenewal, renewalNoticeDays, ' +
     'terminationNoticeDays, governingLaw, jurisdiction, ' +
-    'identifiedClauseFamilies (name+confidence), confidence pro Feld, ' +
+    'identifiedClauseFamilies (name+confidence), confidence per field, ' +
     'overallConfidence (low/medium/high) plus overallConfidenceReason, ' +
-    'notes (Hinweise fuer manuelle Pruefung).',
+    'notes (hints for manual review).',
   toolName: 'report_external_contract_extract',
 };
 
@@ -823,20 +822,19 @@ export const clauseImportSegment: PromptDefinition<
   key: "clause.import.segment",
   model: "claude-sonnet-4-6",
   system:
-    "Du bist DealFlow-Copilot im Modus Clause-Library Import. Du erhaelst " +
-    "den Rohtext eines hochgeladenen Bestandsvertrags und segmentierst ihn " +
-    "in einzelne Klauseln (z. B. Vertraulichkeit, Haftung, Kuendigung). Pro " +
-    "Klausel ordnest du sie der besten Familie aus der mitgelieferten " +
-    "Taxonomie zu oder markierst sie als 'neue Familie noetig' (familyId=null). " +
-    "Wenn der Klausel-Text inhaltlich nahezu identisch zu einer bestehenden " +
-    "Variante ist (geschaetzte cos-Aehnlichkeit > 0.6), trag matchedVariantId " +
-    "und similarityScore ein, sonst null. extractedText ist 1:1 aus dem " +
-    "Original — nur White-Space und Bullet-Marker normalisierst du. Niemals " +
-    "umformulieren. Niemals zusammenfassen. Maximal 50 Segmente; wenn das " +
-    "Dokument groesser ist, segmentiere die wichtigsten ersten 50 und " +
-    "vermerk das in notes. notes: maximal 8 Eintraege, jeder Eintrag KURZ " +
-    "(maximal 240 Zeichen). Lange Beobachtungen kuerzt du; mehrere Punkte " +
-    "splittest du auf mehrere Eintraege. " +
+    "You are the DealFlow Copilot in Clause-Library Import mode. You receive " +
+    "the raw text of an uploaded existing contract and segment it into " +
+    "individual clauses (e.g. confidentiality, liability, termination). For " +
+    "each clause you assign it to the best family from the provided " +
+    "taxonomy or mark it as 'new family needed' (familyId=null). " +
+    "If the clause text is nearly identical in content to an existing " +
+    "variant (estimated cos similarity > 0.6), set matchedVariantId and " +
+    "similarityScore, otherwise null. extractedText is 1:1 from the " +
+    "original — you only normalize white-space and bullet markers. Never " +
+    "rephrase. Never summarize. Maximum 50 segments; if the document is " +
+    "larger, segment the most important first 50 and note that in notes. " +
+    "notes: maximum 8 entries, each entry SHORT (maximum 240 characters). " +
+    "Shorten long observations; split multiple points into multiple entries. " +
     SAFE_GERMAN_HINT,
   buildUser: (input) => {
     const familyList = input.families
@@ -847,20 +845,20 @@ export const clauseImportSegment: PromptDefinition<
       .map((v) => `- ${v.id} (familyId=${v.familyId}): ${v.name} | ${v.summary}`)
       .join("\n");
     return (
-      `Datei: ${input.fileName}\n` +
-      `Sprache: ${input.language}\n` +
-      (input.contractTypeCode ? `Vertrags-Typ: ${input.contractTypeCode}\n` : "") +
-      `\nVerfuegbare Klausel-Familien (id: name — beschreibung):\n${familyList}\n` +
-      `\nVorhandene Varianten in diesen Familien:\n${variantList || "(keine)"}\n` +
-      `\nVertrags-Rohtext (gekuerzt):\n"""${input.rawText}"""`
+      `File: ${input.fileName}\n` +
+      `Language: ${input.language}\n` +
+      (input.contractTypeCode ? `Contract type: ${input.contractTypeCode}\n` : "") +
+      `\nAvailable clause families (id: name — description):\n${familyList}\n` +
+      `\nExisting variants in these families:\n${variantList || "(none)"}\n` +
+      `\nContract raw text (truncated):\n"""${input.rawText}"""`
     );
   },
   outputSchema: ClauseImportSegmentOutput,
   toolDescription:
-    "Liefert eine Liste von Klausel-Segmenten mit suggestedName, " +
+    "Returns a list of clause segments with suggestedName, " +
     "suggestedSummary, extractedText (1:1), pageHint, suggestedTone, " +
-    "suggestedSeverity, suggestedFamilyId (aus Liste oder null), " +
-    "alternativeMatches (max 3) und matchedVariantId (optional).",
+    "suggestedSeverity, suggestedFamilyId (from list or null), " +
+    "alternativeMatches (max 3), and matchedVariantId (optional).",
   toolName: "report_clause_import_segments",
   // Defensive Sanitisierung: zu lange notes-Einträge werden gekürzt statt
   // den ganzen Job zu killen (Task #105).

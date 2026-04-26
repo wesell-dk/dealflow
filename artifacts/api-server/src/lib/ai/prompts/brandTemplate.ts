@@ -32,13 +32,13 @@ export interface BrandLayoutExtractInput {
 }
 
 const TYPE_HINT: Record<DocumentTemplateType, string> = {
-  quote: 'Angebot (Quote) — meist mit "Gueltig bis"-Datum, Positionen, Gesamtbetrag, optional ohne USt.',
+  quote: 'Quote — usually with "valid until" date, line items, total amount, optionally without VAT.',
   order_confirmation:
-    'Auftragsbestaetigung (Order Confirmation) — bestaetigt einen Auftrag, oft mit Lieferdatum und Konditionen.',
+    'Order Confirmation — confirms an order, often with delivery date and terms.',
   invoice:
-    'Rechnung (Invoice) — Rechnungsnummer, Rechnungsdatum, Leistungszeitraum, Positionen, USt, Gesamtbetrag, Zahlungsfrist.',
+    'Invoice — invoice number, invoice date, service period, line items, VAT, total amount, payment due date.',
   contract:
-    'Vertrag (Contract) — laengeres juristisches Dokument, Klauseln, Unterschriftenfeld; KEINE Positions-Tabelle, sondern Klausel-Block.',
+    'Contract — longer legal document, clauses, signature field; NO line items table, but a clause block.',
 };
 
 export const brandDocumentLayoutExtract: PromptDefinition<
@@ -51,31 +51,31 @@ export const brandDocumentLayoutExtract: PromptDefinition<
   // ungenau werden; Opus ist Overkill fuer einen einmaligen Onboarding-Step.
   model: 'claude-sonnet-4-6',
   system:
-    'Du bist Layout-Analyst fuer DealFlow.One. Aufgabe: aus einem hochgeladenen ' +
-    'Referenz-PDF einer Brand das Layout-Profil ableiten, mit dem unser PDF-' +
-    'Renderer NEU erzeugte Dokumente derselben Sorte (Angebot/Auftragsbestaetigung/' +
-    'Rechnung/Vertrag) visuell der Vorlage angleicht. Du antwortest AUSSCHLIESSLICH ' +
-    'ueber das Tool `report_document_layout`. Keine Erklaerungen, kein Freitext.\n\n' +
-    'Regeln:\n' +
-    '- Sprache des Profils ist die der Vorlage (de wenn deutsch, en wenn englisch).\n' +
-    '- Akzentfarben: nimm die dominante Linien-/Header-Farbe der Vorlage. Wenn ' +
-    'die Vorlage neutral schwarz/grau ist, gib #1f2937 als primary an.\n' +
-    '- itemsTable.columns: liefere die Spalten EXAKT in der Reihenfolge und mit ' +
-    'den Labels der Vorlage. Bei Vertraegen ohne Positions-Tabelle gib eine ' +
-    'minimale ein-Spalten-Tabelle ("Klausel"/"Clause") an.\n' +
-    '- footer.addressLine/legalLine/bankLine: liefere die Zeilen der Vorlage 1:1, ' +
-    'aber gekuerzt (jeweils max ~250 Zeichen). Wenn ein Block fehlt, gib einen ' +
-    'leeren String. KEINE Halluzination — wenn du eine IBAN nicht sicher liest, ' +
-    'gib bankLine = "" zurueck.\n' +
-    '- pageNumberFormat: nimm das Format der Vorlage (z. B. "Seite {n}/{total}", ' +
-    '"Seite {n}", "{n}/{total}"). Wenn nicht erkennbar: "Seite {n}/{total}" (de) ' +
-    'bzw. "Page {n}/{total}" (en).\n' +
-    '- schemaVersion: IMMER 1.\n' +
-    '- Falls du dir bei einem Wert wirklich unsicher bist, nutze einen geschaeftlich ' +
-    'tauglichen Default — die Profile werden vor dem Speichern strikt validiert ' +
-    '(zod), aber der Renderer faellt auf eingebaute Defaults zurueck.',
+    'You are a layout analyst for DealFlow.One. Task: from an uploaded ' +
+    'reference PDF of a brand, derive the layout profile that our PDF renderer ' +
+    'will use to make NEWLY generated documents of the same kind (quote/order ' +
+    'confirmation/invoice/contract) visually match the template. Respond EXCLUSIVELY ' +
+    'via the `report_document_layout` tool. No explanations, no free text.\n\n' +
+    'Rules:\n' +
+    '- The profile language follows the template (de if German, en if English).\n' +
+    '- Accent colors: take the dominant line/header color of the template. If ' +
+    'the template is neutral black/gray, return #1f2937 as primary.\n' +
+    '- itemsTable.columns: return the columns EXACTLY in the order and with ' +
+    'the labels of the template. For contracts without a positions table, ' +
+    'return a minimal one-column table ("Klausel"/"Clause").\n' +
+    '- footer.addressLine/legalLine/bankLine: return the lines of the template 1:1, ' +
+    'but shortened (each max ~250 characters). If a block is missing, return an ' +
+    'empty string. NO hallucination — if you cannot read an IBAN with certainty, ' +
+    'return bankLine = "".\n' +
+    '- pageNumberFormat: take the template format (e.g. "Seite {n}/{total}", ' +
+    '"Seite {n}", "{n}/{total}"). If unclear: "Seite {n}/{total}" (de) ' +
+    'or "Page {n}/{total}" (en).\n' +
+    '- schemaVersion: ALWAYS 1.\n' +
+    '- If you are truly unsure about a value, use a business-suitable ' +
+    'default — profiles are strictly validated before saving (zod), but the ' +
+    'renderer falls back to built-in defaults.',
   buildUser: () =>
-    'siehe document content block + Brand-Kontext im messages-Override.',
+    'see document content block + brand context in messages override.',
   // Override: gibt einen messages-Array zurueck mit dem PDF als document
   // content block. Der Orchestrator nutzt buildMessages bevorzugt vor
   // buildUser, wenn vorhanden.
@@ -100,13 +100,13 @@ export function buildBrandLayoutMessages(
   const intro =
     `Brand: ${input.brandHint.name}` +
     (input.brandHint.legalName ? ` (${input.brandHint.legalName})` : '') +
-    `\nBekannte Adresszeile: ${input.brandHint.addressLine ?? '—'}` +
-    `\nDokumenttyp: ${input.documentType} — ${TYPE_HINT[input.documentType]}` +
+    `\nKnown address line: ${input.brandHint.addressLine ?? '—'}` +
+    `\nDocument type: ${input.documentType} — ${TYPE_HINT[input.documentType]}` +
     (input.extractedText
-      ? `\n\nExtrahierter Text-Layer (zur Hilfe — VORLAGE im PDF ist Quelle der Wahrheit):\n` +
+      ? `\n\nExtracted text layer (for assistance — TEMPLATE in PDF is the source of truth):\n` +
         '------\n' +
         input.extractedText.slice(0, 12000) +
-        (input.extractedText.length > 12000 ? '\n…(gekuerzt)' : '') +
+        (input.extractedText.length > 12000 ? '\n…(truncated)' : '') +
         '\n------'
       : '');
 

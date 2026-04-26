@@ -8,226 +8,226 @@ export type GlossaryGroup = Record<string, GlossaryEntry>;
 
 export const DEAL_STAGES: GlossaryGroup = {
   qualified: {
-    label: "Qualifiziert",
-    short: "Bedarf bestätigt, Budget grob bekannt – ein realer Kauf-Anlass existiert.",
-    long: "Erstkontakt hat stattgefunden, der Kunde hat einen konkreten Anlass und das Budget liegt im plausiblen Rahmen. Noch keine Lösung definiert.",
+    label: "Qualified",
+    short: "Need confirmed, budget roughly known – a real reason to buy exists.",
+    long: "Initial contact has happened, the customer has a concrete trigger and the budget is in a plausible range. No solution defined yet.",
   },
   discovery: {
     label: "Discovery",
-    short: "Anforderungen, Stakeholder und Entscheidungsweg werden geklärt.",
-    long: "Tiefes Verständnis aufbauen: Pains, technische Anforderungen, Buying Center, Zeitplan, Mitbewerber. Ergebnis ist ein gemeinsam verstandener Scope.",
+    short: "Requirements, stakeholders and decision path are being clarified.",
+    long: "Build deep understanding: pains, technical requirements, buying center, timeline, competitors. Outcome is a jointly understood scope.",
   },
   proposal: {
-    label: "Angebot",
-    short: "Konkretes Angebot ist erstellt und beim Kunden – Reaktion ausstehend.",
-    long: "Ein Quote mit Positionen, Preisen und Konditionen liegt versendet vor. Genehmigungen für Discounts/Sonderkonditionen sind eingeholt.",
+    label: "Proposal",
+    short: "A concrete quote has been issued and is with the customer – awaiting response.",
+    long: "A quote with line items, pricing and terms has been sent. Approvals for discounts/special conditions have been obtained.",
   },
   negotiation: {
-    label: "Verhandlung",
-    short: "Konditionen, Klauseln oder Preise werden mit dem Kunden ausgehandelt.",
-    long: "Der Kunde stellt Gegenforderungen – z.B. zu Preis, Laufzeit, SLA, Haftung. Verhandlungsschritte werden im Bereich Verhandlungen dokumentiert.",
+    label: "Negotiation",
+    short: "Terms, clauses or pricing are being negotiated with the customer.",
+    long: "The customer raises counter-demands – e.g. on price, term, SLA, liability. Negotiation steps are documented in the Negotiations area.",
   },
   closing: {
     label: "Closing",
-    short: "Vertrag liegt zur Unterschrift bereit – nur noch formelle Schritte fehlen.",
-    long: "Inhalte sind beidseitig akzeptiert, Unterzeichner sind benannt, Vertrag wartet auf Signatur. Risiko ist deutlich reduziert, Forecast hochgewichtet.",
+    short: "Contract is ready for signature – only formal steps remain.",
+    long: "Content is mutually accepted, signers are named, contract is awaiting signature. Risk is significantly reduced, forecast weighted high.",
   },
   won: {
     label: "Won",
-    short: "Vertrag ist unterschrieben – der Deal zählt zum Umsatz.",
-    long: "Geschlossen. Ab hier übernehmen Auftragsbestätigung, Onboarding und ggf. Renewal-Planung im Bereich Folgegeschäft.",
+    short: "Contract is signed – the deal counts toward revenue.",
+    long: "Closed. From here, order confirmation, onboarding and possibly renewal planning take over in the Renewals area.",
   },
   lost: {
     label: "Lost",
-    short: "Deal verloren oder vom Kunden abgesagt – Lost-Reason wird erfasst.",
-    long: "Wichtig: Verlustgrund festhalten (Preis, Mitbewerber, Timing, Budget). Diese Daten speisen Reports und Pricing-Analysen.",
+    short: "Deal lost or cancelled by the customer – lost reason is recorded.",
+    long: "Important: capture the loss reason (price, competitor, timing, budget). This data feeds reports and pricing analytics.",
   },
 };
 
 export const QUOTE_STATUS: GlossaryGroup = {
   draft: {
-    label: "Entwurf",
-    short: "Angebot wird gerade erstellt – noch nicht versendet, nicht freigegeben.",
+    label: "Draft",
+    short: "Quote is being created – not yet sent, not yet approved.",
   },
   pending_approval: {
-    label: "Freigabe ausstehend",
-    short: "Discount oder Sonderkondition liegt über dem Schwellwert – wartet auf Genehmigung.",
+    label: "Pending approval",
+    short: "Discount or special term exceeds the threshold – awaiting approval.",
   },
   approved: {
-    label: "Freigegeben",
-    short: "Intern abgenommen, kann an den Kunden versendet werden.",
+    label: "Approved",
+    short: "Internally signed off, can be sent to the customer.",
   },
   sent: {
-    label: "Versendet",
-    short: "Beim Kunden eingegangen – Reaktion (Annahme/Ablehnung) ausstehend.",
+    label: "Sent",
+    short: "Delivered to the customer – response (acceptance/rejection) pending.",
   },
   accepted: {
-    label: "Angenommen",
-    short: "Kunde hat das Angebot bestätigt – Vertrag/Order folgt.",
+    label: "Accepted",
+    short: "Customer has confirmed the quote – contract/order to follow.",
   },
   rejected: {
-    label: "Abgelehnt",
-    short: "Kunde lehnt das Angebot ab – ggf. neue Version erforderlich.",
+    label: "Rejected",
+    short: "Customer rejects the quote – a new version may be needed.",
   },
   expired: {
-    label: "Abgelaufen",
-    short: "Gültigkeitsdatum überschritten – Verlängerung oder neues Angebot nötig.",
+    label: "Expired",
+    short: "Validity date passed – extension or new quote required.",
   },
 };
 
 export const CONTRACT_STATUS: GlossaryGroup = {
   draft: {
-    label: "Entwurf",
-    short: "Vertragsentwurf wird intern vorbereitet – noch nicht beim Kunden.",
+    label: "Draft",
+    short: "Contract draft is being prepared internally – not yet with the customer.",
   },
   in_negotiation: {
-    label: "In Verhandlung",
-    short: "Klauseln und Konditionen werden mit dem Kunden ausgetauscht.",
+    label: "In negotiation",
+    short: "Clauses and terms are being exchanged with the customer.",
   },
   pending_signature: {
-    label: "Wartet auf Unterschrift",
-    short: "Inhalte sind final – Unterzeichner sind benannt, Signaturprozess läuft.",
+    label: "Pending signature",
+    short: "Content is final – signers are named, signature process is running.",
   },
   active: {
-    label: "Aktiv",
-    short: "Vertrag ist unterschrieben und in Kraft.",
+    label: "Active",
+    short: "Contract is signed and in force.",
   },
   expired: {
-    label: "Abgelaufen",
-    short: "Vertragslaufzeit ist beendet – Renewal-Aktion erforderlich.",
+    label: "Expired",
+    short: "Contract term has ended – renewal action required.",
   },
   terminated: {
-    label: "Gekündigt",
-    short: "Vertrag wurde vor Ablauf beendet – Kündigungsgrund ist dokumentiert.",
+    label: "Terminated",
+    short: "Contract was ended before expiry – termination reason is documented.",
   },
 };
 
 export const APPROVAL_STATUS: GlossaryGroup = {
   pending: {
-    label: "Offen",
-    short: "Wartet auf Entscheidung des verantwortlichen Genehmigers.",
+    label: "Open",
+    short: "Awaiting decision from the responsible approver.",
   },
   approved: {
-    label: "Freigegeben",
-    short: "Genehmigt – das auslösende Quote/Vertrag kann fortfahren.",
+    label: "Approved",
+    short: "Approved – the triggering quote/contract can proceed.",
   },
   rejected: {
-    label: "Abgelehnt",
-    short: "Nicht genehmigt – Begründung ist im Audit-Log gespeichert.",
+    label: "Rejected",
+    short: "Not approved – reason is stored in the audit log.",
   },
   escalated: {
-    label: "Eskaliert",
-    short: "An die nächste Hierarchie-Stufe weitergeleitet (z.B. Sales Director).",
+    label: "Escalated",
+    short: "Forwarded to the next hierarchy level (e.g. Sales Director).",
   },
 };
 
 export const SIGNATURE_STATUS: GlossaryGroup = {
   pending: {
-    label: "Offen",
-    short: "Anfrage ist beim Unterzeichner – noch nicht gehandelt.",
+    label: "Open",
+    short: "Request is with the signer – not yet acted on.",
   },
   signed: {
-    label: "Unterschrieben",
-    short: "Signatur liegt vor – rechtsgültig dokumentiert.",
+    label: "Signed",
+    short: "Signature is in place – legally documented.",
   },
   declined: {
-    label: "Abgelehnt",
-    short: "Unterzeichner hat die Signatur verweigert – Vertrag muss überarbeitet werden.",
+    label: "Declined",
+    short: "Signer has refused the signature – contract must be revised.",
   },
 };
 
 export const ATTACHMENT_CATEGORIES: GlossaryGroup = {
   datasheet: {
-    label: "Datenblatt",
-    short: "Technische Spezifikation eines Produkts oder einer Leistung.",
+    label: "Datasheet",
+    short: "Technical specification of a product or service.",
   },
   terms: {
-    label: "Bedingungen",
-    short: "AGB, DPA, NDA oder andere rechtliche Rahmen-Dokumente.",
+    label: "Terms",
+    short: "T&Cs, DPA, NDA or other legal framework documents.",
   },
   reference: {
-    label: "Referenz",
-    short: "Case Study, Kundenstimme oder vergleichbares Vertrauens-Material.",
+    label: "Reference",
+    short: "Case study, customer testimonial or comparable trust material.",
   },
   certificate: {
-    label: "Zertifikat",
-    short: "Compliance-, Sicherheits- oder Qualitätsnachweis (z.B. ISO 27001).",
+    label: "Certificate",
+    short: "Compliance, security or quality proof (e.g. ISO 27001).",
   },
   other: {
-    label: "Sonstiges",
-    short: "Alles, was nicht in die obigen Kategorien passt.",
+    label: "Other",
+    short: "Anything that does not fit the categories above.",
   },
 };
 
 export const TENANT_PLANS: GlossaryGroup = {
   Starter: {
     label: "Starter",
-    short: "Einstiegsplan – kleine Teams, Grundfunktionen, Basis-Limits.",
+    short: "Entry-level plan – small teams, core features, basic limits.",
   },
   Growth: {
     label: "Growth",
-    short: "Wachsende Teams – höhere Limits, erweiterte Reports und Approvals.",
+    short: "Growing teams – higher limits, advanced reports and approvals.",
   },
   Business: {
     label: "Business",
-    short: "Mittlere Unternehmen – SSO, granulare Rollen, erweiterte Audit-Funktionen.",
+    short: "Mid-market companies – SSO, granular roles, advanced audit features.",
   },
   Enterprise: {
     label: "Enterprise",
-    short: "Konzernkunden – dedizierte Region, individuelle SLAs, On-Prem-Optionen.",
+    short: "Enterprise customers – dedicated region, custom SLAs, on-prem options.",
   },
 };
 
 export const TENANT_REGIONS: GlossaryGroup = {
   EU: {
     label: "EU",
-    short: "Datenresidenz in der Europäischen Union (Frankfurt) – DSGVO-konform.",
+    short: "Data residency in the European Union (Frankfurt) – GDPR compliant.",
   },
   US: {
     label: "US",
-    short: "Datenresidenz in den USA (Virginia) – passend für nordamerikanische Kunden.",
+    short: "Data residency in the USA (Virginia) – suitable for North American customers.",
   },
   UK: {
     label: "UK",
-    short: "Datenresidenz im Vereinigten Königreich (London) – getrennt von EU-Daten.",
+    short: "Data residency in the United Kingdom (London) – separated from EU data.",
   },
   APAC: {
     label: "APAC",
-    short: "Datenresidenz in Asien-Pazifik (Singapur) – Latenz-optimiert für die Region.",
+    short: "Data residency in Asia-Pacific (Singapore) – latency-optimized for the region.",
   },
 };
 
 export const CONCEPTS: GlossaryGroup = {
   brand: {
-    label: "Marke",
-    short: "Bestimmt Branding, Vertragsklauseln, Standardpreise und Templates für diesen Deal.",
-    long: "Eine Marke (Brand) bündelt visuelles Branding, Default-Klauseln, Listenpreise und Approval-Schwellen. Die hier gewählte Marke wird auf alle Folge-Dokumente (Quote, Vertrag, AB) automatisch übertragen.",
+    label: "Brand",
+    short: "Determines branding, contract clauses, default pricing and templates for this deal.",
+    long: "A brand bundles visual branding, default clauses, list prices and approval thresholds. The brand selected here is automatically applied to all downstream documents (quote, contract, order confirmation).",
   },
   company: {
     label: "Company",
-    short: "Verkaufende juristische Einheit (z.B. „DealFlow GmbH“). Bestimmt Rechnungssteller und Steuer-Setup.",
+    short: "Selling legal entity (e.g. \"DealFlow GmbH\"). Determines invoicing party and tax setup.",
   },
   owner: {
-    label: "Verantwortlich",
-    short: "Account Owner – die Person, die diesen Deal aktiv vorantreibt.",
-    long: "Owner sieht den Deal in seinem persönlichen Forecast und ist Ansprechpartner für Folge-Tasks (Approvals, Verhandlungen, Renewals).",
+    label: "Owner",
+    short: "Account owner – the person actively driving this deal.",
+    long: "The owner sees the deal in their personal forecast and is the point of contact for follow-up tasks (approvals, negotiations, renewals).",
   },
   value: {
-    label: "Wert",
-    short: "Erwarteter Auftragswert in Euro – Basis für Forecast und Pipeline-Analytics.",
-    long: "Bei Subscription-Deals: ARR (Annual Recurring Revenue). Bei Einmal-Deals: Gesamtsumme. Wird in Reports nach Phase und Wahrscheinlichkeit gewichtet.",
+    label: "Value",
+    short: "Expected order value in EUR – basis for forecast and pipeline analytics.",
+    long: "For subscription deals: ARR (Annual Recurring Revenue). For one-off deals: total amount. Weighted by stage and probability in reports.",
   },
   expectedCloseDate: {
-    label: "Erwartetes Abschlussdatum",
-    short: "Datum, an dem der Deal voraussichtlich gewonnen oder verloren ist – speist Forecast-Buckets.",
+    label: "Expected close date",
+    short: "Date the deal is expected to be won or lost – feeds forecast buckets.",
   },
   probability: {
-    label: "Wahrscheinlichkeit",
-    short: "Subjektive Einschätzung in Prozent (0–100). Wird mit dem Wert multipliziert, um den Forecast-Beitrag zu berechnen.",
+    label: "Probability",
+    short: "Subjective estimate in percent (0–100). Multiplied with the value to compute the forecast contribution.",
   },
   scope: {
     label: "Scope",
-    short: "Welche Marken und Companies ein User sehen darf. Steuert Sichtbarkeit und Bearbeitungsrechte.",
+    short: "Which brands and companies a user is allowed to see. Controls visibility and editing rights.",
   },
 };
 

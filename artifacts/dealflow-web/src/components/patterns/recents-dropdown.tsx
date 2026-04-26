@@ -23,9 +23,9 @@ const ICONS: Record<RecentKind, typeof Building2> = {
 const KIND_LABEL: Record<RecentKind, string> = {
   account: "Account",
   deal: "Deal",
-  contract: "Vertrag",
-  quote: "Angebot",
-  negotiation: "Verhandlung",
+  contract: "Contract",
+  quote: "Quote",
+  negotiation: "Negotiation",
   lead: "Lead",
 };
 
@@ -38,25 +38,25 @@ export function RecentsDropdown() {
       <DropdownMenuTrigger asChild>
         <Button variant="ghost" size="sm" className="h-8 gap-1.5 px-2" data-testid="recents-trigger">
           <History className="h-4 w-4" />
-          <span className="hidden md:inline text-xs">Zuletzt</span>
+          <span className="hidden md:inline text-xs">Recent</span>
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-72">
         <DropdownMenuLabel className="flex items-center justify-between">
-          <span>Zuletzt geöffnet</span>
+          <span>Recently opened</span>
           {items.length > 0 && (
             <button
               onClick={() => clearRecents()}
               className="text-[10px] text-muted-foreground hover:text-foreground"
             >
-              Liste leeren
+              Clear list
             </button>
           )}
         </DropdownMenuLabel>
         <DropdownMenuSeparator />
         {items.length === 0 ? (
           <div className="px-3 py-6 text-center text-xs text-muted-foreground">
-            Noch keine Einträge — öffne einen Account oder Deal.
+            No entries yet — open an account or deal.
           </div>
         ) : (
           items.map((item) => {
@@ -78,7 +78,7 @@ export function RecentsDropdown() {
                       removeRecent(item.kind, item.id);
                     }}
                     className="ml-1 opacity-0 group-hover:opacity-100 hover:bg-muted rounded p-0.5"
-                    aria-label="Aus Liste entfernen"
+                    aria-label="Remove from list"
                   >
                     <X className="h-3 w-3" />
                   </button>

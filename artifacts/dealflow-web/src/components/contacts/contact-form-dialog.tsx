@@ -62,12 +62,12 @@ export function ContactFormDialog({ open, onOpenChange, accountId, contact, init
     e.preventDefault();
     const trimmedName = name.trim();
     if (!trimmedName) {
-      toast({ title: "Name fehlt", description: "Bitte einen Namen angeben.", variant: "destructive" });
+      toast({ title: "Name missing", description: "Please enter a name.", variant: "destructive" });
       return;
     }
     const trimmedEmail = email.trim();
     if (trimmedEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmedEmail)) {
-      toast({ title: "E-Mail ungültig", description: "Bitte eine gültige E-Mail-Adresse eingeben.", variant: "destructive" });
+      toast({ title: "Invalid email", description: "Please enter a valid email address.", variant: "destructive" });
       return;
     }
     try {
@@ -85,7 +85,7 @@ export function ContactFormDialog({ open, onOpenChange, accountId, contact, init
           return;
         }
         await update.mutateAsync({ id: contact.id, data: patch });
-        toast({ title: "Kontakt aktualisiert", description: trimmedName });
+        toast({ title: "Contact updated", description: trimmedName });
       } else {
         const data: ContactInput = {
           name: trimmedName,
@@ -95,7 +95,7 @@ export function ContactFormDialog({ open, onOpenChange, accountId, contact, init
           isDecisionMaker,
         };
         await create.mutateAsync({ id: accountId, data });
-        toast({ title: "Kontakt angelegt", description: trimmedName });
+        toast({ title: "Contact created", description: trimmedName });
       }
       await Promise.all([
         qc.invalidateQueries({ queryKey: getGetAccountQueryKey(accountId) }),
@@ -104,8 +104,8 @@ export function ContactFormDialog({ open, onOpenChange, accountId, contact, init
       onOpenChange(false);
     } catch (err) {
       toast({
-        title: "Fehler",
-        description: err instanceof Error ? err.message : "Speichern fehlgeschlagen",
+        title: "Error",
+        description: err instanceof Error ? err.message : "Save failed",
         variant: "destructive",
       });
     }
@@ -115,11 +115,11 @@ export function ContactFormDialog({ open, onOpenChange, accountId, contact, init
     <Dialog open={open} onOpenChange={(o) => { if (!pending) onOpenChange(o); }}>
       <DialogContent className="max-w-md" data-testid="contact-form-dialog">
         <DialogHeader>
-          <DialogTitle>{isEdit ? "Kontakt bearbeiten" : "Kontakt hinzufügen"}</DialogTitle>
+          <DialogTitle>{isEdit ? "Edit contact" : "Add contact"}</DialogTitle>
           <DialogDescription>
             {isEdit
-              ? "Aktualisiere die Daten dieses Ansprechpartners."
-              : "Lege einen neuen Ansprechpartner für diesen Kunden an."}
+              ? "Update the details of this contact."
+              : "Add a new contact for this customer."}
           </DialogDescription>
         </DialogHeader>
         <form onSubmit={submit} className="space-y-4">
@@ -130,24 +130,24 @@ export function ContactFormDialog({ open, onOpenChange, accountId, contact, init
               data-testid="contact-form-name"
               value={name}
               onChange={(e) => setName(e.target.value)}
-              placeholder="z.B. Anna Schmidt"
+              placeholder="e.g. Anna Schmidt"
               autoFocus
               disabled={pending}
             />
           </div>
           <div className="space-y-2">
-            <Label htmlFor="contact-role">Rolle</Label>
+            <Label htmlFor="contact-role">Role</Label>
             <Input
               id="contact-role"
               data-testid="contact-form-role"
               value={role}
               onChange={(e) => setRole(e.target.value)}
-              placeholder="z.B. Geschäftsführerin, Einkauf"
+              placeholder="e.g. Managing Director, Procurement"
               disabled={pending}
             />
           </div>
           <div className="space-y-2">
-            <Label htmlFor="contact-email">E-Mail</Label>
+            <Label htmlFor="contact-email">Email</Label>
             <Input
               id="contact-email"
               data-testid="contact-form-email"
@@ -159,7 +159,7 @@ export function ContactFormDialog({ open, onOpenChange, accountId, contact, init
             />
           </div>
           <div className="space-y-2">
-            <Label htmlFor="contact-phone">Telefon</Label>
+            <Label htmlFor="contact-phone">Phone</Label>
             <Input
               id="contact-phone"
               data-testid="contact-form-phone"
@@ -176,15 +176,15 @@ export function ContactFormDialog({ open, onOpenChange, accountId, contact, init
               disabled={pending}
               data-testid="contact-form-decision-maker"
             />
-            <span>Entscheider</span>
+            <span>Decision maker</span>
           </label>
           <DialogFooter>
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)} disabled={pending}>
-              Abbrechen
+              Cancel
             </Button>
             <Button type="submit" disabled={pending} data-testid="contact-form-submit">
               {pending && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-              {isEdit ? "Speichern" : "Anlegen"}
+              {isEdit ? "Save" : "Create"}
             </Button>
           </DialogFooter>
         </form>

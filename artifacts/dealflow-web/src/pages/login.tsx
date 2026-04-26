@@ -33,7 +33,7 @@ export default function LoginPage() {
       await login(email, password);
       setLocation("/");
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Login fehlgeschlagen");
+      setError(err instanceof Error ? err.message : "Login failed");
     } finally {
       setBusy(false);
     }
@@ -48,17 +48,17 @@ export default function LoginPage() {
               <div className="size-8 rounded bg-primary text-primary-foreground flex items-center justify-center font-bold">D</div>
               <span className="font-semibold">DealFlow One</span>
             </div>
-            <CardTitle>Anmelden</CardTitle>
+            <CardTitle>Sign in</CardTitle>
             <CardDescription>B2B Commercial Execution Platform</CardDescription>
           </CardHeader>
           <CardContent>
             <form onSubmit={submit} className="space-y-4" data-testid="form-login">
               <div className="space-y-1.5">
-                <Label htmlFor="email">E-Mail</Label>
+                <Label htmlFor="email">Email</Label>
                 <Input id="email" type="email" required value={email} onChange={(e) => setEmail(e.target.value)} data-testid="input-email" />
               </div>
               <div className="space-y-1.5">
-                <Label htmlFor="password">Passwort</Label>
+                <Label htmlFor="password">Password</Label>
                 <Input id="password" type="password" required value={password} onChange={(e) => setPassword(e.target.value)} data-testid="input-password" />
               </div>
               {error && (
@@ -66,7 +66,7 @@ export default function LoginPage() {
               )}
               <Button type="submit" className="w-full" disabled={busy} data-testid="button-login">
                 {busy ? <Loader2 className="size-4 animate-spin" /> : <LogIn className="size-4" />}
-                Anmelden
+                Sign in
               </Button>
             </form>
           </CardContent>
@@ -74,8 +74,8 @@ export default function LoginPage() {
 
         <Card>
           <CardHeader>
-            <CardTitle className="text-base">Demo-Nutzer</CardTitle>
-            <CardDescription>Passwort für alle Demo-Konten: <code className="font-mono">dealflow</code></CardDescription>
+            <CardTitle className="text-base">Demo users</CardTitle>
+            <CardDescription>Password for all demo accounts: <code className="font-mono">dealflow</code></CardDescription>
           </CardHeader>
           <CardContent className="space-y-2">
             {DEMO_USERS.map((u) => (

@@ -129,10 +129,10 @@ export default function ExternalContractPage() {
     setEditDraft((prev) => ({ ...prev, [f]: v === "" ? null : v }));
   }
   function fieldLabel(f: EditableField): string {
-    return f === "effectiveFrom" ? "Vertragsbeginn"
-      : f === "effectiveTo" ? "Vertragsende"
-      : f === "governingLaw" ? "Anwendbares Recht"
-      : "Gerichtsstand";
+    return f === "effectiveFrom" ? "Contractsbeginn"
+      : f === "effectiveTo" ? "Contractsende"
+      : f === "governingLaw" ? "Governing law"
+      : "Jurisdiction";
   }
 
   async function saveEdits() {
@@ -149,7 +149,7 @@ export default function ExternalContractPage() {
         const txt = await r.text();
         setEditMessage({ kind: "err", text: txt || `HTTP ${r.status}` });
       } else {
-        setEditMessage({ kind: "ok", text: "Felder erfolgreich gespeichert." });
+        setEditMessage({ kind: "ok", text: "Felder succeeded gespeichert." });
         setEditDraft({});
         await load();
       }
@@ -216,7 +216,7 @@ export default function ExternalContractPage() {
     if (!data) return;
     const trimmed = signName.trim();
     if (trimmed.length === 0) {
-      setSignMessage({ kind: "err", text: "Bitte deinen Namen eingeben." });
+      setSignMessage({ kind: "err", text: "Please enter your name." });
       return;
     }
     setSignSubmitting(true);
@@ -236,7 +236,7 @@ export default function ExternalContractPage() {
       } else {
         const json = (await r.json()) as { signer: { signedAt: string } };
         setSignedAt(json.signer.signedAt);
-        setSignMessage({ kind: "ok", text: "Vertrag erfolgreich mitgezeichnet." });
+        setSignMessage({ kind: "ok", text: "Contract succeeded mitgezeichnet." });
         setSignOpen(false);
       }
     } catch (e) {
@@ -290,13 +290,13 @@ export default function ExternalContractPage() {
           )}
           <div className="flex-1">
             <h1 className="text-lg font-semibold">{data?.brand?.name ?? "DealFlow.One"}</h1>
-            <p className="text-xs text-muted-foreground">Externer Vertrags-Zugang</p>
+            <p className="text-xs text-muted-foreground">Externer Contracts-Zugang</p>
           </div>
           {data && (
             <div className="text-xs text-muted-foreground text-right">
               <div>{data.collaborator.email}</div>
               <div>
-                Gültig bis {new Date(data.collaborator.expiresAt).toLocaleString()}
+                Valid to {new Date(data.collaborator.expiresAt).toLocaleString()}
               </div>
             </div>
           )}
@@ -312,16 +312,16 @@ export default function ExternalContractPage() {
               <CardTitle className="flex items-center gap-2 text-destructive">
                 <Lock className="h-5 w-5" />
                 {error.status === 401
-                  ? "Dieser Magic-Link ist abgelaufen oder wurde widerrufen."
+                  ? "This magic link has expired or was revoked."
                   : error.status === 404
-                  ? "Magic-Link ungültig."
-                  : "Ein Fehler ist aufgetreten."}
+                  ? "Magic link invalid."
+                  : "Ein Error ist aufgetreten."}
               </CardTitle>
             </CardHeader>
             <CardContent>
               <p className="text-sm text-muted-foreground">
-                Bitte kontaktiere die Person, die dir den Link geschickt hat — sie kann einen
-                neuen Magic-Link erstellen.
+                Please contact the person who sent you the link — they can create a
+                neuen Magic-Link create.
               </p>
             </CardContent>
           </Card>
@@ -330,7 +330,7 @@ export default function ExternalContractPage() {
         {data && (
           <>
             {/* Externer Zugriff Banner — informiert Anwalt/Berater ueber Read-only- und
-                Audit-Status, sodass keine Verwechslung mit interner Bearbeitung entsteht. */}
+                Audit-Status, sodass keine Verwechslung mit internaler Bearbeitung entsteht. */}
             <div
               className="border-l-4 border-amber-500 bg-amber-500/10 px-4 py-3 rounded-md flex items-start gap-3"
               data-testid="ext-access-banner"
@@ -339,20 +339,20 @@ export default function ExternalContractPage() {
               <Info className="h-5 w-5 text-amber-600 shrink-0 mt-0.5" />
               <div className="text-sm">
                 <div className="font-semibold text-amber-900 dark:text-amber-200">
-                  Externer Zugriff über Magic-Link
+                  External access via magic link
                 </div>
                 <p className="text-amber-900/80 dark:text-amber-200/80 mt-0.5">
-                  Du arbeitest mit einem zeitlich begrenzten, gegenüber{" "}
+                  You are working with a time-limited access, logged with{" "}
                   <strong>{data.brand?.name ?? "DealFlow.One"}</strong> protokollierten Zugang.
-                  Alle Aktionen werden mit deiner E-Mail-Adresse{" "}
-                  <strong>{data.collaborator.email}</strong> im Audit-Log festgehalten.
-                  Berechtigungen:{" "}
+                  All actions are logged with your email address{" "}
+                  <strong>{data.collaborator.email}</strong> in the audit log.
+                  Permissions:{" "}
                   {data.collaborator.capabilities.map((c) => (
                     <Badge key={c} variant="outline" className="ml-1 text-[10px] uppercase">
-                      {c === "view" ? "Lesen"
-                       : c === "comment" ? "Kommentieren"
-                       : c === "edit_fields" ? "Felder bearbeiten"
-                       : "Mitzeichnen"}
+                      {c === "view" ? "Read"
+                       : c === "comment" ? "Comment"
+                       : c === "edit_fields" ? "Felder edit"
+                       : "Countersign"}
                     </Badge>
                   ))}
                 </p>
@@ -375,31 +375,31 @@ export default function ExternalContractPage() {
                 )}
                 {data.contract.currency && (
                   <div>
-                    <div className="text-muted-foreground text-xs">Währung</div>
+                    <div className="text-muted-foreground text-xs">Currency</div>
                     <div>{data.contract.currency}</div>
                   </div>
                 )}
                 {data.contract.effectiveFrom && (
                   <div>
-                    <div className="text-muted-foreground text-xs">Gültig ab</div>
+                    <div className="text-muted-foreground text-xs">Valid from</div>
                     <div>{new Date(data.contract.effectiveFrom).toLocaleDateString()}</div>
                   </div>
                 )}
                 {data.contract.effectiveTo && (
                   <div>
-                    <div className="text-muted-foreground text-xs">Gültig bis</div>
+                    <div className="text-muted-foreground text-xs">Valid to</div>
                     <div>{new Date(data.contract.effectiveTo).toLocaleDateString()}</div>
                   </div>
                 )}
                 {data.contract.governingLaw && (
                   <div>
-                    <div className="text-muted-foreground text-xs">Rechtswahl</div>
+                    <div className="text-muted-foreground text-xs">Governing law</div>
                     <div>{data.contract.governingLaw}</div>
                   </div>
                 )}
                 {data.contract.jurisdiction && (
                   <div>
-                    <div className="text-muted-foreground text-xs">Gerichtsstand</div>
+                    <div className="text-muted-foreground text-xs">Jurisdiction</div>
                     <div>{data.contract.jurisdiction}</div>
                   </div>
                 )}
@@ -411,13 +411,13 @@ export default function ExternalContractPage() {
                 <CardHeader>
                   <CardTitle className="text-base flex items-center gap-2">
                     <Pencil className="h-4 w-4" />
-                    Felder bearbeiten
+                    Felder edit
                   </CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-3">
                   <p className="text-xs text-muted-foreground">
-                    Du kannst die folgenden Felder direkt aendern. Jede Aenderung wird im
-                    Audit-Log mit deiner E-Mail-Adresse protokolliert.
+                    You can change the following fields directly. Each change is recorded in the
+                    audit log with your email address.
                   </p>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     {data.collaborator.editableFields.map((f) => {
@@ -455,7 +455,7 @@ export default function ExternalContractPage() {
                       disabled={savingEdit || Object.keys(editDraft).length === 0}
                       data-testid="ext-edit-submit"
                     >
-                      Aenderungen speichern
+                      Save changes
                     </Button>
                   </div>
                 </CardContent>
@@ -467,7 +467,7 @@ export default function ExternalContractPage() {
                 <CardHeader>
                   <CardTitle className="text-base flex items-center gap-2">
                     <PenLine className="h-4 w-4" />
-                    Mitzeichnen als externer Anwalt
+                    Countersign as external counsel
                   </CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-3">
@@ -478,13 +478,13 @@ export default function ExternalContractPage() {
                       role="status"
                     >
                       <CheckCircle2 className="h-4 w-4" />
-                      Vertrag mitgezeichnet am {new Date(signedAt).toLocaleString()}.
+                      Contract mitgezeichnet am {new Date(signedAt).toLocaleString()}.
                     </div>
                   ) : (
                     <p className="text-xs text-muted-foreground">
-                      Du kannst diesen Vertrag als externer Mitzeichner gegenzeichnen.
-                      Deine Unterschrift wird mit deiner E-Mail-Adresse im Audit-Log
-                      protokolliert und an das Signatur-Paket des Vertrags angeheftet.
+                      Du kannst diesen Contract als externaler Mitzeichner gegenzeichnen.
+                      Your signature is logged with your email address
+                      protokolliert und an das Signatur-Paket des Contracts angeheftet.
                     </p>
                   )}
                   {signMessage && !signOpen && (
@@ -505,7 +505,7 @@ export default function ExternalContractPage() {
                       data-testid="ext-sign-open"
                     >
                       <PenLine className="h-4 w-4 mr-1" />
-                      {signedAt ? "Bereits mitgezeichnet" : "Mitzeichnen"}
+                      {signedAt ? "Already countersigned" : "Countersign"}
                     </Button>
                   </div>
                 </CardContent>
@@ -514,11 +514,11 @@ export default function ExternalContractPage() {
 
             <Card>
               <CardHeader>
-                <CardTitle className="text-base">Klauseln</CardTitle>
+                <CardTitle className="text-base">Clauses</CardTitle>
               </CardHeader>
               <CardContent className="space-y-2">
                 {data.clauses.length === 0 && (
-                  <p className="text-sm text-muted-foreground italic">Keine Klauseln hinterlegt.</p>
+                  <p className="text-sm text-muted-foreground italic">Keine Clauses hinterlegt.</p>
                 )}
                 {data.clauses.map((cl) => (
                   <div key={cl.id} className="border rounded-md p-3" data-testid={`ext-clause-${cl.id}`}>
@@ -548,19 +548,19 @@ export default function ExternalContractPage() {
               <CardHeader>
                 <CardTitle className="text-base flex items-center gap-2">
                   <MessageSquare className="h-4 w-4" />
-                  Kommentare
+                  Comments
                 </CardTitle>
               </CardHeader>
               <CardContent className="space-y-3">
                 {data.comments.length === 0 && (
-                  <p className="text-sm text-muted-foreground italic">Noch keine Kommentare.</p>
+                  <p className="text-sm text-muted-foreground italic">Noch keine Comments.</p>
                 )}
                 {data.comments.map((c) => (
                   <div key={c.id} className="border-l-2 border-muted pl-3" data-testid={`ext-comment-${c.id}`}>
                     <div className="flex items-center gap-2 text-xs text-muted-foreground">
                       <span className="font-medium text-foreground">{c.authorName}</span>
                       <Badge variant="outline" className="text-[10px]">
-                        {c.authorType === "external" ? "extern" : "intern"}
+                        {c.authorType === "external" ? "external" : "internal"}
                       </Badge>
                       <span>{new Date(c.createdAt).toLocaleString()}</span>
                     </div>
@@ -573,7 +573,7 @@ export default function ExternalContractPage() {
                     <textarea
                       className="w-full border rounded p-2 text-sm bg-background"
                       rows={3}
-                      placeholder="Kommentar hinzufügen…"
+                      placeholder="Comment add…"
                       value={commentBody}
                       onChange={(e) => setCommentBody(e.target.value)}
                       data-testid="ext-comment-input"
@@ -592,14 +592,14 @@ export default function ExternalContractPage() {
                 ) : (
                   <p className="text-xs text-muted-foreground italic flex items-center gap-1 pt-2 border-t">
                     <ShieldAlert className="h-3 w-3" />
-                    Kommentare deaktiviert für diesen Zugang.
+                    Comments disabled for this access.
                   </p>
                 )}
               </CardContent>
             </Card>
 
             <p className="text-xs text-muted-foreground text-center pt-4">
-              {t("appName", { defaultValue: "DealFlow.One" })} — sicherer externer Zugang
+              {t("appName", { defaultValue: "DealFlow.One" })} — sicherer externaler Zugang
             </p>
           </>
         )}
@@ -610,12 +610,12 @@ export default function ExternalContractPage() {
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <PenLine className="h-4 w-4" />
-              Vertrag mitzeichnen
+              Contract mitzeichnen
             </DialogTitle>
             <DialogDescription>
-              Bitte bestaetige deine Mitzeichnung. Datum und Uhrzeit werden automatisch
+              Bitte bestaetige deine Countersignature. Datum und Uhrzeit werden automatisch
               uebernommen. Die Unterschrift wird mit deiner E-Mail-Adresse{" "}
-              <strong>{data?.collaborator.email}</strong> im Audit-Log festgehalten.
+              <strong>{data?.collaborator.email}</strong> in the audit log.
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-3">
@@ -659,7 +659,7 @@ export default function ExternalContractPage() {
               />
               <p className="text-[11px] text-muted-foreground">
                 Du kannst hier optional eine Unterschrift zeichnen. Wenn leer, wird nur der
-                Name als Mitzeichnung gespeichert.
+                Name als Countersignature gespeichert.
               </p>
             </div>
             {signMessage && signOpen && (
@@ -681,7 +681,7 @@ export default function ExternalContractPage() {
               disabled={signSubmitting}
               data-testid="ext-sign-cancel"
             >
-              Abbrechen
+              Cancel
             </Button>
             <Button
               size="sm"
@@ -689,7 +689,7 @@ export default function ExternalContractPage() {
               disabled={signSubmitting || signName.trim().length === 0}
               data-testid="ext-sign-submit"
             >
-              {signSubmitting ? "Wird gespeichert..." : "Mitzeichnung bestaetigen"}
+              {signSubmitting ? "Wird gespeichert..." : "Countersignature bestaetigen"}
             </Button>
           </DialogFooter>
         </DialogContent>
