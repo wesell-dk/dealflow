@@ -365,7 +365,7 @@ export default function Deals() {
           />
         )
       ) : (
-        <div className="border rounded-md overflow-hidden">
+        <div className="border rounded-xl overflow-hidden">
           <Table>
             <TableHeader>
               <TableRow>
@@ -463,7 +463,7 @@ function DealRow({
 }) {
   const stageLabel = stages.find((s) => s.value === deal.stage)?.label ?? deal.stage;
   return (
-    <TableRow data-state={selected ? "selected" : undefined} className={selected ? "bg-muted/40" : undefined}>
+    <TableRow data-state={selected ? "selected" : undefined} className={selected ? "bg-accent/40" : undefined}>
       <TableCell className="sticky left-0 bg-background z-10 md:static md:bg-transparent">
         <Checkbox checked={selected} onCheckedChange={onToggle} aria-label={`Select ${deal.name}`} />
       </TableCell>

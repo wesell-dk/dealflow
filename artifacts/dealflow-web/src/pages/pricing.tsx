@@ -84,7 +84,7 @@ function ResolvePanel() {
         {error && <p className="text-sm text-rose-600">{error}</p>}
         {result && (
           <div className="space-y-3">
-            <div className="flex items-baseline gap-3 border rounded-lg p-4 bg-muted/30">
+            <div className="flex items-baseline gap-3 border rounded-xl p-4 bg-accent/30">
               <div className="text-xs uppercase text-muted-foreground">{t("pages.pricing.price")}</div>
               <div className="text-2xl font-bold tabular-nums">
                 {result.listPrice.toLocaleString()} {result.currency}
@@ -275,7 +275,7 @@ function PositionsPanel({ positions }: { positions: PricePosition[] | undefined 
           <Plus className="mr-2 h-4 w-4" /> {t("pages.pricing.positions.new")}
         </Button>
       </div>
-      <div className="border rounded-md bg-card">
+      <div className="border rounded-xl bg-card overflow-hidden">
         <Table>
           <TableHeader>
             <TableRow>
@@ -441,7 +441,7 @@ function RulesPanel({ rules }: { rules: PriceRule[] | undefined }) {
               <Badge variant="secondary" className="w-fit">{rule.scope}</Badge>
             </CardHeader>
             <CardContent className="pt-2 text-sm">
-              <div className="flex flex-col gap-2 p-3 bg-muted/20 rounded-md border">
+              <div className="flex flex-col gap-2 p-3 bg-accent/30 rounded-xl border">
                 <div className="font-mono text-xs p-1.5 bg-background rounded border">{rule.condition}</div>
                 <div className="flex justify-center text-muted-foreground"><ArrowRight className="h-4 w-4" /></div>
                 <div className="font-mono text-xs p-1.5 bg-primary/10 text-primary-foreground font-semibold rounded border border-primary/20 bg-primary text-primary-foreground text-center">{rule.effect}</div>
@@ -475,7 +475,7 @@ function RulesPanel({ rules }: { rules: PriceRule[] | undefined }) {
           </Card>
         ))}
         {rules?.length === 0 && (
-          <div className="col-span-full p-8 text-center border rounded-md text-muted-foreground bg-muted/10">
+          <div className="col-span-full p-8 text-center border rounded-xl text-muted-foreground bg-accent/20">
             {t("pages.pricing.rules.empty")}
           </div>
         )}

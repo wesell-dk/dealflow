@@ -362,7 +362,7 @@ export default function Contract() {
             </div>
 
         {(clauses?.length ?? 0) === 0 ? (
-          <div className="p-8 text-center border rounded-md text-muted-foreground bg-muted/10">
+          <div className="p-8 text-center border rounded-xl text-muted-foreground bg-accent/20">
             {t("common.noData")}
           </div>
         ) : (
@@ -382,7 +382,7 @@ export default function Contract() {
                   }}
                   data-testid={`clause-card-${clause.id}`}
                 >
-                  <CardHeader className="py-3 px-4 flex flex-row items-start justify-between gap-4 bg-muted/10">
+                  <CardHeader className="py-3 px-4 flex flex-row items-start justify-between gap-4 bg-accent/20">
                     <div className="flex-1 min-w-0">
                       <CardTitle className="text-base font-medium">{clause.family}</CardTitle>
                       <div className="flex items-center gap-2 mt-1 text-xs">
@@ -505,7 +505,7 @@ export default function Contract() {
             </div>
             <div className="grid md:grid-cols-2 gap-3">
               {families?.map(family => (
-                <Card key={family.id} className="bg-muted/5">
+                <Card key={family.id} className="bg-accent/10">
                   <CardHeader className="py-3 px-4">
                     <CardTitle className="text-base font-medium">{family.name}</CardTitle>
                     <p className="text-xs text-muted-foreground">{family.description}</p>
@@ -623,7 +623,7 @@ export default function Contract() {
                 <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
                   Redlining
                 </div>
-                <div className="p-3 border rounded text-sm leading-relaxed bg-muted/20">
+                <div className="p-3 border rounded-lg text-sm leading-relaxed bg-accent/20">
                   {diffWords(diff.fromVariant.body ?? "", diff.toVariant.body ?? "").map((seg, i) => (
                     <span
                       key={i}
@@ -917,7 +917,7 @@ function EffectiveStateSection({ contractId, contractStatus }: { contractId: str
               Clause set including all active amendments ({data.appliedAmendments.length} applied).
             </p>
             {data.clauses.length === 0 ? (
-              <div className="p-4 text-center border rounded-md text-muted-foreground bg-muted/10 text-sm">
+              <div className="p-4 text-center border rounded-xl text-muted-foreground bg-accent/20 text-sm">
                 No clauses present.
               </div>
             ) : (
@@ -990,14 +990,14 @@ function AmendmentsSection({ contractId, contractStatus }: { contractId: string;
       {isLoading ? (
         <Skeleton className="h-24 w-full" />
       ) : (amendments?.length ?? 0) === 0 ? (
-        <div className="p-6 text-center border rounded-md text-muted-foreground bg-muted/10 text-sm">
+        <div className="p-6 text-center border rounded-xl text-muted-foreground bg-accent/20 text-sm">
           {canAmend ? "No amendments." : `Amendments are only available once the contract status is "signed".`}
         </div>
       ) : (
         <div className="grid gap-2">
           {amendments?.map(a => (
             <Link key={a.id} href={`/amendments/${a.id}`}>
-              <Card className="hover:bg-muted/30 transition-colors cursor-pointer" data-testid={`amendment-${a.id}`}>
+              <Card className="hover:bg-accent/30 transition-colors cursor-pointer" data-testid={`amendment-${a.id}`}>
                 <CardContent className="p-4 flex items-center justify-between gap-4">
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 text-xs text-muted-foreground">
@@ -1051,7 +1051,7 @@ function AmendmentsSection({ contractId, contractStatus }: { contractId: string;
               <label className="text-xs font-medium text-muted-foreground uppercase">Title</label>
               <input
                 type="text"
-                className="w-full px-3 py-2 border rounded-md text-sm bg-background"
+                className="w-full px-3 py-2 border rounded-lg text-sm bg-background"
                 value={title}
                 onChange={e => setTitle(e.target.value)}
                 placeholder="e.g. Price adjustment Q2 2026"
@@ -1061,7 +1061,7 @@ function AmendmentsSection({ contractId, contractStatus }: { contractId: string;
             <div>
               <label className="text-xs font-medium text-muted-foreground uppercase">Description</label>
               <textarea
-                className="w-full px-3 py-2 border rounded-md text-sm bg-background min-h-[80px]"
+                className="w-full px-3 py-2 border rounded-lg text-sm bg-background min-h-[80px]"
                 value={description}
                 onChange={e => setDescription(e.target.value)}
                 placeholder="Justification and scope of the change"
@@ -1357,7 +1357,7 @@ function CuadCoverageSection({ contractId }: { contractId: string }) {
 
       {blocked && (
         <div
-          className="border border-red-300 bg-red-50/60 rounded-md p-4 space-y-2"
+          className="border border-red-300 bg-red-50/60 rounded-xl p-4 space-y-2"
           data-testid="cuad-block-banner"
         >
           <div className="flex items-center gap-2 text-red-800 font-medium text-sm">
@@ -1430,7 +1430,7 @@ function CuadCoverageSection({ contractId }: { contractId: string }) {
         <Skeleton className="h-24 w-full" />
       ) : !cov || !cov.contractTypeId ? (
         <div
-          className="p-4 border rounded-md text-sm bg-muted/10 space-y-3"
+          className="p-4 border rounded-xl text-sm bg-accent/20 space-y-3"
           data-testid="cuad-bind-contract-type"
         >
           <p className="text-muted-foreground">
@@ -1502,7 +1502,7 @@ function CuadCoverageSection({ contractId }: { contractId: string }) {
               {cov.missing.map(m => (
                 <div
                   key={m.cuadCategoryId}
-                  className="border rounded-md p-3 bg-card"
+                  className="border rounded-xl p-3 bg-card"
                   data-testid={`cuad-missing-${m.cuadCategoryId}`}
                 >
                   <div className="flex items-start justify-between gap-3 flex-wrap">
@@ -1549,7 +1549,7 @@ function CuadCoverageSection({ contractId }: { contractId: string }) {
                   {cov.covered.map(c => (
                     <div
                       key={c.cuadCategoryId}
-                      className="border rounded-md p-2 bg-emerald-50/30 text-sm"
+                      className="border rounded-xl p-2 bg-emerald-50/30 text-sm"
                       data-testid={`cuad-covered-${c.cuadCategoryId}`}
                     >
                       <div className="flex items-center gap-2 flex-wrap">
@@ -1633,7 +1633,7 @@ function DeviationsSection({ contractId }: { contractId: string }) {
       {isLoading ? (
         <Skeleton className="h-24 w-full" />
       ) : (deviations?.length ?? 0) === 0 ? (
-        <div className="p-6 text-center border rounded-md text-sm text-muted-foreground bg-muted/10">
+        <div className="p-6 text-center border rounded-xl text-sm text-muted-foreground bg-accent/20">
           No deviations recorded. Click "Check against playbook" to evaluate.
         </div>
       ) : (
@@ -1641,7 +1641,7 @@ function DeviationsSection({ contractId }: { contractId: string }) {
           {[...open, ...resolved].map(dev => (
             <div
               key={dev.id}
-              className="border rounded-md p-3 bg-card"
+              className="border rounded-xl p-3 bg-card"
               data-testid={`deviation-row-${dev.id}`}
             >
               <div className="flex items-start justify-between gap-3 flex-wrap">
@@ -1761,15 +1761,15 @@ function ObligationsSection({ contractId, contractStatus }: { contractId: string
       {isLoading ? (
         <Skeleton className="h-24 w-full" />
       ) : items.length === 0 ? (
-        <div className="p-6 text-center border rounded-md text-sm text-muted-foreground bg-muted/10">
+        <div className="p-6 text-center border rounded-xl text-sm text-muted-foreground bg-accent/20">
           {contractStatus === "signed"
             ? 'No obligations yet — click "Derive from clauses".'
             : "Obligations are generated automatically on signature."}
         </div>
       ) : (
-        <div className="border rounded-md overflow-hidden">
+        <div className="border rounded-xl overflow-hidden">
           <table className="w-full text-sm">
-            <thead className="bg-muted/30 text-xs uppercase text-muted-foreground">
+            <thead className="bg-accent/30 text-xs uppercase text-muted-foreground">
               <tr>
                 <th className="text-left px-3 py-2">Title</th>
                 <th className="text-left px-3 py-2">Type</th>
@@ -2043,7 +2043,7 @@ function ExternalCollaboratorsCard({ contractId }: { contractId: string }) {
           {collabs!.map((c) => (
             <div
               key={c.id}
-              className="flex items-center justify-between gap-4 border rounded-md p-3 bg-card"
+              className="flex items-center justify-between gap-4 border rounded-xl p-3 bg-card"
               data-testid={`ext-collab-row-${c.id}`}
             >
               <div className="flex-1 min-w-0">
@@ -2471,7 +2471,7 @@ function ExternalAccessActivityCard({ contractId }: { contractId: string }) {
                 className={isHighlighted ? "ring-2 ring-primary/40" : ""}
                 data-testid={`ext-activity-block-${collabId}`}
               >
-                <CardHeader className="py-3 px-4 bg-muted/10">
+                <CardHeader className="py-3 px-4 bg-accent/20">
                   <div className="flex flex-wrap items-center gap-3 justify-between">
                     <div className="flex flex-col gap-1 min-w-0">
                       <div className="flex items-center gap-2 flex-wrap">

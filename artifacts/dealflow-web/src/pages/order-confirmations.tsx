@@ -88,7 +88,7 @@ export default function OrderConfirmations() {
           body={t("common.noResultsBody")}
         />
       ) : (
-        <div className="border rounded-md">
+        <div className="border rounded-xl overflow-hidden">
           <Table>
             <TableHeader>
               <TableRow>
@@ -102,7 +102,7 @@ export default function OrderConfirmations() {
             </TableHeader>
             <TableBody>
               {filtered.map((c) => (
-                <TableRow key={c.id} className="cursor-pointer hover:bg-muted/50">
+                <TableRow key={c.id} className="cursor-pointer hover:bg-accent/40">
                   <TableCell className="sticky left-0 bg-background z-10 md:static md:bg-transparent">
                     <Link href={`/order-confirmations/${c.id}`} className="font-mono text-xs text-primary hover:underline">
                       {c.number}

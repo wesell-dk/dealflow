@@ -273,7 +273,7 @@ export default function Contracts() {
           />
         )
       ) : (
-        <div className="border rounded-md overflow-hidden">
+        <div className="border rounded-xl overflow-hidden">
           <Table>
             <TableHeader>
               <TableRow>

@@ -186,7 +186,7 @@ export function SavedViewTabs({
                     type="button"
                     aria-label={`${v.name} Optionen`}
                     onClick={(e) => e.stopPropagation()}
-                    className="ml-1 inline-flex h-5 w-5 items-center justify-center rounded hover:bg-muted/80"
+                    className="ml-1 inline-flex h-5 w-5 items-center justify-center rounded-lg hover:bg-accent/80"
                   >
                     <MoreHorizontal className="h-3.5 w-3.5" />
                   </button>
@@ -286,10 +286,10 @@ function ViewTab({
   return (
     <div
       className={cn(
-        "flex items-center gap-0.5 rounded-t-md border border-b-0 -mb-px",
+        "flex items-center gap-0.5 rounded-t-lg border border-b-0 -mb-px",
         active
           ? "border-border bg-background text-foreground font-medium"
-          : "border-transparent bg-transparent text-muted-foreground hover:text-foreground hover:bg-muted/50",
+          : "border-transparent bg-transparent text-muted-foreground hover:text-foreground hover:bg-accent/50",
       )}
       data-active={active}
     >
@@ -298,7 +298,7 @@ function ViewTab({
         role="tab"
         aria-selected={active}
         onClick={onClick}
-        className="px-3 py-1.5 text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/40 rounded-t-md whitespace-nowrap"
+        className="px-3 py-1.5 text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/40 rounded-t-lg whitespace-nowrap"
         data-testid={testId}
       >
         {label}

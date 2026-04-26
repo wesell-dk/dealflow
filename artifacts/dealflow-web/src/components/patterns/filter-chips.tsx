@@ -85,7 +85,7 @@ export function FilterChip<T extends string = string>({
               key={o.value}
               type="button"
               onClick={() => { onChange(o.value as T); setOpen(false); setQ(""); }}
-              className="flex w-full items-center justify-between px-3 py-1.5 text-sm hover:bg-muted text-left"
+              className="flex w-full items-center justify-between px-3 py-1.5 text-sm hover:bg-accent text-left"
             >
               <span className="truncate">{o.label}</span>
               {value === o.value && <Check className="h-4 w-4" />}

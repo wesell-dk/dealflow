@@ -114,7 +114,7 @@ function MyDelegationsCard() {
       </CardHeader>
       <CardContent className="space-y-3 text-sm">
         {open && (
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-2 border rounded p-3 bg-muted/20">
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-2 border rounded-xl p-3 bg-accent/30">
             <div>
               <Label className="text-xs">Delegated to</Label>
               <select
@@ -440,7 +440,7 @@ export default function Approvals() {
                   )}
                 </CardContent>
                 {isOpen && (
-                  <CardFooter className="pt-3 border-t bg-muted/10 flex flex-col items-stretch gap-3">
+                  <CardFooter className="pt-3 border-t bg-accent/20 flex flex-col items-stretch gap-3">
                     {!canDecide && hasStages && (
                       <div className="text-xs text-muted-foreground italic" data-testid={`hint-cannot-decide-${approval.id}`}>
                         You are not authorized to decide on the current stage.
@@ -480,7 +480,7 @@ export default function Approvals() {
                   </CardFooter>
                 )}
                 {!isOpen && approval.decisionComment && (
-                  <CardFooter className="pt-3 border-t bg-muted/10 text-sm">
+                  <CardFooter className="pt-3 border-t bg-accent/20 text-sm">
                     <div className="italic">"{approval.decisionComment}"</div>
                   </CardFooter>
                 )}
