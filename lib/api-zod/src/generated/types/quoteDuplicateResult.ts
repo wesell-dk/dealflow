@@ -12,4 +12,20 @@ export interface QuoteDuplicateResult {
   id: string;
   number: string;
   dealId: string;
+  /** True wenn das Ziel-Angebot in einen Deal kopiert wurde, dessen
+Owner != aktueller Nutzer ist. In dem Fall wurde der Owner über
+den bestehenden Notification-Stack (Timeline-Event auf dem
+Ziel-Deal + Best-Effort-Mail) informiert.
+ */
+  ownerNotified: boolean;
+  /**
+   * User-ID des Owners des Ziel-Deals (null wenn unbekannt).
+   * @nullable
+   */
+  targetDealOwnerId?: string | null;
+  /**
+   * Anzeigename des Owners des Ziel-Deals.
+   * @nullable
+   */
+  targetDealOwnerName?: string | null;
 }

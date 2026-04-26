@@ -10,6 +10,7 @@ import {
   sendCollaboratorSignConfirmationEmail,
   sendOwnerCounterSignNotificationEmail,
 } from '../lib/collaboratorEmail';
+import { sendEmail } from '../lib/email';
 import { buildMagicLinkUrl } from '../lib/magicLinkUrl';
 import {
   sanitizeCompanyName,
@@ -10828,12 +10829,96 @@ router.post('/quotes/:id/duplicate', async (req, res) => {
       }
     }
   });
+  // Cross-Deal-Kopie: Wenn das neue Angebot in einem anderen Deal landet als
+  // das Original, ist die Owner-Zuordnung eine wichtige Information fuer die
+  // Audit-Trail. Wir laden Quelle/Ziel jetzt einmal und teilen die Daten
+  // zwischen Notification (Timeline + Mail) und Audit-Eintrag.
+  const scope = getScope(req);
+  const dealIds = Array.from(new Set([src.dealId, targetDealId]));
+  const dealRows = await db.select().from(dealsTable).where(inArray(dealsTable.id, dealIds));
+  const sourceDeal = dealRows.find(d => d.id === src.dealId) ?? null;
+  const targetDeal = dealRows.find(d => d.id === targetDealId) ?? null;
+  const ownerIds = Array.from(new Set([
+    sourceDeal?.ownerId ?? '',
+    targetDeal?.ownerId ?? '',
+  ].filter(Boolean)));
+  const ownerRows = ownerIds.length
+    ? await db.select().from(usersTable).where(inArray(usersTable.id, ownerIds))
+    : [];
+  const sourceOwner = ownerRows.find(u => u.id === sourceDeal?.ownerId) ?? null;
+  const targetOwner = ownerRows.find(u => u.id === targetDeal?.ownerId) ?? null;
+  const crossDeal = src.dealId !== targetDealId;
+  const crossOwner = !!targetOwner && targetOwner.id !== scope.user.id;
+
+  let ownerNotified = false;
+  if (crossOwner && targetDeal && targetOwner) {
+    // 1) In-App-Notification: Timeline-Event auf dem Ziel-Deal. Erscheint im
+    //    Activity-Feed des Deals und in der globalen Activity-Liste, sodass
+    //    der Owner die fremde Kopie auch ohne E-Mail-Postfach mitbekommt
+    //    (gleicher Pfad wie bei /renewals/:id/notify-owner).
+    await db.insert(timelineEventsTable).values({
+      id: `tl_${randomUUID().slice(0, 8)}`,
+      tenantId: scope.tenantId,
+      type: 'quote',
+      title: 'Angebot in Deinen Deal kopiert',
+      description: `${scope.user.name} hat Angebot ${src.number} als ${newNumber} in „${targetDeal.name}“ kopiert (Quelle: „${sourceDeal?.name ?? src.dealId}“).`,
+      actor: scope.user.name,
+      dealId: targetDealId,
+    });
+    // 2) Best-Effort-E-Mail an den Owner. Schlaegt der Versand fehl, blockt
+    //    das die Duplikation nicht — der Timeline-Eintrag bleibt bestehen.
+    if (targetOwner.email) {
+      const subject = `Neues Angebot ${newNumber} in Deinem Deal „${targetDeal.name}“`;
+      const bodyText = `${scope.user.name} hat Angebot ${src.number} in Deinen Deal „${targetDeal.name}“ kopiert.\n\nDas neue Angebot ${newNumber} ist als Entwurf angelegt. Quelle: ${sourceDeal?.name ?? src.dealId}.`;
+      const bodyHtml = `<p>${scope.user.name} hat Angebot <strong>${src.number}</strong> in Deinen Deal <strong>${targetDeal.name}</strong> kopiert.</p><p>Das neue Angebot <strong>${newNumber}</strong> ist als Entwurf angelegt.<br/>Quelle: ${sourceDeal?.name ?? src.dealId}.</p>`;
+      await sendEmail({
+        to: targetOwner.email,
+        from: { email: 'no-reply@dealflow.local', name: 'DealFlow One' },
+        subject,
+        text: bodyText,
+        html: bodyHtml,
+        tags: { kind: 'quote_duplicated_cross_owner' },
+      });
+    }
+    ownerNotified = true;
+  }
+
+  // Audit-Summary erwaehnt jetzt explizit Quelle UND Ziel (frueher nur die
+  // Quelle), damit der Deal-Wechsel im Audit-Log direkt sichtbar ist.
+  const auditSummary = crossDeal
+    ? `Angebot dupliziert aus ${src.number} (Deal „${sourceDeal?.name ?? src.dealId}“) in Deal „${targetDeal?.name ?? targetDealId}“${crossOwner && targetOwner ? ` — Owner ${targetOwner.name} benachrichtigt` : ''}`
+    : `Angebot dupliziert aus ${src.number}`;
   await writeAuditFromReq(req, {
     entityType: 'quote', entityId: newQuoteId, action: 'duplicate',
-    summary: `Angebot dupliziert aus ${src.number}`,
-    actor: getScope(req).user.name,
+    summary: auditSummary,
+    actor: scope.user.name,
+    before: {
+      sourceQuoteId: src.id,
+      sourceQuoteNumber: src.number,
+      sourceDealId: src.dealId,
+      sourceDealName: sourceDeal?.name ?? null,
+      sourceDealOwnerId: sourceOwner?.id ?? null,
+    },
+    after: {
+      newQuoteId,
+      newQuoteNumber: newNumber,
+      targetDealId,
+      targetDealName: targetDeal?.name ?? null,
+      targetDealOwnerId: targetOwner?.id ?? null,
+      targetDealOwnerName: targetOwner?.name ?? null,
+      crossDeal,
+      crossOwner,
+      ownerNotified,
+    },
   });
-  res.status(201).json({ id: newQuoteId, number: newNumber, dealId: targetDealId });
+  res.status(201).json({
+    id: newQuoteId,
+    number: newNumber,
+    dealId: targetDealId,
+    targetDealOwnerId: targetOwner?.id ?? null,
+    targetDealOwnerName: targetOwner?.name ?? null,
+    ownerNotified,
+  });
 });
 
 // ── PREIS-BUNDLES ──

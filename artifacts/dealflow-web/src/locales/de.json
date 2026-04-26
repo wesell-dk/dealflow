@@ -143,6 +143,7 @@
       "duplicateSelectDeal": "Deal wählen",
       "duplicateDealSearchPlaceholder": "Nach Deal oder Kunde suchen…",
       "duplicateSourceDealHint": "Original",
+      "duplicateCrossOwnerHint": "Owner {{name}} wird automatisch per Timeline-Eintrag und E-Mail informiert.",
       "duplicateIncludeTitle": "Was übernehmen?",
       "duplicateLineItems": "Positionen & Preise",
       "duplicateLineItemsHint": "Immer übernommen — sonst wäre Kopieren sinnlos.",

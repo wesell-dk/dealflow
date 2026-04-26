@@ -143,6 +143,7 @@
       "duplicateSelectDeal": "Select deal",
       "duplicateDealSearchPlaceholder": "Search by deal or customer…",
       "duplicateSourceDealHint": "Original",
+      "duplicateCrossOwnerHint": "Owner {{name}} will be notified automatically via timeline entry and email.",
       "duplicateIncludeTitle": "What to copy?",
       "duplicateLineItems": "Line items & prices",
       "duplicateLineItemsHint": "Always copied — otherwise duplicating is meaningless.",

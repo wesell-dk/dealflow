@@ -28,7 +28,8 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
-import { Copy, Loader2, Search } from "lucide-react";
+import { useAuth } from "@/contexts/auth-context";
+import { Copy, Info, Loader2, Search } from "lucide-react";
 
 interface Props {
   quoteId: string;
@@ -50,6 +51,7 @@ export function QuoteDuplicateButton({
 }: Props) {
   const { t } = useTranslation();
   const { toast } = useToast();
+  const { user: currentUser } = useAuth();
   const qc = useQueryClient();
   const [, navigate] = useLocation();
   const [open, setOpen] = useState(false);
@@ -108,6 +110,19 @@ export function QuoteDuplicateButton({
     const sel = deals?.find((d) => d.id === targetDealId);
     return sel ? [sel, ...filteredDeals] : filteredDeals;
   }, [filteredDeals, targetDealId, deals]);
+
+  // Cross-Owner-Erkennung: Wenn der Ziel-Deal einem anderen User gehört,
+  // wird beim Duplizieren der Owner per Timeline + Mail informiert. Wir
+  // zeigen das transparent im Dialog an, damit der kopierende User es weiß.
+  const selectedDeal = useMemo(
+    () => deals?.find((d) => d.id === targetDealId) ?? null,
+    [deals, targetDealId],
+  );
+  const crossOwner =
+    !!selectedDeal &&
+    !!currentUser &&
+    !!selectedDeal.ownerId &&
+    selectedDeal.ownerId !== currentUser.id;
 
   const onConfirm = async () => {
     try {
@@ -190,6 +205,19 @@ export function QuoteDuplicateButton({
                 )}
               </SelectContent>
             </Select>
+            {crossOwner && selectedDeal && (
+              <div
+                className="flex items-start gap-2 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900 dark:border-amber-900/40 dark:bg-amber-950/30 dark:text-amber-200"
+                data-testid="quote-duplicate-cross-owner-hint"
+              >
+                <Info className="mt-0.5 h-3.5 w-3.5 flex-shrink-0" />
+                <span>
+                  {t("pages.quotes.duplicateCrossOwnerHint", {
+                    name: selectedDeal.ownerName,
+                  })}
+                </span>
+              </div>
+            )}
           </div>
 
           <div className="grid gap-2">

@@ -8076,11 +8076,24 @@ components:
 
     QuoteDuplicateResult:
       type: object
-      required: [id, number, dealId]
+      required: [id, number, dealId, ownerNotified]
       properties:
         id: { type: string }
         number: { type: string }
         dealId: { type: string }
+        ownerNotified:
+          type: boolean
+          description: |
+            True wenn das Ziel-Angebot in einen Deal kopiert wurde, dessen
+            Owner != aktueller Nutzer ist. In dem Fall wurde der Owner über
+            den bestehenden Notification-Stack (Timeline-Event auf dem
+            Ziel-Deal + Best-Effort-Mail) informiert.
+        targetDealOwnerId:
+          type: ["string", "null"]
+          description: User-ID des Owners des Ziel-Deals (null wenn unbekannt).
+        targetDealOwnerName:
+          type: ["string", "null"]
+          description: Anzeigename des Owners des Ziel-Deals.
 
     QuoteDuplicateOptions:
       type: object
