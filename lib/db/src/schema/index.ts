@@ -252,6 +252,10 @@ export const accountsTable = pgTable("accounts", {
 export const contactsTable = pgTable("contacts", {
   id: id(),
   accountId: text("account_id").notNull(),
+  // Optionale Verknüpfung zu einem Standort (account_addresses.id). Kontakte
+  // können kunden-global bleiben (addressId = null) oder einem konkreten
+  // Standort zugeordnet sein. Wird beim Standort-Löschen auf null gesetzt.
+  addressId: text("address_id"),
   name: text("name").notNull(),
   email: text("email").notNull(),
   role: text("role").notNull(),
@@ -259,6 +263,37 @@ export const contactsTable = pgTable("contacts", {
   phone: text("phone"),
   deletedAt: timestamp("deleted_at", { withTimezone: true }),
   pseudonymizedAt: timestamp("pseudonymized_at", { withTimezone: true }),
+});
+
+// Standorte (Adressen) eines Kunden. Account hat 0..n Standorte; jeder
+// Standort kann gleichzeitig mehrere Typen tragen (z.B. „hauptsitz" +
+// „rechnungsadresse"). Eindeutigkeit primärer Hauptsitz / primäre
+// Rechnungsadresse wird in der API erzwungen, nicht per DB-Constraint
+// (vereinfacht Migration & Erstanlage).
+export const accountAddressesTable = pgTable("account_addresses", {
+  id: id(),
+  accountId: text("account_id").notNull(),
+  // Anzeige-Label (z.B. „Werk Süd", „Hauptsitz Berlin"). Optional, fallback
+  // ist Stadt + Land.
+  label: text("label"),
+  // Postanschrift; alle einzeln nullable, weil reale Datenquellen oft nur
+  // Teile liefern (z.B. Postfach ohne Straße). Pflicht nur via API-
+  // Validation (postalCode + city + country mindestens).
+  street: text("street"),
+  postalCode: text("postal_code"),
+  city: text("city"),
+  region: text("region"),
+  country: text("country"),
+  // Typen-Set: jeder String aus
+  // {hauptsitz, rechnungsadresse, lieferadresse, werk, niederlassung, sonstiges}.
+  // Default für migrierte Bestandsdaten: ["hauptsitz", "rechnungsadresse"].
+  types: jsonb("types").$type<string[]>().notNull().default([]),
+  // Primärflag für die jeweiligen Typen (Hauptsitz/Rechnungsadresse). Wir
+  // erzwingen Eindeutigkeit via API-Layer.
+  isPrimary: boolean("is_primary").notNull().default(false),
+  isActive: boolean("is_active").notNull().default(true),
+  createdAt: ts("created_at"),
+  updatedAt: ts("updated_at"),
 });
 
 // GDPR: deletion log (soft-delete + pseudonymization audit)

@@ -11,6 +11,15 @@ import {
   sendOwnerCounterSignNotificationEmail,
 } from '../lib/collaboratorEmail';
 import { sendEmail } from '../lib/email';
+import {
+  WZ_CODES,
+  WZ_OTHER_CODE,
+  WZ_SECTIONS,
+  detectWzFromHtml,
+  getWzLabel,
+  isValidWzCode,
+  mapToWzCode,
+} from '../lib/wz2008';
 import { buildMagicLinkUrl } from '../lib/magicLinkUrl';
 import {
   sanitizeCompanyName,
@@ -113,6 +122,7 @@ import {
   attachmentLibraryTable,
   quoteAttachmentsTable,
   industryProfilesTable,
+  accountAddressesTable,
   uploadedObjectsTable,
   brandDocumentTemplatesTable,
   savedViewsTable,
@@ -1777,6 +1787,16 @@ router.post('/leads/:id/convert', async (req, res) => {
     return;
   }
   // ── 1) ALLE Validierungen vor jeglichem INSERT/UPDATE ──────────────────
+  // WZ-2008: gleiche strikte Branchen-Validierung wie POST /accounts.
+  let convertedIndustryCode: string | null = null;
+  if (b.newAccount) {
+    const industryCheck = validateIndustryInput(b.newAccount.industry);
+    if (!industryCheck.ok) {
+      res.status(422).json({ error: 'invalid industry', message: industryCheck.error });
+      return;
+    }
+    convertedIndustryCode = industryCheck.code;
+  }
   // So können wir den ganzen Convert-Flow atomar in einer Transaktion
   // ausführen, ohne halb angelegte Accounts oder Deals zu hinterlassen.
   let existingAccountId: string | null = null;
@@ -1825,7 +1845,7 @@ router.post('/leads/:id/convert', async (req, res) => {
         await tx.insert(accountsTable).values({
           id: accountId,
           name: na.name.trim(),
-          industry: na.industry.trim(),
+          industry: convertedIndustryCode!,
           country: na.country.trim(),
           healthScore: 70,
           ownerId: lead.ownerId ?? scope.user.id,
@@ -2014,8 +2034,14 @@ router.get('/accounts', async (req, res) => {
     .where(inArray(dealsTable.accountId, accIdList));
   res.json(accs.map(a => {
     const ds = accDeals.filter(d => d.accountId === a.id && dealIds.has(d.id) && d.stage !== 'won' && d.stage !== 'lost');
+    // Backwards-Compat: Legacy-Freitext-Branchen on the fly auf einen WZ-Code
+    // normalisieren, damit Listen-Filter und Chips konsistent rendern.
+    // Persistieren passiert lazy beim Aufruf von GET /accounts/:id.
+    const industryCode = a.industry ? mapToWzCode(a.industry) : null;
     return {
       ...a,
+      industry: industryCode,
+      industryLabel: getWzLabel(industryCode),
       openDeals: ds.length,
       totalValue: ds.reduce((s, d) => s + num(d.value), 0),
     };
@@ -2037,17 +2063,38 @@ router.post('/accounts', async (req, res) => {
     if (!ownerCheck.ok) return;
     resolvedOwnerId = ownerCheck.value;
   }
+  // WZ-2008: Eingabe muss ein gültiger Code aus der Referenzliste sein.
+  // Free-Text-Eingaben aus Legacy-Clients werden heuristisch übersetzt;
+  // unbekannte Code-förmige Werte (z. B. Tippfehler) werden abgelehnt.
+  const industryCheck = validateIndustryInput(body.industry);
+  if (!industryCheck.ok) {
+    res.status(422).json({ error: 'invalid industry', message: industryCheck.error });
+    return;
+  }
+  const industryCode = industryCheck.code;
+  const billingAddress = body.billingAddress?.trim() || null;
   await db.insert(accountsTable).values({
-    id, name: body.name, industry: body.industry, country: body.country,
+    id, name: body.name, industry: industryCode, country: body.country,
     healthScore: 70, ownerId: resolvedOwnerId,
     website: body.website?.trim() || null,
     phone: body.phone?.trim() || null,
-    billingAddress: body.billingAddress?.trim() || null,
+    billingAddress,
     vatId: body.vatId?.trim() || null,
     sizeBracket: body.sizeBracket?.trim() || null,
   });
+  // Wenn der Anlage-Body eine Rechnungsadresse enthält, legen wir
+  // synchron einen primären Standort dafür an. Das hält das Datenmodell
+  // konsistent (neue Konsumenten dürfen sich auf addresses[] verlassen).
+  if (billingAddress) {
+    await ensurePrimaryBillingAddress(id, billingAddress, body.country);
+  }
   const [a] = await db.select().from(accountsTable).where(eq(accountsTable.id, id));
-  res.status(201).json({ ...a, openDeals: 0, totalValue: 0 });
+  res.status(201).json({
+    ...a,
+    industryLabel: getWzLabel(a!.industry),
+    openDeals: 0,
+    totalValue: 0,
+  });
 });
 
 router.get('/accounts/:id', async (req, res) => {
@@ -2055,17 +2102,27 @@ router.get('/accounts/:id', async (req, res) => {
   if (!(await gateAccount(req, res, req.params.id))) return;
   const [a] = await db.select().from(accountsTable).where(eq(accountsTable.id, req.params.id));
   if (!a) { res.status(404).json({ error: 'not found' }); return; }
-  const contacts = await db.select().from(contactsTable).where(eq(contactsTable.accountId, a.id));
+  // Backwards-Compat: wenn der Account noch keine Standorte hat, aber eine
+  // Legacy-billingAddress, übernehmen wir sie als primären Standort. Lazy
+  // Migration beim ersten Lesen — kein separater Sweep nötig.
+  await migrateLegacyBillingAddress(a);
+  await migrateLegacyIndustry(a);
+  const [contacts, addresses, allDs] = await Promise.all([
+    db.select().from(contactsTable).where(eq(contactsTable.accountId, a.id)),
+    db.select().from(accountAddressesTable).where(eq(accountAddressesTable.accountId, a.id)),
+    db.select().from(dealsTable).where(eq(dealsTable.accountId, a.id)),
+  ]);
   const dealIds = await allowedDealIds(req);
-  const allDs = await db.select().from(dealsTable).where(eq(dealsTable.accountId, a.id));
   const ds = allDs.filter(d => dealIds.has(d.id));
   const ctx = await dealCtx(getScope(req).tenantId);
   const openDeals = ds.filter(d => d.stage !== 'won' && d.stage !== 'lost');
   res.json({
     ...a,
+    industryLabel: getWzLabel(a.industry),
     openDeals: openDeals.length,
     totalValue: openDeals.reduce((s, d) => s + num(d.value), 0),
     contacts,
+    addresses: addresses.sort(addressSort),
     deals: await Promise.all(ds.map(d => buildDeal(d, ctx))),
   });
 });
@@ -2113,7 +2170,14 @@ router.patch('/accounts/:id', async (req, res) => {
   };
   const update: Record<string, unknown> = { updatedAt: new Date() };
   if (b.name !== undefined) update.name = b.name;
-  if (b.industry !== undefined) update.industry = b.industry;
+  if (b.industry !== undefined) {
+    const industryCheck = validateIndustryInput(b.industry);
+    if (!industryCheck.ok) {
+      res.status(422).json({ error: 'invalid industry', message: industryCheck.error });
+      return;
+    }
+    update.industry = industryCheck.code;
+  }
   if (b.country !== undefined) update.country = b.country;
   if (b.healthScore !== undefined) update.healthScore = b.healthScore;
   if (b.ownerId !== undefined) {
@@ -2134,6 +2198,24 @@ router.patch('/accounts/:id', async (req, res) => {
     if (norm !== undefined) update[k] = norm;
   }
   await db.update(accountsTable).set(update).where(eq(accountsTable.id, req.params.id));
+  // Wenn billingAddress über die Legacy-API geändert wurde, halten wir den
+  // gespiegelten primären Standort konsistent. Verhalten:
+  //  - neuer Wert nicht-null → primären Rechnungs-Standort upserten,
+  //  - null → keine harte Aktion (würde sonst Standorte entfernen, die
+  //    Anwender bewusst gepflegt haben). Der UI-User würde stattdessen
+  //    den Standort selbst löschen.
+  if (b.billingAddress !== undefined && b.billingAddress) {
+    const norm = (b.billingAddress as string).trim();
+    if (norm) {
+      const [acc] = await db.select().from(accountsTable).where(eq(accountsTable.id, req.params.id));
+      await ensurePrimaryBillingAddress(req.params.id, norm, acc?.country ?? null);
+    }
+  }
+  // Legacy-Spiegel hart aus dem Standort-Modell rekonstruieren, falls eine
+  // aktive primäre Rechnungsadresse existiert. Verhindert „Drift" wenn ein
+  // Client den Legacy-Wert auf null setzt während im neuen Modell noch eine
+  // gültige Anschrift gepflegt ist (PDF/Webhooks würden sonst null sehen).
+  await syncLegacyBillingFromAddresses(req.params.id);
   const [a] = await db.select().from(accountsTable).where(eq(accountsTable.id, req.params.id));
   if (!a) { res.status(404).json({ error: 'not found' }); return; }
   const dealIds = await allowedDealIds(req);
@@ -2142,10 +2224,467 @@ router.patch('/accounts/:id', async (req, res) => {
   const openDeals = ds.filter(d => d.stage !== 'won' && d.stage !== 'lost');
   res.json({
     ...a,
+    industryLabel: getWzLabel(a.industry),
     openDeals: openDeals.length,
     totalValue: openDeals.reduce((s, d) => s + num(d.value), 0),
   });
 });
+
+// ── WZ-2008 Reference & Account-Adressen ─────────────────────────────────
+//
+// Sortierung der Standorte: primär (true) zuerst, dann aktiv vor inaktiv,
+// dann nach Erstellung. Stabil über Reloads.
+function addressSort(
+  a: typeof accountAddressesTable.$inferSelect,
+  b: typeof accountAddressesTable.$inferSelect,
+): number {
+  if (a.isPrimary !== b.isPrimary) return a.isPrimary ? -1 : 1;
+  if (a.isActive !== b.isActive) return a.isActive ? -1 : 1;
+  return (a.createdAt?.getTime() ?? 0) - (b.createdAt?.getTime() ?? 0);
+}
+
+const ACCOUNT_ADDRESS_TYPES = [
+  'hauptsitz',
+  'rechnungsadresse',
+  'lieferadresse',
+  'werk',
+  'niederlassung',
+  'sonstiges',
+] as const;
+type AccountAddressType = typeof ACCOUNT_ADDRESS_TYPES[number];
+
+function normalizeTypes(input: unknown): AccountAddressType[] | null {
+  if (!Array.isArray(input)) return null;
+  const out: AccountAddressType[] = [];
+  for (const v of input) {
+    if (typeof v !== 'string') return null;
+    if (!(ACCOUNT_ADDRESS_TYPES as readonly string[]).includes(v)) return null;
+    if (!out.includes(v as AccountAddressType)) out.push(v as AccountAddressType);
+  }
+  return out;
+}
+
+function formatAddressMultiline(a: {
+  street?: string | null;
+  postalCode?: string | null;
+  city?: string | null;
+  country?: string | null;
+}): string {
+  const line2 = [a.postalCode, a.city].filter(Boolean).join(' ');
+  return [a.street, line2, a.country].filter(Boolean).join('\n');
+}
+
+// Erstellt — falls noch nicht vorhanden — eine primäre Rechnungsadresse aus
+// einem Mehrzeiler. Wird vom Legacy-Path (POST/PATCH /accounts mit billing-
+// Address) und von der Migration genutzt. Idempotent.
+async function ensurePrimaryBillingAddress(
+  accountId: string,
+  billingAddress: string,
+  country: string | null,
+): Promise<void> {
+  const existing = await db.select().from(accountAddressesTable)
+    .where(eq(accountAddressesTable.accountId, accountId));
+  // Wenn schon irgendeine primäre Rechnungsadresse existiert, lassen wir
+  // sie unangetastet (User-gepflegte Daten haben Vorrang).
+  const hasPrimaryBilling = existing.some(
+    (a) => a.isPrimary && a.isActive && Array.isArray(a.types) && a.types.includes('rechnungsadresse'),
+  );
+  if (hasPrimaryBilling) return;
+  // Best-effort Parser für den Mehrzeiler ("Straße\nPLZ Stadt\nLand").
+  const lines = billingAddress.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+  let street: string | null = null;
+  let postalCode: string | null = null;
+  let city: string | null = null;
+  let parsedCountry: string | null = country;
+  for (const line of lines) {
+    const m = line.match(/^(\d{4,5})\s+(.+)$/);
+    if (m && !postalCode) { postalCode = m[1]!; city = m[2]!; continue; }
+    if (!street) { street = line; continue; }
+    if (line.length === 2 && !parsedCountry) { parsedCountry = line.toUpperCase(); }
+  }
+  await db.insert(accountAddressesTable).values({
+    id: `addr_${randomUUID().slice(0, 8)}`,
+    accountId,
+    label: null,
+    street,
+    postalCode,
+    city,
+    region: null,
+    country: parsedCountry,
+    types: ['hauptsitz', 'rechnungsadresse'],
+    isPrimary: true,
+    isActive: true,
+  });
+}
+
+// Lazy Migration beim ersten Lesen: legt aus accounts.billingAddress einen
+// primären Standort an, falls der Account noch keine Standorte hat.
+async function migrateLegacyBillingAddress(
+  account: typeof accountsTable.$inferSelect,
+): Promise<void> {
+  if (!account.billingAddress) return;
+  const existing = await db.select({ id: accountAddressesTable.id })
+    .from(accountAddressesTable)
+    .where(eq(accountAddressesTable.accountId, account.id));
+  if (existing.length > 0) return;
+  await ensurePrimaryBillingAddress(account.id, account.billingAddress, account.country);
+}
+
+// Backwards-Compat: Alte Accounts halten in `industry` noch Freitext
+// ("Manufacturing", "SaaS"). Beim ersten Lesen heuristisch auf einen
+// WZ-2008-Code mappen und persistieren — danach liefert die API einen
+// stabilen Code. Mutation passiert in-place auf dem übergebenen Objekt,
+// damit nachfolgender Code (z. B. getWzLabel) den neuen Wert sieht.
+async function migrateLegacyIndustry(
+  account: typeof accountsTable.$inferSelect,
+): Promise<void> {
+  if (!account.industry) return;
+  if (isValidWzCode(account.industry)) return;
+  const mapped = mapToWzCode(account.industry);
+  if (mapped === account.industry) return;
+  await db.update(accountsTable)
+    .set({ industry: mapped })
+    .where(eq(accountsTable.id, account.id));
+  account.industry = mapped;
+}
+
+// Liefert die Anschrift, die für Rechnungs-Dokumente genutzt werden soll:
+// bevorzugt den primären Rechnungsstandort (neues Modell), fällt sonst auf
+// den Legacy-Mehrzeiler zurück. Wird vom Invoice-PDF und Auftragsbestätigungs-
+// Renderer genutzt.
+async function resolveCustomerAddress(
+  account: typeof accountsTable.$inferSelect,
+): Promise<string | null> {
+  const rows = await db.select().from(accountAddressesTable)
+    .where(eq(accountAddressesTable.accountId, account.id));
+  const primaryBilling = rows.find(
+    (r) => r.isActive && r.isPrimary && Array.isArray(r.types) && r.types.includes('rechnungsadresse'),
+  );
+  const anyBilling = rows.find(
+    (r) => r.isActive && Array.isArray(r.types) && r.types.includes('rechnungsadresse'),
+  );
+  const hq = rows.find(
+    (r) => r.isActive && r.isPrimary && Array.isArray(r.types) && r.types.includes('hauptsitz'),
+  );
+  const pick = primaryBilling ?? anyBilling ?? hq ?? null;
+  if (pick) {
+    const text = formatAddressMultiline(pick);
+    if (text) return text;
+  }
+  return account.billingAddress ?? null;
+}
+
+// Hält accounts.billingAddress als Spiegel der primären Rechnungsadresse —
+// alte Konsumenten (PDF, externe Webhooks) bleiben damit funktional. Wird
+// nach jedem schreibenden Zugriff auf accounts oder account_addresses
+// aufgerufen, damit der Spiegel nicht „driftet" (z. B. wenn ein PATCH
+// /accounts den Legacy-Wert auf null setzt während es noch eine aktive
+// primäre Rechnungsadresse gibt).
+async function syncLegacyBillingFromAddresses(accountId: string): Promise<void> {
+  const rows = await db.select().from(accountAddressesTable)
+    .where(eq(accountAddressesTable.accountId, accountId));
+  // Bevorzugt primäre, sonst irgendeine aktive Rechnungsadresse, sonst HQ.
+  // Damit bleibt der Legacy-Spiegel auch nach Demotion / Löschung der
+  // primären Adresse für PDF/Webhooks brauchbar.
+  const billing =
+    rows.find((a) => a.isActive && a.isPrimary && Array.isArray(a.types) && a.types.includes('rechnungsadresse'))
+    ?? rows.find((a) => a.isActive && Array.isArray(a.types) && a.types.includes('rechnungsadresse'))
+    ?? rows.find((a) => a.isActive && a.isPrimary && Array.isArray(a.types) && a.types.includes('hauptsitz'));
+  if (!billing) {
+    // Keine geeignete Anschrift mehr im neuen Modell — Legacy-Wert ggf.
+    // unangetastet lassen (User-Eingabe), aber NICHT überschreiben.
+    return;
+  }
+  const text = formatAddressMultiline(billing);
+  await db.update(accountsTable)
+    .set({ billingAddress: text || null })
+    .where(eq(accountsTable.id, accountId));
+}
+
+// Strikte Branchen-Validierung mit Legacy-Backwards-Compat:
+//   • Eingabe ist ein gültiger WZ-2008-Code → akzeptieren
+//   • Eingabe sieht aus wie ein WZ-Code (XX oder XX.X oder XX.XX),
+//     ist aber nicht in der Referenzliste → 422 (verhindert Tippfehler/
+//     vermeintliche Codes wie "99.01"; Clients sollen aus der Liste wählen)
+//   • Freitext ohne Code-Form → heuristisch via mapToWzCode auf den
+//     besten passenden Code abbilden (Legacy-Pfad, behält Importierbarkeit
+//     alter Datenquellen). Nie null.
+//
+// Liefert `{ ok:true, code }` oder `{ ok:false, error }`. Aufrufer schickt
+// im Fehlerfall 422 mit der Nachricht zurück.
+function validateIndustryInput(
+  raw: string | null | undefined,
+): { ok: true; code: string } | { ok: false; error: string } {
+  if (!raw || !raw.trim()) return { ok: false, error: 'industry required' };
+  const trimmed = raw.trim();
+  if (isValidWzCode(trimmed)) return { ok: true, code: trimmed };
+  // Code-Form aber kein Treffer in der Referenzliste — explizit ablehnen.
+  if (/^\d{2}(?:\.\d{1,2})?$/.test(trimmed)) {
+    return {
+      ok: false,
+      error: `unbekannter WZ-Code "${trimmed}". Bitte aus der WZ-2008-Liste wählen.`,
+    };
+  }
+  // Freitext (Legacy-Compat): heuristische Abbildung.
+  return { ok: true, code: mapToWzCode(trimmed) };
+}
+
+router.get('/reference/wz-codes', (_req, res) => {
+  res.json({
+    otherCode: WZ_OTHER_CODE,
+    sections: WZ_SECTIONS.map((s) => ({ code: s.code, label: s.label })),
+    codes: WZ_CODES.map((c) => ({
+      code: c.code,
+      label: c.label,
+      section: c.section,
+      sectionLabel: WZ_SECTIONS.find((s) => s.code === c.section)?.label ?? c.section,
+    })),
+  });
+});
+
+router.get('/accounts/:id/addresses', async (req, res) => {
+  if (!validateInline(req, res, { params: Z.ListAccountAddressesParams })) return;
+  if (!(await gateAccount(req, res, req.params.id))) return;
+  const [acc] = await db.select().from(accountsTable).where(eq(accountsTable.id, req.params.id));
+  if (!acc) { res.status(404).json({ error: 'not found' }); return; }
+  await migrateLegacyBillingAddress(acc);
+  const rows = await db.select().from(accountAddressesTable)
+    .where(eq(accountAddressesTable.accountId, req.params.id));
+  res.json(rows.sort(addressSort));
+});
+
+router.post('/accounts/:id/addresses', async (req, res) => {
+  if (!validateInline(req, res, { params: Z.CreateAccountAddressParams, body: Z.CreateAccountAddressBody })) return;
+  if (!(await gateAccount(req, res, req.params.id))) return;
+  const accountId = req.params.id;
+  const [acc] = await db.select().from(accountsTable).where(eq(accountsTable.id, accountId));
+  if (!acc) { res.status(404).json({ error: 'not found' }); return; }
+  const b = req.body as {
+    label?: string | null; street?: string | null; postalCode?: string | null;
+    city?: string | null; region?: string | null; country?: string | null;
+    types: string[]; isPrimary?: boolean;
+  };
+  const types = normalizeTypes(b.types);
+  if (!types || types.length === 0) {
+    res.status(422).json({ error: 'types required' }); return;
+  }
+  // Postanschrift muss vollständig genug für Versand/Rechnung sein:
+  // PLZ + Ort + Land sind Pflicht; Straße empfohlen aber optional (z. B.
+  // ausschließliche Postfach-Anschriften via label).
+  if (!b.postalCode || !b.city || !b.country) {
+    res.status(422).json({
+      error: 'incomplete address',
+      message: 'PLZ, Ort und Land sind Pflichtfelder einer Standort-Anschrift.',
+    });
+    return;
+  }
+  // Account-weite Invariant: sobald ein Account *irgendeinen* Standort
+  // hat, muss mindestens eine aktive Rechnungsadresse existieren. Wenn
+  // dieser Account noch keine Standorte hat und auch keinen Legacy-
+  // billingAddress-Wert, MUSS der erste Standort eine Rechnungsadresse
+  // sein. Sonst riskieren wir „leere Standort-Liste ohne Rechnungs-
+  // adresse" — exakt das, was die Invariant verhindern soll.
+  if (!types.includes('rechnungsadresse')) {
+    const existingAddrs = await db.select().from(accountAddressesTable)
+      .where(eq(accountAddressesTable.accountId, accountId));
+    const hasActiveBilling = existingAddrs.some(
+      (o) => o.isActive && Array.isArray(o.types) && o.types.includes('rechnungsadresse'),
+    );
+    if (!hasActiveBilling && !acc.billingAddress) {
+      res.status(422).json({
+        error: 'first address must include billing',
+        message: 'Der erste Standort eines Kunden muss eine Rechnungsadresse enthalten. Wähle „Rechnungsadresse" mit aus.',
+      });
+      return;
+    }
+  }
+  const id = `addr_${randomUUID().slice(0, 8)}`;
+  // isPrimary darf höchstens einer pro Typ-Gruppe sein. Wenn der neue
+  // Eintrag primary ist, demoten wir bestehende mit überschneidenden Typen.
+  if (b.isPrimary) {
+    await demoteOtherPrimaries(accountId, types);
+  }
+  const row = {
+    id,
+    accountId,
+    label: b.label?.trim() || null,
+    street: b.street?.trim() || null,
+    postalCode: b.postalCode?.trim() || null,
+    city: b.city?.trim() || null,
+    region: b.region?.trim() || null,
+    country: b.country?.trim() || null,
+    types,
+    isPrimary: Boolean(b.isPrimary),
+    isActive: true,
+  };
+  await db.insert(accountAddressesTable).values(row);
+  // Wenn primärer Rechnungsstandort, Legacy-Spiegel aktualisieren.
+  if (row.isPrimary && row.types.includes('rechnungsadresse')) {
+    await syncLegacyBillingFromAddresses(accountId);
+  }
+  await writeAuditFromReq(req, {
+    entityType: 'account_address',
+    entityId: id,
+    action: 'create',
+    summary: `Standort ${row.label ?? row.city ?? id} angelegt`,
+    after: { ...row },
+  });
+  const [created] = await db.select().from(accountAddressesTable)
+    .where(eq(accountAddressesTable.id, id));
+  res.status(201).json(created);
+});
+
+router.patch('/accounts/:id/addresses/:addressId', async (req, res) => {
+  if (!validateInline(req, res, { params: Z.UpdateAccountAddressParams, body: Z.UpdateAccountAddressBody })) return;
+  if (!(await gateAccount(req, res, req.params.id))) return;
+  const [existing] = await db.select().from(accountAddressesTable)
+    .where(eq(accountAddressesTable.id, req.params.addressId));
+  if (!existing || existing.accountId !== req.params.id) {
+    res.status(404).json({ error: 'not found' }); return;
+  }
+  const b = req.body as {
+    label?: string | null; street?: string | null; postalCode?: string | null;
+    city?: string | null; region?: string | null; country?: string | null;
+    types?: string[]; isPrimary?: boolean; isActive?: boolean;
+  };
+  const update: Record<string, unknown> = { updatedAt: new Date() };
+  for (const k of ['label', 'street', 'postalCode', 'city', 'region', 'country'] as const) {
+    if (b[k] !== undefined) {
+      const v = b[k];
+      update[k] = typeof v === 'string' && v.trim() ? v.trim() : null;
+    }
+  }
+  // Required-Field-Invariant: nach dem Update müssen PLZ + Ort + Land
+  // weiterhin gesetzt sein. So lässt sich kein Standort durch ein
+  // Teil-Update zu „leerem" Eintrag degradieren.
+  const merged = {
+    postalCode: 'postalCode' in update ? (update.postalCode as string | null) : existing.postalCode,
+    city: 'city' in update ? (update.city as string | null) : existing.city,
+    country: 'country' in update ? (update.country as string | null) : existing.country,
+  };
+  if (!merged.postalCode || !merged.city || !merged.country) {
+    res.status(422).json({
+      error: 'incomplete address',
+      message: 'PLZ, Ort und Land sind Pflichtfelder einer Standort-Anschrift.',
+    });
+    return;
+  }
+  let nextTypes: AccountAddressType[] = (existing.types as AccountAddressType[]) ?? [];
+  if (b.types !== undefined) {
+    const t = normalizeTypes(b.types);
+    if (!t || t.length === 0) { res.status(422).json({ error: 'types required' }); return; }
+    nextTypes = t;
+    update.types = t;
+  }
+  const nextPrimary = b.isPrimary !== undefined ? Boolean(b.isPrimary) : existing.isPrimary;
+  if (b.isPrimary !== undefined) update.isPrimary = nextPrimary;
+  const nextActive = b.isActive !== undefined ? Boolean(b.isActive) : existing.isActive;
+  if (b.isActive !== undefined) update.isActive = nextActive;
+  // Invariant: jeder Account, der überhaupt Standorte hat, muss mindestens
+  // eine aktive Rechnungsadresse haben. Greift in drei Konstellationen:
+  //   1) Deaktivieren des letzten aktiven Rechnungs-Standorts
+  //   2) PATCH von types entfernt 'rechnungsadresse' vom letzten aktiven
+  //      Rechnungs-Standort
+  //   3) Kombination beider Felder im selben Request
+  const wasBilling = existing.isActive && Array.isArray(existing.types) && existing.types.includes('rechnungsadresse');
+  const willBeBilling = nextActive && nextTypes.includes('rechnungsadresse');
+  if (wasBilling && !willBeBilling) {
+    const others = await db.select().from(accountAddressesTable)
+      .where(eq(accountAddressesTable.accountId, req.params.id));
+    const remaining = others.filter(
+      (o) => o.id !== existing.id && o.isActive && Array.isArray(o.types) && o.types.includes('rechnungsadresse'),
+    );
+    if (remaining.length === 0) {
+      res.status(409).json({
+        error: 'last billing address protected',
+        message: 'Mindestens eine aktive Rechnungsadresse pro Kunde ist Pflicht. Lege erst eine alternative Rechnungsadresse an.',
+      });
+      return;
+    }
+  }
+  // Falls neu primary, bestehende mit überschneidenden Typen demoten.
+  if (nextPrimary && (b.isPrimary === true || b.types !== undefined)) {
+    await demoteOtherPrimaries(req.params.id, nextTypes, existing.id);
+  }
+  await db.update(accountAddressesTable).set(update)
+    .where(eq(accountAddressesTable.id, existing.id));
+  // Mirror nach JEDER Mutation deterministisch nachziehen — auch wenn das
+  // PATCH den Eintrag de-primaries oder die Rechnungs-Eigenschaft entfernt
+  // (in dem Fall fallback auf eine andere aktive Rechnungsadresse).
+  await syncLegacyBillingFromAddresses(req.params.id);
+  const [after] = await db.select().from(accountAddressesTable)
+    .where(eq(accountAddressesTable.id, existing.id));
+  await writeAuditFromReq(req, {
+    entityType: 'account_address',
+    entityId: existing.id,
+    action: 'update',
+    summary: `Standort ${after?.label ?? after?.city ?? existing.id} aktualisiert`,
+    before: existing,
+    after: after ?? null,
+  });
+  res.json(after ?? existing);
+});
+
+router.delete('/accounts/:id/addresses/:addressId', async (req, res) => {
+  if (!validateInline(req, res, { params: Z.DeleteAccountAddressParams })) return;
+  if (!(await gateAccount(req, res, req.params.id))) return;
+  const [existing] = await db.select().from(accountAddressesTable)
+    .where(eq(accountAddressesTable.id, req.params.addressId));
+  if (!existing || existing.accountId !== req.params.id) {
+    res.status(404).json({ error: 'not found' }); return;
+  }
+  // Letzte aktive Rechnungsadresse: gleiche Schutzregel wie bei deactivate.
+  if (existing.isActive && Array.isArray(existing.types) && existing.types.includes('rechnungsadresse')) {
+    const others = await db.select().from(accountAddressesTable)
+      .where(eq(accountAddressesTable.accountId, req.params.id));
+    const remaining = others.filter(
+      (o) => o.id !== existing.id && o.isActive && Array.isArray(o.types) && o.types.includes('rechnungsadresse'),
+    );
+    if (remaining.length === 0) {
+      res.status(409).json({ error: 'cannot delete last billing address' }); return;
+    }
+  }
+  // Soft-Delete via deactivate. Verknüpfte Kontakte: addressId nullen.
+  await db.update(accountAddressesTable).set({ isActive: false, isPrimary: false, updatedAt: new Date() })
+    .where(eq(accountAddressesTable.id, existing.id));
+  await db.update(contactsTable).set({ addressId: null })
+    .where(eq(contactsTable.addressId, existing.id));
+  // Mirror auch nach DELETE/Deaktivierung nachziehen — fällt ggf. auf eine
+  // verbleibende aktive Rechnungsadresse oder primären Hauptsitz zurück.
+  await syncLegacyBillingFromAddresses(req.params.id);
+  await writeAuditFromReq(req, {
+    entityType: 'account_address',
+    entityId: existing.id,
+    action: 'delete',
+    summary: `Standort ${existing.label ?? existing.city ?? existing.id} deaktiviert`,
+    before: existing,
+  });
+  res.status(204).end();
+});
+
+async function demoteOtherPrimaries(
+  accountId: string,
+  types: AccountAddressType[],
+  exceptId?: string,
+): Promise<void> {
+  const all = await db.select().from(accountAddressesTable)
+    .where(eq(accountAddressesTable.accountId, accountId));
+  let demoted = false;
+  for (const row of all) {
+    if (row.id === exceptId) continue;
+    if (!row.isPrimary) continue;
+    const overlap = (row.types as string[] | null)?.some((t) => types.includes(t as AccountAddressType));
+    if (overlap) {
+      await db.update(accountAddressesTable)
+        .set({ isPrimary: false, updatedAt: new Date() })
+        .where(eq(accountAddressesTable.id, row.id));
+      demoted = true;
+    }
+  }
+  // Nach jeder Demotion (insbes. wenn der demotete Eintrag der primäre
+  // Rechnungsstandort war) Mirror neu berechnen.
+  if (demoted) await syncLegacyBillingFromAddresses(accountId);
+}
 
 router.get('/contacts', async (req, res) => {
   if (!validateInline(req, res, { query: Z.ListContactsQueryParams })) return;
@@ -2200,6 +2739,7 @@ router.post('/accounts/:id/contacts', async (req, res) => {
     email?: string | null;
     phone?: string | null;
     isDecisionMaker?: boolean;
+    addressId?: string | null;
   };
   const name = (b.name ?? '').trim();
   if (!name) { res.status(422).json({ error: 'name required' }); return; }
@@ -2207,10 +2747,21 @@ router.post('/accounts/:id/contacts', async (req, res) => {
   if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
     res.status(422).json({ error: 'invalid email' }); return;
   }
+  // addressId muss zu einem aktiven Standort dieses Accounts gehören.
+  let addressId: string | null = null;
+  if (b.addressId) {
+    const [addr] = await db.select().from(accountAddressesTable)
+      .where(eq(accountAddressesTable.id, b.addressId));
+    if (!addr || addr.accountId !== req.params.id || !addr.isActive) {
+      res.status(422).json({ error: 'invalid addressId for account' }); return;
+    }
+    addressId = addr.id;
+  }
   const id = `ct_${randomUUID().slice(0, 8)}`;
   const row = {
     id,
     accountId: req.params.id,
+    addressId,
     name,
     role: (b.role ?? '').trim(),
     email: email ?? '',
@@ -2239,6 +2790,7 @@ router.patch('/contacts/:id', async (req, res) => {
     email?: string | null;
     phone?: string | null;
     isDecisionMaker?: boolean;
+    addressId?: string | null;
   };
   const update: Record<string, unknown> = {};
   if (typeof b.name === 'string') {
@@ -2256,6 +2808,18 @@ router.patch('/contacts/:id', async (req, res) => {
   }
   if (b.phone !== undefined) update.phone = trimOrNull(b.phone);
   if (b.isDecisionMaker !== undefined) update.isDecisionMaker = Boolean(b.isDecisionMaker);
+  if (b.addressId !== undefined) {
+    if (b.addressId === null || b.addressId === '') {
+      update.addressId = null;
+    } else {
+      const [addr] = await db.select().from(accountAddressesTable)
+        .where(eq(accountAddressesTable.id, b.addressId));
+      if (!addr || addr.accountId !== existing.accountId || !addr.isActive) {
+        res.status(422).json({ error: 'invalid addressId for account' }); return;
+      }
+      update.addressId = addr.id;
+    }
+  }
   if (Object.keys(update).length === 0) {
     res.json(existing); return;
   }
@@ -3335,7 +3899,7 @@ router.get('/quotes/:id/invoice.pdf', async (req, res) => {
     dueAt: null,
     servicePeriod: null,
     customerName: account?.name ?? d?.name ?? 'Kunde',
-    customerAddress: account?.billingAddress ?? null,
+    customerAddress: account ? await resolveCustomerAddress(account) : null,
     notes: current?.notes ?? null,
     taxPct: 19,
     lines: lines.map(l => ({
@@ -12671,6 +13235,15 @@ router.post('/accounts/enrich-from-website', async (req, res) => {
     slot.name = sanitizedName;
   }
 
+  // Industry-Vorschlag aus den gefundenen Pages — nutzt sichtbaren Text
+  // (HTML wird im Helper gestripped) sowie den (ggf. bereits sanitizten)
+  // Display-Namen. Konservativ: kein Vorschlag, wenn nichts klar matcht.
+  let industrySuggestion: ReturnType<typeof detectWzFromHtml> = null;
+  for (const page of orderedPages) {
+    industrySuggestion = detectWzFromHtml(page.html, slot.name ?? slot.legalEntityName);
+    if (industrySuggestion) break;
+  }
+
   const out = {
     name: slot.name,
     country: slot.country,
@@ -12679,6 +13252,10 @@ router.post('/accounts/enrich-from-website', async (req, res) => {
     vatId: slot.vatId,
     legalEntityName: slot.legalEntityName,
     sourceUrl,
+    industryWzCode: industrySuggestion?.code ?? null,
+    industryLabel: industrySuggestion?.label ?? null,
+    industrySource: industrySuggestion?.source ?? null,
+    industryConfidence: industrySuggestion?.confidence ?? null,
   };
 
   // 5) Land via Nominatim — basierend auf gefundener Adresse, sonst Domain-TLD-Heuristik.

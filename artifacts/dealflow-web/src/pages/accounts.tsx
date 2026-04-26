@@ -37,6 +37,8 @@ import { EmptyStateCard } from "@/components/patterns/empty-state-card";
 import { CSVExportButton } from "@/components/patterns/csv-export-button";
 import { CSVImportDialog } from "@/components/patterns/csv-import-dialog";
 import { InlineEditField } from "@/components/patterns/inline-edit-field";
+import { IndustryWzInline } from "@/components/accounts/industry-wz-combobox";
+import { useListWzCodes, getListWzCodesQueryKey } from "@workspace/api-client-react";
 import { useToast } from "@/hooks/use-toast";
 
 const COLUMNS: ColumnDef[] = [
@@ -149,7 +151,14 @@ export default function Accounts() {
     [filtered, page, pageSize],
   );
 
-  const industries = useMemo(() => Array.from(new Set((accounts ?? []).map((a) => a.industry))).sort(), [accounts]);
+  const { data: wzData } = useListWzCodes({
+    query: { queryKey: getListWzCodesQueryKey(), staleTime: Infinity, gcTime: Infinity },
+  });
+  const industries = useMemo(() => {
+    const codes = Array.from(new Set((accounts ?? []).map((a) => a.industry))).sort();
+    const lookup = new Map(wzData?.codes.map((c) => [c.code, c.label]) ?? []);
+    return codes.map((code) => ({ code, label: lookup.get(code) ?? code }));
+  }, [accounts, wzData]);
   const countries = useMemo(() => Array.from(new Set((accounts ?? []).map((a) => a.country))).sort(), [accounts]);
   const userOptions = users.map((u) => ({ value: u.id, label: u.name }));
 
@@ -357,7 +366,7 @@ export default function Accounts() {
           <FilterChip
             label="Industry"
             value={(view.filters as Record<string, string>).industry as string | undefined}
-            options={industries.map((v) => ({ value: v, label: v }))}
+            options={industries.map(({ code, label }) => ({ value: code, label: `${code} · ${label}` }))}
             onChange={(v) => setFilter("industry", v)}
             searchable
             testId="chip-industry"
@@ -704,11 +713,11 @@ function AccountRow({
       )}
       {visible.has("industry") && (
         <TableCell>
-          <InlineEditField
-            ariaLabel="Industry"
+          <IndustryWzInline
             value={account.industry}
             onSubmit={(v) => onPatch({ industry: v })}
             testId={`inline-industry-${account.id}`}
+            ariaLabel="Industry"
           />
         </TableCell>
       )}

@@ -11,6 +11,11 @@ Multi-tenant, multi-company, multi-brand. Deal-centric.
 export interface Contact {
   id: string;
   accountId: string;
+  /**
+   * Optionale Verknüpfung zu einem Standort (account_addresses.id).
+   * @nullable
+   */
+  addressId?: string | null;
   name: string;
   email: string;
   role: string;

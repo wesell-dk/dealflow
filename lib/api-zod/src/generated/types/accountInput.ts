@@ -10,10 +10,12 @@ Multi-tenant, multi-company, multi-brand. Deal-centric.
 
 export interface AccountInput {
   name: string;
+  /** WZ-2008 Code; Freitext wird heuristisch gemappt (Backwards-Compat). */
   industry: string;
   country: string;
   website?: string | null;
   phone?: string | null;
+  /** Legacy. Wenn gesetzt, wird daraus eine primäre Rechnungs-Adresse erzeugt. */
   billingAddress?: string | null;
   vatId?: string | null;
   sizeBracket?: string | null;

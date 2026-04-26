@@ -17,4 +17,9 @@ export interface ContactInput {
   /** @nullable */
   phone?: string | null;
   isDecisionMaker?: boolean;
+  /**
+   * Optional: Standort-ID des Kunden, dem der Kontakt zugeordnet wird.
+   * @nullable
+   */
+  addressId?: string | null;
 }

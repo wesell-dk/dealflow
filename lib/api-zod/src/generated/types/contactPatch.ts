@@ -17,4 +17,6 @@ export interface ContactPatch {
   /** @nullable */
   phone?: string | null;
   isDecisionMaker?: boolean;
+  /** @nullable */
+  addressId?: string | null;
 }

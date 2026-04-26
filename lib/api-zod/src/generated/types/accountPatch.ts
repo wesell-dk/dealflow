@@ -10,6 +10,7 @@ Multi-tenant, multi-company, multi-brand. Deal-centric.
 
 export interface AccountPatch {
   name?: string;
+  /** WZ-2008 Code; Freitext wird heuristisch gemappt. */
   industry?: string;
   country?: string;
   healthScore?: number;
@@ -19,7 +20,10 @@ export interface AccountPatch {
   website?: string | null;
   /** @nullable */
   phone?: string | null;
-  /** @nullable */
+  /**
+   * Legacy. Updates spiegeln in primäre Rechnungsadresse.
+   * @nullable
+   */
   billingAddress?: string | null;
   /** @nullable */
   vatId?: string | null;

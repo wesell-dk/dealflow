@@ -58,6 +58,7 @@ import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
+import { IndustryWzCombobox } from "@/components/accounts/industry-wz-combobox";
 
 // ─── Quellen / Status ───────────────────────────────────────────────────────
 const SOURCE_KEYS = [
@@ -829,7 +830,11 @@ export function ConvertDialog({
                   </div>
                   <div className="grid gap-1.5">
                     <Label>{t("pages.leads.convert.newAccountIndustry")}</Label>
-                    <Input value={accIndustry} onChange={e => setAccIndustry(e.target.value)} data-testid="input-acc-industry" />
+                    <IndustryWzCombobox
+                      value={accIndustry}
+                      onChange={setAccIndustry}
+                      testId="input-acc-industry"
+                    />
                   </div>
                 </div>
                 <div className="grid grid-cols-3 gap-3">

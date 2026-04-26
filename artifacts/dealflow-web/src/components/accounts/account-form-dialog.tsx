@@ -19,6 +19,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { useToast } from "@/hooks/use-toast";
 import { Loader2, Sparkles, Check, X } from "lucide-react";
 import { useOnboarding } from "@/contexts/onboarding-context";
+import { IndustryWzCombobox } from "./industry-wz-combobox";
 
 type EditAccount = {
   id: string;
@@ -41,6 +42,11 @@ type Props = {
 };
 
 const SIZE_BRACKETS = ["1-10", "11-50", "51-200", "201-1000", "1000+"];
+
+const CONFIDENCE_LABELS = { high: "hoch", medium: "mittel", low: "niedrig" } as const;
+function confidenceLabel(c: "high" | "medium" | "low"): string {
+  return CONFIDENCE_LABELS[c] ?? c;
+}
 
 export function AccountFormDialog({ open, onOpenChange, account, onSaved }: Props) {
   const { toast } = useToast();
@@ -105,6 +111,8 @@ export function AccountFormDialog({ open, onOpenChange, account, onSaved }: Prop
       const conflictSuggestion: AccountEnrichmentSuggestion = {
         name: null, country: null, billingAddress: null,
         phone: null, vatId: null, legalEntityName: null, sourceUrl: res.sourceUrl ?? null,
+        industryWzCode: null, industryLabel: null,
+        industrySource: null, industryConfidence: null,
       };
 
       // Normalisierung pro Feldtyp, damit semantisch gleiche Werte nicht
@@ -139,6 +147,20 @@ export function AccountFormDialog({ open, onOpenChange, account, onSaved }: Prop
       consider("Address", res.billingAddress, billingAddress, setBillingAddress, "billingAddress");
       consider("Phone", res.phone, phone, setPhone, "phone", normPhone);
       consider("VAT ID", res.vatId, vatId, setVatId, "vatId", normVatId);
+      // Industry: Proposal from web enrichment. If field empty → apply directly,
+      // otherwise offer as conflict (same logic as others).
+      if (res.industryWzCode) {
+        if (!industry) {
+          setIndustry(res.industryWzCode);
+          applied.push("Industry");
+        } else if (res.industryWzCode !== industry) {
+          conflicts.push("Industry");
+          conflictSuggestion.industryWzCode = res.industryWzCode;
+          conflictSuggestion.industryLabel = res.industryLabel ?? null;
+          conflictSuggestion.industrySource = res.industrySource ?? null;
+          conflictSuggestion.industryConfidence = res.industryConfidence ?? null;
+        }
+      }
       // Firmierung hat kein eigenes Form-Feld — nur als Info im Panel.
       const hasLegalHint = Boolean(res.legalEntityName);
       if (hasLegalHint) {
@@ -195,6 +217,7 @@ export function AccountFormDialog({ open, onOpenChange, account, onSaved }: Prop
     if (suggestion.billingAddress) setBillingAddress(suggestion.billingAddress);
     if (suggestion.phone) setPhone(suggestion.phone);
     if (suggestion.vatId) setVatId(suggestion.vatId);
+    if (suggestion.industryWzCode) setIndustry(suggestion.industryWzCode);
     setSuggestion(null);
     toast({ title: "Suggestions applied" });
   };
@@ -285,14 +308,13 @@ export function AccountFormDialog({ open, onOpenChange, account, onSaved }: Prop
 
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-2">
-              <Label htmlFor="acc-industry">Industry *</Label>
-              <Input
-                id="acc-industry"
-                data-testid="account-form-industry"
+              <Label htmlFor="acc-industry">Industry (WZ-2008) *</Label>
+              <IndustryWzCombobox
                 value={industry}
-                onChange={(e) => setIndustry(e.target.value)}
-                placeholder="e.g. Mechanical engineering"
+                onChange={setIndustry}
                 disabled={pending}
+                placeholder="Select industry…"
+                testId="account-form-industry"
               />
             </div>
             <div className="space-y-2">
@@ -356,6 +378,16 @@ export function AccountFormDialog({ open, onOpenChange, account, onSaved }: Prop
                 {suggestion.country && <div><span className="text-muted-foreground">Country:</span> {suggestion.country}</div>}
                 {suggestion.phone && <div><span className="text-muted-foreground">Phone:</span> {suggestion.phone}</div>}
                 {suggestion.vatId && <div><span className="text-muted-foreground">VAT ID:</span> {suggestion.vatId}</div>}
+                {suggestion.industryWzCode && (
+                  <div className="col-span-2" data-testid="account-form-suggestion-industry">
+                    <span className="text-muted-foreground">Industry:</span>{" "}
+                    <span className="font-mono">{suggestion.industryWzCode}</span>
+                    {suggestion.industryLabel ? ` · ${suggestion.industryLabel}` : ""}
+                    {suggestion.industryConfidence && (
+                      <span className="text-muted-foreground"> · Confidence {confidenceLabel(suggestion.industryConfidence)}</span>
+                    )}
+                  </div>
+                )}
                 {suggestion.billingAddress && <div className="col-span-2"><span className="text-muted-foreground">Address:</span> {suggestion.billingAddress}</div>}
                 {suggestion.sourceUrl && <div className="col-span-2 text-muted-foreground italic">Source: {suggestion.sourceUrl}</div>}
               </div>

@@ -11,7 +11,13 @@ Multi-tenant, multi-company, multi-brand. Deal-centric.
 export interface Account {
   id: string;
   name: string;
+  /** WZ-2008 Code (z. B. '62.01' oder '99.99' für Sonstiges). Legacy-Werte werden beim Lesen heuristisch gemappt. */
   industry: string;
+  /**
+   * Aufgelöste Bezeichnung des WZ-Codes (Convenience für UI).
+   * @nullable
+   */
+  industryLabel?: string | null;
   country: string;
   healthScore: number;
   openDeals: number;
@@ -29,7 +35,7 @@ export interface Account {
    */
   phone?: string | null;
   /**
-   * Rechnungsadresse als Mehrzeiler.
+   * Legacy-Spiegel der primären Rechnungsadresse als Mehrzeiler. Wird automatisch synchronisiert; neue Integrationen sollen `addresses[]` nutzen.
    * @nullable
    */
   billingAddress?: string | null;

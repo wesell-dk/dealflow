@@ -20,6 +20,9 @@ import type {
 
 import type {
   Account,
+  AccountAddress,
+  AccountAddressInput,
+  AccountAddressPatch,
   AccountDetail,
   AccountEnrichmentRequest,
   AccountEnrichmentSuggestion,
@@ -305,6 +308,7 @@ import type {
   UserDelegation,
   UserDelegationInput,
   UserDelegationPatch,
+  WzCodeReference,
 } from "./api.schemas";
 
 import { customFetch } from "../custom-fetch";
@@ -3219,6 +3223,85 @@ export const useConvertLead = <
   return useMutation(getConvertLeadMutationOptions(options));
 };
 
+/**
+ * Liefert die kuratierte WZ-2008-Liste plus den kanonischen
+Sonstiges-Code (`99.99`). Wird im Frontend für die Branchen-Auswahl
+verwendet. Statisch — kein Tenant-Bezug.
+
+ * @summary WZ-2008 Branchencodes (kuratierte Liste, inkl. Sektionen).
+ */
+export const getListWzCodesUrl = () => {
+  return `/api/v1/reference/wz-codes`;
+};
+
+export const listWzCodes = async (
+  options?: RequestInit,
+): Promise<WzCodeReference> => {
+  return customFetch<WzCodeReference>(getListWzCodesUrl(), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getListWzCodesQueryKey = () => {
+  return [`/api/v1/reference/wz-codes`] as const;
+};
+
+export const getListWzCodesQueryOptions = <
+  TData = Awaited<ReturnType<typeof listWzCodes>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof listWzCodes>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getListWzCodesQueryKey();
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof listWzCodes>>> = ({
+    signal,
+  }) => listWzCodes({ signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof listWzCodes>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type ListWzCodesQueryResult = NonNullable<
+  Awaited<ReturnType<typeof listWzCodes>>
+>;
+export type ListWzCodesQueryError = ErrorType<unknown>;
+
+/**
+ * @summary WZ-2008 Branchencodes (kuratierte Liste, inkl. Sektionen).
+ */
+
+export function useListWzCodes<
+  TData = Awaited<ReturnType<typeof listWzCodes>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof listWzCodes>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getListWzCodesQueryOptions(options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
 export const getListAccountsUrl = (params?: ListAccountsParams) => {
   const normalizedParams = new URLSearchParams();
 
@@ -3816,6 +3899,351 @@ export const useScrapeContactsFromWebsite = <
   TContext
 > => {
   return useMutation(getScrapeContactsFromWebsiteMutationOptions(options));
+};
+
+/**
+ * @summary Standorte (Adressen) eines Kunden auflisten.
+ */
+export const getListAccountAddressesUrl = (id: string) => {
+  return `/api/v1/accounts/${id}/addresses`;
+};
+
+export const listAccountAddresses = async (
+  id: string,
+  options?: RequestInit,
+): Promise<AccountAddress[]> => {
+  return customFetch<AccountAddress[]>(getListAccountAddressesUrl(id), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getListAccountAddressesQueryKey = (id: string) => {
+  return [`/api/v1/accounts/${id}/addresses`] as const;
+};
+
+export const getListAccountAddressesQueryOptions = <
+  TData = Awaited<ReturnType<typeof listAccountAddresses>>,
+  TError = ErrorType<void>,
+>(
+  id: string,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof listAccountAddresses>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey =
+    queryOptions?.queryKey ?? getListAccountAddressesQueryKey(id);
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof listAccountAddresses>>
+  > = ({ signal }) => listAccountAddresses(id, { signal, ...requestOptions });
+
+  return {
+    queryKey,
+    queryFn,
+    enabled: !!id,
+    ...queryOptions,
+  } as UseQueryOptions<
+    Awaited<ReturnType<typeof listAccountAddresses>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type ListAccountAddressesQueryResult = NonNullable<
+  Awaited<ReturnType<typeof listAccountAddresses>>
+>;
+export type ListAccountAddressesQueryError = ErrorType<void>;
+
+/**
+ * @summary Standorte (Adressen) eines Kunden auflisten.
+ */
+
+export function useListAccountAddresses<
+  TData = Awaited<ReturnType<typeof listAccountAddresses>>,
+  TError = ErrorType<void>,
+>(
+  id: string,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof listAccountAddresses>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getListAccountAddressesQueryOptions(id, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Neuen Standort am Kunden anlegen.
+ */
+export const getCreateAccountAddressUrl = (id: string) => {
+  return `/api/v1/accounts/${id}/addresses`;
+};
+
+export const createAccountAddress = async (
+  id: string,
+  accountAddressInput: AccountAddressInput,
+  options?: RequestInit,
+): Promise<AccountAddress> => {
+  return customFetch<AccountAddress>(getCreateAccountAddressUrl(id), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(accountAddressInput),
+  });
+};
+
+export const getCreateAccountAddressMutationOptions = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof createAccountAddress>>,
+    TError,
+    { id: string; data: BodyType<AccountAddressInput> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof createAccountAddress>>,
+  TError,
+  { id: string; data: BodyType<AccountAddressInput> },
+  TContext
+> => {
+  const mutationKey = ["createAccountAddress"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof createAccountAddress>>,
+    { id: string; data: BodyType<AccountAddressInput> }
+  > = (props) => {
+    const { id, data } = props ?? {};
+
+    return createAccountAddress(id, data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type CreateAccountAddressMutationResult = NonNullable<
+  Awaited<ReturnType<typeof createAccountAddress>>
+>;
+export type CreateAccountAddressMutationBody = BodyType<AccountAddressInput>;
+export type CreateAccountAddressMutationError = ErrorType<void>;
+
+/**
+ * @summary Neuen Standort am Kunden anlegen.
+ */
+export const useCreateAccountAddress = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof createAccountAddress>>,
+    TError,
+    { id: string; data: BodyType<AccountAddressInput> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof createAccountAddress>>,
+  TError,
+  { id: string; data: BodyType<AccountAddressInput> },
+  TContext
+> => {
+  return useMutation(getCreateAccountAddressMutationOptions(options));
+};
+
+export const getUpdateAccountAddressUrl = (id: string, addressId: string) => {
+  return `/api/v1/accounts/${id}/addresses/${addressId}`;
+};
+
+export const updateAccountAddress = async (
+  id: string,
+  addressId: string,
+  accountAddressPatch: AccountAddressPatch,
+  options?: RequestInit,
+): Promise<AccountAddress> => {
+  return customFetch<AccountAddress>(
+    getUpdateAccountAddressUrl(id, addressId),
+    {
+      ...options,
+      method: "PATCH",
+      headers: { "Content-Type": "application/json", ...options?.headers },
+      body: JSON.stringify(accountAddressPatch),
+    },
+  );
+};
+
+export const getUpdateAccountAddressMutationOptions = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof updateAccountAddress>>,
+    TError,
+    { id: string; addressId: string; data: BodyType<AccountAddressPatch> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof updateAccountAddress>>,
+  TError,
+  { id: string; addressId: string; data: BodyType<AccountAddressPatch> },
+  TContext
+> => {
+  const mutationKey = ["updateAccountAddress"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof updateAccountAddress>>,
+    { id: string; addressId: string; data: BodyType<AccountAddressPatch> }
+  > = (props) => {
+    const { id, addressId, data } = props ?? {};
+
+    return updateAccountAddress(id, addressId, data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type UpdateAccountAddressMutationResult = NonNullable<
+  Awaited<ReturnType<typeof updateAccountAddress>>
+>;
+export type UpdateAccountAddressMutationBody = BodyType<AccountAddressPatch>;
+export type UpdateAccountAddressMutationError = ErrorType<void>;
+
+export const useUpdateAccountAddress = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof updateAccountAddress>>,
+    TError,
+    { id: string; addressId: string; data: BodyType<AccountAddressPatch> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof updateAccountAddress>>,
+  TError,
+  { id: string; addressId: string; data: BodyType<AccountAddressPatch> },
+  TContext
+> => {
+  return useMutation(getUpdateAccountAddressMutationOptions(options));
+};
+
+/**
+ * @summary Standort deaktivieren (soft-delete).
+ */
+export const getDeleteAccountAddressUrl = (id: string, addressId: string) => {
+  return `/api/v1/accounts/${id}/addresses/${addressId}`;
+};
+
+export const deleteAccountAddress = async (
+  id: string,
+  addressId: string,
+  options?: RequestInit,
+): Promise<void> => {
+  return customFetch<void>(getDeleteAccountAddressUrl(id, addressId), {
+    ...options,
+    method: "DELETE",
+  });
+};
+
+export const getDeleteAccountAddressMutationOptions = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof deleteAccountAddress>>,
+    TError,
+    { id: string; addressId: string },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof deleteAccountAddress>>,
+  TError,
+  { id: string; addressId: string },
+  TContext
+> => {
+  const mutationKey = ["deleteAccountAddress"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof deleteAccountAddress>>,
+    { id: string; addressId: string }
+  > = (props) => {
+    const { id, addressId } = props ?? {};
+
+    return deleteAccountAddress(id, addressId, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type DeleteAccountAddressMutationResult = NonNullable<
+  Awaited<ReturnType<typeof deleteAccountAddress>>
+>;
+
+export type DeleteAccountAddressMutationError = ErrorType<void>;
+
+/**
+ * @summary Standort deaktivieren (soft-delete).
+ */
+export const useDeleteAccountAddress = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof deleteAccountAddress>>,
+    TError,
+    { id: string; addressId: string },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof deleteAccountAddress>>,
+  TError,
+  { id: string; addressId: string },
+  TContext
+> => {
+  return useMutation(getDeleteAccountAddressMutationOptions(options));
 };
 
 export const getUpdateContactUrl = (id: string) => {

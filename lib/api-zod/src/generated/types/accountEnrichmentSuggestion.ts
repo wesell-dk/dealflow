@@ -7,6 +7,8 @@ Multi-tenant, multi-company, multi-brand. Deal-centric.
 
  * OpenAPI spec version: 0.1.0
  */
+import type { AccountEnrichmentSuggestionIndustryConfidence } from "./accountEnrichmentSuggestionIndustryConfidence";
+import type { AccountEnrichmentSuggestionIndustrySource } from "./accountEnrichmentSuggestionIndustrySource";
 
 /**
  * Best-effort Vorschläge aus Web-Anreicherung (Nominatim + Impressum-Crawl).
@@ -21,4 +23,9 @@ export interface AccountEnrichmentSuggestion {
   legalEntityName?: string | null;
   /** Tatsächlich gefetchte URL (z. B. /impressum). */
   sourceUrl?: string | null;
+  /** Vorgeschlagener WZ-2008 Code. */
+  industryWzCode?: string | null;
+  industryLabel?: string | null;
+  industrySource?: AccountEnrichmentSuggestionIndustrySource;
+  industryConfidence?: AccountEnrichmentSuggestionIndustryConfidence;
 }

@@ -1108,7 +1108,13 @@ export interface LeadConvertInput {
 export interface Account {
   id: string;
   name: string;
+  /** WZ-2008 Code (z. B. '62.01' oder '99.99' für Sonstiges). Legacy-Werte werden beim Lesen heuristisch gemappt. */
   industry: string;
+  /**
+   * Aufgelöste Bezeichnung des WZ-Codes (Convenience für UI).
+   * @nullable
+   */
+  industryLabel?: string | null;
   country: string;
   healthScore: number;
   openDeals: number;
@@ -1126,7 +1132,7 @@ export interface Account {
    */
   phone?: string | null;
   /**
-   * Rechnungsadresse als Mehrzeiler.
+   * Legacy-Spiegel der primären Rechnungsadresse als Mehrzeiler. Wird automatisch synchronisiert; neue Integrationen sollen `addresses[]` nutzen.
    * @nullable
    */
   billingAddress?: string | null;
@@ -1180,6 +1186,11 @@ export interface LeadConvertResponse {
 export interface Contact {
   id: string;
   accountId: string;
+  /**
+   * Optionale Verknüpfung zu einem Standort (account_addresses.id).
+   * @nullable
+   */
+  addressId?: string | null;
   name: string;
   email: string;
   role: string;
@@ -1188,17 +1199,62 @@ export interface Contact {
   phone?: string | null;
 }
 
+export type AccountAddressType =
+  (typeof AccountAddressType)[keyof typeof AccountAddressType];
+
+export const AccountAddressType = {
+  hauptsitz: "hauptsitz",
+  rechnungsadresse: "rechnungsadresse",
+  lieferadresse: "lieferadresse",
+  werk: "werk",
+  niederlassung: "niederlassung",
+  sonstiges: "sonstiges",
+} as const;
+
+export interface AccountAddress {
+  id: string;
+  accountId: string;
+  /**
+   * Anzeige-Label (z. B. 'Werk Süd').
+   * @nullable
+   */
+  label?: string | null;
+  /** @nullable */
+  street?: string | null;
+  /** @nullable */
+  postalCode?: string | null;
+  /** @nullable */
+  city?: string | null;
+  /** @nullable */
+  region?: string | null;
+  /**
+   * ISO-3166 Alpha-2.
+   * @nullable
+   */
+  country?: string | null;
+  types: AccountAddressType[];
+  /** Markiert Hauptsitz/Hauptrechnungsadresse — pro Account je Typ höchstens einer. */
+  isPrimary: boolean;
+  isActive: boolean;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
 export type AccountDetail = Account & {
   contacts: Contact[];
   deals: Deal[];
+  /** Standorte des Kunden inkl. Rolle/Primär-Flag. */
+  addresses: AccountAddress[];
 };
 
 export interface AccountInput {
   name: string;
+  /** WZ-2008 Code; Freitext wird heuristisch gemappt (Backwards-Compat). */
   industry: string;
   country: string;
   website?: string | null;
   phone?: string | null;
+  /** Legacy. Wenn gesetzt, wird daraus eine primäre Rechnungs-Adresse erzeugt. */
   billingAddress?: string | null;
   vatId?: string | null;
   sizeBracket?: string | null;
@@ -1207,6 +1263,7 @@ export interface AccountInput {
 
 export interface AccountPatch {
   name?: string;
+  /** WZ-2008 Code; Freitext wird heuristisch gemappt. */
   industry?: string;
   country?: string;
   healthScore?: number;
@@ -1216,7 +1273,10 @@ export interface AccountPatch {
   website?: string | null;
   /** @nullable */
   phone?: string | null;
-  /** @nullable */
+  /**
+   * Legacy. Updates spiegeln in primäre Rechnungsadresse.
+   * @nullable
+   */
   billingAddress?: string | null;
   /** @nullable */
   vatId?: string | null;
@@ -1226,10 +1286,82 @@ export interface AccountPatch {
   primaryContactId?: string | null;
 }
 
+export interface AccountAddressInput {
+  label?: string | null;
+  street?: string | null;
+  postalCode?: string | null;
+  city?: string | null;
+  region?: string | null;
+  country?: string | null;
+  /** @minItems 1 */
+  types: AccountAddressType[];
+  isPrimary?: boolean;
+}
+
+export interface AccountAddressPatch {
+  /** @nullable */
+  label?: string | null;
+  /** @nullable */
+  street?: string | null;
+  /** @nullable */
+  postalCode?: string | null;
+  /** @nullable */
+  city?: string | null;
+  /** @nullable */
+  region?: string | null;
+  /** @nullable */
+  country?: string | null;
+  /** @minItems 1 */
+  types?: AccountAddressType[];
+  isPrimary?: boolean;
+  isActive?: boolean;
+}
+
+export interface WzCodeEntry {
+  code: string;
+  label: string;
+  /** Sektionsbuchstabe A..U. */
+  section: string;
+  sectionLabel: string;
+}
+
+export type WzCodeReferenceSectionsItem = {
+  code: string;
+  label: string;
+};
+
+export interface WzCodeReference {
+  /** Kanonischer Sonstiges-Code (z. B. '99.99'). */
+  otherCode: string;
+  sections: WzCodeReferenceSectionsItem[];
+  codes: WzCodeEntry[];
+}
+
 export interface AccountEnrichmentRequest {
   /** URL oder Domain (https:// optional). */
   website: string;
 }
+
+export type AccountEnrichmentSuggestionIndustrySource =
+  | (typeof AccountEnrichmentSuggestionIndustrySource)[keyof typeof AccountEnrichmentSuggestionIndustrySource]
+  | null;
+
+export const AccountEnrichmentSuggestionIndustrySource = {
+  wz_mention: "wz_mention",
+  keyword: "keyword",
+  schema_org: "schema_org",
+  title: "title",
+} as const;
+
+export type AccountEnrichmentSuggestionIndustryConfidence =
+  | (typeof AccountEnrichmentSuggestionIndustryConfidence)[keyof typeof AccountEnrichmentSuggestionIndustryConfidence]
+  | null;
+
+export const AccountEnrichmentSuggestionIndustryConfidence = {
+  high: "high",
+  medium: "medium",
+  low: "low",
+} as const;
 
 /**
  * Best-effort Vorschläge aus Web-Anreicherung (Nominatim + Impressum-Crawl).
@@ -1244,6 +1376,11 @@ export interface AccountEnrichmentSuggestion {
   legalEntityName?: string | null;
   /** Tatsächlich gefetchte URL (z. B. /impressum). */
   sourceUrl?: string | null;
+  /** Vorgeschlagener WZ-2008 Code. */
+  industryWzCode?: string | null;
+  industryLabel?: string | null;
+  industrySource?: AccountEnrichmentSuggestionIndustrySource;
+  industryConfidence?: AccountEnrichmentSuggestionIndustryConfidence;
 }
 
 export type SavedViewEntityType =
@@ -1429,6 +1566,11 @@ export interface ContactInput {
   /** @nullable */
   phone?: string | null;
   isDecisionMaker?: boolean;
+  /**
+   * Optional: Standort-ID des Kunden, dem der Kontakt zugeordnet wird.
+   * @nullable
+   */
+  addressId?: string | null;
 }
 
 export interface ContactPatch {
@@ -1440,6 +1582,8 @@ export interface ContactPatch {
   /** @nullable */
   phone?: string | null;
   isDecisionMaker?: boolean;
+  /** @nullable */
+  addressId?: string | null;
 }
 
 export interface ContactScrapeRequest {

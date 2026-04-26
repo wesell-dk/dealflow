@@ -1132,7 +1132,15 @@ export const ConvertLeadResponse = zod.object({
   account: zod.object({
     id: zod.string(),
     name: zod.string(),
-    industry: zod.string(),
+    industry: zod
+      .string()
+      .describe(
+        "WZ-2008 Code (z. B. '62.01' oder '99.99' für Sonstiges). Legacy-Werte werden beim Lesen heuristisch gemappt.",
+      ),
+    industryLabel: zod
+      .string()
+      .nullish()
+      .describe("Aufgelöste Bezeichnung des WZ-Codes (Convenience für UI)."),
     country: zod.string(),
     healthScore: zod.number(),
     openDeals: zod.number(),
@@ -1146,7 +1154,9 @@ export const ConvertLeadResponse = zod.object({
     billingAddress: zod
       .string()
       .nullish()
-      .describe("Rechnungsadresse als Mehrzeiler."),
+      .describe(
+        "Legacy-Spiegel der primären Rechnungsadresse als Mehrzeiler. Wird automatisch synchronisiert; neue Integrationen sollen `addresses[]` nutzen.",
+      ),
     vatId: zod.string().nullish().describe("USt-IdNr. (z. B. DE123456789)."),
     sizeBracket: zod
       .string()
@@ -1189,6 +1199,33 @@ export const ConvertLeadResponse = zod.object({
     .optional(),
 });
 
+/**
+ * Liefert die kuratierte WZ-2008-Liste plus den kanonischen
+Sonstiges-Code (`99.99`). Wird im Frontend für die Branchen-Auswahl
+verwendet. Statisch — kein Tenant-Bezug.
+
+ * @summary WZ-2008 Branchencodes (kuratierte Liste, inkl. Sektionen).
+ */
+export const ListWzCodesResponse = zod.object({
+  otherCode: zod
+    .string()
+    .describe("Kanonischer Sonstiges-Code (z. B. '99.99')."),
+  sections: zod.array(
+    zod.object({
+      code: zod.string(),
+      label: zod.string(),
+    }),
+  ),
+  codes: zod.array(
+    zod.object({
+      code: zod.string(),
+      label: zod.string(),
+      section: zod.string().describe("Sektionsbuchstabe A..U."),
+      sectionLabel: zod.string(),
+    }),
+  ),
+});
+
 export const ListAccountsQueryParams = zod.object({
   status: zod
     .enum(["active", "archived", "all"])
@@ -1201,7 +1238,15 @@ export const ListAccountsQueryParams = zod.object({
 export const ListAccountsResponseItem = zod.object({
   id: zod.string(),
   name: zod.string(),
-  industry: zod.string(),
+  industry: zod
+    .string()
+    .describe(
+      "WZ-2008 Code (z. B. '62.01' oder '99.99' für Sonstiges). Legacy-Werte werden beim Lesen heuristisch gemappt.",
+    ),
+  industryLabel: zod
+    .string()
+    .nullish()
+    .describe("Aufgelöste Bezeichnung des WZ-Codes (Convenience für UI)."),
   country: zod.string(),
   healthScore: zod.number(),
   openDeals: zod.number(),
@@ -1215,7 +1260,9 @@ export const ListAccountsResponseItem = zod.object({
   billingAddress: zod
     .string()
     .nullish()
-    .describe("Rechnungsadresse als Mehrzeiler."),
+    .describe(
+      "Legacy-Spiegel der primären Rechnungsadresse als Mehrzeiler. Wird automatisch synchronisiert; neue Integrationen sollen `addresses[]` nutzen.",
+    ),
   vatId: zod.string().nullish().describe("USt-IdNr. (z. B. DE123456789)."),
   sizeBracket: zod
     .string()
@@ -1233,11 +1280,20 @@ export const ListAccountsResponse = zod.array(ListAccountsResponseItem);
 
 export const CreateAccountBody = zod.object({
   name: zod.string(),
-  industry: zod.string(),
+  industry: zod
+    .string()
+    .describe(
+      "WZ-2008 Code; Freitext wird heuristisch gemappt (Backwards-Compat).",
+    ),
   country: zod.string(),
   website: zod.string().nullish(),
   phone: zod.string().nullish(),
-  billingAddress: zod.string().nullish(),
+  billingAddress: zod
+    .string()
+    .nullish()
+    .describe(
+      "Legacy. Wenn gesetzt, wird daraus eine primäre Rechnungs-Adresse erzeugt.",
+    ),
   vatId: zod.string().nullish(),
   sizeBracket: zod.string().nullish(),
   ownerId: zod.string().nullish(),
@@ -1251,7 +1307,15 @@ export const GetAccountResponse = zod
   .object({
     id: zod.string(),
     name: zod.string(),
-    industry: zod.string(),
+    industry: zod
+      .string()
+      .describe(
+        "WZ-2008 Code (z. B. '62.01' oder '99.99' für Sonstiges). Legacy-Werte werden beim Lesen heuristisch gemappt.",
+      ),
+    industryLabel: zod
+      .string()
+      .nullish()
+      .describe("Aufgelöste Bezeichnung des WZ-Codes (Convenience für UI)."),
     country: zod.string(),
     healthScore: zod.number(),
     openDeals: zod.number(),
@@ -1265,7 +1329,9 @@ export const GetAccountResponse = zod
     billingAddress: zod
       .string()
       .nullish()
-      .describe("Rechnungsadresse als Mehrzeiler."),
+      .describe(
+        "Legacy-Spiegel der primären Rechnungsadresse als Mehrzeiler. Wird automatisch synchronisiert; neue Integrationen sollen `addresses[]` nutzen.",
+      ),
     vatId: zod.string().nullish().describe("USt-IdNr. (z. B. DE123456789)."),
     sizeBracket: zod
       .string()
@@ -1287,6 +1353,12 @@ export const GetAccountResponse = zod
         zod.object({
           id: zod.string(),
           accountId: zod.string(),
+          addressId: zod
+            .string()
+            .nullish()
+            .describe(
+              "Optionale Verknüpfung zu einem Standort (account_addresses.id).",
+            ),
           name: zod.string(),
           email: zod.string(),
           role: zod.string(),
@@ -1316,6 +1388,41 @@ export const GetAccountResponse = zod
           nextStep: zod.string().nullish(),
         }),
       ),
+      addresses: zod
+        .array(
+          zod.object({
+            id: zod.string(),
+            accountId: zod.string(),
+            label: zod
+              .string()
+              .nullish()
+              .describe("Anzeige-Label (z. B. 'Werk Süd')."),
+            street: zod.string().nullish(),
+            postalCode: zod.string().nullish(),
+            city: zod.string().nullish(),
+            region: zod.string().nullish(),
+            country: zod.string().nullish().describe("ISO-3166 Alpha-2."),
+            types: zod.array(
+              zod.enum([
+                "hauptsitz",
+                "rechnungsadresse",
+                "lieferadresse",
+                "werk",
+                "niederlassung",
+                "sonstiges",
+              ]),
+            ),
+            isPrimary: zod
+              .boolean()
+              .describe(
+                "Markiert Hauptsitz\/Hauptrechnungsadresse — pro Account je Typ höchstens einer.",
+              ),
+            isActive: zod.boolean(),
+            createdAt: zod.coerce.date().optional(),
+            updatedAt: zod.coerce.date().optional(),
+          }),
+        )
+        .describe("Standorte des Kunden inkl. Rolle\/Primär-Flag."),
     }),
   );
 
@@ -1325,13 +1432,19 @@ export const UpdateAccountParams = zod.object({
 
 export const UpdateAccountBody = zod.object({
   name: zod.string().optional(),
-  industry: zod.string().optional(),
+  industry: zod
+    .string()
+    .optional()
+    .describe("WZ-2008 Code; Freitext wird heuristisch gemappt."),
   country: zod.string().optional(),
   healthScore: zod.number().optional(),
   ownerId: zod.string().nullish(),
   website: zod.string().nullish(),
   phone: zod.string().nullish(),
-  billingAddress: zod.string().nullish(),
+  billingAddress: zod
+    .string()
+    .nullish()
+    .describe("Legacy. Updates spiegeln in primäre Rechnungsadresse."),
   vatId: zod.string().nullish(),
   sizeBracket: zod.string().nullish(),
   primaryContactId: zod.string().nullish(),
@@ -1340,7 +1453,15 @@ export const UpdateAccountBody = zod.object({
 export const UpdateAccountResponse = zod.object({
   id: zod.string(),
   name: zod.string(),
-  industry: zod.string(),
+  industry: zod
+    .string()
+    .describe(
+      "WZ-2008 Code (z. B. '62.01' oder '99.99' für Sonstiges). Legacy-Werte werden beim Lesen heuristisch gemappt.",
+    ),
+  industryLabel: zod
+    .string()
+    .nullish()
+    .describe("Aufgelöste Bezeichnung des WZ-Codes (Convenience für UI)."),
   country: zod.string(),
   healthScore: zod.number(),
   openDeals: zod.number(),
@@ -1354,7 +1475,9 @@ export const UpdateAccountResponse = zod.object({
   billingAddress: zod
     .string()
     .nullish()
-    .describe("Rechnungsadresse als Mehrzeiler."),
+    .describe(
+      "Legacy-Spiegel der primären Rechnungsadresse als Mehrzeiler. Wird automatisch synchronisiert; neue Integrationen sollen `addresses[]` nutzen.",
+    ),
   vatId: zod.string().nullish().describe("USt-IdNr. (z. B. DE123456789)."),
   sizeBracket: zod
     .string()
@@ -1376,6 +1499,12 @@ export const ListContactsQueryParams = zod.object({
 export const ListContactsResponseItem = zod.object({
   id: zod.string(),
   accountId: zod.string(),
+  addressId: zod
+    .string()
+    .nullish()
+    .describe(
+      "Optionale Verknüpfung zu einem Standort (account_addresses.id).",
+    ),
   name: zod.string(),
   email: zod.string(),
   role: zod.string(),
@@ -1397,6 +1526,12 @@ export const CreateContactBody = zod.object({
   email: zod.string().nullish(),
   phone: zod.string().nullish(),
   isDecisionMaker: zod.boolean().optional(),
+  addressId: zod
+    .string()
+    .nullish()
+    .describe(
+      "Optional: Standort-ID des Kunden, dem der Kontakt zugeordnet wird.",
+    ),
 });
 
 /**
@@ -1438,6 +1573,140 @@ export const ScrapeContactsFromWebsiteResponse = zod.object({
   ),
 });
 
+/**
+ * @summary Standorte (Adressen) eines Kunden auflisten.
+ */
+export const ListAccountAddressesParams = zod.object({
+  id: zod.coerce.string(),
+});
+
+export const ListAccountAddressesResponseItem = zod.object({
+  id: zod.string(),
+  accountId: zod.string(),
+  label: zod.string().nullish().describe("Anzeige-Label (z. B. 'Werk Süd')."),
+  street: zod.string().nullish(),
+  postalCode: zod.string().nullish(),
+  city: zod.string().nullish(),
+  region: zod.string().nullish(),
+  country: zod.string().nullish().describe("ISO-3166 Alpha-2."),
+  types: zod.array(
+    zod.enum([
+      "hauptsitz",
+      "rechnungsadresse",
+      "lieferadresse",
+      "werk",
+      "niederlassung",
+      "sonstiges",
+    ]),
+  ),
+  isPrimary: zod
+    .boolean()
+    .describe(
+      "Markiert Hauptsitz\/Hauptrechnungsadresse — pro Account je Typ höchstens einer.",
+    ),
+  isActive: zod.boolean(),
+  createdAt: zod.coerce.date().optional(),
+  updatedAt: zod.coerce.date().optional(),
+});
+export const ListAccountAddressesResponse = zod.array(
+  ListAccountAddressesResponseItem,
+);
+
+/**
+ * @summary Neuen Standort am Kunden anlegen.
+ */
+export const CreateAccountAddressParams = zod.object({
+  id: zod.coerce.string(),
+});
+
+export const CreateAccountAddressBody = zod.object({
+  label: zod.string().nullish(),
+  street: zod.string().nullish(),
+  postalCode: zod.string().nullish(),
+  city: zod.string().nullish(),
+  region: zod.string().nullish(),
+  country: zod.string().nullish(),
+  types: zod
+    .array(
+      zod.enum([
+        "hauptsitz",
+        "rechnungsadresse",
+        "lieferadresse",
+        "werk",
+        "niederlassung",
+        "sonstiges",
+      ]),
+    )
+    .min(1),
+  isPrimary: zod.boolean().optional(),
+});
+
+export const UpdateAccountAddressParams = zod.object({
+  id: zod.coerce.string(),
+  addressId: zod.coerce.string(),
+});
+
+export const UpdateAccountAddressBody = zod.object({
+  label: zod.string().nullish(),
+  street: zod.string().nullish(),
+  postalCode: zod.string().nullish(),
+  city: zod.string().nullish(),
+  region: zod.string().nullish(),
+  country: zod.string().nullish(),
+  types: zod
+    .array(
+      zod.enum([
+        "hauptsitz",
+        "rechnungsadresse",
+        "lieferadresse",
+        "werk",
+        "niederlassung",
+        "sonstiges",
+      ]),
+    )
+    .min(1)
+    .optional(),
+  isPrimary: zod.boolean().optional(),
+  isActive: zod.boolean().optional(),
+});
+
+export const UpdateAccountAddressResponse = zod.object({
+  id: zod.string(),
+  accountId: zod.string(),
+  label: zod.string().nullish().describe("Anzeige-Label (z. B. 'Werk Süd')."),
+  street: zod.string().nullish(),
+  postalCode: zod.string().nullish(),
+  city: zod.string().nullish(),
+  region: zod.string().nullish(),
+  country: zod.string().nullish().describe("ISO-3166 Alpha-2."),
+  types: zod.array(
+    zod.enum([
+      "hauptsitz",
+      "rechnungsadresse",
+      "lieferadresse",
+      "werk",
+      "niederlassung",
+      "sonstiges",
+    ]),
+  ),
+  isPrimary: zod
+    .boolean()
+    .describe(
+      "Markiert Hauptsitz\/Hauptrechnungsadresse — pro Account je Typ höchstens einer.",
+    ),
+  isActive: zod.boolean(),
+  createdAt: zod.coerce.date().optional(),
+  updatedAt: zod.coerce.date().optional(),
+});
+
+/**
+ * @summary Standort deaktivieren (soft-delete).
+ */
+export const DeleteAccountAddressParams = zod.object({
+  id: zod.coerce.string(),
+  addressId: zod.coerce.string(),
+});
+
 export const UpdateContactParams = zod.object({
   id: zod.coerce.string(),
 });
@@ -1448,11 +1717,18 @@ export const UpdateContactBody = zod.object({
   email: zod.string().nullish(),
   phone: zod.string().nullish(),
   isDecisionMaker: zod.boolean().optional(),
+  addressId: zod.string().nullish(),
 });
 
 export const UpdateContactResponse = zod.object({
   id: zod.string(),
   accountId: zod.string(),
+  addressId: zod
+    .string()
+    .nullish()
+    .describe(
+      "Optionale Verknüpfung zu einem Standort (account_addresses.id).",
+    ),
   name: zod.string(),
   email: zod.string(),
   role: zod.string(),
@@ -1738,6 +2014,12 @@ export const GetDealResponse = zod
         zod.object({
           id: zod.string(),
           accountId: zod.string(),
+          addressId: zod
+            .string()
+            .nullish()
+            .describe(
+              "Optionale Verknüpfung zu einem Standort (account_addresses.id).",
+            ),
           name: zod.string(),
           email: zod.string(),
           role: zod.string(),
@@ -6634,6 +6916,15 @@ export const EnrichAccountFromWebsiteResponse = zod
       .string()
       .nullish()
       .describe("Tatsächlich gefetchte URL (z. B. \/impressum)."),
+    industryWzCode: zod
+      .string()
+      .nullish()
+      .describe("Vorgeschlagener WZ-2008 Code."),
+    industryLabel: zod.string().nullish(),
+    industrySource: zod
+      .enum(["wz_mention", "keyword", "schema_org", "title"])
+      .nullish(),
+    industryConfidence: zod.enum(["high", "medium", "low"]).nullish(),
   })
   .describe(
     "Best-effort Vorschläge aus Web-Anreicherung (Nominatim + Impressum-Crawl).",

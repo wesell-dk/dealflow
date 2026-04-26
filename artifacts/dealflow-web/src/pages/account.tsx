@@ -29,6 +29,8 @@ import { AccountFormDialog } from "@/components/accounts/account-form-dialog";
 import { ContactFormDialog, type EditableContact } from "@/components/contacts/contact-form-dialog";
 import { ContactScrapeDialog } from "@/components/contacts/contact-scrape-dialog";
 import { InlineEditField } from "@/components/patterns/inline-edit-field";
+import { IndustryWzInline } from "@/components/accounts/industry-wz-combobox";
+import { AccountAddressesCard } from "@/components/accounts/account-addresses-card";
 import { ActivityTimeline } from "@/components/patterns/activity-timeline";
 import { ExternalContractsCard } from "@/components/external-contracts/external-contracts-card";
 import { useTrackRecent } from "@/hooks/use-recents";
@@ -104,7 +106,7 @@ export default function Account() {
             </h1>
             <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-muted-foreground">
               <span className="inline-flex items-center gap-1"><Building className="h-3.5 w-3.5" />
-                <InlineEditField ariaLabel="Industry" value={account.industry} onSubmit={(v) => patch({ industry: v })} testId="account-industry-edit" />
+                <IndustryWzInline ariaLabel="Industry" value={account.industry} onSubmit={(v) => patch({ industry: v })} testId="account-industry-edit" />
               </span>
               <span aria-hidden>•</span>
               <InlineEditField ariaLabel="Country" value={account.country} onSubmit={(v) => patch({ country: v })} testId="account-country-edit" />
@@ -177,12 +179,30 @@ export default function Account() {
             </div>
           )}
         </div>
-        {account.billingAddress && (
-          <div className="text-sm text-muted-foreground flex items-start gap-1.5 mt-1">
-            <MapPin className="h-3.5 w-3.5 mt-0.5 shrink-0" />
-            <span className="whitespace-pre-line">{account.billingAddress}</span>
-          </div>
-        )}
+        {(() => {
+          const primaryBilling = account.addresses?.find(
+            (a) => a.isPrimary && a.types.includes("rechnungsadresse"),
+          ) ?? account.addresses?.find((a) => a.isPrimary)
+            ?? account.addresses?.[0];
+          const fallback = account.billingAddress;
+          const lines = primaryBilling
+            ? [
+                primaryBilling.label,
+                primaryBilling.street,
+                [primaryBilling.postalCode, primaryBilling.city].filter(Boolean).join(" "),
+                primaryBilling.country,
+              ].filter((s): s is string => Boolean(s && s.trim()))
+            : fallback
+              ? [fallback]
+              : [];
+          if (!lines.length) return null;
+          return (
+            <div className="text-sm text-muted-foreground flex items-start gap-1.5 mt-1">
+              <MapPin className="h-3.5 w-3.5 mt-0.5 shrink-0" />
+              <span className="whitespace-pre-line">{lines.join("\n")}</span>
+            </div>
+          );
+        })()}
       </div>
 
       <div className="grid lg:grid-cols-3 gap-6">
@@ -244,6 +264,7 @@ export default function Account() {
                                   email: contact.email,
                                   phone: contact.phone ?? null,
                                   isDecisionMaker: contact.isDecisionMaker,
+                                  addressId: contact.addressId ?? null,
                                 });
                                 setContactOpen(true);
                               }}
@@ -261,6 +282,7 @@ export default function Account() {
                                 email: contact.email,
                                 phone: contact.phone ?? null,
                                 isDecisionMaker: contact.isDecisionMaker,
+                                addressId: contact.addressId ?? null,
                               })}
                               data-testid={`contact-delete-${contact.id}`}
                             >
@@ -284,6 +306,8 @@ export default function Account() {
               </div>
             </CardContent>
           </Card>
+
+          <AccountAddressesCard accountId={id} addresses={account.addresses ?? []} />
 
           <ExternalContractsCard accountId={id} />
 
@@ -343,6 +367,7 @@ export default function Account() {
         onOpenChange={(o) => { setContactOpen(o); if (!o) setContactEdit(null); }}
         accountId={id}
         contact={contactEdit}
+        addresses={account.addresses ?? []}
       />
       <ContactScrapeDialog
         open={scrapeOpen}

@@ -9,9 +9,15 @@ Multi-tenant, multi-company, multi-brand. Deal-centric.
  */
 
 export * from "./account";
+export * from "./accountAddress";
+export * from "./accountAddressInput";
+export * from "./accountAddressPatch";
+export * from "./accountAddressType";
 export * from "./accountDetail";
 export * from "./accountEnrichmentRequest";
 export * from "./accountEnrichmentSuggestion";
+export * from "./accountEnrichmentSuggestionIndustryConfidence";
+export * from "./accountEnrichmentSuggestionIndustrySource";
 export * from "./accountInput";
 export * from "./accountPatch";
 export * from "./activeScope";
@@ -556,3 +562,6 @@ export * from "./user";
 export * from "./userDelegation";
 export * from "./userDelegationInput";
 export * from "./userDelegationPatch";
+export * from "./wzCodeEntry";
+export * from "./wzCodeReference";
+export * from "./wzCodeReferenceSectionsItem";

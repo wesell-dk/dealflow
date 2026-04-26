@@ -8,10 +8,13 @@ Multi-tenant, multi-company, multi-brand. Deal-centric.
  * OpenAPI spec version: 0.1.0
  */
 import type { Account } from "./account";
+import type { AccountAddress } from "./accountAddress";
 import type { Contact } from "./contact";
 import type { Deal } from "./deal";
 
 export type AccountDetail = Account & {
   contacts: Contact[];
   deals: Deal[];
+  /** Standorte des Kunden inkl. Rolle/Primär-Flag. */
+  addresses: AccountAddress[];
 };

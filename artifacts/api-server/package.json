@@ -8,7 +8,7 @@
     "build": "node ./build.mjs",
     "start": "node --enable-source-maps ./dist/index.mjs",
     "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tests/tsconfig.json --noEmit",
-    "test:isolation": "node --import tsx --test --test-reporter=spec tests/tenant-isolation.test.ts tests/validation-negative.test.ts",
+    "test:isolation": "node --import tsx --test --test-reporter=spec tests/tenant-isolation.test.ts tests/validation-negative.test.ts tests/account-industry-and-addresses.test.ts",
     "test:risk-score": "node --import tsx --test --test-reporter=spec tests/renewal-risk-score.test.ts",
     "test:renewals": "node --import tsx --test --test-reporter=spec tests/renewals.test.ts",
     "test:approvals": "node --import tsx --test --test-reporter=spec tests/approval-chains.test.ts",

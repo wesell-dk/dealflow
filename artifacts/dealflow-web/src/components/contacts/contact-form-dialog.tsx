@@ -13,8 +13,10 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { Loader2 } from "lucide-react";
+import type { AccountAddress } from "@workspace/api-client-react";
 
 export type EditableContact = {
   id: string;
@@ -23,6 +25,7 @@ export type EditableContact = {
   email: string;
   phone: string | null;
   isDecisionMaker: boolean;
+  addressId?: string | null;
 };
 
 type Props = {
@@ -31,9 +34,10 @@ type Props = {
   accountId: string;
   contact?: EditableContact | null;
   initialDraft?: Partial<EditableContact> | null;
+  addresses?: AccountAddress[];
 };
 
-export function ContactFormDialog({ open, onOpenChange, accountId, contact, initialDraft }: Props) {
+export function ContactFormDialog({ open, onOpenChange, accountId, contact, initialDraft, addresses }: Props) {
   const { toast } = useToast();
   const qc = useQueryClient();
   const create = useCreateContact();
@@ -45,6 +49,7 @@ export function ContactFormDialog({ open, onOpenChange, accountId, contact, init
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
   const [isDecisionMaker, setIsDecisionMaker] = useState(false);
+  const [addressId, setAddressId] = useState<string>("");
 
   useEffect(() => {
     if (!open) return;
@@ -54,7 +59,10 @@ export function ContactFormDialog({ open, onOpenChange, accountId, contact, init
     setEmail(src.email ?? "");
     setPhone(src.phone ?? "");
     setIsDecisionMaker(Boolean(src.isDecisionMaker));
+    setAddressId(src.addressId ?? "");
   }, [open, contact, initialDraft]);
+
+  const activeAddresses = (addresses ?? []).filter((a) => a.isActive);
 
   const pending = create.isPending || update.isPending;
 
@@ -80,6 +88,9 @@ export function ContactFormDialog({ open, onOpenChange, accountId, contact, init
         const p = phone.trim();
         if (p !== (contact.phone ?? "")) patch.phone = p || null;
         if (isDecisionMaker !== contact.isDecisionMaker) patch.isDecisionMaker = isDecisionMaker;
+        const newAddrId = addressId || null;
+        const oldAddrId = contact.addressId ?? null;
+        if (newAddrId !== oldAddrId) patch.addressId = newAddrId;
         if (Object.keys(patch).length === 0) {
           onOpenChange(false);
           return;
@@ -93,6 +104,7 @@ export function ContactFormDialog({ open, onOpenChange, accountId, contact, init
           email: trimmedEmail || null,
           phone: phone.trim() || null,
           isDecisionMaker,
+          addressId: addressId || null,
         };
         await create.mutateAsync({ id: accountId, data });
         toast({ title: "Contact created", description: trimmedName });
@@ -169,6 +181,31 @@ export function ContactFormDialog({ open, onOpenChange, accountId, contact, init
               disabled={pending}
             />
           </div>
+          {activeAddresses.length > 0 && (
+            <div className="space-y-2">
+              <Label htmlFor="contact-address">Standort</Label>
+              <Select
+                value={addressId || "_none"}
+                onValueChange={(v) => setAddressId(v === "_none" ? "" : v)}
+                disabled={pending}
+              >
+                <SelectTrigger id="contact-address" data-testid="contact-form-address">
+                  <SelectValue placeholder="Standort wählen…" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="_none">— kein Standort —</SelectItem>
+                  {activeAddresses.map((a) => (
+                    <SelectItem key={a.id} value={a.id}>
+                      {[a.label, a.city, a.country].filter(Boolean).join(", ") || a.id}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground">
+                Optional — verknüpft den Kontakt mit einem Standort dieses Kunden.
+              </p>
+            </div>
+          )}
           <label className="flex items-center gap-2 text-sm">
             <Checkbox
               checked={isDecisionMaker}
