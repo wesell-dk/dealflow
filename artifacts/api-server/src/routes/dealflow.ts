@@ -4451,6 +4451,13 @@ router.post('/price-positions', async (req, res) => {
     currency: b.currency, status: 'draft', validFrom: b.validFrom, validUntil: null,
     brandId: b.brandId, companyId: b.companyId, version: 1, isStandard: true,
   });
+  // Audit-Eintrag für die Erzeugung — sorgt dafür, dass die Position in
+  // /pricing/summary unter "Recent Changes" mit echtem Zeitstempel auftaucht
+  // (pricePositionsTable hat selbst kein createdAt).
+  await writeAuditFromReq(req, {
+    entityType: 'price_position', entityId: id, action: 'created',
+    summary: `Preis ${b.sku} als Entwurf angelegt`,
+  });
   const [p] = await db.select().from(pricePositionsTable).where(eq(pricePositionsTable.id, id));
   const brands = await getBrandMap();
   const companies = await getCompanyMap();
@@ -4655,16 +4662,79 @@ router.get('/pricing/summary', async (req, res) => {
       eq(approvalsTable.type, 'discount'),
       inArray(approvalsTable.dealId, dealIds),
     )))[0]?.c ?? 0;
+  // Recent Changes: nur echte Ereignisse für die aktuell sichtbaren Positionen.
+  // Quellen sind audit_log (Updates/Status-/Versions-Wechsel) und entity_versions
+  // (jede neue Version einer Preis-Position). Tenant-Isolation kommt einerseits
+  // implizit über die visiblen Position-IDs, andererseits explizit über
+  // audit_log.tenantId.
+  const visibleIdToSku = new Map(positions.map(p => [p.id, p.sku] as const));
+  const visibleIds = [...visibleIdToSku.keys()];
+  type RecentChange = { id: string; sku: string; change: string; at: string };
+  const recentChanges: RecentChange[] = [];
+  if (visibleIds.length > 0) {
+    const [auditRows, versionRows] = await Promise.all([
+      db.select().from(auditLogTable).where(and(
+        eq(auditLogTable.tenantId, scope.tenantId),
+        inArray(auditLogTable.entityType, ['price_position', 'price']),
+        inArray(auditLogTable.entityId, visibleIds),
+      )),
+      db.select().from(entityVersionsTable).where(and(
+        eq(entityVersionsTable.entityType, 'price_position'),
+        inArray(entityVersionsTable.entityId, visibleIds),
+      )),
+    ]);
+    // Track which positions already have at least one real history event so
+    // we know whether to synthesize a fallback "Created as draft" entry below.
+    const positionsWithHistory = new Set<string>();
+    for (const a of auditRows) {
+      const sku = visibleIdToSku.get(a.entityId);
+      if (!sku) continue;
+      // Versions-Erzeugung erscheint bereits über entity_versions — Doppel-
+      // einträge vermeiden.
+      if (a.action === 'version_created') continue;
+      let change: string;
+      switch (a.action) {
+        case 'created':            change = 'Created as draft'; break;
+        case 'updated':            change = 'Updated'; break;
+        case 'price_overridden':   change = 'Price overridden'; break;
+        case 'status_changed':     change = 'Status changed'; break;
+        case 'discount_changed':   change = 'Discount changed'; break;
+        default:                   change = a.action.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+      }
+      recentChanges.push({ id: a.id, sku, change, at: iso(a.at)! });
+      positionsWithHistory.add(a.entityId);
+    }
+    for (const v of versionRows) {
+      const sku = visibleIdToSku.get(v.entityId);
+      if (!sku) continue;
+      const change = v.version <= 1 ? 'Created as draft' : `Version v${v.version} published`;
+      recentChanges.push({ id: v.id, sku, change, at: iso(v.createdAt)! });
+      positionsWithHistory.add(v.entityId);
+    }
+    // Fallback: für Positionen ohne jedwede History-Zeile (typisch für vor
+    // diesem Patch erzeugte Positionen, die kein Audit-Insert hatten) leiten
+    // wir aus `validFrom` einen "Created as draft"-Eintrag ab. Damit erscheint
+    // jede sichtbare Position mindestens einmal im Feed mit echter SKU und
+    // einem realen Datum aus den Stammdaten der Position selbst.
+    for (const p of positions) {
+      if (positionsWithHistory.has(p.id)) continue;
+      const validFromIso = iso(p.validFrom);
+      if (!validFromIso) continue;
+      recentChanges.push({
+        id: `pp-init-${p.id}`,
+        sku: p.sku,
+        change: 'Created as draft',
+        at: validFromIso,
+      });
+    }
+    recentChanges.sort((a, b) => b.at.localeCompare(a.at));
+  }
   res.json({
     totalPositions: positions.length,
     activePositions: positions.filter(p => p.status === 'active').length,
     pendingApprovalCount,
     standardCoveragePct: Math.round(positions.filter(p => p.isStandard).length / Math.max(1, positions.length) * 1000) / 10,
-    recentChanges: [
-      { id: 'rc_1', sku: 'HX-CORE-LIC', change: 'List price uplift to EUR 240,000', at: iso(new Date(Date.now() - 2 * 86400000))! },
-      { id: 'rc_2', sku: 'HX-PRO-LIC',  change: 'New version v2 published',         at: iso(new Date(Date.now() - 5 * 86400000))! },
-      { id: 'rc_3', sku: 'HX-VEL-LIC',  change: 'Created as draft (US)',            at: iso(new Date(Date.now() - 7 * 86400000))! },
-    ],
+    recentChanges: recentChanges.slice(0, 10),
   });
 });
 
