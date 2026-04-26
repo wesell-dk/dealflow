@@ -41,6 +41,13 @@ function convert(schema: z.ZodTypeAny): JsonSchemaObject {
   const def = schema._def as { typeName?: string; description?: string };
   const description = def.description;
 
+  // z.preprocess / z.transform — JSON Schema kennt keine Effects; wir
+  // beschreiben den inneren (validierten) Typ und lassen den Effect
+  // ausschliesslich auf der Validierungs-Seite (validateStructured) wirken.
+  if (schema instanceof z.ZodEffects) {
+    return convert((schema as z.ZodEffects<z.ZodTypeAny>).innerType());
+  }
+
   // z.nullable(X) — Anthropic's tool input schemas accept JSON Schema's
   // type-as-array trick: wrap inner type and add "null" to the type list.
   if (schema instanceof z.ZodNullable) {

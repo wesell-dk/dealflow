@@ -3683,6 +3683,57 @@ paths:
         "502": { description: AI provider failed or returned invalid output. }
         "503": { description: AI provider not configured. }
 
+  /copilot/contract-negotiation/{contractId}:
+    post:
+      operationId: runContractNegotiation
+      tags: [copilot]
+      summary: |
+        AI-generated per-clause negotiation strategy (Task #229). Returns one
+        playbook entry per clause (current / ideal / target / walk-away
+        positions, economic + legal rationale, ready-to-paste counterproposal
+        text in DE and EN, pro/contra arguments, per-clause confidence). The
+        accompanying insight is persisted as kind=ai_contract_negotiation;
+        the cached suggestion can be exported via the negotiation playbook
+        PDF endpoint.
+      parameters:
+        - in: path
+          name: contractId
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Structured per-clause negotiation strategy returned.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ContractNegotiationStrategyEnvelope" }
+        "403": { description: Caller lacks scope on this contract. }
+        "404": { description: Contract does not exist for this tenant. }
+        "409": { description: Contract has no clauses to negotiate. }
+        "502": { description: AI provider failed or returned invalid output. }
+        "503": { description: AI provider not configured. }
+
+  /contracts/{id}/negotiation-playbook.pdf:
+    get:
+      operationId: getNegotiationPlaybookPdf
+      tags: [contracts]
+      summary: |
+        Renders the latest cached per-clause negotiation strategy for the
+        contract as a printable playbook (PDF). Returns 404 if no strategy
+        was generated yet.
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: PDF stream
+          content:
+            application/pdf:
+              schema: { type: string, format: binary }
+        "403": { description: Caller lacks scope on this contract. }
+        "404": { description: Contract or strategy not found. }
+
   /activity:
     get:
       operationId: listRecentActivity
@@ -10083,6 +10134,90 @@ components:
           properties:
             ok: { type: boolean, enum: [true] }
             result: { $ref: "#/components/schemas/ContractRiskResult" }
+            secondOpinion: { $ref: "#/components/schemas/SecondOpinionEnvelope" }
+
+    # ── Task #229: Per-Clause Negotiation Strategy ──
+    ClauseNegotiationStrategy:
+      type: object
+      required:
+        - contractClauseId
+        - family
+        - currentPosition
+        - idealPosition
+        - targetPosition
+        - walkAwayPosition
+        - economicRationale
+        - legalRationale
+        - counterTextDe
+        - counterTextEn
+        - proArguments
+        - contraArguments
+        - perClauseConfidence
+        - perClauseConfidenceReason
+      properties:
+        contractClauseId: { type: string }
+        family: { type: string }
+        currentPosition: { type: string }
+        idealPosition: { type: string }
+        targetPosition: { type: string }
+        walkAwayPosition: { type: string }
+        economicRationale: { type: string }
+        legalRationale: { type: string }
+        counterTextDe: { type: string }
+        counterTextEn: { type: string }
+        proArguments:
+          type: array
+          items: { type: string }
+        contraArguments:
+          type: array
+          items: { type: string }
+        perClauseConfidence: { type: string, enum: [low, medium, high] }
+        perClauseConfidenceReason: { type: string }
+        relatedSources:
+          type: array
+          items: { $ref: "#/components/schemas/LegalKnowledgeSourceRef" }
+
+    ContractNegotiationStrategyResult:
+      type: object
+      required:
+        - overallSummary
+        - clauseStrategies
+        - confidence
+        - confidenceReason
+      properties:
+        overallSummary: { type: string }
+        clauseStrategies:
+          type: array
+          items: { $ref: "#/components/schemas/ClauseNegotiationStrategy" }
+        relatedSources:
+          type: array
+          items: { $ref: "#/components/schemas/LegalKnowledgeSourceRef" }
+        confidence: { type: string, enum: [low, medium, high] }
+        confidenceReason: { type: string }
+
+    ContractNegotiationStrategyEnvelope:
+      type: object
+      required:
+        - ok
+        - result
+        - insightId
+        - invocationId
+        - model
+        - latencyMs
+        - status
+        - recommendationId
+        - confidence
+        - confidenceLevel
+        - confidenceReason
+        - secondOpinion
+      allOf:
+        - $ref: "#/components/schemas/CopilotAiInsightRef"
+        - $ref: "#/components/schemas/CopilotAiRecommendationRef"
+        - type: object
+          required: [ok, result, secondOpinion]
+          properties:
+            ok: { type: boolean, enum: [true] }
+            result: { $ref: "#/components/schemas/ContractNegotiationStrategyResult" }
             secondOpinion: { $ref: "#/components/schemas/SecondOpinionEnvelope" }
 
     # ── Task #232: Admin-Konfiguration für KI-Zweitmeinung ──

@@ -80,6 +80,7 @@ import { ApiError } from "@workspace/api-client-react";
 import { AiPromptPanel } from "@/components/copilot/ai-prompt-panel";
 import { Breadcrumbs } from "@/components/patterns/breadcrumbs";
 import { LintPanel } from "@/components/contract/lint-panel";
+import { NegotiationStrategyTab } from "@/components/contract/negotiation-strategy-tab";
 
 /**
  * Kleiner Badge für den Konsistenz-Tab — zeigt die Fehler-Anzahl als roter
@@ -323,6 +324,9 @@ export default function Contract() {
           <TabsTrigger value="approvals" data-testid="contract-tab-approvals">
             {t("pages.contracts.tabs.approvals")}
           </TabsTrigger>
+          <TabsTrigger value="negotiation" data-testid="contract-tab-negotiation">
+            {t("pages.contracts.tabs.negotiation")}
+          </TabsTrigger>
         </TabsList>
 
         <TabsContent value="overview" className="mt-4 space-y-6" data-testid="contract-tabpanel-overview">
@@ -546,6 +550,10 @@ export default function Contract() {
         <TabsContent value="approvals" className="mt-4 space-y-6" data-testid="contract-tabpanel-approvals">
           <AmendmentsSection contractId={id} contractStatus={contract.status} />
           <ExternalCollaboratorsCard contractId={id} />
+        </TabsContent>
+
+        <TabsContent value="negotiation" className="mt-4 space-y-6" data-testid="contract-tabpanel-negotiation">
+          <NegotiationStrategyTab contractId={id} clauses={clauses ?? []} />
         </TabsContent>
       </Tabs>
 

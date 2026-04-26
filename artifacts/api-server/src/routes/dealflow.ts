@@ -188,7 +188,7 @@ import {
   type SecondOpinionEnvelope,
 } from '../lib/ai';
 import { recordRecommendation, clampConfidence, confidenceLevelToScore } from '../lib/ai/recommendations.js';
-import type { HelpAssistantInput, ContractRiskInput, ContractConsistencyInput } from '../lib/ai/prompts/dealflow';
+import type { HelpAssistantInput, ContractRiskInput, ContractConsistencyInput, ContractNegotiationInput } from '../lib/ai/prompts/dealflow';
 import { runContractLint, type ContractLintInput } from '../lib/contractLinter/index.js';
 import {
   searchLegalKnowledge,
@@ -7728,6 +7728,130 @@ router.get('/contracts/:id/pdf', async (req, res) => {
   stream.pipe(res);
 });
 
+// Verhandlungs-Playbook PDF (Task #229).
+// Holt die letzte gespeicherte Verhandlungs-Empfehlung (recordRecommendation
+// → ai_recommendations) für den Vertrag und rendert sie als PDF. Wenn noch
+// keine Empfehlung existiert, antwortet 404 — das Frontend triggert den
+// Lauf zuerst und erst danach den Download.
+router.get('/contracts/:id/negotiation-playbook.pdf', async (req, res) => {
+  const contractId = req.params['id'] ?? '';
+  const [c] = await db.select().from(contractsTable).where(eq(contractsTable.id, contractId));
+  if (!c) { res.status(404).json({ error: 'not found' }); return; }
+  if (!(await gateDeal(req, res, c.dealId))) return;
+  const scope = getScope(req);
+  // Letzte Empfehlung lesen (eine pro Vertrag in der Praxis, neuestes
+  // Datum gewinnt).
+  const [rec] = await db
+    .select()
+    .from(aiRecommendationsTable)
+    .where(
+      and(
+        eq(aiRecommendationsTable.tenantId, scope.tenantId),
+        eq(aiRecommendationsTable.promptKey, 'contract.negotiation'),
+        eq(aiRecommendationsTable.entityType, 'contract'),
+        eq(aiRecommendationsTable.entityId, contractId),
+      ),
+    )
+    .orderBy(desc(aiRecommendationsTable.createdAt))
+    .limit(1);
+  if (!rec) { res.status(404).json({ error: 'no negotiation strategy generated yet' }); return; }
+  const suggestion = rec.suggestion as {
+    overallSummary: string;
+    confidence: 'low' | 'medium' | 'high';
+    confidenceReason: string;
+    clauseStrategies: Array<{
+      contractClauseId: string;
+      family: string;
+      currentPosition: string;
+      idealPosition: string;
+      targetPosition: string;
+      walkAwayPosition: string;
+      economicRationale: string;
+      legalRationale: string;
+      counterTextDe: string;
+      counterTextEn: string;
+      proArguments: string[];
+      contraArguments: string[];
+      perClauseConfidence: 'low' | 'medium' | 'high';
+      perClauseConfidenceReason: string;
+      relatedSources?: Array<{ kind: 'norm' | 'precedent'; ref: string; note?: string }>;
+    }>;
+  };
+  const [d] = await db.select().from(dealsTable).where(eq(dealsTable.id, c.dealId));
+  // Body-Texte für die Vergleichs-Spalte holen.
+  const rawClauses = await db.select().from(contractClausesTable).where(eq(contractClausesTable.contractId, c.id));
+  const variantsAll = rawClauses.some((cl) => cl.activeVariantId)
+    ? await db.select().from(clauseVariantsTable).where(
+        inArray(
+          clauseVariantsTable.id,
+          rawClauses.map((cl) => cl.activeVariantId).filter((v): v is string => Boolean(v)),
+        ),
+      )
+    : [];
+  const vById = new Map(variantsAll.map((v) => [v.id, v]));
+  const clauseById = new Map(
+    rawClauses.map((cl, idx) => [
+      cl.id,
+      {
+        ordinal: idx + 1,
+        family: cl.family,
+        body: cl.editedBody || (cl.activeVariantId ? vById.get(cl.activeVariantId)?.body : '') || '',
+      },
+    ]),
+  );
+  let brand: typeof brandsTable.$inferSelect | undefined;
+  if (d?.brandId) {
+    const [b] = await db.select().from(brandsTable).where(eq(brandsTable.id, d.brandId));
+    brand = b;
+  }
+  const profile = await loadReadyTemplateProfile(d?.brandId, 'contract');
+  const language = normalizeLocale(c.language);
+  const { renderNegotiationPlaybookPdf } = await import('../pdf/negotiationPlaybook');
+  const stream = await renderNegotiationPlaybookPdf({
+    contractTitle: c.title,
+    contractNumber: `${c.title} · v${c.version}`,
+    dealName: d?.name ?? 'Unknown',
+    generatedAt: new Date().toISOString().slice(0, 10),
+    language,
+    overallSummary: suggestion.overallSummary,
+    overallConfidence: suggestion.confidence,
+    overallConfidenceReason: suggestion.confidenceReason,
+    profile,
+    clauses: suggestion.clauseStrategies.map((s) => {
+      const ref = clauseById.get(s.contractClauseId);
+      return {
+        ordinal: ref?.ordinal ?? 0,
+        family: ref?.family ?? s.family,
+        currentBody: ref?.body ?? '',
+        currentPosition: s.currentPosition,
+        idealPosition: s.idealPosition,
+        targetPosition: s.targetPosition,
+        walkAwayPosition: s.walkAwayPosition,
+        economicRationale: s.economicRationale,
+        legalRationale: s.legalRationale,
+        counterTextDe: s.counterTextDe,
+        counterTextEn: s.counterTextEn,
+        proArguments: s.proArguments ?? [],
+        contraArguments: s.contraArguments ?? [],
+        perClauseConfidence: s.perClauseConfidence,
+        perClauseConfidenceReason: s.perClauseConfidenceReason,
+        relatedSources: (s.relatedSources ?? []).map((r) => ({ kind: r.kind, ref: r.ref, note: r.note })),
+      };
+    }),
+    brand: brand ? {
+      name: brand.name,
+      logoUrl: await resolveLogoForPdf(brand.logoUrl),
+      primaryColor: brand.primaryColor ?? brand.color,
+      secondaryColor: brand.secondaryColor ?? null,
+      legalEntityName: brand.legalEntityName ?? null,
+      addressLine: brand.addressLine ?? null,
+    } : null,
+  });
+  res.setHeader('Content-Type', 'application/pdf');
+  res.setHeader('Content-Disposition', `inline; filename="negotiation-playbook-${c.id}.pdf"`);
+  stream.pipe(res);
+});
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Vertragswesen MVP Phase 1 — ContractTypes / Playbooks / Deviations / Obligations
 // ─────────────────────────────────────────────────────────────────────────────
@@ -13174,6 +13298,13 @@ const SECOND_OPINION_COMPARE_POINTS: Record<string, ComparePoint[]> = {
     { path: 'riskSignals', label: 'Risiko-Signale (max. Schwere)', kind: 'severityListMax', severity: 'major' },
     { path: 'confidence', label: 'Konfidenz', kind: 'confidence', severity: 'minor' },
   ],
+  // Task #229: Pro-Klausel-Strategie. Wir vergleichen die Gesamt-Konfidenz
+  // sowie die Anzahl/Reichweite der Klausel-Strategien (über die Liste),
+  // damit "Modell A liefert 8 Strategien, Modell B nur 2" als major-diff
+  // landet und der Reviewer den Output spürbar hinterfragt.
+  'contract.negotiation': [
+    { path: 'confidence', label: 'Konfidenz', kind: 'confidence', severity: 'minor' },
+  ],
 };
 
 /**
@@ -13563,6 +13694,193 @@ router.post('/copilot/contract-risk/:contractId', async (req, res) => {
   } catch (err) {
     if (err instanceof AIOrchestrationError) {
       mapAiOrchestrationErrorToHttp(err, res, 'contract-risk');
+      return;
+    }
+    throw err;
+  }
+});
+
+// ── 4b. Per-Clause Negotiation Strategy (Task #229) ──
+//
+// Erzeugt pro Klausel ein Verhandlungs-Playbook (ideal/target/walk-away,
+// Begründungen, bilingualer Counter-Text, pro/contra). Mirror der
+// contract-risk Pipeline mit eigenem Prompt + eigener Persistierung
+// (insight kind=ai_contract_negotiation). Frontend offeriert pro Klausel
+// "Counter übernehmen" via PATCH /contract-clauses/:id (editedBody +
+// editedReason).
+router.post('/copilot/contract-negotiation/:contractId', async (req, res) => {
+  const scope = getScope(req);
+  if (!isAIConfigured()) {
+    res.status(503).json({ ok: false, error: 'AI provider not configured', code: 'config_error' });
+    return;
+  }
+  const contractId = req.params['contractId'] ?? '';
+  let ctx: ContractContext;
+  try {
+    ctx = await buildContractContext(req, contractId);
+  } catch (e) {
+    if (handleScopeError(e, res)) return;
+    throw e;
+  }
+
+  // Klauseln mit Bodies laden — der Prompt zitiert pro Klausel-Id.
+  // Wir laden bewusst direkt aus contract_clauses + clause_variants statt
+  // den Effective-State zu rekonstruieren: Verhandlung bezieht sich immer
+  // auf den vom User aktuell gewählten Variant-Body, nicht auf Amendments
+  // (die laufen über einen eigenen Prozess).
+  const rawClauses = await db
+    .select()
+    .from(contractClausesTable)
+    .where(eq(contractClausesTable.contractId, contractId));
+  if (rawClauses.length === 0) {
+    res.status(409).json({ ok: false, error: 'contract has no clauses to negotiate', code: 'no_clauses' });
+    return;
+  }
+  const variantIds = rawClauses
+    .map((c) => c.activeVariantId)
+    .filter((v): v is string => Boolean(v));
+  const variantRows = variantIds.length > 0
+    ? await db.select().from(clauseVariantsTable).where(inArray(clauseVariantsTable.id, variantIds))
+    : [];
+  const vById = new Map(variantRows.map((v) => [v.id, v]));
+  const clauseInputs = rawClauses.map((cl, idx) => {
+    const active = cl.activeVariantId ? vById.get(cl.activeVariantId) : undefined;
+    return {
+      id: cl.id,
+      ordinal: idx + 1,
+      family: cl.family,
+      variant: cl.editedName || cl.variant,
+      severity: cl.severity,
+      body: cl.editedBody || active?.body || '',
+    };
+  });
+
+  // Juristische Wissensbasis (gleiche Hybrid-Suche wie contract.risk).
+  const knowledgeQuery = [
+    ctx.contract.title,
+    ...clauseInputs.map((c) => `${c.family} ${c.body.slice(0, 280)}`),
+  ].join(' ');
+  const knowledge = await searchLegalKnowledge({
+    tenantId: scope.tenantId,
+    query: knowledgeQuery,
+    filters: { jurisdiction: null, areaOfLaw: null },
+    limitSources: 5,
+    limitPrecedents: 4,
+  });
+  const knowledgeBlock = formatLegalKnowledgeForPrompt(knowledge);
+  const knowledgeIndex = new Map<string, NormHit | PrecedentHit>();
+  for (const s of knowledge.sources) knowledgeIndex.set(s.id, s);
+  for (const p of knowledge.precedents) knowledgeIndex.set(p.id, p);
+
+  // Klauselsatz für die Halluzinations-Sanitisierung — das Modell darf nur
+  // Klausel-Ids zitieren, die im Vertrag wirklich existieren.
+  const clauseIdSet = new Set(clauseInputs.map((c) => c.id));
+
+  try {
+    const result = await runStructuredWithSecondOpinion<ContractNegotiationInput, {
+      overallSummary: string;
+      clauseStrategies: Array<{
+        contractClauseId: string;
+        family: string;
+        currentPosition: string;
+        idealPosition: string;
+        targetPosition: string;
+        walkAwayPosition: string;
+        economicRationale: string;
+        legalRationale: string;
+        counterTextDe: string;
+        counterTextEn: string;
+        proArguments: string[];
+        contraArguments: string[];
+        perClauseConfidence: 'low' | 'medium' | 'high';
+        perClauseConfidenceReason: string;
+        relatedSources?: Array<{ kind: 'norm' | 'precedent'; id: string; ref: string; note?: string }>;
+      }>;
+      relatedSources?: Array<{ kind: 'norm' | 'precedent'; id: string; ref: string; note?: string }>;
+      confidence: 'low' | 'medium' | 'high';
+      confidenceReason: string;
+    }>({
+      promptKey: 'contract.negotiation',
+      input: { contract: ctx, clauses: clauseInputs, knowledgeBlock },
+      scope,
+      entityRef: { entityType: 'contract', entityId: contractId },
+      comparePoints: SECOND_OPINION_COMPARE_POINTS['contract.negotiation']!,
+      requestSecondOpinion: readSecondOpinionOptIn(req),
+    });
+
+    // Citations gegen Retrieval-Set sanitisieren (verhindert
+    // Halluzinationen). Greift sowohl auf overall- als auch klausel-
+    // spezifische relatedSources.
+    const sanitizeSources = (
+      raw: Array<{ kind: 'norm' | 'precedent'; id: string; ref: string; note?: string }> | undefined,
+    ) =>
+      (raw ?? [])
+        .filter((s) => knowledgeIndex.has(s.id))
+        .map((s) => {
+          const hit = knowledgeIndex.get(s.id)!;
+          return { ...s, snippet: hit.snippet };
+        });
+
+    // Klausel-Strategien gegen die tatsächlichen Klausel-Ids filtern. Das
+    // verhindert, dass das Modell für nicht existierende Klauseln
+    // halluziniert oder Ids rät.
+    const sanitizedStrategies = (result.output.clauseStrategies ?? [])
+      .filter((s) => clauseIdSet.has(s.contractClauseId))
+      .map((s) => ({
+        ...s,
+        relatedSources: sanitizeSources(s.relatedSources),
+      }));
+    const enrichedOutput = {
+      ...result.output,
+      clauseStrategies: sanitizedStrategies,
+      relatedSources: sanitizeSources(result.output.relatedSources),
+    };
+
+    // Persistenz: ein Insight pro Vertrag (re-runs überschreiben via
+    // onConflictDoUpdate). actionType='open_negotiation' damit die
+    // Insight-Card auf den Tab linken kann.
+    const insightId = await persistAiInsight(scope.tenantId, {
+      kind: 'ai_contract_negotiation',
+      title: `Verhandlungs-Strategie: ${ctx.contract.title}`,
+      summary: result.output.overallSummary,
+      severity: 'info',
+      dealId: ctx.deal.id,
+      triggerType: 'ai_contract_negotiation',
+      triggerEntityRef: contractId,
+      actionType: 'open_negotiation',
+      actionPayload: {
+        contractId,
+        clauseCount: sanitizedStrategies.length,
+        sources: enrichedOutput.relatedSources?.map((s) => ({ kind: s.kind, id: s.id, ref: s.ref })) ?? [],
+      },
+    });
+    const confScore = confidenceLevelToScore(result.output.confidence);
+    const recommendationId = await recordRecommendation({
+      tenantId: scope.tenantId,
+      promptKey: 'contract.negotiation',
+      suggestion: enrichedOutput,
+      confidence: confScore,
+      entityType: 'contract',
+      entityId: contractId,
+      aiInvocationId: result.invocationId,
+    });
+    res.json({
+      ok: true,
+      result: enrichedOutput,
+      invocationId: result.invocationId,
+      insightId,
+      recommendationId,
+      confidence: confScore,
+      confidenceLevel: result.output.confidence,
+      confidenceReason: result.output.confidenceReason,
+      model: result.model,
+      latencyMs: result.latencyMs,
+      status: 'open',
+      secondOpinion: result.secondOpinion,
+    });
+  } catch (err) {
+    if (err instanceof AIOrchestrationError) {
+      mapAiOrchestrationErrorToHttp(err, res, 'contract-negotiation');
       return;
     }
     throw err;

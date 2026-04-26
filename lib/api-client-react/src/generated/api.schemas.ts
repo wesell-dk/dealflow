@@ -4408,6 +4408,57 @@ export type ContractRiskEnvelope = CopilotAiInsightRef &
     secondOpinion: SecondOpinionEnvelope;
   };
 
+export type ClauseNegotiationStrategyPerClauseConfidence =
+  (typeof ClauseNegotiationStrategyPerClauseConfidence)[keyof typeof ClauseNegotiationStrategyPerClauseConfidence];
+
+export const ClauseNegotiationStrategyPerClauseConfidence = {
+  low: "low",
+  medium: "medium",
+  high: "high",
+} as const;
+
+export interface ClauseNegotiationStrategy {
+  contractClauseId: string;
+  family: string;
+  currentPosition: string;
+  idealPosition: string;
+  targetPosition: string;
+  walkAwayPosition: string;
+  economicRationale: string;
+  legalRationale: string;
+  counterTextDe: string;
+  counterTextEn: string;
+  proArguments: string[];
+  contraArguments: string[];
+  perClauseConfidence: ClauseNegotiationStrategyPerClauseConfidence;
+  perClauseConfidenceReason: string;
+  relatedSources?: LegalKnowledgeSourceRef[];
+}
+
+export type ContractNegotiationStrategyResultConfidence =
+  (typeof ContractNegotiationStrategyResultConfidence)[keyof typeof ContractNegotiationStrategyResultConfidence];
+
+export const ContractNegotiationStrategyResultConfidence = {
+  low: "low",
+  medium: "medium",
+  high: "high",
+} as const;
+
+export interface ContractNegotiationStrategyResult {
+  overallSummary: string;
+  clauseStrategies: ClauseNegotiationStrategy[];
+  relatedSources?: LegalKnowledgeSourceRef[];
+  confidence: ContractNegotiationStrategyResultConfidence;
+  confidenceReason: string;
+}
+
+export type ContractNegotiationStrategyEnvelope = CopilotAiInsightRef &
+  CopilotAiRecommendationRef & {
+    ok: boolean;
+    result: ContractNegotiationStrategyResult;
+    secondOpinion: SecondOpinionEnvelope;
+  };
+
 export type AiSecondOpinionPromptConfigMode =
   (typeof AiSecondOpinionPromptConfigMode)[keyof typeof AiSecondOpinionPromptConfigMode];
 

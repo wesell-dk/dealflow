@@ -402,6 +402,138 @@ export const contractRisk: PromptDefinition<
   toolName: "report_contract_risk",
 };
 
+// ───────────── 6b. Per-Clause Negotiation Strategy (Task #229) ─────────────
+//
+// Pro Klausel produziert das Modell:
+//   - currentPosition  (knappe Zusammenfassung des Status quo)
+//   - idealPosition    (Was wir maximal bekommen wollen)
+//   - targetPosition   (Realistisches Verhandlungsziel)
+//   - walkAwayPosition (Untere Grenze, ab der wir aussteigen)
+//   - economicRationale + legalRationale (Begründungen)
+//   - counterTextDe / counterTextEn (alternative Klausel-Texte, bilingual,
+//     bereit zum 1:1 Übernehmen via PATCH /contract-clauses/:id)
+//   - proArguments / contraArguments (Argumentations-Linien für die UI)
+//   - perClauseConfidence + perClauseConfidenceReason (low/medium/high)
+//
+// Output ist absichtlich klauselzentriert; das Frontend drillt pro Eintrag
+// in einen Detail-View und bietet "Counter übernehmen" als One-Click-Aktion.
+// Bei perClauseConfidence='low' rendert die UI eine Manual-Review-Warnung.
+
+const ClauseNegotiationStrategy = z.object({
+  contractClauseId: z.string().min(2).max(80),
+  family: z.string().min(2).max(120),
+  currentPosition: z.string().min(2).max(600),
+  idealPosition: z.string().min(2).max(600),
+  targetPosition: z.string().min(2).max(600),
+  walkAwayPosition: z.string().min(2).max(600),
+  economicRationale: z.string().min(2).max(800),
+  legalRationale: z.string().min(2).max(800),
+  counterTextDe: z.string().min(2).max(4000),
+  counterTextEn: z.string().min(2).max(4000),
+  proArguments: z.array(z.string().min(2).max(400)).min(1).max(6),
+  contraArguments: z.array(z.string().min(2).max(400)).max(6),
+  perClauseConfidence: CONFIDENCE_LEVEL,
+  perClauseConfidenceReason: CONFIDENCE_REASON,
+  relatedSources: z.array(RELATED_SOURCE).max(6).optional(),
+});
+
+const ContractNegotiationStrict = z.object({
+  overallSummary: z.string().min(8).max(1200),
+  clauseStrategies: z.array(ClauseNegotiationStrategy).max(20),
+  relatedSources: z.array(RELATED_SOURCE).max(10).optional(),
+  confidence: CONFIDENCE_LEVEL,
+  confidenceReason: CONFIDENCE_REASON,
+});
+
+// Manche Provider serialisieren tief verschachtelte Arrays gelegentlich als
+// JSON-String statt als natives Array. Wir tolerieren beides via preprocess
+// auf Top-Level — strukturell muss am Ende immer ein Array stehen.
+const parseIfStringifiedArray = (v: unknown): unknown => {
+  if (v && typeof v === "object" && !Array.isArray(v)) {
+    const o = { ...(v as Record<string, unknown>) };
+    for (const k of ["clauseStrategies", "relatedSources"] as const) {
+      if (typeof o[k] === "string") {
+        try {
+          o[k] = JSON.parse(o[k] as string);
+        } catch {
+          /* leave as-is and let zod report */
+        }
+      }
+    }
+    return o;
+  }
+  return v;
+};
+
+const ContractNegotiationOutput = z.preprocess(
+  parseIfStringifiedArray,
+  ContractNegotiationStrict,
+) as z.ZodType<z.infer<typeof ContractNegotiationStrict>>;
+
+// Eingabe: ContractContext + denormalisierte Klauseln (id/ordinal/body),
+// damit das Modell pro Klausel zitieren kann (UI mappt anhand
+// contractClauseId zurück auf den Slot).
+export interface ContractNegotiationInput {
+  contract: ContractContext;
+  clauses: Array<{
+    id: string;
+    ordinal: number;
+    family: string;
+    variant: string;
+    severity: string;
+    body: string;
+  }>;
+  knowledgeBlock?: string;
+}
+
+export const contractNegotiation: PromptDefinition<
+  ContractNegotiationInput,
+  z.infer<typeof ContractNegotiationOutput>
+> = {
+  key: "contract.negotiation",
+  model: "claude-sonnet-4-6",
+  system:
+    "You are the DealFlow Copilot in Per-Clause Negotiation Strategy mode. " +
+    "For each contract clause you produce a structured negotiation playbook: " +
+    "current position, ideal/target/walk-away positions, economic and legal " +
+    "rationale, ready-to-paste counterproposal text in BOTH German (counterTextDe) " +
+    "AND English (counterTextEn), plus pro/contra argument lines for the " +
+    "internal negotiator. Each clause MUST reuse the provided contractClauseId " +
+    "verbatim — do NOT invent new IDs and do NOT cover families that are not " +
+    "in the input. " +
+    "If a clause is already balanced, output a 'hold the line' strategy " +
+    "(idealPosition == currentPosition is fine) and set perClauseConfidence='high'. " +
+    "If the data is too thin (very short body, missing context), set " +
+    "perClauseConfidence='low' and recommend manual review in the rationale. " +
+    "Counter texts must be paste-ready clause bodies (full sentences, no " +
+    "placeholders like 'TBD' or '[X]' unless explicitly noted). " +
+    CITATION_HINT + " " +
+    SAFE_GERMAN_HINT,
+  buildUser: (input) => {
+    const clauseList = input.clauses
+      .map(
+        (c) =>
+          `§ ${c.ordinal} ${c.family} (id=${c.id}, severity=${c.severity}, variant=${c.variant})\n${c.body.slice(0, 1800)}`,
+      )
+      .join("\n\n");
+    return (
+      `Build a per-clause negotiation strategy for the following contract.\n\n` +
+      `Contract context (JSON):\n${JSON.stringify(input.contract)}\n\n` +
+      `Clauses:\n${clauseList}` +
+      (input.knowledgeBlock ? `\n${input.knowledgeBlock}` : "")
+    );
+  },
+  outputSchema: ContractNegotiationOutput,
+  toolDescription:
+    "Returns overallSummary, clauseStrategies (one per supplied contractClauseId " +
+    "with current/ideal/target/walkAway positions, economic+legal rationale, " +
+    "counterTextDe + counterTextEn, proArguments, contraArguments, " +
+    "perClauseConfidence/perClauseConfidenceReason and optional relatedSources), " +
+    "overall relatedSources, and overall confidence (low/medium/high) plus a " +
+    "single confidenceReason sentence.",
+  toolName: "report_contract_negotiation",
+};
+
 // ───────────────────────── 7. External Paper / Redline ─────────────────────────
 
 const RedlineOutput = z.object({
@@ -1074,6 +1206,7 @@ export const DEALFLOW_PROMPTS = {
   [approvalReadiness.key]: approvalReadiness,
   [contractDrafting.key]: contractDrafting,
   [contractRisk.key]: contractRisk,
+  [contractNegotiation.key]: contractNegotiation,
   [contractRedline.key]: contractRedline,
   [priceIncreaseSupport.key]: priceIncreaseSupport,
   [executiveBrief.key]: executiveBrief,

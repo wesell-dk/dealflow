@@ -7274,6 +7274,155 @@ export const RunContractRiskResponse = zod
   );
 
 /**
+ * @summary AI-generated per-clause negotiation strategy (Task #229). Returns one
+playbook entry per clause (current / ideal / target / walk-away
+positions, economic + legal rationale, ready-to-paste counterproposal
+text in DE and EN, pro/contra arguments, per-clause confidence). The
+accompanying insight is persisted as kind=ai_contract_negotiation;
+the cached suggestion can be exported via the negotiation playbook
+PDF endpoint.
+
+ */
+export const RunContractNegotiationParams = zod.object({
+  contractId: zod.coerce.string(),
+});
+
+export const runContractNegotiationResponseTwoConfidenceMin = 0;
+export const runContractNegotiationResponseTwoConfidenceMax = 1;
+
+export const runContractNegotiationResponseThreeSecondOpinionAgreementScoreOneMin = 0;
+export const runContractNegotiationResponseThreeSecondOpinionAgreementScoreOneMax = 100;
+
+export const RunContractNegotiationResponse = zod
+  .object({
+    insightId: zod.string(),
+    invocationId: zod.string(),
+    model: zod.string(),
+    latencyMs: zod.number(),
+    status: zod.enum(["open"]),
+  })
+  .and(
+    zod.object({
+      recommendationId: zod.string(),
+      confidence: zod
+        .number()
+        .min(runContractNegotiationResponseTwoConfidenceMin)
+        .max(runContractNegotiationResponseTwoConfidenceMax),
+      confidenceLevel: zod.enum(["low", "medium", "high"]),
+      confidenceReason: zod.string(),
+    }),
+  )
+  .and(
+    zod.object({
+      ok: zod.literal(true),
+      result: zod.object({
+        overallSummary: zod.string(),
+        clauseStrategies: zod.array(
+          zod.object({
+            contractClauseId: zod.string(),
+            family: zod.string(),
+            currentPosition: zod.string(),
+            idealPosition: zod.string(),
+            targetPosition: zod.string(),
+            walkAwayPosition: zod.string(),
+            economicRationale: zod.string(),
+            legalRationale: zod.string(),
+            counterTextDe: zod.string(),
+            counterTextEn: zod.string(),
+            proArguments: zod.array(zod.string()),
+            contraArguments: zod.array(zod.string()),
+            perClauseConfidence: zod.enum(["low", "medium", "high"]),
+            perClauseConfidenceReason: zod.string(),
+            relatedSources: zod
+              .array(
+                zod.object({
+                  kind: zod.enum(["norm", "precedent"]),
+                  id: zod.string(),
+                  ref: zod.string(),
+                  note: zod.string().optional(),
+                  snippet: zod.string().optional(),
+                }),
+              )
+              .optional(),
+          }),
+        ),
+        relatedSources: zod
+          .array(
+            zod.object({
+              kind: zod.enum(["norm", "precedent"]),
+              id: zod.string(),
+              ref: zod.string(),
+              note: zod.string().optional(),
+              snippet: zod.string().optional(),
+            }),
+          )
+          .optional(),
+        confidence: zod.enum(["low", "medium", "high"]),
+        confidenceReason: zod.string(),
+      }),
+      secondOpinion: zod.object({
+        status: zod.enum([
+          "disabled",
+          "skipped",
+          "unavailable",
+          "failed",
+          "completed",
+        ]),
+        reason: zod.union([zod.string(), zod.null()]).optional(),
+        secondOpinionId: zod.union([zod.string(), zod.null()]).optional(),
+        invocationId: zod.union([zod.string(), zod.null()]).optional(),
+        model: zod.union([zod.string(), zod.null()]).optional(),
+        agreementLevel: zod
+          .union([zod.enum(["low", "medium", "high"]), zod.null()])
+          .optional(),
+        agreementScore: zod
+          .union([
+            zod
+              .number()
+              .min(
+                runContractNegotiationResponseThreeSecondOpinionAgreementScoreOneMin,
+              )
+              .max(
+                runContractNegotiationResponseThreeSecondOpinionAgreementScoreOneMax,
+              ),
+            zod.null(),
+          ])
+          .optional(),
+        diffs: zod
+          .array(
+            zod.object({
+              path: zod.string(),
+              label: zod.string(),
+              primary: zod.unknown(),
+              secondary: zod.unknown(),
+              severity: zod.enum(["info", "minor", "major"]),
+            }),
+          )
+          .optional(),
+        output: zod
+          .union([zod.record(zod.string(), zod.unknown()), zod.null()])
+          .optional(),
+        decision: zod
+          .union([
+            zod.enum(["pending", "keep_primary", "adopt_secondary", "manual"]),
+            zod.null(),
+          ])
+          .optional(),
+      }),
+    }),
+  );
+
+/**
+ * @summary Renders the latest cached per-clause negotiation strategy for the
+contract as a printable playbook (PDF). Returns 404 if no strategy
+was generated yet.
+
+ */
+export const GetNegotiationPlaybookPdfParams = zod.object({
+  id: zod.coerce.string(),
+});
+
+/**
  * @summary Cross-domain recent activity feed
  */
 export const ListRecentActivityResponseItem = zod.object({

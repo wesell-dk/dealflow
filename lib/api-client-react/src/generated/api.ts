@@ -111,6 +111,7 @@ import type {
   ContractInput,
   ContractLintAiEnvelope,
   ContractLintReport,
+  ContractNegotiationStrategyEnvelope,
   ContractPatchInput,
   ContractPlaybook,
   ContractPlaybookCreate,
@@ -15491,6 +15492,202 @@ export const useRunContractRisk = <
 > => {
   return useMutation(getRunContractRiskMutationOptions(options));
 };
+
+/**
+ * @summary AI-generated per-clause negotiation strategy (Task #229). Returns one
+playbook entry per clause (current / ideal / target / walk-away
+positions, economic + legal rationale, ready-to-paste counterproposal
+text in DE and EN, pro/contra arguments, per-clause confidence). The
+accompanying insight is persisted as kind=ai_contract_negotiation;
+the cached suggestion can be exported via the negotiation playbook
+PDF endpoint.
+
+ */
+export const getRunContractNegotiationUrl = (contractId: string) => {
+  return `/api/v1/copilot/contract-negotiation/${contractId}`;
+};
+
+export const runContractNegotiation = async (
+  contractId: string,
+  options?: RequestInit,
+): Promise<ContractNegotiationStrategyEnvelope> => {
+  return customFetch<ContractNegotiationStrategyEnvelope>(
+    getRunContractNegotiationUrl(contractId),
+    {
+      ...options,
+      method: "POST",
+    },
+  );
+};
+
+export const getRunContractNegotiationMutationOptions = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof runContractNegotiation>>,
+    TError,
+    { contractId: string },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof runContractNegotiation>>,
+  TError,
+  { contractId: string },
+  TContext
+> => {
+  const mutationKey = ["runContractNegotiation"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof runContractNegotiation>>,
+    { contractId: string }
+  > = (props) => {
+    const { contractId } = props ?? {};
+
+    return runContractNegotiation(contractId, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type RunContractNegotiationMutationResult = NonNullable<
+  Awaited<ReturnType<typeof runContractNegotiation>>
+>;
+
+export type RunContractNegotiationMutationError = ErrorType<void>;
+
+/**
+ * @summary AI-generated per-clause negotiation strategy (Task #229). Returns one
+playbook entry per clause (current / ideal / target / walk-away
+positions, economic + legal rationale, ready-to-paste counterproposal
+text in DE and EN, pro/contra arguments, per-clause confidence). The
+accompanying insight is persisted as kind=ai_contract_negotiation;
+the cached suggestion can be exported via the negotiation playbook
+PDF endpoint.
+
+ */
+export const useRunContractNegotiation = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof runContractNegotiation>>,
+    TError,
+    { contractId: string },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof runContractNegotiation>>,
+  TError,
+  { contractId: string },
+  TContext
+> => {
+  return useMutation(getRunContractNegotiationMutationOptions(options));
+};
+
+/**
+ * @summary Renders the latest cached per-clause negotiation strategy for the
+contract as a printable playbook (PDF). Returns 404 if no strategy
+was generated yet.
+
+ */
+export const getGetNegotiationPlaybookPdfUrl = (id: string) => {
+  return `/api/v1/contracts/${id}/negotiation-playbook.pdf`;
+};
+
+export const getNegotiationPlaybookPdf = async (
+  id: string,
+  options?: RequestInit,
+): Promise<Blob> => {
+  return customFetch<Blob>(getGetNegotiationPlaybookPdfUrl(id), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getGetNegotiationPlaybookPdfQueryKey = (id: string) => {
+  return [`/api/v1/contracts/${id}/negotiation-playbook.pdf`] as const;
+};
+
+export const getGetNegotiationPlaybookPdfQueryOptions = <
+  TData = Awaited<ReturnType<typeof getNegotiationPlaybookPdf>>,
+  TError = ErrorType<void>,
+>(
+  id: string,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getNegotiationPlaybookPdf>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey =
+    queryOptions?.queryKey ?? getGetNegotiationPlaybookPdfQueryKey(id);
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof getNegotiationPlaybookPdf>>
+  > = ({ signal }) =>
+    getNegotiationPlaybookPdf(id, { signal, ...requestOptions });
+
+  return {
+    queryKey,
+    queryFn,
+    enabled: !!id,
+    ...queryOptions,
+  } as UseQueryOptions<
+    Awaited<ReturnType<typeof getNegotiationPlaybookPdf>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetNegotiationPlaybookPdfQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getNegotiationPlaybookPdf>>
+>;
+export type GetNegotiationPlaybookPdfQueryError = ErrorType<void>;
+
+/**
+ * @summary Renders the latest cached per-clause negotiation strategy for the
+contract as a printable playbook (PDF). Returns 404 if no strategy
+was generated yet.
+
+ */
+
+export function useGetNegotiationPlaybookPdf<
+  TData = Awaited<ReturnType<typeof getNegotiationPlaybookPdf>>,
+  TError = ErrorType<void>,
+>(
+  id: string,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getNegotiationPlaybookPdf>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetNegotiationPlaybookPdfQueryOptions(id, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
 
 /**
  * @summary Cross-domain recent activity feed
