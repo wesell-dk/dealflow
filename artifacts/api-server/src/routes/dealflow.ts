@@ -1435,6 +1435,10 @@ router.get('/orgs/me', async (req, res) => {
     id: u.id, name: u.name, email: u.email, role: u.role, scope: u.scope,
     initials: u.initials, avatarColor: u.avatarColor,
     tenantId: u.tenantId, tenantWide: scope.tenantWide,
+    // Persönliche Anzeige-Einstellungen (Task #282).
+    displayName: u.displayName,
+    preferredLanguage: u.preferredLanguage,
+    timeZone: u.timeZone,
     // Backwards-compat
     companyIds: scope.companyIds, brandIds: scope.brandIds,
     // Allowed scope (Permission, vollständig)
@@ -1454,6 +1458,87 @@ router.get('/orgs/me', async (req, res) => {
 });
 
 const ACTIVE_SCOPE_COOKIE = 'df_active_scope';
+
+// Persönliche Anzeige-Einstellungen (Task #282) — Spitzname für die
+// Begrüßung, bevorzugte Sprache und Zeitzone. Alle Felder sind optional;
+// `null` setzt den jeweiligen Wert zurück (Frontend fällt dann wieder auf
+// Browser-Default bzw. ersten Vornamens-Teil zurück). Validierung:
+//   - displayName: 1..40 Zeichen nach trim, sonst 422
+//   - preferredLanguage: 'de' | 'en'
+//   - timeZone: muss vom V8/ICU als IANA-Zone akzeptiert werden
+function isValidIanaTimeZone(value: string): boolean {
+  try {
+    new Intl.DateTimeFormat('en-US', { timeZone: value });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+router.patch('/orgs/me/profile', async (req, res) => {
+  const scope = getScope(req);
+  const body = (req.body ?? {}) as {
+    displayName?: string | null;
+    preferredLanguage?: string | null;
+    timeZone?: string | null;
+  };
+  const patch: Partial<typeof usersTable.$inferInsert> = {};
+  if ('displayName' in body) {
+    if (body.displayName === null) {
+      patch.displayName = null;
+    } else if (typeof body.displayName === 'string') {
+      const trimmed = body.displayName.trim();
+      if (trimmed.length === 0) {
+        patch.displayName = null;
+      } else if (trimmed.length > 40) {
+        res.status(422).json({ error: 'displayName must be 1..40 characters' });
+        return;
+      } else {
+        patch.displayName = trimmed;
+      }
+    } else {
+      res.status(422).json({ error: 'displayName must be string or null' });
+      return;
+    }
+  }
+  if ('preferredLanguage' in body) {
+    if (body.preferredLanguage === null || body.preferredLanguage === '') {
+      patch.preferredLanguage = null;
+    } else if (body.preferredLanguage === 'de' || body.preferredLanguage === 'en') {
+      patch.preferredLanguage = body.preferredLanguage;
+    } else {
+      res.status(422).json({ error: 'preferredLanguage must be one of de|en or null' });
+      return;
+    }
+  }
+  if ('timeZone' in body) {
+    if (body.timeZone === null || body.timeZone === '') {
+      patch.timeZone = null;
+    } else if (typeof body.timeZone === 'string' && isValidIanaTimeZone(body.timeZone)) {
+      patch.timeZone = body.timeZone;
+    } else {
+      res.status(422).json({ error: 'timeZone must be a valid IANA zone or null' });
+      return;
+    }
+  }
+  if (Object.keys(patch).length > 0) {
+    await db.update(usersTable).set(patch).where(eq(usersTable.id, scope.user.id));
+    await writeAuditFromReq(req, {
+      entityType: 'user',
+      entityId: scope.user.id,
+      action: 'profile.update',
+      summary: 'Persönliche Anzeige-Einstellungen aktualisiert',
+      after: patch,
+      actor: scope.user.name,
+    });
+  }
+  const [updated] = await db.select().from(usersTable).where(eq(usersTable.id, scope.user.id));
+  res.json({
+    displayName: updated?.displayName ?? null,
+    preferredLanguage: updated?.preferredLanguage ?? null,
+    timeZone: updated?.timeZone ?? null,
+  });
+});
 
 router.patch('/orgs/me/active-scope', async (req, res) => {
   if (!validateInline(req, res, { body: Z.UpdateActiveScopeBody })) return;

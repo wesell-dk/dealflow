@@ -315,6 +315,18 @@ export async function ensureSchemaColumns(): Promise<void> {
     sql`ALTER TABLE "negotiations" ADD COLUMN IF NOT EXISTS "concluded_at" timestamp with time zone`,
   );
 
+  // Task #282: Persönliche Anzeige-Einstellungen (Spitzname, Sprache,
+  // Zeitzone). Auf älteren DBs fehlen diese Spalten noch.
+  await db.execute(
+    sql`ALTER TABLE "users" ADD COLUMN IF NOT EXISTS "display_name" text`,
+  );
+  await db.execute(
+    sql`ALTER TABLE "users" ADD COLUMN IF NOT EXISTS "preferred_language" text`,
+  );
+  await db.execute(
+    sql`ALTER TABLE "users" ADD COLUMN IF NOT EXISTS "time_zone" text`,
+  );
+
   // Regulatorik-Bibliothek (Task #231).
   await db.execute(sql`
     CREATE TABLE IF NOT EXISTS "regulatory_frameworks" (

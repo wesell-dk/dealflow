@@ -15,8 +15,50 @@ function firstName(fullName: string | undefined): string {
   return trimmed.split(/\s+/)[0];
 }
 
-function greetingKey(date: Date): "morning" | "afternoon" | "evening" {
-  const h = date.getHours();
+/**
+ * Bevorzugter Anzeigename (Task #282): wenn Nutzer:in einen Spitznamen im
+ * Profil hinterlegt hat, gewinnt der. Sonst Fallback auf den ersten Teil
+ * von `name` (= heutiges Verhalten).
+ */
+function greetingName(
+  displayName: string | null | undefined,
+  fullName: string | undefined,
+): string {
+  if (typeof displayName === "string") {
+    const t = displayName.trim();
+    if (t.length > 0) return t;
+  }
+  return firstName(fullName);
+}
+
+/**
+ * Tageszeit-Key auf Basis der gewählten Zeitzone (Task #282).
+ * Ohne `timeZone` → Browser-Lokalzeit (= heutiges Verhalten).
+ * Mit `timeZone` → IANA-Zone via Intl.DateTimeFormat. Ungültige Zonen
+ * (z. B. veraltete Profile-Werte) fallen sauber auf die Browser-Lokalzeit
+ * zurück, statt einen Render-Crash auszulösen.
+ */
+function greetingKey(
+  date: Date,
+  timeZone?: string | null,
+): "morning" | "afternoon" | "evening" {
+  let h = date.getHours();
+  if (timeZone) {
+    try {
+      const parts = new Intl.DateTimeFormat("en-US", {
+        timeZone,
+        hour: "numeric",
+        hour12: false,
+      }).formatToParts(date);
+      const hourPart = parts.find((p) => p.type === "hour");
+      if (hourPart) {
+        const parsed = Number(hourPart.value);
+        if (Number.isFinite(parsed)) h = parsed % 24;
+      }
+    } catch {
+      // Ungültige Zone → Browser-Lokalzeit (h bleibt unverändert).
+    }
+  }
   if (h < 11) return "morning";
   if (h < 18) return "afternoon";
   return "evening";
@@ -38,13 +80,23 @@ export default function Home() {
 
   const now = new Date();
   const locale = i18n.resolvedLanguage === "en" ? "en-US" : "de-DE";
-  const dateLabel = now.toLocaleDateString(locale, {
-    weekday: "long",
-    day: "numeric",
-    month: "long",
-  });
-  const greeting = t(`pages.home.greetings.${greetingKey(now)}`);
-  const fname = firstName(user?.name);
+  const userTimeZone = user?.timeZone ?? null;
+  const dateLabel = (() => {
+    const baseOpts: Intl.DateTimeFormatOptions = {
+      weekday: "long",
+      day: "numeric",
+      month: "long",
+    };
+    if (!userTimeZone) return now.toLocaleDateString(locale, baseOpts);
+    try {
+      return now.toLocaleDateString(locale, { ...baseOpts, timeZone: userTimeZone });
+    } catch {
+      // Ungültige Zone (z. B. veraltete Profile-Werte) → Browser-Lokalzeit.
+      return now.toLocaleDateString(locale, baseOpts);
+    }
+  })();
+  const greeting = t(`pages.home.greetings.${greetingKey(now, userTimeZone)}`);
+  const displayed = greetingName(user?.displayName, user?.name);
 
   return (
     <div className="flex flex-col gap-8">
@@ -54,8 +106,11 @@ export default function Home() {
         <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground/80">
           {dateLabel}
         </p>
-        <h1 className="mt-2 text-3xl sm:text-4xl font-semibold tracking-tight text-foreground">
-          {fname ? `${greeting}, ${fname}` : greeting}
+        <h1
+          className="mt-2 text-3xl sm:text-4xl font-semibold tracking-tight text-foreground"
+          data-testid="text-greeting"
+        >
+          {displayed ? `${greeting}, ${displayed}` : greeting}
         </h1>
         <p className="text-muted-foreground mt-2 max-w-xl">
           {t("pages.home.subtitle")}

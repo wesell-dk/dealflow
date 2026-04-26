@@ -199,6 +199,17 @@ export const usersTable = pgTable("users", {
   // und Tenant-übergreifende Plattform-Routen aufrufen. KEIN Cross-Tenant-
   // Datenzugriff auf Kunden/Deals/etc. — diese bleiben tenant-isoliert.
   isPlatformAdmin: boolean("is_platform_admin").notNull().default(false),
+  // Persönliche Anzeige-Einstellungen (Task #282).
+  // displayName ist ein optionaler Spitzname / bevorzugter Vorname für die
+  // Begrüßung auf der Startseite. NULL → Fallback auf den ersten Teil von
+  // `name` (legacy-Verhalten). preferredLanguage (de|en) überschreibt die
+  // Browser-/localStorage-Sprache nach dem Login. timeZone ist eine IANA-
+  // Zone (z. B. "Europe/Berlin", "America/New_York") — wenn gesetzt, nutzen
+  // Zeit-abhängige UI-Teile (Tageszeit-Begrüßung) diese Zone statt der
+  // Browser-Lokalzeit. Alle drei Felder sind optional.
+  displayName: text("display_name"),
+  preferredLanguage: text("preferred_language"),
+  timeZone: text("time_zone"),
 });
 
 export const rolesTable = pgTable("roles", {

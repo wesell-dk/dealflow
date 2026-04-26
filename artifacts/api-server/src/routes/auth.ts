@@ -70,6 +70,12 @@ async function publicUser(u: typeof usersTable.$inferSelect) {
     tenantId: u.tenantId,
     tenantWide: scope.tenantWide,
     isPlatformAdmin: u.isPlatformAdmin,
+    // Persönliche Anzeige-Einstellungen (Task #282). Können null sein, wenn
+    // der Nutzer nichts hinterlegt hat — Frontend fällt auf seine Defaults
+    // zurück (Vorname aus `name`, Browser-Sprache, Browser-Zeitzone).
+    displayName: u.displayName,
+    preferredLanguage: u.preferredLanguage,
+    timeZone: u.timeZone,
     companyIds: scope.companyIds,
     brandIds: scope.brandIds,
     allowedScope: {

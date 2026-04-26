@@ -2,7 +2,7 @@
 
 ## Overview
 
-DealFlow One is a Commercial Execution Platform for B2B companies, designed to streamline commercial operations by integrating CRM, CPQ, document management, and automation into a deal-centric UI. Its purpose is to create an intelligent Commercial Flow, providing a central source of truth for commercial operations to enhance efficiency and strategic oversight in B2B sales by managing deals, quotes, contracts, and approvals with AI-driven orchestration. The platform aims to streamline commercial closing, offer a unified operational view, and improve decision-making through intelligent automation and AI assistance.
+DealFlow One is a Commercial Execution Platform for B2B companies, designed to streamline commercial operations by integrating CRM, CPQ, document management, and automation into a deal-centric UI. Its purpose is to create an intelligent Commercial Flow, providing a central source of truth for commercial operations to enhance efficiency and strategic oversight in B2B sales by managing deals, quotes, contracts, and approvals with AI-driven orchestration. The platform aims to streamline commercial closing, offer a unified operational view, and improve decision-making through intelligent automation and AI assistance. DealFlow One acts as a central source of truth for managing deals, quotes, contracts, and approvals with AI-driven orchestration, ultimately enhancing efficiency and strategic oversight through intelligent automation and AI assistance. The platform aims to improve decision-making and accelerate commercial closing processes, fostering a unified operational view.
 
 ## User Preferences
 
@@ -15,6 +15,8 @@ DealFlow One is a Commercial Execution Platform for B2B companies, designed to s
 **Organizational Core Model:** A hierarchical structure of Platform > Tenant > Company > Brand defines user roles and visibility scopes.
 
 **Permission Model:** Access is governed by Roles (capabilities) and Scope (organizational units).
+
+**Core Domains:** Organisation, Identity & Permissions, Customer & Relationship, Deal, Quote & Pricing, Contract, Approvals, Signature, Order Confirmation & Handover, Price Increase Letters, Negotiation & Counterproposal, Reports & KPIs, AI Copilot Orchestration, Governance, Audit, GDPR, Integrations & API.
 
 **Core Domains:** Key functional areas include Organization, Identity & Permissions, Customer & Relationship, Deal, Quote & Pricing, Contract, Approvals, Signature, Order Confirmation & Handover, Price Increase Letters, Negotiation & Counterproposal, Reports & KPIs, AI Copilot Orchestration, Governance, Audit, GDPR, Integrations & API.
 
@@ -30,7 +32,14 @@ DealFlow One is a Commercial Execution Platform for B2B companies, designed to s
 - **Validation**: Zod with drizzle-zod.
 - **API Codegen**: Orval (generates React Query hooks and Zod schemas).
 
-**AI Layer:** A modular AI layer with an Anthropic adapter, featuring a typed Prompt Registry, an Orchestrator for managing provider calls and output validation, and a comprehensive Audit Log. The Domain Context Builder ensures scope-validated, typed contexts while maintaining cross-tenant isolation. AI Copilot Modes support various commercial tasks (e.g., deal summary, negotiation, contract drafting), and an AI Help-Bot acts as a tool-using agent for system interaction. AI Recommendations are supported with persistence, confidence scores, and feedback mechanisms.
+**AI Layer:**
+- **Architecture**: Modular AI layer with an Anthropic adapter.
+- **Prompt Registry**: Typed registry for stable keys, model specifications, typed input builders, and Zod output schemas.
+- **Orchestrator**: Manages provider calls, output validation, and error classification.
+- **Domain Context Builder**: Ensures scope-validated, typed contexts for entities while maintaining cross-tenant isolation.
+- **Copilot Modes**: AI Copilot Modes support various commercial tasks (e.g., deal summary, negotiation, contract drafting).
+- **AI Help-Bot**: A tool-using agent with a registry for system interaction (e.g., `search_accounts`, `create_deal`).
+- **AI Recommendations**: Supports persistence of recommendations with confidence scores, status updates, and feedback mechanisms.
 
 **Key Features & Workspaces:** The platform provides 14 dedicated workspaces, including a Home/Today dashboard, Deal Workspace, Quote Studio, Approval Hub, Contract Workspace, Signature Center, and an AI Copilot Workspace.
 

@@ -1,4 +1,5 @@
 import { createContext, useContext, useEffect, useState, ReactNode } from "react";
+import i18n from "@/lib/i18n";
 import {
   apiLogin,
   apiLogout,
@@ -7,6 +8,18 @@ import {
   type ActiveScope,
   type CurrentUser,
 } from "@/lib/auth";
+
+/**
+ * Wenn der User eine Sprache im Profil hinterlegt hat (Task #282),
+ * gewinnt sie über den Browser-/localStorage-Default. Wir wenden sie
+ * idempotent an: nur ändern, wenn sie tatsächlich abweicht, damit kein
+ * unnötiges Re-Render kaskadiert.
+ */
+function applyPreferredLanguage(user: CurrentUser | null): void {
+  if (!user?.preferredLanguage) return;
+  if (i18n.resolvedLanguage === user.preferredLanguage) return;
+  void i18n.changeLanguage(user.preferredLanguage);
+}
 
 interface AuthState {
   user: CurrentUser | null;
@@ -33,6 +46,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const refresh = async () => {
     const u = await apiMe();
     setUser(u);
+    applyPreferredLanguage(u);
   };
 
   useEffect(() => {
@@ -45,6 +59,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const login = async (email: string, password: string) => {
     const u = await apiLogin(email, password);
     setUser(u);
+    applyPreferredLanguage(u);
   };
 
   const logout = async () => {

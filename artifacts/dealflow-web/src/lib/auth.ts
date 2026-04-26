@@ -48,10 +48,38 @@ export interface CurrentUser {
   tenantId: string;
   tenantWide: boolean;
   isPlatformAdmin?: boolean;
+  /** Optionaler Spitzname für die Begrüßung (Task #282). NULL → Vorname aus `name`. */
+  displayName?: string | null;
+  /** Bevorzugte UI-Sprache (Task #282). NULL → Browser-Default. */
+  preferredLanguage?: "de" | "en" | null;
+  /** Bevorzugte IANA-Zeitzone für zeit-abhängige UI-Teile (Task #282). NULL → Browser-Lokalzeit. */
+  timeZone?: string | null;
   companyIds: string[];
   brandIds: string[];
   allowedScope: AllowedScope;
   activeScope: ActiveScope;
+}
+
+export interface ProfilePreferences {
+  displayName: string | null;
+  preferredLanguage: "de" | "en" | null;
+  timeZone: string | null;
+}
+
+export async function apiUpdateProfilePreferences(
+  input: Partial<ProfilePreferences>,
+): Promise<ProfilePreferences> {
+  const r = await fetch(`${API_BASE}/orgs/me/profile`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    credentials: "include",
+    body: JSON.stringify(input),
+  });
+  if (!r.ok) {
+    const body = (await r.json().catch(() => ({}))) as { error?: string };
+    throw new Error(body.error ?? "Profile update failed");
+  }
+  return (await r.json()) as ProfilePreferences;
 }
 
 export async function apiUpdateActiveScope(input: {
