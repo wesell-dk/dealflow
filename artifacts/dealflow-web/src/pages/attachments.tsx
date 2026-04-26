@@ -38,6 +38,8 @@ import { EmptyStateCard } from "@/components/patterns/empty-state-card";
 
 const CATEGORIES = ["all", "datasheet", "terms", "reference", "certificate", "other"];
 const UPLOAD_CATEGORIES = ["datasheet", "terms", "reference", "certificate", "other"] as const;
+const ALLOWED_EXTENSIONS = [".pdf", ".docx", ".xlsx", ".md", ".csv", ".txt"];
+const MAX_ATTACHMENT_BYTES = 25 * 1024 * 1024;
 
 export default function Attachments() {
   const { t } = useTranslation();
@@ -54,6 +56,7 @@ export default function Attachments() {
   const [uploadCategory, setUploadCategory] = useState("other");
   const [file, setFile] = useState<File | null>(null);
   const [uploading, setUploading] = useState(false);
+  const [dragOver, setDragOver] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
 
   const requestUrlMut = useRequestUploadUrl();
@@ -78,7 +81,47 @@ export default function Attachments() {
     setTags("");
     setUploadCategory("other");
     setFile(null);
+    setDragOver(false);
     if (fileRef.current) fileRef.current.value = "";
+  };
+
+  const acceptFile = (f: File) => {
+    const lower = f.name.toLowerCase();
+    if (!ALLOWED_EXTENSIONS.some((ext) => lower.endsWith(ext))) {
+      toast({
+        variant: "destructive",
+        title: t("pages.attachments.invalidType"),
+        description: t("pages.attachments.formatHint"),
+      });
+      return;
+    }
+    if (f.size > MAX_ATTACHMENT_BYTES) {
+      toast({
+        variant: "destructive",
+        title: t("pages.attachments.tooLarge"),
+        description: `${(f.size / 1024 / 1024).toFixed(1)} MB — Max 25 MB`,
+      });
+      return;
+    }
+    setFile(f);
+    if (!name.trim()) {
+      const base = f.name.replace(/\.[^.]+$/, "");
+      setName(base);
+    }
+  };
+
+  const onFileInput = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const f = e.target.files?.[0];
+    if (f) acceptFile(f);
+    if (fileRef.current) fileRef.current.value = "";
+  };
+
+  const onDrop = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    setDragOver(false);
+    if (uploading) return;
+    const f = e.dataTransfer.files?.[0];
+    if (f) acceptFile(f);
   };
 
   const handleUpload = async () => {
@@ -221,17 +264,60 @@ export default function Attachments() {
                   />
                 </div>
               </div>
-              <div>
+              <div className="space-y-1.5">
                 <Label>{t("pages.attachments.file")}</Label>
-                <Input
-                  ref={fileRef}
-                  type="file"
-                  accept=".pdf,.docx,.xlsx,.md,.csv,.txt"
-                  onChange={(e) => setFile(e.target.files?.[0] ?? null)}
-                />
-                <p className="mt-1 text-xs text-muted-foreground">
-                  {t("pages.attachments.formatHint")}
-                </p>
+                <div
+                  role="button"
+                  tabIndex={0}
+                  aria-label={t("pages.attachments.dropOrClick")}
+                  aria-disabled={uploading || undefined}
+                  onDragOver={(e) => { if (uploading) return; e.preventDefault(); setDragOver(true); }}
+                  onDragLeave={() => setDragOver(false)}
+                  onDrop={onDrop}
+                  onClick={() => { if (!uploading) fileRef.current?.click(); }}
+                  onKeyDown={(e) => {
+                    if (uploading) return;
+                    if (e.key === "Enter" || e.key === " ") {
+                      e.preventDefault();
+                      fileRef.current?.click();
+                    }
+                  }}
+                  className={`relative rounded-md border-2 border-dashed transition-colors outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 ${
+                    uploading ? "cursor-not-allowed opacity-60" : "cursor-pointer"
+                  } ${
+                    dragOver ? "border-primary bg-primary/5" : "border-muted-foreground/30 hover:border-muted-foreground/60"
+                  }`}
+                  data-testid="attachment-dropzone"
+                >
+                  <input
+                    ref={fileRef}
+                    type="file"
+                    accept=".pdf,.docx,.xlsx,.md,.csv,.txt"
+                    className="hidden"
+                    disabled={uploading}
+                    onChange={onFileInput}
+                  />
+                  <div className="flex items-center gap-3 p-4">
+                    <div className="flex-shrink-0 h-12 w-12 rounded-md bg-muted flex items-center justify-center text-muted-foreground">
+                      {file ? <Paperclip className="h-6 w-6 text-primary" /> : <Upload className="h-6 w-6" />}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      {file ? (
+                        <>
+                          <p className="text-sm font-medium truncate" data-testid="attachment-dropzone-filename">{file.name}</p>
+                          <p className="text-xs text-muted-foreground mt-1">
+                            {(file.size / 1024).toFixed(0)} KB · {t("pages.attachments.dropToReplace")}
+                          </p>
+                        </>
+                      ) : (
+                        <>
+                          <p className="text-sm font-medium">{t("pages.attachments.dropOrClick")}</p>
+                          <p className="text-xs text-muted-foreground mt-1">{t("pages.attachments.formatHint")}</p>
+                        </>
+                      )}
+                    </div>
+                  </div>
+                </div>
               </div>
             </div>
             <DialogFooter>

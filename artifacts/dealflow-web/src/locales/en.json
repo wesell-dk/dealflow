@@ -232,7 +232,11 @@
       "category": "Category",
       "tags": "Tags (comma separated)",
       "file": "File",
-      "formatHint": "Allowed: PDF, DOCX, XLSX, MD, CSV, TXT (max 25 MB)"
+      "formatHint": "Allowed: PDF, DOCX, XLSX, MD, CSV, TXT (max 25 MB)",
+      "dropOrClick": "Drop file here or click",
+      "dropToReplace": "Click or drop a file to replace.",
+      "invalidType": "Format not supported",
+      "tooLarge": "File too large"
     },
     "approvals": {
       "title": "Approvals",

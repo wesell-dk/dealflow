@@ -232,7 +232,11 @@
       "category": "Kategorie",
       "tags": "Tags (kommagetrennt)",
       "file": "Datei",
-      "formatHint": "Erlaubt: PDF, DOCX, XLSX, MD, CSV, TXT (max. 25 MB)"
+      "formatHint": "Erlaubt: PDF, DOCX, XLSX, MD, CSV, TXT (max. 25 MB)",
+      "dropOrClick": "Datei hierher ziehen oder klicken",
+      "dropToReplace": "Klicken oder Datei ziehen, um zu ersetzen.",
+      "invalidType": "Format nicht unterstützt",
+      "tooLarge": "Datei zu groß"
     },
     "approvals": {
       "title": "Freigaben",
