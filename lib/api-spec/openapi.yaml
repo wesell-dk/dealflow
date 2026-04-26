@@ -771,6 +771,15 @@ paths:
           name: status
           required: false
           schema: { type: string }
+        - in: query
+          name: archived
+          required: false
+          description: >
+            Default: nur aktive Angebote (archivedAt IS NULL).
+            `true` → nur archivierte. `all` → beide.
+          schema:
+            type: string
+            enum: [active, archived, all]
       responses:
         "200":
           description: ok
@@ -5905,6 +5914,10 @@ components:
         canEdit:
           type: boolean
           description: "Darf der aktuelle Nutzer das Angebot bearbeiten/Statuswechsel durchführen."
+        archivedAt:
+          type: ["string", "null"]
+          format: date-time
+          description: "Wenn nicht NULL, ist das Angebot archiviert (Soft-Archive)."
 
     QuoteSendInput:
       type: object
@@ -5939,6 +5952,17 @@ components:
         language:
           type: string
           enum: [de, en]
+        status:
+          type: string
+          enum: [expired, rejected]
+          description: >
+            Setzt den Angebots-Status. Erlaubte Übergänge: aus draft/sent →
+            expired oder rejected. Andere Übergänge → 409.
+        archived:
+          type: boolean
+          description: >
+            true → Angebot archivieren (archivedAt = now). false → Angebot
+            wiederherstellen (archivedAt = null).
 
     QuoteTransitionInput:
       type: object

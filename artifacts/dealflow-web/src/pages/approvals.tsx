@@ -1,5 +1,5 @@
 import { useTranslation } from "react-i18next";
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Link } from "wouter";
 import {
@@ -20,15 +20,22 @@ import { Card, CardContent, CardHeader, CardTitle, CardFooter, CardDescription }
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Checkbox } from "@/components/ui/checkbox";
 import { AiPromptPanel } from "@/components/copilot/ai-prompt-panel";
 import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import {
   Clock, CheckCircle2, XCircle, AlertCircle, ChevronRight, UserCog, Trash2,
 } from "lucide-react";
 import { PageHeader } from "@/components/patterns/page-header";
 import { EmptyStateCard } from "@/components/patterns/empty-state-card";
+import { BulkActionBar } from "@/components/patterns/bulk-action-bar";
+import { useToast } from "@/hooks/use-toast";
 
 function StageStepper({ stages, currentIdx }: { stages: ApprovalStage[]; currentIdx: number }) {
   return (
@@ -196,6 +203,7 @@ function MyDelegationsCard() {
 
 export default function Approvals() {
   const { t } = useTranslation();
+  const { toast } = useToast();
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const { data: approvals, isLoading } = useListApprovals(
     statusFilter === "all" ? {} : { status: statusFilter }
@@ -207,15 +215,65 @@ export default function Approvals() {
   const qc = useQueryClient();
   const decideApproval = useDecideApproval();
 
+  // Bulk-Auswahl: nur Cases sind selektierbar, bei denen der eingeloggte User
+  // entscheidungsberechtigt ist (canDecide === true). Der Server lehnt
+  // unberechtigte Decisions ab; wir filtern dennoch im UI, damit der Toast
+  // nur die wirklich angefragten Items zählt und nicht „silently failed" wird.
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [bulkRunning, setBulkRunning] = useState(false);
+  const [bulkRejectOpen, setBulkRejectOpen] = useState(false);
+  const [bulkRejectComment, setBulkRejectComment] = useState("");
+
+  // Wenn der Filter wechselt, alte Auswahl verwerfen — sonst könnten
+  // Items „selected" bleiben, die gerade gar nicht mehr sichtbar sind.
+  useEffect(() => { setSelected(new Set()); }, [statusFilter]);
+
+  // Decidable = ist offen, hat canDecide=true. Berücksichtigt Stage-Logik.
+  const decidableMap = useMemo(() => {
+    const m = new Map<string, ApprovalCase>();
+    for (const a of approvals ?? []) {
+      const isOpen = a.status !== "approved" && a.status !== "rejected";
+      if (isOpen && a.canDecide) m.set(a.id, a);
+    }
+    return m;
+  }, [approvals]);
+
+  const decidableSelectedIds = useMemo(
+    () => [...selected].filter((id) => decidableMap.has(id)),
+    [selected, decidableMap],
+  );
+
+  function toggleOne(id: string) {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  }
+  function isAllDecidableSelected() {
+    const ids = [...decidableMap.keys()];
+    return ids.length > 0 && ids.every((id) => selected.has(id));
+  }
+  function toggleAllDecidable() {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      const ids = [...decidableMap.keys()];
+      const allOn = ids.length > 0 && ids.every((id) => next.has(id));
+      if (allOn) ids.forEach((id) => next.delete(id));
+      else ids.forEach((id) => next.add(id));
+      return next;
+    });
+  }
+
+  function invalidateApprovals() {
+    qc.invalidateQueries({ queryKey: getListApprovalsQueryKey() });
+    qc.invalidateQueries({ queryKey: getListApprovalsQueryKey({ status: statusFilter }) });
+  }
+
   const handleApprove = (id: string) => {
     decideApproval.mutate(
       { id, data: { decision: "approve" } },
-      {
-        onSuccess: () => {
-          qc.invalidateQueries({ queryKey: getListApprovalsQueryKey() });
-          qc.invalidateQueries({ queryKey: getListApprovalsQueryKey({ status: statusFilter }) });
-        }
-      }
+      { onSuccess: invalidateApprovals },
     );
   };
 
@@ -226,12 +284,41 @@ export default function Approvals() {
         onSuccess: () => {
           setRejectingId(null);
           setComment("");
-          qc.invalidateQueries({ queryKey: getListApprovalsQueryKey() });
-          qc.invalidateQueries({ queryKey: getListApprovalsQueryKey({ status: statusFilter }) });
-        }
-      }
+          invalidateApprovals();
+        },
+      },
     );
   };
+
+  async function runBulkDecide(decision: "approve" | "reject", bulkComment?: string) {
+    if (decidableSelectedIds.length === 0) return;
+    setBulkRunning(true);
+    try {
+      const results = await Promise.allSettled(
+        decidableSelectedIds.map((id) =>
+          decideApproval.mutateAsync({
+            id,
+            data: decision === "approve"
+              ? { decision: "approve" }
+              : { decision: "reject", comment: bulkComment },
+          }),
+        ),
+      );
+      const ok = results.filter((r) => r.status === "fulfilled").length;
+      const fail = results.length - ok;
+      toast({
+        title: decision === "approve"
+          ? t("pages.approvals.bulkApproveDone")
+          : t("pages.approvals.bulkRejectDone"),
+        description: t("pages.approvals.bulkResult", { ok, fail }),
+        variant: fail > 0 && ok === 0 ? "destructive" : undefined,
+      });
+      setSelected(new Set());
+      invalidateApprovals();
+    } finally {
+      setBulkRunning(false);
+    }
+  }
 
   if (isLoading) {
     return <div className="p-8 space-y-4"><Skeleton className="h-12 w-1/3" /><Skeleton className="h-64 w-full" /></div>;
@@ -247,7 +334,7 @@ export default function Approvals() {
 
       <MyDelegationsCard />
 
-      <div className="flex gap-2">
+      <div className="flex flex-wrap items-center gap-2">
         {["all", "pending", "approved", "rejected"].map(s => (
           <Button
             key={s}
@@ -259,6 +346,17 @@ export default function Approvals() {
             {s}
           </Button>
         ))}
+        {decidableMap.size > 0 && (
+          <label className="ml-auto inline-flex items-center gap-2 text-xs text-muted-foreground cursor-pointer">
+            <Checkbox
+              checked={isAllDecidableSelected()}
+              onCheckedChange={toggleAllDecidable}
+              data-testid="approvals-select-all"
+              aria-label={t("pages.approvals.selectAllDecidable")}
+            />
+            {t("pages.approvals.selectAllDecidable")} ({decidableMap.size})
+          </label>
+        )}
       </div>
 
       <div className="grid gap-4">
@@ -275,9 +373,19 @@ export default function Approvals() {
             const hasStages = approval.stages && approval.stages.length > 0;
             const canDecide = !!approval.canDecide;
             const onBehalfOf = approval.canDecideOnBehalfOf;
+            const decidable = isOpen && canDecide;
             return (
               <Card key={approval.id} data-testid={`approval-${approval.id}`}>
-                <CardHeader className="pb-3 flex flex-row items-start justify-between">
+                <CardHeader className="pb-3 flex flex-row items-start justify-between gap-3">
+                  {decidable && (
+                    <Checkbox
+                      className="mt-1.5"
+                      checked={selected.has(approval.id)}
+                      onCheckedChange={() => toggleOne(approval.id)}
+                      data-testid={`approval-select-${approval.id}`}
+                      aria-label={t("common.bulk.selectRow", { name: approval.dealName })}
+                    />
+                  )}
                   <div className="flex-1">
                     <div className="flex items-center gap-2 mb-1">
                       <CardTitle className="text-lg">
@@ -375,6 +483,66 @@ export default function Approvals() {
           })
         )}
       </div>
+
+      <BulkActionBar count={selected.size} onClear={() => setSelected(new Set())}>
+        <Button
+          size="sm"
+          variant="default"
+          className="h-8 gap-1"
+          disabled={decidableSelectedIds.length === 0 || bulkRunning}
+          onClick={() => void runBulkDecide("approve")}
+          data-testid="approvals-bulk-approve"
+        >
+          <CheckCircle2 className="h-3.5 w-3.5" />
+          {t("pages.approvals.bulkApprove", { count: decidableSelectedIds.length })}
+        </Button>
+        <Button
+          size="sm"
+          variant="ghost"
+          className="h-8 gap-1 text-destructive"
+          disabled={decidableSelectedIds.length === 0 || bulkRunning}
+          onClick={() => { setBulkRejectComment(""); setBulkRejectOpen(true); }}
+          data-testid="approvals-bulk-reject"
+        >
+          <XCircle className="h-3.5 w-3.5" />
+          {t("pages.approvals.bulkReject", { count: decidableSelectedIds.length })}
+        </Button>
+      </BulkActionBar>
+
+      <AlertDialog open={bulkRejectOpen} onOpenChange={setBulkRejectOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              {t("pages.approvals.bulkRejectDialogTitle", { count: decidableSelectedIds.length })}
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              {t("pages.approvals.bulkRejectDialogBody")}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <Textarea
+            value={bulkRejectComment}
+            onChange={(e) => setBulkRejectComment(e.target.value)}
+            placeholder={t("pages.approvals.bulkRejectCommentPlaceholder")}
+            className="min-h-[100px]"
+            data-testid="approvals-bulk-reject-comment"
+          />
+          <AlertDialogFooter>
+            <AlertDialogCancel>{t("common.cancel")}</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              disabled={!bulkRejectComment.trim() || bulkRunning}
+              onClick={(e) => {
+                e.preventDefault();
+                setBulkRejectOpen(false);
+                void runBulkDecide("reject", bulkRejectComment.trim());
+              }}
+              data-testid="approvals-bulk-reject-confirm"
+            >
+              {t("pages.approvals.bulkRejectConfirm")}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

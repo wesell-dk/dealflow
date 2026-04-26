@@ -1,5 +1,5 @@
 import { Router, type IRouter, type Request, type Response } from 'express';
-import { and, asc, desc, eq, inArray, isNull, or, sql, type SQL } from 'drizzle-orm';
+import { and, asc, desc, eq, inArray, isNotNull, isNull, or, sql, type SQL } from 'drizzle-orm';
 import { randomUUID, randomBytes } from 'node:crypto';
 import { BlockList } from 'node:net';
 import { ObjectStorageService, SidecarUnavailableError } from '../lib/objectStorage';
@@ -1492,6 +1492,7 @@ function mapQuote(q: typeof quotesTable.$inferSelect, dealName: string, opts?: {
     rejectionReason: q.rejectionReason ?? null,
     displayStatus: deriveDisplayStatus(q),
     canEdit: opts?.canEdit ?? false,
+    archivedAt: iso(q.archivedAt) ?? null,
   };
 }
 
@@ -1523,6 +1524,12 @@ router.get('/quotes', async (req, res) => {
   const filters = [];
   if (req.query.dealId) filters.push(eq(quotesTable.dealId, String(req.query.dealId)));
   if (req.query.status) filters.push(eq(quotesTable.status, String(req.query.status)));
+  // Default-Verhalten: archivierte Angebote ausblenden, damit die Quotes-
+  // Liste sich wie die Accounts-Liste verhält. `archived=archived` zeigt nur
+  // archivierte, `archived=all` zeigt beide.
+  const archivedParam = typeof req.query.archived === 'string' ? req.query.archived : 'active';
+  if (archivedParam === 'active') filters.push(isNull(quotesTable.archivedAt));
+  else if (archivedParam === 'archived') filters.push(isNotNull(quotesTable.archivedAt));
   const dealIds = await scopedDealIds(req);
   if (dealIds.length === 0) { res.json([]); return; }
   filters.push(inArray(quotesTable.dealId, dealIds));
@@ -1946,26 +1953,75 @@ router.post('/quotes/:id/send', async (req, res) => {
   res.json(await enrichQuote(updated!, d?.name ?? 'Unknown'));
 });
 
-// PATCH quote — currently only supports updating the language.
+// PATCH quote — supports updating language, status (expired/rejected) and
+// archived flag. Bulk-Aktionen aus dem Quotes-UI rufen diesen Endpoint
+// parallel pro Zeile auf (kein dedizierter bulk-Endpoint).
 router.patch('/quotes/:id', async (req, res) => {
   const [q] = await db.select().from(quotesTable).where(eq(quotesTable.id, req.params.id));
   if (!q) { res.status(404).json({ error: 'not found' }); return; }
   if (!(await gateDeal(req, res, q.dealId))) return;
-  const body = (req.body ?? {}) as { language?: unknown };
+  const body = (req.body ?? {}) as {
+    language?: unknown; status?: unknown; archived?: unknown;
+  };
   const patch: Partial<typeof quotesTable.$inferInsert> = {};
+  const auditEntries: Array<{
+    action: string; summary: string;
+    before: Record<string, unknown>; after: Record<string, unknown>;
+  }> = [];
   if (body.language !== undefined) {
     if (typeof body.language !== 'string' || !SUPPORTED_LOCALES.includes(body.language as SupportedLocale)) {
       res.status(400).json({ error: 'language must be one of de|en' }); return;
     }
-    if (body.language !== q.language) patch.language = body.language as SupportedLocale;
+    if (body.language !== q.language) {
+      patch.language = body.language as SupportedLocale;
+      auditEntries.push({
+        action: 'language_changed',
+        summary: `Angebotssprache: ${q.language ?? 'de'} → ${patch.language}`,
+        before: { language: q.language }, after: { language: patch.language },
+      });
+    }
+  }
+  if (body.status !== undefined) {
+    if (body.status !== 'expired' && body.status !== 'rejected') {
+      res.status(400).json({ error: 'status must be one of expired|rejected' }); return;
+    }
+    // Nur aus „lebenden" Status (draft, sent) heraus erlaubt.
+    if (q.status !== 'draft' && q.status !== 'sent') {
+      res.status(409).json({ error: `cannot transition from ${q.status} to ${body.status}` }); return;
+    }
+    patch.status = body.status;
+    auditEntries.push({
+      action: body.status === 'expired' ? 'expired' : 'rejected',
+      summary: `Status: ${q.status} → ${body.status}`,
+      before: { status: q.status }, after: { status: body.status },
+    });
+  }
+  if (body.archived !== undefined) {
+    if (typeof body.archived !== 'boolean') {
+      res.status(400).json({ error: 'archived must be a boolean' }); return;
+    }
+    const wasArchived = q.archivedAt !== null;
+    if (body.archived && !wasArchived) {
+      patch.archivedAt = new Date();
+      auditEntries.push({
+        action: 'archived', summary: `Angebot ${q.number} archiviert.`,
+        before: { archivedAt: null }, after: { archivedAt: iso(patch.archivedAt) },
+      });
+    } else if (!body.archived && wasArchived) {
+      patch.archivedAt = null;
+      auditEntries.push({
+        action: 'unarchived', summary: `Angebot ${q.number} wiederhergestellt.`,
+        before: { archivedAt: iso(q.archivedAt) }, after: { archivedAt: null },
+      });
+    }
   }
   if (Object.keys(patch).length > 0) {
     await db.update(quotesTable).set(patch).where(eq(quotesTable.id, q.id));
-    await writeAuditFromReq(req, {
-      entityType: 'quote', entityId: q.id, action: 'language_changed',
-      summary: `Angebotssprache: ${q.language ?? 'de'} → ${patch.language}`,
-      before: { language: q.language }, after: { language: patch.language },
-    });
+    for (const entry of auditEntries) {
+      await writeAuditFromReq(req, {
+        entityType: 'quote', entityId: q.id, ...entry,
+      });
+    }
   }
   const [updated] = await db.select().from(quotesTable).where(eq(quotesTable.id, q.id));
   const dealMap = await getDealMap();

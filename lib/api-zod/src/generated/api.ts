@@ -1051,6 +1051,12 @@ export const GetDealResponse = zod
             .describe(
               "Darf der aktuelle Nutzer das Angebot bearbeiten\/Statuswechsel durchführen.",
             ),
+          archivedAt: zod.coerce
+            .date()
+            .nullish()
+            .describe(
+              "Wenn nicht NULL, ist das Angebot archiviert (Soft-Archive).",
+            ),
         }),
       ),
       contracts: zod.array(
@@ -1244,6 +1250,12 @@ export const GetDealTimelineResponse = zod.array(GetDealTimelineResponseItem);
 export const ListQuotesQueryParams = zod.object({
   dealId: zod.coerce.string().optional(),
   status: zod.coerce.string().optional(),
+  archived: zod
+    .enum(["active", "archived", "all"])
+    .optional()
+    .describe(
+      "Default: nur aktive Angebote (archivedAt IS NULL). `true` → nur archivierte. `all` → beide.\n",
+    ),
 });
 
 export const ListQuotesResponseItem = zod.object({
@@ -1288,6 +1300,10 @@ export const ListQuotesResponseItem = zod.object({
     .describe(
       "Darf der aktuelle Nutzer das Angebot bearbeiten\/Statuswechsel durchführen.",
     ),
+  archivedAt: zod.coerce
+    .date()
+    .nullish()
+    .describe("Wenn nicht NULL, ist das Angebot archiviert (Soft-Archive)."),
 });
 export const ListQuotesResponse = zod.array(ListQuotesResponseItem);
 
@@ -1353,6 +1369,10 @@ export const GetQuoteResponse = zod
       .describe(
         "Darf der aktuelle Nutzer das Angebot bearbeiten\/Statuswechsel durchführen.",
       ),
+    archivedAt: zod.coerce
+      .date()
+      .nullish()
+      .describe("Wenn nicht NULL, ist das Angebot archiviert (Soft-Archive)."),
   })
   .and(
     zod.object({
@@ -1449,6 +1469,18 @@ export const PatchQuoteParams = zod.object({
 
 export const PatchQuoteBody = zod.object({
   language: zod.enum(["de", "en"]).optional(),
+  status: zod
+    .enum(["expired", "rejected"])
+    .optional()
+    .describe(
+      "Setzt den Angebots-Status. Erlaubte Übergänge: aus draft\/sent → expired oder rejected. Andere Übergänge → 409.\n",
+    ),
+  archived: zod
+    .boolean()
+    .optional()
+    .describe(
+      "true → Angebot archivieren (archivedAt = now). false → Angebot wiederherstellen (archivedAt = null).\n",
+    ),
 });
 
 export const PatchQuoteResponse = zod.object({
@@ -1493,6 +1525,10 @@ export const PatchQuoteResponse = zod.object({
     .describe(
       "Darf der aktuelle Nutzer das Angebot bearbeiten\/Statuswechsel durchführen.",
     ),
+  archivedAt: zod.coerce
+    .date()
+    .nullish()
+    .describe("Wenn nicht NULL, ist das Angebot archiviert (Soft-Archive)."),
 });
 
 export const GetQuotePdfParams = zod.object({
@@ -1561,6 +1597,10 @@ export const SendQuoteEmailResponse = zod.object({
     .describe(
       "Darf der aktuelle Nutzer das Angebot bearbeiten\/Statuswechsel durchführen.",
     ),
+  archivedAt: zod.coerce
+    .date()
+    .nullish()
+    .describe("Wenn nicht NULL, ist das Angebot archiviert (Soft-Archive)."),
 });
 
 export const CreateQuoteVersionParams = zod.object({
@@ -1618,6 +1658,10 @@ export const AcceptQuoteResponse = zod.object({
     .describe(
       "Darf der aktuelle Nutzer das Angebot bearbeiten\/Statuswechsel durchführen.",
     ),
+  archivedAt: zod.coerce
+    .date()
+    .nullish()
+    .describe("Wenn nicht NULL, ist das Angebot archiviert (Soft-Archive)."),
 });
 
 /**
@@ -1701,6 +1745,10 @@ export const TransitionQuoteResponse = zod.object({
     .describe(
       "Darf der aktuelle Nutzer das Angebot bearbeiten\/Statuswechsel durchführen.",
     ),
+  archivedAt: zod.coerce
+    .date()
+    .nullish()
+    .describe("Wenn nicht NULL, ist das Angebot archiviert (Soft-Archive)."),
 });
 
 /**

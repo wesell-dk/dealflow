@@ -1239,6 +1239,11 @@ wird dabei nicht geändert; die Ableitung passiert beim Lesen.
   displayStatus?: string;
   /** Darf der aktuelle Nutzer das Angebot bearbeiten/Statuswechsel durchführen. */
   canEdit?: boolean;
+  /**
+   * Wenn nicht NULL, ist das Angebot archiviert (Soft-Archive).
+   * @nullable
+   */
+  archivedAt?: string | null;
 }
 
 /**
@@ -1475,8 +1480,26 @@ export const QuotePatchInputLanguage = {
   en: "en",
 } as const;
 
+/**
+ * Setzt den Angebots-Status. Erlaubte Übergänge: aus draft/sent → expired oder rejected. Andere Übergänge → 409.
+
+ */
+export type QuotePatchInputStatus =
+  (typeof QuotePatchInputStatus)[keyof typeof QuotePatchInputStatus];
+
+export const QuotePatchInputStatus = {
+  expired: "expired",
+  rejected: "rejected",
+} as const;
+
 export interface QuotePatchInput {
   language?: QuotePatchInputLanguage;
+  /** Setzt den Angebots-Status. Erlaubte Übergänge: aus draft/sent → expired oder rejected. Andere Übergänge → 409.
+   */
+  status?: QuotePatchInputStatus;
+  /** true → Angebot archivieren (archivedAt = now). false → Angebot wiederherstellen (archivedAt = null).
+   */
+  archived?: boolean;
 }
 
 /**
@@ -4970,7 +4993,21 @@ export type ListDealsParams = {
 export type ListQuotesParams = {
   dealId?: string;
   status?: string;
+  /**
+ * Default: nur aktive Angebote (archivedAt IS NULL). `true` → nur archivierte. `all` → beide.
+
+ */
+  archived?: ListQuotesArchived;
 };
+
+export type ListQuotesArchived =
+  (typeof ListQuotesArchived)[keyof typeof ListQuotesArchived];
+
+export const ListQuotesArchived = {
+  active: "active",
+  archived: "archived",
+  all: "all",
+} as const;
 
 export type ReplaceQuoteLineItemsBody = {
   items: LineItemInput[];

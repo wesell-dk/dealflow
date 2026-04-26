@@ -105,7 +105,11 @@
     "resetFilters": "Reset filters",
     "riskLow": "Low",
     "riskMedium": "Medium",
-    "riskHigh": "High"
+    "riskHigh": "High",
+    "bulk": {
+      "selectAllOnPage": "Select all on this page",
+      "selectRow": "Select {{name}}"
+    }
   },
   "actions": {
     "duplicate": "Duplicate"
@@ -180,7 +184,21 @@
       "statusAccepted": "Accepted",
       "statusRejected": "Rejected",
       "statusExpired": "Expired",
-      "discount": "Discount"
+      "discount": "Discount",
+      "tabActive": "Active",
+      "tabArchived": "Archived",
+      "bulkSetStatus": "Set status",
+      "bulkExpire": "Mark as expired",
+      "bulkReject": "Mark as rejected",
+      "bulkArchive": "Archive",
+      "bulkUnarchive": "Restore",
+      "bulkExpireDone": "Quotes marked as expired",
+      "bulkRejectDone": "Quotes marked as rejected",
+      "bulkArchiveDone": "Quotes archived",
+      "bulkUnarchiveDone": "Quotes restored",
+      "bulkResult": "{{ok}} updated, {{fail}} failed, {{skipped}} skipped.",
+      "bulkArchiveDialogTitle": "Archive {{count}} quote(s)?",
+      "bulkArchiveDialogBody": "Archived quotes disappear from the default list and can be restored from the Archive tab at any time."
     },
     "platformAdmin": {
       "title": "Platform Administration",
@@ -669,7 +687,10 @@
       "reminderFailed": "Reminder could not be sent",
       "emptyTitle": "No signature packages",
       "emptyBody": "Signature packages emerge from sign-ready contracts — start a signature workflow in the contract workspace.",
-      "emptyHint": "Tip: switch the filter to “All” to see completed packages."
+      "emptyHint": "Tip: switch the filter to “All” to see completed packages.",
+      "bulkRemind": "Remind {{count}}",
+      "bulkRemindDone": "Reminders processed",
+      "bulkRemindResult": "{{ok}} sent, {{fail}} failed."
     },
     "priceIncreasesList": {
       "title": "Price Increases",

@@ -7,8 +7,14 @@ Multi-tenant, multi-company, multi-brand. Deal-centric.
 
  * OpenAPI spec version: 0.1.0
  */
+import type { ListQuotesArchived } from "./listQuotesArchived";
 
 export type ListQuotesParams = {
   dealId?: string;
   status?: string;
+  /**
+ * Default: nur aktive Angebote (archivedAt IS NULL). `true` → nur archivierte. `all` → beide.
+
+ */
+  archived?: ListQuotesArchived;
 };

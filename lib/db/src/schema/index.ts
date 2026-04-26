@@ -243,6 +243,9 @@ export const quotesTable = pgTable("quotes", {
   // Optionaler Freitext-Grund, wenn das Angebot abgelehnt wurde.
   // Wird beim Statuswechsel auf 'rejected' am Angebot gespeichert.
   rejectionReason: text("rejection_reason"),
+  // Soft-Archive: ungleich NULL → Angebot ist archiviert (aus dem Standard-
+  // Listing ausgeblendet, Bulk-Aktion „Archivieren" auf der Quotes-Liste).
+  archivedAt: timestamp("archived_at", { withTimezone: true }),
   createdAt: ts("created_at"),
 });
 

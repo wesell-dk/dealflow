@@ -1,16 +1,27 @@
 import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { useListQuotes } from "@workspace/api-client-react";
+import { useQueryClient } from "@tanstack/react-query";
+import {
+  useListQuotes, usePatchQuote, getListQuotesQueryKey,
+} from "@workspace/api-client-react";
 import { Link } from "wouter";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem,
   DropdownMenuSeparator, DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Plus, MoreHorizontal, ExternalLink, FileText, Search, ArrowDown, ArrowUp, FilePlus, Wand2 } from "lucide-react";
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import {
+  Plus, MoreHorizontal, ExternalLink, FileText, Search, ArrowDown, ArrowUp,
+  Archive, ArchiveRestore, ChevronDown, FilePlus, Wand2,
+} from "lucide-react";
 import { useLocation } from "wouter";
 import { QuoteWizard } from "@/components/quote-wizard";
 import { QuoteDuplicateButton } from "@/components/quotes/quote-duplicate-button";
@@ -20,6 +31,8 @@ import { QuoteStatusBadge } from "@/components/patterns/status-badges";
 import { SavedViewTabs, type ViewState, type BuiltInView } from "@/components/patterns/saved-view-tabs";
 import { FilterChip, FilterChipsRow } from "@/components/patterns/filter-chips";
 import { PaginationBar } from "@/components/patterns/pagination-bar";
+import { BulkActionBar } from "@/components/patterns/bulk-action-bar";
+import { useToast } from "@/hooks/use-toast";
 
 const DEFAULT_VIEW: ViewState = {
   filters: {},
@@ -28,11 +41,21 @@ const DEFAULT_VIEW: ViewState = {
   sortDir: "asc",
 };
 
+type ArchivedTab = "active" | "archived";
+
 export default function Quotes() {
   const { t } = useTranslation();
   const [, navigate] = useLocation();
-  const { data: quotes, isLoading } = useListQuotes();
+  const { toast } = useToast();
+  const qc = useQueryClient();
+  const patchQuote = usePatchQuote();
   const [wizardOpen, setWizardOpen] = useState(false);
+  // Aktiv vs. archiviert wird auf API-Ebene gefiltert (`archived` query param);
+  // intern halten wir nur einen Tab-State und übergeben ihn an useListQuotes.
+  const [archivedTab, setArchivedTab] = useState<ArchivedTab>("active");
+  const { data: quotes, isLoading } = useListQuotes(
+    archivedTab === "archived" ? { archived: "archived" } : { archived: "active" },
+  );
 
   const builtIns: BuiltInView[] = useMemo(() => [
     { id: "all",      name: t("pages.quotes.viewAll"),      isBuiltIn: true, state: { ...DEFAULT_VIEW, filters: {} } },
@@ -47,7 +70,17 @@ export default function Quotes() {
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(25);
 
-  useEffect(() => { setPage(1); }, [view.filters, view.sortBy, view.sortDir, search]);
+  // Bulk-Selektion mit Status-Set, damit wir client-seitig wissen, welche
+  // Items wirklich „expirable"/„rejectable" sind (Server lässt nur draft/sent
+  // → expired/rejected zu, alles andere → 409). Toast-Zähler kommen aus
+  // Promise.allSettled, damit Teil-Erfolge sauber sichtbar sind.
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [bulkRunning, setBulkRunning] = useState(false);
+  const [bulkStatusOpen, setBulkStatusOpen] = useState(false);
+  const [bulkArchiveOpen, setBulkArchiveOpen] = useState(false);
+
+  useEffect(() => { setPage(1); }, [view.filters, view.sortBy, view.sortDir, search, archivedTab]);
+  useEffect(() => { setSelected(new Set()); }, [activeViewId, archivedTab]);
 
   function selectView(id: string, state: ViewState) {
     setActiveViewId(id);
@@ -99,6 +132,94 @@ export default function Quotes() {
 
   const total = filtered.length;
   const pageRows = useMemo(() => filtered.slice((page - 1) * pageSize, page * pageSize), [filtered, page, pageSize]);
+
+  // Welche Items in der aktuellen Seite sind „bulkable"?
+  // - Status setzen (expire/reject): nur draft/sent
+  // - Archivieren: alle aktiven Items (egal welcher Status)
+  // - Wiederherstellen: alle archivierten Items
+  const STATUS_TRANSITIONABLE = new Set(["draft", "sent"]);
+  function isStatusTransitionable(status: string) {
+    return STATUS_TRANSITIONABLE.has(status);
+  }
+
+  const quoteById = useMemo(() => new Map((quotes ?? []).map((q) => [q.id, q])), [quotes]);
+  const transitionableSelectedIds = useMemo(
+    () => [...selected].filter((id) => isStatusTransitionable(String(quoteById.get(id)?.status ?? ""))),
+    [selected, quoteById],
+  );
+
+  function isAllSelected() {
+    return pageRows.length > 0 && pageRows.every((r) => selected.has(r.id));
+  }
+  function togglePageAll() {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (isAllSelected()) pageRows.forEach((r) => next.delete(r.id));
+      else pageRows.forEach((r) => next.add(r.id));
+      return next;
+    });
+  }
+  function toggleOne(id: string) {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  }
+
+  function invalidateQuotes() {
+    qc.invalidateQueries({ queryKey: getListQuotesQueryKey() });
+  }
+
+  async function runBulkSetStatus(status: "expired" | "rejected") {
+    if (transitionableSelectedIds.length === 0) return;
+    setBulkRunning(true);
+    try {
+      const results = await Promise.allSettled(
+        transitionableSelectedIds.map((id) => patchQuote.mutateAsync({ id, data: { status } })),
+      );
+      const ok = results.filter((r) => r.status === "fulfilled").length;
+      const fail = results.length - ok;
+      const skipped = selected.size - transitionableSelectedIds.length;
+      toast({
+        title: status === "expired"
+          ? t("pages.quotes.bulkExpireDone")
+          : t("pages.quotes.bulkRejectDone"),
+        description: t("pages.quotes.bulkResult", { ok, fail, skipped }),
+        variant: fail > 0 && ok === 0 ? "destructive" : undefined,
+      });
+      setSelected(new Set());
+      invalidateQuotes();
+    } finally {
+      setBulkRunning(false);
+      setBulkStatusOpen(false);
+    }
+  }
+
+  async function runBulkArchive(archived: boolean) {
+    if (selected.size === 0) return;
+    setBulkRunning(true);
+    try {
+      const ids = [...selected];
+      const results = await Promise.allSettled(
+        ids.map((id) => patchQuote.mutateAsync({ id, data: { archived } })),
+      );
+      const ok = results.filter((r) => r.status === "fulfilled").length;
+      const fail = results.length - ok;
+      toast({
+        title: archived
+          ? t("pages.quotes.bulkArchiveDone")
+          : t("pages.quotes.bulkUnarchiveDone"),
+        description: t("pages.quotes.bulkResult", { ok, fail, skipped: 0 }),
+        variant: fail > 0 && ok === 0 ? "destructive" : undefined,
+      });
+      setSelected(new Set());
+      invalidateQuotes();
+    } finally {
+      setBulkRunning(false);
+      setBulkArchiveOpen(false);
+    }
+  }
 
   const hasFilters = Object.keys(view.filters ?? {}).length > 0;
 
@@ -153,6 +274,33 @@ export default function Quotes() {
           </DropdownMenu>
         }
       />
+
+      <div className="flex items-center gap-2 border-b">
+        <button
+          type="button"
+          className={`px-3 py-1.5 text-sm border-b-2 transition-colors ${
+            archivedTab === "active"
+              ? "border-primary font-medium text-foreground"
+              : "border-transparent text-muted-foreground hover:text-foreground"
+          }`}
+          onClick={() => setArchivedTab("active")}
+          data-testid="quotes-tab-active"
+        >
+          {t("pages.quotes.tabActive")}
+        </button>
+        <button
+          type="button"
+          className={`px-3 py-1.5 text-sm border-b-2 transition-colors ${
+            archivedTab === "archived"
+              ? "border-primary font-medium text-foreground"
+              : "border-transparent text-muted-foreground hover:text-foreground"
+          }`}
+          onClick={() => setArchivedTab("archived")}
+          data-testid="quotes-tab-archived"
+        >
+          {t("pages.quotes.tabArchived")}
+        </button>
+      </div>
 
       <SavedViewTabs
         entityType="quote"
@@ -236,6 +384,14 @@ export default function Quotes() {
           <Table>
             <TableHeader>
               <TableRow>
+                <TableHead className="w-10">
+                  <Checkbox
+                    checked={isAllSelected()}
+                    onCheckedChange={togglePageAll}
+                    aria-label={t("common.bulk.selectAllOnPage")}
+                    data-testid="quotes-select-all"
+                  />
+                </TableHead>
                 <TableHead>{sortableHeader("number", t("common.number"))}</TableHead>
                 <TableHead>{t("common.deal")}</TableHead>
                 <TableHead>{sortableHeader("totalAmount", t("common.total"))}</TableHead>
@@ -248,6 +404,14 @@ export default function Quotes() {
             <TableBody>
               {pageRows.map((quote) => (
                 <TableRow key={quote.id} data-testid={`quote-row-${quote.id}`}>
+                  <TableCell>
+                    <Checkbox
+                      checked={selected.has(quote.id)}
+                      onCheckedChange={() => toggleOne(quote.id)}
+                      aria-label={t("common.bulk.selectRow", { name: quote.number })}
+                      data-testid={`quote-select-${quote.id}`}
+                    />
+                  </TableCell>
                   <TableCell className="font-medium">
                     <Link href={`/quotes/${quote.id}`} className="hover:underline">{quote.number}</Link>
                   </TableCell>
@@ -305,6 +469,87 @@ export default function Quotes() {
           </div>
         </div>
       )}
+
+      <BulkActionBar count={selected.size} onClear={() => setSelected(new Set())}>
+        {archivedTab === "active" ? (
+          <>
+            <DropdownMenu open={bulkStatusOpen} onOpenChange={setBulkStatusOpen}>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  className="h-8 gap-1"
+                  disabled={transitionableSelectedIds.length === 0 || bulkRunning}
+                  data-testid="quotes-bulk-status-trigger"
+                  aria-label={t("pages.quotes.bulkSetStatus")}
+                >
+                  <ChevronDown className="h-3.5 w-3.5" />
+                  {t("pages.quotes.bulkSetStatus")} ({transitionableSelectedIds.length})
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem
+                  onSelect={() => void runBulkSetStatus("expired")}
+                  data-testid="quotes-bulk-status-expired"
+                >
+                  {t("pages.quotes.bulkExpire")}
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  onSelect={() => void runBulkSetStatus("rejected")}
+                  data-testid="quotes-bulk-status-rejected"
+                >
+                  {t("pages.quotes.bulkReject")}
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+            <Button
+              size="sm"
+              variant="ghost"
+              className="h-8 gap-1"
+              onClick={() => setBulkArchiveOpen(true)}
+              disabled={bulkRunning}
+              data-testid="quotes-bulk-archive"
+            >
+              <Archive className="h-3.5 w-3.5" />
+              {t("pages.quotes.bulkArchive")}
+            </Button>
+          </>
+        ) : (
+          <Button
+            size="sm"
+            variant="ghost"
+            className="h-8 gap-1"
+            onClick={() => void runBulkArchive(false)}
+            disabled={bulkRunning}
+            data-testid="quotes-bulk-unarchive"
+          >
+            <ArchiveRestore className="h-3.5 w-3.5" />
+            {t("pages.quotes.bulkUnarchive")}
+          </Button>
+        )}
+      </BulkActionBar>
+
+      <AlertDialog open={bulkArchiveOpen} onOpenChange={setBulkArchiveOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              {t("pages.quotes.bulkArchiveDialogTitle", { count: selected.size })}
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              {t("pages.quotes.bulkArchiveDialogBody")}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>{t("common.cancel")}</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={(e) => { e.preventDefault(); void runBulkArchive(true); }}
+              data-testid="quotes-bulk-archive-confirm"
+            >
+              {t("pages.quotes.bulkArchive")}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       <QuoteWizard open={wizardOpen} onOpenChange={setWizardOpen} />
     </div>

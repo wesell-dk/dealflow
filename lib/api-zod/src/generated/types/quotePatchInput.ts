@@ -8,7 +8,14 @@ Multi-tenant, multi-company, multi-brand. Deal-centric.
  * OpenAPI spec version: 0.1.0
  */
 import type { QuotePatchInputLanguage } from "./quotePatchInputLanguage";
+import type { QuotePatchInputStatus } from "./quotePatchInputStatus";
 
 export interface QuotePatchInput {
   language?: QuotePatchInputLanguage;
+  /** Setzt den Angebots-Status. Erlaubte Übergänge: aus draft/sent → expired oder rejected. Andere Übergänge → 409.
+   */
+  status?: QuotePatchInputStatus;
+  /** true → Angebot archivieren (archivedAt = now). false → Angebot wiederherstellen (archivedAt = null).
+   */
+  archived?: boolean;
 }

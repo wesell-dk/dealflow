@@ -105,7 +105,11 @@
     "resetFilters": "Filter zurücksetzen",
     "riskLow": "Niedrig",
     "riskMedium": "Mittel",
-    "riskHigh": "Hoch"
+    "riskHigh": "Hoch",
+    "bulk": {
+      "selectAllOnPage": "Alle auf dieser Seite auswählen",
+      "selectRow": "{{name}} auswählen"
+    }
   },
   "actions": {
     "duplicate": "Duplizieren"
@@ -180,7 +184,21 @@
       "statusAccepted": "Angenommen",
       "statusRejected": "Abgelehnt",
       "statusExpired": "Abgelaufen",
-      "discount": "Rabatt"
+      "discount": "Rabatt",
+      "tabActive": "Aktiv",
+      "tabArchived": "Archiv",
+      "bulkSetStatus": "Status setzen",
+      "bulkExpire": "Ablaufen lassen",
+      "bulkReject": "Ablehnen",
+      "bulkArchive": "Archivieren",
+      "bulkUnarchive": "Wiederherstellen",
+      "bulkExpireDone": "Angebote als abgelaufen markiert",
+      "bulkRejectDone": "Angebote als abgelehnt markiert",
+      "bulkArchiveDone": "Angebote archiviert",
+      "bulkUnarchiveDone": "Angebote wiederhergestellt",
+      "bulkResult": "{{ok}} aktualisiert, {{fail}} fehlgeschlagen, {{skipped}} übersprungen.",
+      "bulkArchiveDialogTitle": "{{count}} Angebot(e) archivieren?",
+      "bulkArchiveDialogBody": "Archivierte Angebote verschwinden aus der Standardliste und sind im Tab „Archiv“ jederzeit wiederherstellbar."
     },
     "platformAdmin": {
       "title": "Plattform-Verwaltung",
@@ -336,7 +354,17 @@
       "reject": "Ablehnen",
       "emptyTitle": "Alles erledigt",
       "emptyBody": "Aktuell sind keine Freigaben offen, die Deinem Filter entsprechen.",
-      "emptyHint": "Hinweis: Freigaben entstehen automatisch aus Rabatten, Risiko-Klauseln oder Vertragsabweichungen."
+      "emptyHint": "Hinweis: Freigaben entstehen automatisch aus Rabatten, Risiko-Klauseln oder Vertragsabweichungen.",
+      "selectAllDecidable": "Alle entscheidbaren auswählen",
+      "bulkApprove": "{{count}} freigeben",
+      "bulkReject": "{{count}} ablehnen",
+      "bulkApproveDone": "Freigaben verarbeitet",
+      "bulkRejectDone": "Ablehnungen verarbeitet",
+      "bulkResult": "{{ok}} erfolgreich, {{fail}} fehlgeschlagen.",
+      "bulkRejectDialogTitle": "{{count}} Freigaben ablehnen?",
+      "bulkRejectDialogBody": "Bitte hinterlege einen Kommentar für die Ablehnung — er wird in der Audit-Spur und im Stage-Verlauf jeder einzelnen Freigabe gespeichert.",
+      "bulkRejectCommentPlaceholder": "Grund für die Ablehnung (Pflichtfeld)…",
+      "bulkRejectConfirm": "Ablehnen"
     },
     "contracts": {
       "tabs": {
@@ -669,7 +697,10 @@
       "reminderFailed": "Erinnerung konnte nicht versendet werden",
       "emptyTitle": "Keine Signaturpakete",
       "emptyBody": "Signaturpakete entstehen aus signierungsbereiten Verträgen — starte einen Signatur-Workflow im Vertrags-Workspace.",
-      "emptyHint": "Tipp: Wechsle den Filter auf „Alle“, um abgeschlossene Pakete zu sehen."
+      "emptyHint": "Tipp: Wechsle den Filter auf „Alle“, um abgeschlossene Pakete zu sehen.",
+      "bulkRemind": "{{count}} erinnern",
+      "bulkRemindDone": "Erinnerungen verarbeitet",
+      "bulkRemindResult": "{{ok}} versendet, {{fail}} fehlgeschlagen."
     },
     "priceIncreasesList": {
       "title": "Preiserhöhungen",

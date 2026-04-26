@@ -46,4 +46,9 @@ wird dabei nicht geändert; die Ableitung passiert beim Lesen.
   displayStatus?: string;
   /** Darf der aktuelle Nutzer das Angebot bearbeiten/Statuswechsel durchführen. */
   canEdit?: boolean;
+  /**
+   * Wenn nicht NULL, ist das Angebot archiviert (Soft-Archive).
+   * @nullable
+   */
+  archivedAt?: Date | null;
 }

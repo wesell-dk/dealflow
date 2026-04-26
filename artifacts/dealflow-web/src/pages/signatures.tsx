@@ -5,6 +5,7 @@ import { useListSignaturePackages, useSendSignatureReminder } from "@workspace/a
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Progress } from "@/components/ui/progress";
 import { PenTool, Bell, Search, ArrowDown, ArrowUp } from "lucide-react";
@@ -15,6 +16,7 @@ import { SignatureStatusBadge } from "@/components/patterns/status-badges";
 import { SavedViewTabs, type ViewState, type BuiltInView } from "@/components/patterns/saved-view-tabs";
 import { FilterChip, FilterChipsRow } from "@/components/patterns/filter-chips";
 import { PaginationBar } from "@/components/patterns/pagination-bar";
+import { BulkActionBar } from "@/components/patterns/bulk-action-bar";
 
 const DEFAULT_VIEW: ViewState = {
   filters: { status: "in_progress" },
@@ -39,8 +41,11 @@ export default function Signatures() {
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(25);
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [bulkRunning, setBulkRunning] = useState(false);
 
   useEffect(() => { setPage(1); }, [view.filters, view.sortBy, view.sortDir, search]);
+  useEffect(() => { setSelected(new Set()); }, [activeViewId]);
 
   const { data: packages, isLoading } = useListSignaturePackages({});
 
@@ -95,6 +100,59 @@ export default function Signatures() {
       onError:   () => toast({ title: t("pages.signatures.reminderFailed"), variant: "destructive" }),
     });
   };
+
+  // Bulk-Remind: nur Pakete im Status `in_progress`/`sent` sind reminderfähig
+  // (server lehnt completed/blocked mit 409 ab). Wir filtern client-seitig
+  // raus, damit die Toast-Zähler stimmen, und rufen den Single-Item-Endpoint
+  // parallel pro Auswahl auf — kein Bulk-Endpoint nötig.
+  const REMINDABLE = new Set(["in_progress", "sent"]);
+  const isRemindable = (status: string) => REMINDABLE.has(status);
+  const remindableSelectedIds = useMemo(() => {
+    const map = new Map((packages ?? []).map((p) => [p.id, p.status]));
+    return [...selected].filter((id) => isRemindable(String(map.get(id) ?? "")));
+  }, [selected, packages]);
+
+  async function handleBulkRemind() {
+    if (remindableSelectedIds.length === 0) return;
+    setBulkRunning(true);
+    try {
+      const results = await Promise.allSettled(
+        remindableSelectedIds.map((id) => remind.mutateAsync({ id })),
+      );
+      const ok = results.filter((r) => r.status === "fulfilled").length;
+      const fail = results.length - ok;
+      toast({
+        title: t("pages.signatures.bulkRemindDone"),
+        description: t("pages.signatures.bulkRemindResult", { ok, fail }),
+        variant: fail > 0 && ok === 0 ? "destructive" : undefined,
+      });
+      setSelected(new Set());
+    } finally {
+      setBulkRunning(false);
+    }
+  }
+
+  function isAllSelected() {
+    const remindablePage = pageRows.filter((r) => isRemindable(r.status));
+    return remindablePage.length > 0 && remindablePage.every((r) => selected.has(r.id));
+  }
+  function togglePageAll() {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      const remindablePage = pageRows.filter((r) => isRemindable(r.status));
+      const allOn = remindablePage.length > 0 && remindablePage.every((r) => next.has(r.id));
+      if (allOn) remindablePage.forEach((r) => next.delete(r.id));
+      else remindablePage.forEach((r) => next.add(r.id));
+      return next;
+    });
+  }
+  function toggleOne(id: string) {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  }
 
   const hasFilters = Object.keys(view.filters ?? {}).length > 0;
 
@@ -181,6 +239,14 @@ export default function Signatures() {
           <Table>
             <TableHeader>
               <TableRow>
+                <TableHead className="w-10">
+                  <Checkbox
+                    checked={isAllSelected()}
+                    onCheckedChange={togglePageAll}
+                    aria-label={t("common.bulk.selectAllOnPage")}
+                    data-testid="signatures-select-all"
+                  />
+                </TableHead>
                 <TableHead>{sortableHeader("title", t("common.title"))}</TableHead>
                 <TableHead>{t("common.deal")}</TableHead>
                 <TableHead>{sortableHeader("status", t("common.status"))}</TableHead>
@@ -190,36 +256,48 @@ export default function Signatures() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {pageRows.map((pkg) => (
-                <TableRow key={pkg.id}>
-                  <TableCell className="font-medium">
-                    <Link href={`/signatures/${pkg.id}`} className="hover:underline">
-                      {pkg.title}
-                    </Link>
-                  </TableCell>
-                  <TableCell>{pkg.dealName}</TableCell>
-                  <TableCell><SignatureStatusBadge status={pkg.status} /></TableCell>
-                  <TableCell>
-                    <div className="flex flex-col gap-1.5">
-                      <div className="flex justify-between text-xs text-muted-foreground">
-                        <span>{pkg.signedCount} / {pkg.totalSigners} {t("pages.signatures.signed")}</span>
+              {pageRows.map((pkg) => {
+                const remindable = isRemindable(pkg.status);
+                return (
+                  <TableRow key={pkg.id} data-testid={`signature-row-${pkg.id}`}>
+                    <TableCell>
+                      <Checkbox
+                        checked={selected.has(pkg.id)}
+                        onCheckedChange={() => toggleOne(pkg.id)}
+                        disabled={!remindable}
+                        aria-label={t("common.bulk.selectRow", { name: pkg.title })}
+                        data-testid={`signature-select-${pkg.id}`}
+                      />
+                    </TableCell>
+                    <TableCell className="font-medium">
+                      <Link href={`/signatures/${pkg.id}`} className="hover:underline">
+                        {pkg.title}
+                      </Link>
+                    </TableCell>
+                    <TableCell>{pkg.dealName}</TableCell>
+                    <TableCell><SignatureStatusBadge status={pkg.status} /></TableCell>
+                    <TableCell>
+                      <div className="flex flex-col gap-1.5">
+                        <div className="flex justify-between text-xs text-muted-foreground">
+                          <span>{pkg.signedCount} / {pkg.totalSigners} {t("pages.signatures.signed")}</span>
+                        </div>
+                        <Progress value={(pkg.signedCount / pkg.totalSigners) * 100} className="h-2" />
                       </div>
-                      <Progress value={(pkg.signedCount / pkg.totalSigners) * 100} className="h-2" />
-                    </div>
-                  </TableCell>
-                  <TableCell>
-                    {pkg.deadline ? new Date(pkg.deadline).toLocaleDateString() : "—"}
-                  </TableCell>
-                  <TableCell className="text-right">
-                    {pkg.status === "in_progress" && (
-                      <Button variant="ghost" size="sm" onClick={() => handleRemind(pkg.id)} disabled={remind.isPending}>
-                        <Bell className="h-4 w-4 mr-2" />
-                        {t("pages.signatures.remind")}
-                      </Button>
-                    )}
-                  </TableCell>
-                </TableRow>
-              ))}
+                    </TableCell>
+                    <TableCell>
+                      {pkg.deadline ? new Date(pkg.deadline).toLocaleDateString() : "—"}
+                    </TableCell>
+                    <TableCell className="text-right">
+                      {pkg.status === "in_progress" && (
+                        <Button variant="ghost" size="sm" onClick={() => handleRemind(pkg.id)} disabled={remind.isPending}>
+                          <Bell className="h-4 w-4 mr-2" />
+                          {t("pages.signatures.remind")}
+                        </Button>
+                      )}
+                    </TableCell>
+                  </TableRow>
+                );
+              })}
             </TableBody>
           </Table>
           <div className="border-t">
@@ -233,6 +311,20 @@ export default function Signatures() {
           </div>
         </div>
       )}
+
+      <BulkActionBar count={selected.size} onClear={() => setSelected(new Set())}>
+        <Button
+          size="sm"
+          variant="ghost"
+          className="h-8 gap-1"
+          disabled={remindableSelectedIds.length === 0 || bulkRunning}
+          onClick={() => void handleBulkRemind()}
+          data-testid="signatures-bulk-remind"
+        >
+          <Bell className="h-3.5 w-3.5" />
+          {t("pages.signatures.bulkRemind", { count: remindableSelectedIds.length })}
+        </Button>
+      </BulkActionBar>
     </div>
   );
 }
