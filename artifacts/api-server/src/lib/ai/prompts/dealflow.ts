@@ -75,6 +75,24 @@ const SAFE_GERMAN_HINT =
   "marketing phrases. No emojis. No hallucinations — if the context does " +
   "not contain a clear signal, note that explicitly.";
 
+// Source citation for AI recommendations (Task #227 — legal knowledge base).
+// The model may only reference IDs that were provided to it in the user
+// prompt under "LEGAL KNOWLEDGE BASE". This keeps citations auditable and
+// non-hallucinated. Shared by the drafting, risk, and redline prompts so the
+// frontend can render a unified sources panel.
+const RELATED_SOURCE = z.object({
+  kind: z.union([z.literal("norm"), z.literal("precedent")]),
+  id: z.string().min(2).max(80),
+  ref: z.string().min(2).max(160),
+  note: z.string().min(2).max(400).optional(),
+});
+
+const CITATION_HINT =
+  "If a 'LEGAL KNOWLEDGE BASE' section supplies legal sources or " +
+  "precedents, you MUST cite each recommendation that relies on a norm or " +
+  "precedent via the listed IDs in the relatedSources field. NEVER invent " +
+  "an ID. If no source fits, omit relatedSources or leave it empty.";
+
 // ───────────────────────── 1. Deal Summary ─────────────────────────
 
 const DealSummaryOutput = z.object({
@@ -291,10 +309,19 @@ const ContractDraftOutput = z.object({
     )
     .max(20),
   openQuestions: z.array(z.string().min(2).max(240)).max(8),
+  relatedSources: z.array(RELATED_SOURCE).max(8).optional(),
 });
 
+// Wrapper-Input: Drafting darf optional einen vorab retrieved'en
+// juristischen Wissensblock erhalten (siehe legalKnowledge.ts), den das
+// Modell über `relatedSources` zitiert.
+export interface ContractDraftInput {
+  deal: DealContext;
+  knowledgeBlock?: string;
+}
+
 export const contractDrafting: PromptDefinition<
-  DealContext,
+  ContractDraftInput,
   z.infer<typeof ContractDraftOutput>
 > = {
   key: "contract.draft",
@@ -304,13 +331,16 @@ export const contractDrafting: PromptDefinition<
     "commercial state (deal, brand, quote, account) you derive a prefill " +
     "for a contract draft — template recommendation, field prefill with " +
     "sources, and clause recommendations with soft/standard/hard variants. " +
+    CITATION_HINT + " " +
     SAFE_GERMAN_HINT,
-  buildUser: (ctx) =>
-    `Propose a contract draft for this deal. Context (JSON):\n${JSON.stringify(ctx)}`,
+  buildUser: (input) =>
+    `Propose a contract draft for this deal. Context (JSON):\n${JSON.stringify(input.deal)}` +
+    (input.knowledgeBlock ? `\n${input.knowledgeBlock}` : ""),
   outputSchema: ContractDraftOutput,
   toolDescription:
     "Returns draftTitle, recommendedTemplate, prefillSuggestions with source, " +
-    "clauseRecommendations (soft/standard/hard), and openQuestions.",
+    "clauseRecommendations (soft/standard/hard), openQuestions, and " +
+    "relatedSources (cited norm/precedent IDs from the knowledge base).",
   toolName: "report_contract_draft",
 };
 
@@ -332,12 +362,21 @@ const ContractRiskOutput = z.object({
     .max(15),
   approvalRelevant: z.boolean(),
   recommendedAction: ACTION_TYPE,
+  relatedSources: z.array(RELATED_SOURCE).max(8).optional(),
   confidence: CONFIDENCE_LEVEL,
   confidenceReason: CONFIDENCE_REASON,
 });
 
+// Erweiterter Input-Wrapper: Risk-Bewertung darf optional eine vorab
+// retrieved'e juristische Wissensbasis erhalten (siehe legalKnowledge.ts).
+// Das Modell zitiert daraus über `relatedSources` im Output.
+export interface ContractRiskInput {
+  contract: ContractContext;
+  knowledgeBlock?: string;
+}
+
 export const contractRisk: PromptDefinition<
-  ContractContext,
+  ContractRiskInput,
   z.infer<typeof ContractRiskOutput>
 > = {
   key: "contract.risk",
@@ -347,14 +386,18 @@ export const contractRisk: PromptDefinition<
     "the contract's clause situation, compare it with the associated deal/" +
     "quote context, and deliver risk signals with clause reference, severity, " +
     "and a concrete recommendation. " +
+    CITATION_HINT + " " +
     SAFE_GERMAN_HINT,
-  buildUser: (ctx) =>
-    `Assess the contract risk for the following contract. Context (JSON):\n${JSON.stringify(ctx)}`,
+  buildUser: (input) =>
+    `Assess the contract risk for the following contract.\n` +
+    `Context (JSON):\n${JSON.stringify(input.contract)}` +
+    (input.knowledgeBlock ? `\n${input.knowledgeBlock}` : ""),
   outputSchema: ContractRiskOutput,
   toolDescription:
     "Returns overallRisk, overallScore (0-100), summary, riskSignals with " +
     "clause/severity/finding/recommendation, approvalRelevant, " +
-    "recommendedAction, and confidence (low/medium/high) plus a single " +
+    "recommendedAction, relatedSources (cited norm/precedent IDs from the " +
+    "knowledge base), and confidence (low/medium/high) plus a single " +
     "confidenceReason sentence.",
   toolName: "report_contract_risk",
 };
@@ -387,13 +430,16 @@ const RedlineOutput = z.object({
     z.literal("legal_and_finance"),
   ]),
   executiveSummary: z.string().min(8).max(800),
+  relatedSources: z.array(RELATED_SOURCE).max(8).optional(),
 });
 
 // External-Paper-Input ist absichtlich anders strukturiert: rohtext +
-// Vertrags-/Deal-Bezug (für Scope-Anker).
+// Vertrags-/Deal-Bezug (für Scope-Anker). Optional zusätzlich ein
+// vorab retrieved'er juristischer Wissensblock (Task #227).
 export interface RedlineInput {
   contract: ContractContext;
   externalText: string;
+  knowledgeBlock?: string;
 }
 
 export const contractRedline: PromptDefinition<
@@ -407,15 +453,18 @@ export const contractRedline: PromptDefinition<
     "You compare an externally provided contract document with the internal " +
     "contract state, identify known clauses including deviations, list " +
     "unknown topics, and propose a review path. " +
+    CITATION_HINT + " " +
     SAFE_GERMAN_HINT,
   buildUser: (input) =>
     `Compare the following external document with our contract state.\n\n` +
     `Internal context (JSON):\n${JSON.stringify(input.contract)}\n\n` +
-    `External document (raw text):\n"""${input.externalText}"""`,
+    `External document (raw text):\n"""${input.externalText}"""` +
+    (input.knowledgeBlock ? `\n${input.knowledgeBlock}` : ""),
   outputSchema: RedlineOutput,
   toolDescription:
     "Returns documentSummary, identifiedClauses with deviation classification, " +
-    "unknownTopics, recommendedReviewPath, and executiveSummary.",
+    "unknownTopics, recommendedReviewPath, executiveSummary, and " +
+    "relatedSources (cited norm/precedent IDs from the knowledge base).",
   toolName: "report_redline_analysis",
 };
 

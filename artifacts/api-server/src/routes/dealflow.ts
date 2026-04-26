@@ -142,6 +142,8 @@ import {
   externalCollaboratorEventsTable,
   contractCommentsTable,
   leadsTable,
+  legalSourcesTable,
+  legalPrecedentsTable,
 } from '@workspace/db';
 import { createHash } from 'node:crypto';
 import {
@@ -181,9 +183,16 @@ import {
   type SecondOpinionEnvelope,
 } from '../lib/ai';
 import { recordRecommendation, clampConfidence, confidenceLevelToScore } from '../lib/ai/recommendations.js';
-import type { HelpAssistantInput } from '../lib/ai/prompts/dealflow';
-import type { ContractConsistencyInput } from '../lib/ai/prompts/dealflow';
+import type { HelpAssistantInput, ContractRiskInput, ContractConsistencyInput } from '../lib/ai/prompts/dealflow';
 import { runContractLint, type ContractLintInput } from '../lib/contractLinter/index.js';
+import {
+  searchLegalKnowledge,
+  formatLegalKnowledgeForPrompt,
+  indexContractPrecedents,
+  backfillPrecedentsForTenant,
+  type NormHit,
+  type PrecedentHit,
+} from '../lib/ai/legalKnowledge';
 import type { DocumentLayoutProfile } from '../pdf/profile.js';
 import { safeParseProfile as safeParseProfileSync } from '../pdf/profile.js';
 import { runAgent, type AgentTrace } from '../lib/ai/agent.js';
@@ -10291,6 +10300,10 @@ async function maybeCompletePackageAndCreateOC(
       try {
         await deriveObligations(ctr.id, tenantIdForCtr);
         await evaluateDeviations(ctr.id, tenantIdForCtr);
+        // Juristische Wissensbasis (Task #227): Klauseln des frisch
+        // signierten Vertrags als Präzedenzfälle indexieren, damit künftige
+        // KI-Vorschläge sie als interne Referenz zitieren können.
+        await indexContractPrecedents({ tenantId: tenantIdForCtr, contractId: ctr.id });
         await db.insert(timelineEventsTable).values({
           id: `tl_${randomUUID().slice(0, 8)}`,
           tenantId: tenantIdForCtr,
@@ -12434,21 +12447,57 @@ router.post('/copilot/contract-risk/:contractId', async (req, res) => {
     if (handleScopeError(e, res)) return;
     throw e;
   }
+  // Juristische Wissensbasis (Task #227): Hybrid-Suche aus dem Vertragsthema
+  // (Klausel-Familien, Risiko-Lage). Wir bauen den Query-Text aus dem
+  // konkreten Klausel-Bestand des Vertrags, damit die Retrieval-Treffer
+  // wirklich auf das vorliegende Dokument zugeschnitten sind.
+  const knowledgeQuery = [
+    ctx.contract.title,
+    ...ctx.clauses.map((c) => `${c.family} ${c.summary}`),
+  ].join(' ');
+  // Bewusst KEIN harter Jurisdiktions-Filter — der Risk-Report braucht
+  // sowohl deutsches Vertragsrecht (BGB/HGB/UWG) als auch EU-Normen
+  // (DSGVO Art. 6/28/32), je nachdem welche Klauseln im Vertrag stehen.
+  // Token-Overlap im Retrieval entscheidet relevanzbasiert.
+  const knowledge = await searchLegalKnowledge({
+    tenantId: scope.tenantId,
+    query: knowledgeQuery,
+    filters: { jurisdiction: null, areaOfLaw: null },
+    limitSources: 5,
+    limitPrecedents: 4,
+  });
+  const knowledgeBlock = formatLegalKnowledgeForPrompt(knowledge);
+  // Lookup-Tabelle für die Anreicherung der Citations im Output.
+  const knowledgeIndex = new Map<string, NormHit | PrecedentHit>();
+  for (const s of knowledge.sources) knowledgeIndex.set(s.id, s);
+  for (const p of knowledge.precedents) knowledgeIndex.set(p.id, p);
   try {
-    const result = await runStructuredWithSecondOpinion<ContractContext, {
+    const result = await runStructuredWithSecondOpinion<ContractRiskInput, {
       overallRisk: string; overallScore: number; summary: string;
       riskSignals: Array<{ clause: string; severity: string; finding: string; recommendation: string }>;
       approvalRelevant: boolean; recommendedAction: string;
+      relatedSources: Array<{ kind: 'norm' | 'precedent'; id: string; ref: string; note?: string }>;
       confidence: 'low' | 'medium' | 'high';
       confidenceReason: string;
     }>({
       promptKey: 'contract.risk',
-      input: ctx,
+      input: { contract: ctx, knowledgeBlock },
       scope,
       entityRef: { entityType: 'contract', entityId: contractId },
       comparePoints: SECOND_OPINION_COMPARE_POINTS['contract.risk']!,
       requestSecondOpinion: readSecondOpinionOptIn(req),
     });
+    // Halluzinationsschutz: nur Citations zurückspielen, deren ID auch im
+    // Retrieval-Set vorhanden war. So kann das Frontend gefahrlos auf den
+    // Detail-Endpoint verlinken.
+    const sanitizedSources = (result.output.relatedSources ?? [])
+      .filter((s) => knowledgeIndex.has(s.id))
+      .map((s) => {
+        const hit = knowledgeIndex.get(s.id)!;
+        const snippet = hit.kind === 'norm' ? hit.snippet : hit.snippet;
+        return { ...s, snippet };
+      });
+    const enrichedOutput = { ...result.output, relatedSources: sanitizedSources };
     const insightId = await persistAiInsight(scope.tenantId, {
       kind: 'ai_contract_risk',
       title: `Vertragsrisiko: ${ctx.contract.title}`,
@@ -12462,6 +12511,7 @@ router.post('/copilot/contract-risk/:contractId', async (req, res) => {
         contractId,
         overallScore: result.output.overallScore,
         approvalRelevant: result.output.approvalRelevant,
+        sources: sanitizedSources.map((s) => ({ kind: s.kind, id: s.id, ref: s.ref })),
       },
     });
     // Konfidenz + recordRecommendation (Task #69).
@@ -12469,7 +12519,7 @@ router.post('/copilot/contract-risk/:contractId', async (req, res) => {
     const recommendationId = await recordRecommendation({
       tenantId: scope.tenantId,
       promptKey: 'contract.risk',
-      suggestion: result.output,
+      suggestion: enrichedOutput,
       confidence: confScore,
       entityType: 'contract',
       entityId: contractId,
@@ -12477,7 +12527,7 @@ router.post('/copilot/contract-risk/:contractId', async (req, res) => {
     });
     res.json({
       ok: true,
-      result: result.output,
+      result: enrichedOutput,
       invocationId: result.invocationId,
       insightId,
       recommendationId,
@@ -19491,6 +19541,381 @@ router.get('/ai-recommendations/_metrics', async (req, res) => {
     };
   }).sort((a, b) => b.count - a.count);
   res.json(result);
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  JURISTISCHE WISSENSBASIS (Task #227)
+//
+//  Zwei Ressourcen unter /admin:
+//    /admin/legal-sources    — externe Rechtsquellen (CRUD)
+//    /admin/legal-precedents — interne Präzedenzfälle (read + delete +
+//                              backfill)
+//
+//  System-Quellen (tenantId NULL) sind für jeden Tenant lesbar, aber nur per
+//  Seed/Replit-Admin änderbar — wir blockieren write-Aktionen auf solche
+//  Zeilen mit 403 ("system source — clone instead").
+// ─────────────────────────────────────────────────────────────────────────────
+
+const VALID_AREAS = new Set([
+  'contract', 'data_protection', 'competition', 'commercial',
+  'it', 'labor', 'tax', 'other',
+]);
+const VALID_HIERARCHIES = new Set(['statute', 'regulation', 'judgment', 'guideline', 'standard']);
+const VALID_OUTCOMES = new Set(['standard', 'softened', 'hardened', 'custom']);
+
+function mapLegalSource(row: typeof legalSourcesTable.$inferSelect) {
+  return {
+    id: row.id,
+    tenantId: row.tenantId,
+    isSystem: row.tenantId === null,
+    normRef: row.normRef,
+    title: row.title,
+    jurisdiction: row.jurisdiction,
+    areaOfLaw: row.areaOfLaw,
+    hierarchy: row.hierarchy,
+    fullText: row.fullText,
+    summary: row.summary,
+    keywords: row.keywords ?? [],
+    validFrom: row.validFrom ? String(row.validFrom) : null,
+    validUntil: row.validUntil ? String(row.validUntil) : null,
+    url: row.url,
+    createdAt: iso(row.createdAt)!,
+    updatedAt: iso(row.updatedAt)!,
+  };
+}
+
+function mapLegalPrecedent(row: typeof legalPrecedentsTable.$inferSelect) {
+  return {
+    id: row.id,
+    tenantId: row.tenantId,
+    contractId: row.contractId,
+    contractClauseId: row.contractClauseId,
+    family: row.family,
+    variantId: row.variantId,
+    negotiationOutcome: row.negotiationOutcome,
+    counterpartyAccountId: row.counterpartyAccountId,
+    counterpartyName: row.counterpartyName,
+    industry: row.industry,
+    contractValueCents: row.contractValueCents,
+    signedAt: iso(row.signedAt),
+    snippet: row.snippet,
+    keywords: row.keywords ?? [],
+    createdAt: iso(row.createdAt)!,
+  };
+}
+
+// ── Legal Sources — list ─────────────────────────────────────────────────────
+router.get('/admin/legal-sources', async (req, res) => {
+  if (!requireAdmin(req, res)) return;
+  const scope = getScope(req);
+  const conds = [
+    or(isNull(legalSourcesTable.tenantId), eq(legalSourcesTable.tenantId, scope.tenantId)),
+  ];
+  const j = req.query['jurisdiction'];
+  const a = req.query['areaOfLaw'];
+  if (typeof j === 'string' && j) conds.push(eq(legalSourcesTable.jurisdiction, j));
+  if (typeof a === 'string' && a) conds.push(eq(legalSourcesTable.areaOfLaw, a));
+  const rows = await db
+    .select()
+    .from(legalSourcesTable)
+    .where(and(...conds))
+    .orderBy(asc(legalSourcesTable.areaOfLaw), asc(legalSourcesTable.normRef))
+    .limit(500);
+  res.json(rows.map(mapLegalSource));
+});
+
+// ── Legal Sources — single (admin detail) ────────────────────────────────────
+router.get('/admin/legal-sources/:id', async (req, res) => {
+  if (!requireAdmin(req, res)) return;
+  const scope = getScope(req);
+  const id = String(req.params['id'] ?? '');
+  const [row] = await db.select().from(legalSourcesTable).where(eq(legalSourcesTable.id, id));
+  if (!row) { res.status(404).json({ error: 'not_found' }); return; }
+  if (row.tenantId !== null && row.tenantId !== scope.tenantId) {
+    res.status(404).json({ error: 'not_found' }); return;
+  }
+  res.json(mapLegalSource(row));
+});
+
+// ── Legal Sources — create ──────────────────────────────────────────────────
+router.post('/admin/legal-sources', async (req, res) => {
+  if (!requireAdmin(req, res)) return;
+  const scope = getScope(req);
+  const b = req.body as {
+    normRef?: string; title?: string; jurisdiction?: string;
+    areaOfLaw?: string; hierarchy?: string; fullText?: string;
+    summary?: string; keywords?: string[]; url?: string | null;
+    validFrom?: string | null; validUntil?: string | null;
+  } | undefined;
+  if (!b || typeof b.normRef !== 'string' || typeof b.title !== 'string'
+    || typeof b.fullText !== 'string' || typeof b.summary !== 'string'
+    || typeof b.areaOfLaw !== 'string') {
+    res.status(422).json({ error: 'normRef, title, areaOfLaw, fullText, summary required' });
+    return;
+  }
+  if (!VALID_AREAS.has(b.areaOfLaw)) {
+    res.status(422).json({ error: `areaOfLaw must be one of ${Array.from(VALID_AREAS).join(', ')}` });
+    return;
+  }
+  const hierarchy = b.hierarchy ?? 'statute';
+  if (!VALID_HIERARCHIES.has(hierarchy)) {
+    res.status(422).json({ error: `hierarchy must be one of ${Array.from(VALID_HIERARCHIES).join(', ')}` });
+    return;
+  }
+  const jurisdiction = (b.jurisdiction ?? 'DE').toUpperCase().slice(0, 4);
+  // Tenant-Eindeutigkeit per (tenantId, normRef)
+  const dup = await db
+    .select()
+    .from(legalSourcesTable)
+    .where(and(eq(legalSourcesTable.tenantId, scope.tenantId), eq(legalSourcesTable.normRef, b.normRef)));
+  if (dup.length) {
+    res.status(409).json({ error: `legal source "${b.normRef}" already exists for this tenant` });
+    return;
+  }
+  const newId = `ls_${randomBytes(6).toString('hex')}`;
+  const row = {
+    id: newId,
+    tenantId: scope.tenantId,
+    normRef: b.normRef.trim(),
+    title: b.title.trim(),
+    jurisdiction,
+    areaOfLaw: b.areaOfLaw,
+    hierarchy,
+    fullText: b.fullText,
+    summary: b.summary,
+    keywords: Array.isArray(b.keywords) ? b.keywords.filter((k) => typeof k === 'string').slice(0, 40) : [],
+    url: b.url ?? null,
+    validFrom: b.validFrom ?? null,
+    validUntil: b.validUntil ?? null,
+  };
+  await db.insert(legalSourcesTable).values(row);
+  const [saved] = await db.select().from(legalSourcesTable).where(eq(legalSourcesTable.id, newId));
+  await writeAuditFromReq(req, {
+    entityType: 'legal_source', entityId: newId, action: 'create',
+    summary: `Rechtsquelle angelegt: ${row.normRef}`,
+    before: null, after: saved,
+  });
+  res.status(201).json(mapLegalSource(saved!));
+});
+
+// ── Legal Sources — patch ───────────────────────────────────────────────────
+router.patch('/admin/legal-sources/:id', async (req, res) => {
+  if (!requireAdmin(req, res)) return;
+  const scope = getScope(req);
+  const id = String(req.params['id'] ?? '');
+  const [existing] = await db.select().from(legalSourcesTable).where(eq(legalSourcesTable.id, id));
+  if (!existing) { res.status(404).json({ error: 'not_found' }); return; }
+  if (existing.tenantId === null) {
+    res.status(403).json({ error: 'system source — clone into your tenant to override' });
+    return;
+  }
+  if (existing.tenantId !== scope.tenantId) {
+    res.status(404).json({ error: 'not_found' }); return;
+  }
+  const b = req.body as Partial<{
+    normRef: string; title: string; jurisdiction: string;
+    areaOfLaw: string; hierarchy: string; fullText: string;
+    summary: string; keywords: string[]; url: string | null;
+    validFrom: string | null; validUntil: string | null;
+  }>;
+  if (b.areaOfLaw && !VALID_AREAS.has(b.areaOfLaw)) {
+    res.status(422).json({ error: 'invalid areaOfLaw' }); return;
+  }
+  if (b.hierarchy && !VALID_HIERARCHIES.has(b.hierarchy)) {
+    res.status(422).json({ error: 'invalid hierarchy' }); return;
+  }
+  const patch: Record<string, unknown> = { updatedAt: new Date() };
+  for (const k of [
+    'normRef', 'title', 'jurisdiction', 'areaOfLaw', 'hierarchy',
+    'fullText', 'summary', 'url', 'validFrom', 'validUntil',
+  ] as const) {
+    if (b[k] !== undefined) patch[k] = b[k];
+  }
+  if (b.keywords !== undefined) {
+    patch['keywords'] = Array.isArray(b.keywords)
+      ? b.keywords.filter((k) => typeof k === 'string').slice(0, 40)
+      : [];
+  }
+  await db.update(legalSourcesTable).set(patch).where(eq(legalSourcesTable.id, id));
+  const [saved] = await db.select().from(legalSourcesTable).where(eq(legalSourcesTable.id, id));
+  await writeAuditFromReq(req, {
+    entityType: 'legal_source', entityId: id, action: 'update',
+    summary: `Rechtsquelle bearbeitet: ${saved!.normRef}`,
+    before: existing, after: saved,
+  });
+  res.json(mapLegalSource(saved!));
+});
+
+// ── Legal Sources — delete ──────────────────────────────────────────────────
+router.delete('/admin/legal-sources/:id', async (req, res) => {
+  if (!requireAdmin(req, res)) return;
+  const scope = getScope(req);
+  const id = String(req.params['id'] ?? '');
+  const [existing] = await db.select().from(legalSourcesTable).where(eq(legalSourcesTable.id, id));
+  if (!existing) { res.status(404).json({ error: 'not_found' }); return; }
+  if (existing.tenantId === null) {
+    res.status(403).json({ error: 'system source cannot be deleted' });
+    return;
+  }
+  if (existing.tenantId !== scope.tenantId) {
+    res.status(404).json({ error: 'not_found' }); return;
+  }
+  await db.delete(legalSourcesTable).where(eq(legalSourcesTable.id, id));
+  await writeAuditFromReq(req, {
+    entityType: 'legal_source', entityId: id, action: 'delete',
+    summary: `Rechtsquelle gelöscht: ${existing.normRef}`,
+    before: existing, after: null,
+  });
+  res.status(204).end();
+});
+
+// ── Legal Precedents — list ─────────────────────────────────────────────────
+router.get('/admin/legal-precedents', async (req, res) => {
+  if (!requireAdmin(req, res)) return;
+  const scope = getScope(req);
+  const conds = [eq(legalPrecedentsTable.tenantId, scope.tenantId)];
+  const family = req.query['family'];
+  const outcome = req.query['outcome'];
+  const counterparty = req.query['counterparty'];
+  if (typeof family === 'string' && family) conds.push(eq(legalPrecedentsTable.family, family));
+  if (typeof outcome === 'string' && outcome && VALID_OUTCOMES.has(outcome)) {
+    conds.push(eq(legalPrecedentsTable.negotiationOutcome, outcome));
+  }
+  if (typeof counterparty === 'string' && counterparty) {
+    conds.push(sql`lower(${legalPrecedentsTable.counterpartyName}) like ${'%' + counterparty.toLowerCase() + '%'}`);
+  }
+  const rows = await db
+    .select()
+    .from(legalPrecedentsTable)
+    .where(and(...conds))
+    .orderBy(desc(legalPrecedentsTable.signedAt))
+    .limit(500);
+  res.json(rows.map(mapLegalPrecedent));
+});
+
+// ── Legal Precedents — single ────────────────────────────────────────────────
+router.get('/admin/legal-precedents/:id', async (req, res) => {
+  if (!requireAdmin(req, res)) return;
+  const scope = getScope(req);
+  const id = String(req.params['id'] ?? '');
+  const [row] = await db
+    .select()
+    .from(legalPrecedentsTable)
+    .where(and(eq(legalPrecedentsTable.id, id), eq(legalPrecedentsTable.tenantId, scope.tenantId)));
+  if (!row) { res.status(404).json({ error: 'not_found' }); return; }
+  res.json(mapLegalPrecedent(row));
+});
+
+// ── Legal Precedents — delete ────────────────────────────────────────────────
+router.delete('/admin/legal-precedents/:id', async (req, res) => {
+  if (!requireAdmin(req, res)) return;
+  const scope = getScope(req);
+  const id = String(req.params['id'] ?? '');
+  const [existing] = await db
+    .select()
+    .from(legalPrecedentsTable)
+    .where(and(eq(legalPrecedentsTable.id, id), eq(legalPrecedentsTable.tenantId, scope.tenantId)));
+  if (!existing) { res.status(404).json({ error: 'not_found' }); return; }
+  await db.delete(legalPrecedentsTable).where(eq(legalPrecedentsTable.id, id));
+  await writeAuditFromReq(req, {
+    entityType: 'legal_precedent', entityId: id, action: 'delete',
+    summary: `Präzedenzfall gelöscht: ${existing.family}`,
+    before: existing, after: null,
+  });
+  res.status(204).end();
+});
+
+// ── Legal Precedents — backfill aller signierten Verträge ────────────────────
+router.post('/admin/legal-precedents/backfill', async (req, res) => {
+  if (!requireAdmin(req, res)) return;
+  const scope = getScope(req);
+  const result = await backfillPrecedentsForTenant(scope.tenantId);
+  await writeAuditFromReq(req, {
+    entityType: 'legal_precedent', entityId: scope.tenantId, action: 'update',
+    summary: `Präzedenzfall-Backfill: ${result.contracts} Verträge, ${result.indexed} Klauseln indexiert.`,
+    before: null, after: result,
+  });
+  res.json({ ok: true, ...result });
+});
+
+// ── Legal Knowledge — Hybrid-Suche (für Admin- und KI-Vorschau) ─────────────
+router.get('/admin/legal-knowledge/search', async (req, res) => {
+  if (!requireAdmin(req, res)) return;
+  const scope = getScope(req);
+  const q = String(req.query['q'] ?? '').trim();
+  const family = req.query['family'];
+  const jurisdiction = req.query['jurisdiction'];
+  const areaOfLaw = req.query['areaOfLaw'];
+  const result = await searchLegalKnowledge({
+    tenantId: scope.tenantId,
+    query: q,
+    filters: {
+      family: typeof family === 'string' && family ? family : null,
+      jurisdiction: typeof jurisdiction === 'string' && jurisdiction ? jurisdiction : null,
+      areaOfLaw: typeof areaOfLaw === 'string' && areaOfLaw ? areaOfLaw : null,
+    },
+    limitSources: 10,
+    limitPrecedents: 10,
+  });
+  res.json(result);
+});
+
+// ── Legal Knowledge — Nutzersuche & Quellen-Detail (Task #227) ──────────────
+// Read-only Endpoints für alle eingeloggten Nutzer, damit z. B. ein AE in
+// der UI nach "Haftungsbegrenzung mit Kunde X" suchen oder die Original-
+// Norm aus einer KI-Citation nachschlagen kann. Tenant-scoped; System-
+// Quellen (tenantId NULL) sind allen sichtbar.
+router.get('/legal-knowledge/search', async (req, res) => {
+  const scope = getScope(req);
+  const q = String(req.query['q'] ?? '').trim();
+  const family = req.query['family'];
+  const jurisdiction = req.query['jurisdiction'];
+  const areaOfLaw = req.query['areaOfLaw'];
+  const counterparty = req.query['counterparty'];
+  // counterparty ist ein Komfort-Filter: wir bauen ihn in den Query-Text
+  // ein, damit Token-Overlap auch counterpartyName trifft.
+  const augmentedQuery = typeof counterparty === 'string' && counterparty
+    ? `${q} ${counterparty}`
+    : q;
+  const result = await searchLegalKnowledge({
+    tenantId: scope.tenantId,
+    query: augmentedQuery,
+    filters: {
+      family: typeof family === 'string' && family ? family : null,
+      jurisdiction: typeof jurisdiction === 'string' && jurisdiction ? jurisdiction : null,
+      areaOfLaw: typeof areaOfLaw === 'string' && areaOfLaw ? areaOfLaw : null,
+    },
+    limitSources: 10,
+    limitPrecedents: 10,
+  });
+  res.json(result);
+});
+
+router.get('/legal-knowledge/sources/:id', async (req, res) => {
+  const scope = getScope(req);
+  const id = String(req.params['id'] ?? '');
+  const [row] = await db
+    .select()
+    .from(legalSourcesTable)
+    .where(
+      and(
+        eq(legalSourcesTable.id, id),
+        or(isNull(legalSourcesTable.tenantId), eq(legalSourcesTable.tenantId, scope.tenantId)),
+      ),
+    );
+  if (!row) { res.status(404).json({ error: 'not_found' }); return; }
+  res.json(mapLegalSource(row));
+});
+
+router.get('/legal-knowledge/precedents/:id', async (req, res) => {
+  const scope = getScope(req);
+  const id = String(req.params['id'] ?? '');
+  const [row] = await db
+    .select()
+    .from(legalPrecedentsTable)
+    .where(and(eq(legalPrecedentsTable.id, id), eq(legalPrecedentsTable.tenantId, scope.tenantId)));
+  if (!row) { res.status(404).json({ error: 'not_found' }); return; }
+  res.json(mapLegalPrecedent(row));
 });
 
 export default router;

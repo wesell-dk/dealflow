@@ -35,6 +35,7 @@ import AccountDetail from "@/pages/account";
 import Renewals from "@/pages/renewals";
 import Reports from "@/pages/reports";
 import Copilot from "@/pages/copilot";
+import Wissensbasis from "@/pages/wissensbasis";
 import Admin from "@/pages/admin";
 import OrderConfirmations from "@/pages/order-confirmations";
 import OrderConfirmationDetail from "@/pages/order-confirmation";
@@ -91,6 +92,7 @@ function ProtectedRoutes() {
         <Route path="/renewals" component={Renewals} />
         <Route path="/reports" component={Reports} />
         <Route path="/copilot" component={Copilot} />
+        <Route path="/wissensbasis" component={Wissensbasis} />
         <Route path="/admin" component={Admin} />
         <Route path="/order-confirmations" component={OrderConfirmations} />
         <Route path="/order-confirmations/:id" component={OrderConfirmationDetail} />

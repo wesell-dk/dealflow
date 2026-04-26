@@ -6456,6 +6456,17 @@ export const RunContractRiskResponse = zod
           "open_negotiation",
           "open_price_increase",
         ]),
+        relatedSources: zod
+          .array(
+            zod.object({
+              kind: zod.enum(["norm", "precedent"]),
+              id: zod.string(),
+              ref: zod.string(),
+              note: zod.string().optional(),
+              snippet: zod.string().optional(),
+            }),
+          )
+          .optional(),
         confidence: zod.enum(["low", "medium", "high"]),
         confidenceReason: zod.string(),
       }),
@@ -6620,6 +6631,423 @@ export const AskHelpBotResponse = zod.object({
       steps: zod.number().nullish(),
     })
     .optional(),
+});
+
+/**
+ * @summary List legal sources visible to this tenant (system + tenant-owned).
+ */
+export const ListLegalSourcesQueryParams = zod.object({
+  jurisdiction: zod.coerce.string().optional(),
+  areaOfLaw: zod.coerce.string().optional(),
+});
+
+export const ListLegalSourcesResponseItem = zod.object({
+  id: zod.string(),
+  tenantId: zod.union([zod.string(), zod.null()]),
+  isSystem: zod.boolean(),
+  normRef: zod.string(),
+  title: zod.string(),
+  jurisdiction: zod.string(),
+  areaOfLaw: zod.enum([
+    "contract",
+    "data_protection",
+    "competition",
+    "commercial",
+    "it",
+    "labor",
+    "tax",
+    "other",
+  ]),
+  hierarchy: zod.enum([
+    "statute",
+    "regulation",
+    "judgment",
+    "guideline",
+    "standard",
+  ]),
+  fullText: zod.string(),
+  summary: zod.string(),
+  keywords: zod.array(zod.string()),
+  validFrom: zod.union([zod.coerce.date(), zod.null()]),
+  validUntil: zod.union([zod.coerce.date(), zod.null()]),
+  url: zod.union([zod.string(), zod.null()]),
+  createdAt: zod.coerce.date(),
+  updatedAt: zod.coerce.date(),
+});
+export const ListLegalSourcesResponse = zod.array(ListLegalSourcesResponseItem);
+
+export const createLegalSourceBodyNormRefMin = 2;
+export const createLegalSourceBodyNormRefMax = 160;
+
+export const createLegalSourceBodyTitleMin = 2;
+export const createLegalSourceBodyTitleMax = 240;
+
+export const createLegalSourceBodyJurisdictionMax = 4;
+
+export const createLegalSourceBodyFullTextMin = 4;
+
+export const createLegalSourceBodySummaryMin = 4;
+
+export const CreateLegalSourceBody = zod.object({
+  normRef: zod
+    .string()
+    .min(createLegalSourceBodyNormRefMin)
+    .max(createLegalSourceBodyNormRefMax),
+  title: zod
+    .string()
+    .min(createLegalSourceBodyTitleMin)
+    .max(createLegalSourceBodyTitleMax),
+  jurisdiction: zod
+    .string()
+    .max(createLegalSourceBodyJurisdictionMax)
+    .optional(),
+  areaOfLaw: zod.enum([
+    "contract",
+    "data_protection",
+    "competition",
+    "commercial",
+    "it",
+    "labor",
+    "tax",
+    "other",
+  ]),
+  hierarchy: zod
+    .enum(["statute", "regulation", "judgment", "guideline", "standard"])
+    .optional(),
+  fullText: zod.string().min(createLegalSourceBodyFullTextMin),
+  summary: zod.string().min(createLegalSourceBodySummaryMin),
+  keywords: zod.array(zod.string()).optional(),
+  url: zod.union([zod.string(), zod.null()]).optional(),
+  validFrom: zod.union([zod.coerce.date(), zod.null()]).optional(),
+  validUntil: zod.union([zod.coerce.date(), zod.null()]).optional(),
+});
+
+export const GetLegalSourceParams = zod.object({
+  id: zod.coerce.string(),
+});
+
+export const GetLegalSourceResponse = zod.object({
+  id: zod.string(),
+  tenantId: zod.union([zod.string(), zod.null()]),
+  isSystem: zod.boolean(),
+  normRef: zod.string(),
+  title: zod.string(),
+  jurisdiction: zod.string(),
+  areaOfLaw: zod.enum([
+    "contract",
+    "data_protection",
+    "competition",
+    "commercial",
+    "it",
+    "labor",
+    "tax",
+    "other",
+  ]),
+  hierarchy: zod.enum([
+    "statute",
+    "regulation",
+    "judgment",
+    "guideline",
+    "standard",
+  ]),
+  fullText: zod.string(),
+  summary: zod.string(),
+  keywords: zod.array(zod.string()),
+  validFrom: zod.union([zod.coerce.date(), zod.null()]),
+  validUntil: zod.union([zod.coerce.date(), zod.null()]),
+  url: zod.union([zod.string(), zod.null()]),
+  createdAt: zod.coerce.date(),
+  updatedAt: zod.coerce.date(),
+});
+
+export const UpdateLegalSourceParams = zod.object({
+  id: zod.coerce.string(),
+});
+
+export const UpdateLegalSourceBody = zod.object({
+  normRef: zod.string().optional(),
+  title: zod.string().optional(),
+  jurisdiction: zod.string().optional(),
+  areaOfLaw: zod
+    .enum([
+      "contract",
+      "data_protection",
+      "competition",
+      "commercial",
+      "it",
+      "labor",
+      "tax",
+      "other",
+    ])
+    .optional(),
+  hierarchy: zod
+    .enum(["statute", "regulation", "judgment", "guideline", "standard"])
+    .optional(),
+  fullText: zod.string().optional(),
+  summary: zod.string().optional(),
+  keywords: zod.array(zod.string()).optional(),
+  url: zod.union([zod.string(), zod.null()]).optional(),
+  validFrom: zod.union([zod.coerce.date(), zod.null()]).optional(),
+  validUntil: zod.union([zod.coerce.date(), zod.null()]).optional(),
+});
+
+export const UpdateLegalSourceResponse = zod.object({
+  id: zod.string(),
+  tenantId: zod.union([zod.string(), zod.null()]),
+  isSystem: zod.boolean(),
+  normRef: zod.string(),
+  title: zod.string(),
+  jurisdiction: zod.string(),
+  areaOfLaw: zod.enum([
+    "contract",
+    "data_protection",
+    "competition",
+    "commercial",
+    "it",
+    "labor",
+    "tax",
+    "other",
+  ]),
+  hierarchy: zod.enum([
+    "statute",
+    "regulation",
+    "judgment",
+    "guideline",
+    "standard",
+  ]),
+  fullText: zod.string(),
+  summary: zod.string(),
+  keywords: zod.array(zod.string()),
+  validFrom: zod.union([zod.coerce.date(), zod.null()]),
+  validUntil: zod.union([zod.coerce.date(), zod.null()]),
+  url: zod.union([zod.string(), zod.null()]),
+  createdAt: zod.coerce.date(),
+  updatedAt: zod.coerce.date(),
+});
+
+export const DeleteLegalSourceParams = zod.object({
+  id: zod.coerce.string(),
+});
+
+export const ListLegalPrecedentsQueryParams = zod.object({
+  family: zod.coerce.string().optional(),
+  outcome: zod.enum(["standard", "softened", "hardened", "custom"]).optional(),
+  counterparty: zod.coerce.string().optional(),
+});
+
+export const ListLegalPrecedentsResponseItem = zod.object({
+  id: zod.string(),
+  tenantId: zod.string(),
+  contractId: zod.string(),
+  contractClauseId: zod.union([zod.string(), zod.null()]),
+  family: zod.string(),
+  variantId: zod.union([zod.string(), zod.null()]),
+  negotiationOutcome: zod.enum(["standard", "softened", "hardened", "custom"]),
+  counterpartyAccountId: zod.union([zod.string(), zod.null()]),
+  counterpartyName: zod.union([zod.string(), zod.null()]),
+  industry: zod.union([zod.string(), zod.null()]),
+  contractValueCents: zod.union([zod.number(), zod.null()]),
+  signedAt: zod.union([zod.coerce.date(), zod.null()]),
+  snippet: zod.string(),
+  keywords: zod.array(zod.string()),
+  createdAt: zod.coerce.date(),
+});
+export const ListLegalPrecedentsResponse = zod.array(
+  ListLegalPrecedentsResponseItem,
+);
+
+export const GetLegalPrecedentParams = zod.object({
+  id: zod.coerce.string(),
+});
+
+export const GetLegalPrecedentResponse = zod.object({
+  id: zod.string(),
+  tenantId: zod.string(),
+  contractId: zod.string(),
+  contractClauseId: zod.union([zod.string(), zod.null()]),
+  family: zod.string(),
+  variantId: zod.union([zod.string(), zod.null()]),
+  negotiationOutcome: zod.enum(["standard", "softened", "hardened", "custom"]),
+  counterpartyAccountId: zod.union([zod.string(), zod.null()]),
+  counterpartyName: zod.union([zod.string(), zod.null()]),
+  industry: zod.union([zod.string(), zod.null()]),
+  contractValueCents: zod.union([zod.number(), zod.null()]),
+  signedAt: zod.union([zod.coerce.date(), zod.null()]),
+  snippet: zod.string(),
+  keywords: zod.array(zod.string()),
+  createdAt: zod.coerce.date(),
+});
+
+export const DeleteLegalPrecedentParams = zod.object({
+  id: zod.coerce.string(),
+});
+
+/**
+ * @summary Re-index every signed contract's clauses as precedents.
+ */
+export const BackfillLegalPrecedentsResponse = zod.object({
+  ok: zod.literal(true),
+  contracts: zod.number(),
+  indexed: zod.number(),
+});
+
+/**
+ * @summary Hybrid token-overlap search across norms and precedents.
+ */
+export const SearchLegalKnowledgeQueryParams = zod.object({
+  q: zod.coerce.string().optional(),
+  family: zod.coerce.string().optional(),
+  jurisdiction: zod.coerce.string().optional(),
+  areaOfLaw: zod.coerce.string().optional(),
+});
+
+export const SearchLegalKnowledgeResponse = zod.object({
+  sources: zod.array(
+    zod.object({
+      kind: zod.enum(["norm"]),
+      id: zod.string(),
+      ref: zod.string(),
+      title: zod.string(),
+      jurisdiction: zod.string(),
+      areaOfLaw: zod.string(),
+      hierarchy: zod.string(),
+      snippet: zod.string(),
+      url: zod.union([zod.string(), zod.null()]).optional(),
+      score: zod.number(),
+    }),
+  ),
+  precedents: zod.array(
+    zod.object({
+      kind: zod.enum(["precedent"]),
+      id: zod.string(),
+      contractId: zod.string(),
+      family: zod.string(),
+      variantId: zod.union([zod.string(), zod.null()]).optional(),
+      outcome: zod.string(),
+      counterpartyName: zod.union([zod.string(), zod.null()]).optional(),
+      industry: zod.union([zod.string(), zod.null()]).optional(),
+      signedAt: zod.union([zod.coerce.date(), zod.null()]).optional(),
+      snippet: zod.string(),
+      score: zod.number(),
+    }),
+  ),
+});
+
+/**
+ * @summary Read-only hybrid search across legal sources and internal precedents
+for any signed-in user. Tenant-scoped. Powers the user-facing
+Wissensbasis page and the click-through view from AI citations.
+
+ */
+export const SearchLegalKnowledgeForUserQueryParams = zod.object({
+  q: zod.coerce.string().optional(),
+  family: zod.coerce.string().optional(),
+  jurisdiction: zod.coerce.string().optional(),
+  areaOfLaw: zod.coerce.string().optional(),
+  counterparty: zod.coerce
+    .string()
+    .optional()
+    .describe(
+      "Convenience filter — augments the query with the counterparty name.",
+    ),
+});
+
+export const SearchLegalKnowledgeForUserResponse = zod.object({
+  sources: zod.array(
+    zod.object({
+      kind: zod.enum(["norm"]),
+      id: zod.string(),
+      ref: zod.string(),
+      title: zod.string(),
+      jurisdiction: zod.string(),
+      areaOfLaw: zod.string(),
+      hierarchy: zod.string(),
+      snippet: zod.string(),
+      url: zod.union([zod.string(), zod.null()]).optional(),
+      score: zod.number(),
+    }),
+  ),
+  precedents: zod.array(
+    zod.object({
+      kind: zod.enum(["precedent"]),
+      id: zod.string(),
+      contractId: zod.string(),
+      family: zod.string(),
+      variantId: zod.union([zod.string(), zod.null()]).optional(),
+      outcome: zod.string(),
+      counterpartyName: zod.union([zod.string(), zod.null()]).optional(),
+      industry: zod.union([zod.string(), zod.null()]).optional(),
+      signedAt: zod.union([zod.coerce.date(), zod.null()]).optional(),
+      snippet: zod.string(),
+      score: zod.number(),
+    }),
+  ),
+});
+
+/**
+ * @summary Fetch the full text of a legal source for citation drill-down.
+ */
+export const GetLegalSourceForUserParams = zod.object({
+  id: zod.coerce.string(),
+});
+
+export const GetLegalSourceForUserResponse = zod.object({
+  id: zod.string(),
+  tenantId: zod.union([zod.string(), zod.null()]),
+  isSystem: zod.boolean(),
+  normRef: zod.string(),
+  title: zod.string(),
+  jurisdiction: zod.string(),
+  areaOfLaw: zod.enum([
+    "contract",
+    "data_protection",
+    "competition",
+    "commercial",
+    "it",
+    "labor",
+    "tax",
+    "other",
+  ]),
+  hierarchy: zod.enum([
+    "statute",
+    "regulation",
+    "judgment",
+    "guideline",
+    "standard",
+  ]),
+  fullText: zod.string(),
+  summary: zod.string(),
+  keywords: zod.array(zod.string()),
+  validFrom: zod.union([zod.coerce.date(), zod.null()]),
+  validUntil: zod.union([zod.coerce.date(), zod.null()]),
+  url: zod.union([zod.string(), zod.null()]),
+  createdAt: zod.coerce.date(),
+  updatedAt: zod.coerce.date(),
+});
+
+/**
+ * @summary Fetch the full text of an internal precedent for citation drill-down.
+ */
+export const GetLegalPrecedentForUserParams = zod.object({
+  id: zod.coerce.string(),
+});
+
+export const GetLegalPrecedentForUserResponse = zod.object({
+  id: zod.string(),
+  tenantId: zod.string(),
+  contractId: zod.string(),
+  contractClauseId: zod.union([zod.string(), zod.null()]),
+  family: zod.string(),
+  variantId: zod.union([zod.string(), zod.null()]),
+  negotiationOutcome: zod.enum(["standard", "softened", "hardened", "custom"]),
+  counterpartyAccountId: zod.union([zod.string(), zod.null()]),
+  counterpartyName: zod.union([zod.string(), zod.null()]),
+  industry: zod.union([zod.string(), zod.null()]),
+  contractValueCents: zod.union([zod.number(), zod.null()]),
+  signedAt: zod.union([zod.coerce.date(), zod.null()]),
+  snippet: zod.string(),
+  keywords: zod.array(zod.string()),
+  createdAt: zod.coerce.date(),
 });
 
 export const ListAuditEntriesQueryParams = zod.object({

@@ -11,6 +11,7 @@ import type { ContractRiskResultConfidence } from "./contractRiskResultConfidenc
 import type { ContractRiskResultOverallRisk } from "./contractRiskResultOverallRisk";
 import type { ContractRiskResultRecommendedAction } from "./contractRiskResultRecommendedAction";
 import type { ContractRiskResultRiskSignalsItem } from "./contractRiskResultRiskSignalsItem";
+import type { LegalKnowledgeSourceRef } from "./legalKnowledgeSourceRef";
 
 export interface ContractRiskResult {
   overallRisk: ContractRiskResultOverallRisk;
@@ -19,6 +20,7 @@ export interface ContractRiskResult {
   riskSignals: ContractRiskResultRiskSignalsItem[];
   approvalRelevant: boolean;
   recommendedAction: ContractRiskResultRecommendedAction;
+  relatedSources?: LegalKnowledgeSourceRef[];
   confidence: ContractRiskResultConfidence;
   confidenceReason: string;
 }

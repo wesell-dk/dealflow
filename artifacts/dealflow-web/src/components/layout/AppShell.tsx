@@ -14,6 +14,7 @@ import {
   Users,
   BarChart3,
   Bot,
+  Scale,
   Settings,
   Search,
   Bell,
@@ -141,6 +142,7 @@ function useNavigationGroups(): NavGroup[] {
       items: [
         { key: "reports", label: t("nav.reports"), href: "/reports", icon: BarChart3 },
         { key: "copilot", label: t("nav.copilot"), href: "/copilot", icon: Bot },
+        { key: "wissensbasis", label: t("nav.wissensbasis"), href: "/wissensbasis", icon: Scale },
       ],
     },
     {

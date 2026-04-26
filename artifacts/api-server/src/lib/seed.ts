@@ -81,6 +81,52 @@ export async function ensureSchemaColumns(): Promise<void> {
   await db.execute(
     sql`ALTER TABLE "accounts" ADD COLUMN IF NOT EXISTS "archived_at" timestamp with time zone`,
   );
+  // Juristische Wissensbasis (Task #227). DDL-Guard, falls drizzle push noch
+  // nicht gelaufen ist — sonst crasht der erste seedLegalSourcesIdempotent().
+  await db.execute(sql`
+    CREATE TABLE IF NOT EXISTS "legal_sources" (
+      "id" text PRIMARY KEY,
+      "tenant_id" text,
+      "norm_ref" text NOT NULL,
+      "title" text NOT NULL,
+      "jurisdiction" text NOT NULL DEFAULT 'DE',
+      "area_of_law" text NOT NULL,
+      "hierarchy" text NOT NULL DEFAULT 'statute',
+      "full_text" text NOT NULL,
+      "summary" text NOT NULL,
+      "keywords" jsonb NOT NULL DEFAULT '[]'::jsonb,
+      "valid_from" date,
+      "valid_until" date,
+      "url" text,
+      "created_at" timestamp with time zone NOT NULL DEFAULT now(),
+      "updated_at" timestamp with time zone NOT NULL DEFAULT now()
+    )
+  `);
+  await db.execute(sql`CREATE INDEX IF NOT EXISTS "legal_sources_tenant_area_idx" ON "legal_sources" ("tenant_id","area_of_law")`);
+  await db.execute(sql`CREATE INDEX IF NOT EXISTS "legal_sources_jurisdiction_idx" ON "legal_sources" ("jurisdiction","area_of_law")`);
+  await db.execute(sql`CREATE UNIQUE INDEX IF NOT EXISTS "legal_sources_tenant_norm_uq" ON "legal_sources" ("tenant_id","norm_ref")`);
+  await db.execute(sql`
+    CREATE TABLE IF NOT EXISTS "legal_precedents" (
+      "id" text PRIMARY KEY,
+      "tenant_id" text NOT NULL,
+      "contract_id" text NOT NULL,
+      "contract_clause_id" text,
+      "family" text NOT NULL,
+      "variant_id" text,
+      "negotiation_outcome" text NOT NULL DEFAULT 'standard',
+      "counterparty_account_id" text,
+      "counterparty_name" text,
+      "industry" text,
+      "contract_value_cents" integer,
+      "signed_at" timestamp with time zone,
+      "snippet" text NOT NULL,
+      "keywords" jsonb NOT NULL DEFAULT '[]'::jsonb,
+      "created_at" timestamp with time zone NOT NULL DEFAULT now()
+    )
+  `);
+  await db.execute(sql`CREATE INDEX IF NOT EXISTS "legal_precedents_tenant_family_idx" ON "legal_precedents" ("tenant_id","family")`);
+  await db.execute(sql`CREATE INDEX IF NOT EXISTS "legal_precedents_tenant_signed_idx" ON "legal_precedents" ("tenant_id","signed_at")`);
+  await db.execute(sql`CREATE UNIQUE INDEX IF NOT EXISTS "legal_precedents_clause_uq" ON "legal_precedents" ("tenant_id","contract_clause_id")`);
 }
 
 export async function seedIfEmpty(): Promise<void> {

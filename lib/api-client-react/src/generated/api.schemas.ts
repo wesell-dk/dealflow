@@ -4048,6 +4048,22 @@ export const ContractRiskResultConfidence = {
   high: "high",
 } as const;
 
+export type LegalKnowledgeSourceRefKind =
+  (typeof LegalKnowledgeSourceRefKind)[keyof typeof LegalKnowledgeSourceRefKind];
+
+export const LegalKnowledgeSourceRefKind = {
+  norm: "norm",
+  precedent: "precedent",
+} as const;
+
+export interface LegalKnowledgeSourceRef {
+  kind: LegalKnowledgeSourceRefKind;
+  id: string;
+  ref: string;
+  note?: string;
+  snippet?: string;
+}
+
 export interface ContractRiskResult {
   overallRisk: ContractRiskResultOverallRisk;
   overallScore: number;
@@ -4055,6 +4071,7 @@ export interface ContractRiskResult {
   riskSignals: ContractRiskResultRiskSignalsItem[];
   approvalRelevant: boolean;
   recommendedAction: ContractRiskResultRecommendedAction;
+  relatedSources?: LegalKnowledgeSourceRef[];
   confidence: ContractRiskResultConfidence;
   confidenceReason: string;
 }
@@ -5982,6 +5999,219 @@ export interface AiRecommendationMetric {
   trend: AiRecommendationTrendPoint[];
 }
 
+export type LegalSourceAreaOfLaw =
+  (typeof LegalSourceAreaOfLaw)[keyof typeof LegalSourceAreaOfLaw];
+
+export const LegalSourceAreaOfLaw = {
+  contract: "contract",
+  data_protection: "data_protection",
+  competition: "competition",
+  commercial: "commercial",
+  it: "it",
+  labor: "labor",
+  tax: "tax",
+  other: "other",
+} as const;
+
+export type LegalSourceHierarchy =
+  (typeof LegalSourceHierarchy)[keyof typeof LegalSourceHierarchy];
+
+export const LegalSourceHierarchy = {
+  statute: "statute",
+  regulation: "regulation",
+  judgment: "judgment",
+  guideline: "guideline",
+  standard: "standard",
+} as const;
+
+export interface LegalSource {
+  id: string;
+  tenantId: string | null;
+  isSystem: boolean;
+  normRef: string;
+  title: string;
+  jurisdiction: string;
+  areaOfLaw: LegalSourceAreaOfLaw;
+  hierarchy: LegalSourceHierarchy;
+  fullText: string;
+  summary: string;
+  keywords: string[];
+  validFrom: string | null;
+  validUntil: string | null;
+  url: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export type LegalSourceInputAreaOfLaw =
+  (typeof LegalSourceInputAreaOfLaw)[keyof typeof LegalSourceInputAreaOfLaw];
+
+export const LegalSourceInputAreaOfLaw = {
+  contract: "contract",
+  data_protection: "data_protection",
+  competition: "competition",
+  commercial: "commercial",
+  it: "it",
+  labor: "labor",
+  tax: "tax",
+  other: "other",
+} as const;
+
+export type LegalSourceInputHierarchy =
+  (typeof LegalSourceInputHierarchy)[keyof typeof LegalSourceInputHierarchy];
+
+export const LegalSourceInputHierarchy = {
+  statute: "statute",
+  regulation: "regulation",
+  judgment: "judgment",
+  guideline: "guideline",
+  standard: "standard",
+} as const;
+
+export interface LegalSourceInput {
+  /**
+   * @minLength 2
+   * @maxLength 160
+   */
+  normRef: string;
+  /**
+   * @minLength 2
+   * @maxLength 240
+   */
+  title: string;
+  /** @maxLength 4 */
+  jurisdiction?: string;
+  areaOfLaw: LegalSourceInputAreaOfLaw;
+  hierarchy?: LegalSourceInputHierarchy;
+  /** @minLength 4 */
+  fullText: string;
+  /** @minLength 4 */
+  summary: string;
+  keywords?: string[];
+  url?: string | null;
+  validFrom?: string | null;
+  validUntil?: string | null;
+}
+
+export type LegalSourcePatchAreaOfLaw =
+  (typeof LegalSourcePatchAreaOfLaw)[keyof typeof LegalSourcePatchAreaOfLaw];
+
+export const LegalSourcePatchAreaOfLaw = {
+  contract: "contract",
+  data_protection: "data_protection",
+  competition: "competition",
+  commercial: "commercial",
+  it: "it",
+  labor: "labor",
+  tax: "tax",
+  other: "other",
+} as const;
+
+export type LegalSourcePatchHierarchy =
+  (typeof LegalSourcePatchHierarchy)[keyof typeof LegalSourcePatchHierarchy];
+
+export const LegalSourcePatchHierarchy = {
+  statute: "statute",
+  regulation: "regulation",
+  judgment: "judgment",
+  guideline: "guideline",
+  standard: "standard",
+} as const;
+
+export interface LegalSourcePatch {
+  normRef?: string;
+  title?: string;
+  jurisdiction?: string;
+  areaOfLaw?: LegalSourcePatchAreaOfLaw;
+  hierarchy?: LegalSourcePatchHierarchy;
+  fullText?: string;
+  summary?: string;
+  keywords?: string[];
+  url?: string | null;
+  validFrom?: string | null;
+  validUntil?: string | null;
+}
+
+export type LegalPrecedentNegotiationOutcome =
+  (typeof LegalPrecedentNegotiationOutcome)[keyof typeof LegalPrecedentNegotiationOutcome];
+
+export const LegalPrecedentNegotiationOutcome = {
+  standard: "standard",
+  softened: "softened",
+  hardened: "hardened",
+  custom: "custom",
+} as const;
+
+export interface LegalPrecedent {
+  id: string;
+  tenantId: string;
+  contractId: string;
+  contractClauseId: string | null;
+  family: string;
+  variantId: string | null;
+  negotiationOutcome: LegalPrecedentNegotiationOutcome;
+  counterpartyAccountId: string | null;
+  counterpartyName: string | null;
+  industry: string | null;
+  contractValueCents: number | null;
+  signedAt: string | null;
+  snippet: string;
+  keywords: string[];
+  createdAt: string;
+}
+
+export interface LegalPrecedentBackfillResult {
+  ok: boolean;
+  contracts: number;
+  indexed: number;
+}
+
+export type LegalKnowledgeNormHitKind =
+  (typeof LegalKnowledgeNormHitKind)[keyof typeof LegalKnowledgeNormHitKind];
+
+export const LegalKnowledgeNormHitKind = {
+  norm: "norm",
+} as const;
+
+export interface LegalKnowledgeNormHit {
+  kind: LegalKnowledgeNormHitKind;
+  id: string;
+  ref: string;
+  title: string;
+  jurisdiction: string;
+  areaOfLaw: string;
+  hierarchy: string;
+  snippet: string;
+  url?: string | null;
+  score: number;
+}
+
+export type LegalKnowledgePrecedentHitKind =
+  (typeof LegalKnowledgePrecedentHitKind)[keyof typeof LegalKnowledgePrecedentHitKind];
+
+export const LegalKnowledgePrecedentHitKind = {
+  precedent: "precedent",
+} as const;
+
+export interface LegalKnowledgePrecedentHit {
+  kind: LegalKnowledgePrecedentHitKind;
+  id: string;
+  contractId: string;
+  family: string;
+  variantId?: string | null;
+  outcome: string;
+  counterpartyName?: string | null;
+  industry?: string | null;
+  signedAt?: string | null;
+  snippet: string;
+  score: number;
+}
+
+export interface LegalKnowledgeSearchResult {
+  sources: LegalKnowledgeNormHit[];
+  precedents: LegalKnowledgePrecedentHit[];
+}
+
 export type ListCompaniesParams = {
   /**
  * If true, returns the FULL permitted set (ignoring active scope filter).
@@ -6270,6 +6500,45 @@ export type ExecuteCopilotInsight200 = {
   ok?: boolean;
   insightId?: string;
   result?: ExecuteCopilotInsight200Result;
+};
+
+export type ListLegalSourcesParams = {
+  jurisdiction?: string;
+  areaOfLaw?: string;
+};
+
+export type ListLegalPrecedentsParams = {
+  family?: string;
+  outcome?: ListLegalPrecedentsOutcome;
+  counterparty?: string;
+};
+
+export type ListLegalPrecedentsOutcome =
+  (typeof ListLegalPrecedentsOutcome)[keyof typeof ListLegalPrecedentsOutcome];
+
+export const ListLegalPrecedentsOutcome = {
+  standard: "standard",
+  softened: "softened",
+  hardened: "hardened",
+  custom: "custom",
+} as const;
+
+export type SearchLegalKnowledgeParams = {
+  q?: string;
+  family?: string;
+  jurisdiction?: string;
+  areaOfLaw?: string;
+};
+
+export type SearchLegalKnowledgeForUserParams = {
+  q?: string;
+  family?: string;
+  jurisdiction?: string;
+  areaOfLaw?: string;
+  /**
+   * Convenience filter — augments the query with the counterparty name.
+   */
+  counterparty?: string;
 };
 
 export type ListAuditEntriesParams = {

@@ -194,6 +194,12 @@ import type {
   LeadListResponse,
   LeadPatch,
   LeadsReport,
+  LegalKnowledgeSearchResult,
+  LegalPrecedent,
+  LegalPrecedentBackfillResult,
+  LegalSource,
+  LegalSourceInput,
+  LegalSourcePatch,
   ListAccountsParams,
   ListAiRecommendationsParams,
   ListApprovalsParams,
@@ -213,6 +219,8 @@ import type {
   ListExternalContractsParams,
   ListGdprAccessLogParams,
   ListLeadsParams,
+  ListLegalPrecedentsParams,
+  ListLegalSourcesParams,
   ListMyDelegations200,
   ListNegotiationsParams,
   ListObligationsParams,
@@ -299,6 +307,8 @@ import type {
   SavedViewPatch,
   ScopeTree,
   SearchGdprSubjectsParams,
+  SearchLegalKnowledgeForUserParams,
+  SearchLegalKnowledgeParams,
   SetClauseFamilyCuadCategoriesBody,
   SetContractTypeCuadExpectations200,
   SetContractTypeCuadExpectationsBody,
@@ -14658,6 +14668,1158 @@ export const useAskHelpBot = <
 > => {
   return useMutation(getAskHelpBotMutationOptions(options));
 };
+
+/**
+ * @summary List legal sources visible to this tenant (system + tenant-owned).
+ */
+export const getListLegalSourcesUrl = (params?: ListLegalSourcesParams) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? "null" : value.toString());
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0
+    ? `/api/v1/admin/legal-sources?${stringifiedParams}`
+    : `/api/v1/admin/legal-sources`;
+};
+
+export const listLegalSources = async (
+  params?: ListLegalSourcesParams,
+  options?: RequestInit,
+): Promise<LegalSource[]> => {
+  return customFetch<LegalSource[]>(getListLegalSourcesUrl(params), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getListLegalSourcesQueryKey = (
+  params?: ListLegalSourcesParams,
+) => {
+  return [`/api/v1/admin/legal-sources`, ...(params ? [params] : [])] as const;
+};
+
+export const getListLegalSourcesQueryOptions = <
+  TData = Awaited<ReturnType<typeof listLegalSources>>,
+  TError = ErrorType<unknown>,
+>(
+  params?: ListLegalSourcesParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof listLegalSources>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey =
+    queryOptions?.queryKey ?? getListLegalSourcesQueryKey(params);
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof listLegalSources>>
+  > = ({ signal }) => listLegalSources(params, { signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof listLegalSources>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type ListLegalSourcesQueryResult = NonNullable<
+  Awaited<ReturnType<typeof listLegalSources>>
+>;
+export type ListLegalSourcesQueryError = ErrorType<unknown>;
+
+/**
+ * @summary List legal sources visible to this tenant (system + tenant-owned).
+ */
+
+export function useListLegalSources<
+  TData = Awaited<ReturnType<typeof listLegalSources>>,
+  TError = ErrorType<unknown>,
+>(
+  params?: ListLegalSourcesParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof listLegalSources>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getListLegalSourcesQueryOptions(params, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+export const getCreateLegalSourceUrl = () => {
+  return `/api/v1/admin/legal-sources`;
+};
+
+export const createLegalSource = async (
+  legalSourceInput: LegalSourceInput,
+  options?: RequestInit,
+): Promise<LegalSource> => {
+  return customFetch<LegalSource>(getCreateLegalSourceUrl(), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(legalSourceInput),
+  });
+};
+
+export const getCreateLegalSourceMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof createLegalSource>>,
+    TError,
+    { data: BodyType<LegalSourceInput> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof createLegalSource>>,
+  TError,
+  { data: BodyType<LegalSourceInput> },
+  TContext
+> => {
+  const mutationKey = ["createLegalSource"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof createLegalSource>>,
+    { data: BodyType<LegalSourceInput> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return createLegalSource(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type CreateLegalSourceMutationResult = NonNullable<
+  Awaited<ReturnType<typeof createLegalSource>>
+>;
+export type CreateLegalSourceMutationBody = BodyType<LegalSourceInput>;
+export type CreateLegalSourceMutationError = ErrorType<unknown>;
+
+export const useCreateLegalSource = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof createLegalSource>>,
+    TError,
+    { data: BodyType<LegalSourceInput> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof createLegalSource>>,
+  TError,
+  { data: BodyType<LegalSourceInput> },
+  TContext
+> => {
+  return useMutation(getCreateLegalSourceMutationOptions(options));
+};
+
+export const getGetLegalSourceUrl = (id: string) => {
+  return `/api/v1/admin/legal-sources/${id}`;
+};
+
+export const getLegalSource = async (
+  id: string,
+  options?: RequestInit,
+): Promise<LegalSource> => {
+  return customFetch<LegalSource>(getGetLegalSourceUrl(id), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getGetLegalSourceQueryKey = (id: string) => {
+  return [`/api/v1/admin/legal-sources/${id}`] as const;
+};
+
+export const getGetLegalSourceQueryOptions = <
+  TData = Awaited<ReturnType<typeof getLegalSource>>,
+  TError = ErrorType<void>,
+>(
+  id: string,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getLegalSource>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getGetLegalSourceQueryKey(id);
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof getLegalSource>>> = ({
+    signal,
+  }) => getLegalSource(id, { signal, ...requestOptions });
+
+  return {
+    queryKey,
+    queryFn,
+    enabled: !!id,
+    ...queryOptions,
+  } as UseQueryOptions<
+    Awaited<ReturnType<typeof getLegalSource>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetLegalSourceQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getLegalSource>>
+>;
+export type GetLegalSourceQueryError = ErrorType<void>;
+
+export function useGetLegalSource<
+  TData = Awaited<ReturnType<typeof getLegalSource>>,
+  TError = ErrorType<void>,
+>(
+  id: string,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getLegalSource>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetLegalSourceQueryOptions(id, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+export const getUpdateLegalSourceUrl = (id: string) => {
+  return `/api/v1/admin/legal-sources/${id}`;
+};
+
+export const updateLegalSource = async (
+  id: string,
+  legalSourcePatch: LegalSourcePatch,
+  options?: RequestInit,
+): Promise<LegalSource> => {
+  return customFetch<LegalSource>(getUpdateLegalSourceUrl(id), {
+    ...options,
+    method: "PATCH",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(legalSourcePatch),
+  });
+};
+
+export const getUpdateLegalSourceMutationOptions = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof updateLegalSource>>,
+    TError,
+    { id: string; data: BodyType<LegalSourcePatch> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof updateLegalSource>>,
+  TError,
+  { id: string; data: BodyType<LegalSourcePatch> },
+  TContext
+> => {
+  const mutationKey = ["updateLegalSource"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof updateLegalSource>>,
+    { id: string; data: BodyType<LegalSourcePatch> }
+  > = (props) => {
+    const { id, data } = props ?? {};
+
+    return updateLegalSource(id, data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type UpdateLegalSourceMutationResult = NonNullable<
+  Awaited<ReturnType<typeof updateLegalSource>>
+>;
+export type UpdateLegalSourceMutationBody = BodyType<LegalSourcePatch>;
+export type UpdateLegalSourceMutationError = ErrorType<void>;
+
+export const useUpdateLegalSource = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof updateLegalSource>>,
+    TError,
+    { id: string; data: BodyType<LegalSourcePatch> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof updateLegalSource>>,
+  TError,
+  { id: string; data: BodyType<LegalSourcePatch> },
+  TContext
+> => {
+  return useMutation(getUpdateLegalSourceMutationOptions(options));
+};
+
+export const getDeleteLegalSourceUrl = (id: string) => {
+  return `/api/v1/admin/legal-sources/${id}`;
+};
+
+export const deleteLegalSource = async (
+  id: string,
+  options?: RequestInit,
+): Promise<void> => {
+  return customFetch<void>(getDeleteLegalSourceUrl(id), {
+    ...options,
+    method: "DELETE",
+  });
+};
+
+export const getDeleteLegalSourceMutationOptions = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof deleteLegalSource>>,
+    TError,
+    { id: string },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof deleteLegalSource>>,
+  TError,
+  { id: string },
+  TContext
+> => {
+  const mutationKey = ["deleteLegalSource"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof deleteLegalSource>>,
+    { id: string }
+  > = (props) => {
+    const { id } = props ?? {};
+
+    return deleteLegalSource(id, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type DeleteLegalSourceMutationResult = NonNullable<
+  Awaited<ReturnType<typeof deleteLegalSource>>
+>;
+
+export type DeleteLegalSourceMutationError = ErrorType<void>;
+
+export const useDeleteLegalSource = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof deleteLegalSource>>,
+    TError,
+    { id: string },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof deleteLegalSource>>,
+  TError,
+  { id: string },
+  TContext
+> => {
+  return useMutation(getDeleteLegalSourceMutationOptions(options));
+};
+
+export const getListLegalPrecedentsUrl = (
+  params?: ListLegalPrecedentsParams,
+) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? "null" : value.toString());
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0
+    ? `/api/v1/admin/legal-precedents?${stringifiedParams}`
+    : `/api/v1/admin/legal-precedents`;
+};
+
+export const listLegalPrecedents = async (
+  params?: ListLegalPrecedentsParams,
+  options?: RequestInit,
+): Promise<LegalPrecedent[]> => {
+  return customFetch<LegalPrecedent[]>(getListLegalPrecedentsUrl(params), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getListLegalPrecedentsQueryKey = (
+  params?: ListLegalPrecedentsParams,
+) => {
+  return [
+    `/api/v1/admin/legal-precedents`,
+    ...(params ? [params] : []),
+  ] as const;
+};
+
+export const getListLegalPrecedentsQueryOptions = <
+  TData = Awaited<ReturnType<typeof listLegalPrecedents>>,
+  TError = ErrorType<unknown>,
+>(
+  params?: ListLegalPrecedentsParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof listLegalPrecedents>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey =
+    queryOptions?.queryKey ?? getListLegalPrecedentsQueryKey(params);
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof listLegalPrecedents>>
+  > = ({ signal }) =>
+    listLegalPrecedents(params, { signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof listLegalPrecedents>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type ListLegalPrecedentsQueryResult = NonNullable<
+  Awaited<ReturnType<typeof listLegalPrecedents>>
+>;
+export type ListLegalPrecedentsQueryError = ErrorType<unknown>;
+
+export function useListLegalPrecedents<
+  TData = Awaited<ReturnType<typeof listLegalPrecedents>>,
+  TError = ErrorType<unknown>,
+>(
+  params?: ListLegalPrecedentsParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof listLegalPrecedents>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getListLegalPrecedentsQueryOptions(params, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+export const getGetLegalPrecedentUrl = (id: string) => {
+  return `/api/v1/admin/legal-precedents/${id}`;
+};
+
+export const getLegalPrecedent = async (
+  id: string,
+  options?: RequestInit,
+): Promise<LegalPrecedent> => {
+  return customFetch<LegalPrecedent>(getGetLegalPrecedentUrl(id), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getGetLegalPrecedentQueryKey = (id: string) => {
+  return [`/api/v1/admin/legal-precedents/${id}`] as const;
+};
+
+export const getGetLegalPrecedentQueryOptions = <
+  TData = Awaited<ReturnType<typeof getLegalPrecedent>>,
+  TError = ErrorType<void>,
+>(
+  id: string,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getLegalPrecedent>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getGetLegalPrecedentQueryKey(id);
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof getLegalPrecedent>>
+  > = ({ signal }) => getLegalPrecedent(id, { signal, ...requestOptions });
+
+  return {
+    queryKey,
+    queryFn,
+    enabled: !!id,
+    ...queryOptions,
+  } as UseQueryOptions<
+    Awaited<ReturnType<typeof getLegalPrecedent>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetLegalPrecedentQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getLegalPrecedent>>
+>;
+export type GetLegalPrecedentQueryError = ErrorType<void>;
+
+export function useGetLegalPrecedent<
+  TData = Awaited<ReturnType<typeof getLegalPrecedent>>,
+  TError = ErrorType<void>,
+>(
+  id: string,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getLegalPrecedent>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetLegalPrecedentQueryOptions(id, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+export const getDeleteLegalPrecedentUrl = (id: string) => {
+  return `/api/v1/admin/legal-precedents/${id}`;
+};
+
+export const deleteLegalPrecedent = async (
+  id: string,
+  options?: RequestInit,
+): Promise<void> => {
+  return customFetch<void>(getDeleteLegalPrecedentUrl(id), {
+    ...options,
+    method: "DELETE",
+  });
+};
+
+export const getDeleteLegalPrecedentMutationOptions = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof deleteLegalPrecedent>>,
+    TError,
+    { id: string },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof deleteLegalPrecedent>>,
+  TError,
+  { id: string },
+  TContext
+> => {
+  const mutationKey = ["deleteLegalPrecedent"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof deleteLegalPrecedent>>,
+    { id: string }
+  > = (props) => {
+    const { id } = props ?? {};
+
+    return deleteLegalPrecedent(id, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type DeleteLegalPrecedentMutationResult = NonNullable<
+  Awaited<ReturnType<typeof deleteLegalPrecedent>>
+>;
+
+export type DeleteLegalPrecedentMutationError = ErrorType<void>;
+
+export const useDeleteLegalPrecedent = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof deleteLegalPrecedent>>,
+    TError,
+    { id: string },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof deleteLegalPrecedent>>,
+  TError,
+  { id: string },
+  TContext
+> => {
+  return useMutation(getDeleteLegalPrecedentMutationOptions(options));
+};
+
+/**
+ * @summary Re-index every signed contract's clauses as precedents.
+ */
+export const getBackfillLegalPrecedentsUrl = () => {
+  return `/api/v1/admin/legal-precedents/backfill`;
+};
+
+export const backfillLegalPrecedents = async (
+  options?: RequestInit,
+): Promise<LegalPrecedentBackfillResult> => {
+  return customFetch<LegalPrecedentBackfillResult>(
+    getBackfillLegalPrecedentsUrl(),
+    {
+      ...options,
+      method: "POST",
+    },
+  );
+};
+
+export const getBackfillLegalPrecedentsMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof backfillLegalPrecedents>>,
+    TError,
+    void,
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof backfillLegalPrecedents>>,
+  TError,
+  void,
+  TContext
+> => {
+  const mutationKey = ["backfillLegalPrecedents"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof backfillLegalPrecedents>>,
+    void
+  > = () => {
+    return backfillLegalPrecedents(requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type BackfillLegalPrecedentsMutationResult = NonNullable<
+  Awaited<ReturnType<typeof backfillLegalPrecedents>>
+>;
+
+export type BackfillLegalPrecedentsMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Re-index every signed contract's clauses as precedents.
+ */
+export const useBackfillLegalPrecedents = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof backfillLegalPrecedents>>,
+    TError,
+    void,
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof backfillLegalPrecedents>>,
+  TError,
+  void,
+  TContext
+> => {
+  return useMutation(getBackfillLegalPrecedentsMutationOptions(options));
+};
+
+/**
+ * @summary Hybrid token-overlap search across norms and precedents.
+ */
+export const getSearchLegalKnowledgeUrl = (
+  params?: SearchLegalKnowledgeParams,
+) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? "null" : value.toString());
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0
+    ? `/api/v1/admin/legal-knowledge/search?${stringifiedParams}`
+    : `/api/v1/admin/legal-knowledge/search`;
+};
+
+export const searchLegalKnowledge = async (
+  params?: SearchLegalKnowledgeParams,
+  options?: RequestInit,
+): Promise<LegalKnowledgeSearchResult> => {
+  return customFetch<LegalKnowledgeSearchResult>(
+    getSearchLegalKnowledgeUrl(params),
+    {
+      ...options,
+      method: "GET",
+    },
+  );
+};
+
+export const getSearchLegalKnowledgeQueryKey = (
+  params?: SearchLegalKnowledgeParams,
+) => {
+  return [
+    `/api/v1/admin/legal-knowledge/search`,
+    ...(params ? [params] : []),
+  ] as const;
+};
+
+export const getSearchLegalKnowledgeQueryOptions = <
+  TData = Awaited<ReturnType<typeof searchLegalKnowledge>>,
+  TError = ErrorType<unknown>,
+>(
+  params?: SearchLegalKnowledgeParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof searchLegalKnowledge>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey =
+    queryOptions?.queryKey ?? getSearchLegalKnowledgeQueryKey(params);
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof searchLegalKnowledge>>
+  > = ({ signal }) =>
+    searchLegalKnowledge(params, { signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof searchLegalKnowledge>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type SearchLegalKnowledgeQueryResult = NonNullable<
+  Awaited<ReturnType<typeof searchLegalKnowledge>>
+>;
+export type SearchLegalKnowledgeQueryError = ErrorType<unknown>;
+
+/**
+ * @summary Hybrid token-overlap search across norms and precedents.
+ */
+
+export function useSearchLegalKnowledge<
+  TData = Awaited<ReturnType<typeof searchLegalKnowledge>>,
+  TError = ErrorType<unknown>,
+>(
+  params?: SearchLegalKnowledgeParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof searchLegalKnowledge>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getSearchLegalKnowledgeQueryOptions(params, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Read-only hybrid search across legal sources and internal precedents
+for any signed-in user. Tenant-scoped. Powers the user-facing
+Wissensbasis page and the click-through view from AI citations.
+
+ */
+export const getSearchLegalKnowledgeForUserUrl = (
+  params?: SearchLegalKnowledgeForUserParams,
+) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? "null" : value.toString());
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0
+    ? `/api/v1/legal-knowledge/search?${stringifiedParams}`
+    : `/api/v1/legal-knowledge/search`;
+};
+
+export const searchLegalKnowledgeForUser = async (
+  params?: SearchLegalKnowledgeForUserParams,
+  options?: RequestInit,
+): Promise<LegalKnowledgeSearchResult> => {
+  return customFetch<LegalKnowledgeSearchResult>(
+    getSearchLegalKnowledgeForUserUrl(params),
+    {
+      ...options,
+      method: "GET",
+    },
+  );
+};
+
+export const getSearchLegalKnowledgeForUserQueryKey = (
+  params?: SearchLegalKnowledgeForUserParams,
+) => {
+  return [
+    `/api/v1/legal-knowledge/search`,
+    ...(params ? [params] : []),
+  ] as const;
+};
+
+export const getSearchLegalKnowledgeForUserQueryOptions = <
+  TData = Awaited<ReturnType<typeof searchLegalKnowledgeForUser>>,
+  TError = ErrorType<unknown>,
+>(
+  params?: SearchLegalKnowledgeForUserParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof searchLegalKnowledgeForUser>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey =
+    queryOptions?.queryKey ?? getSearchLegalKnowledgeForUserQueryKey(params);
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof searchLegalKnowledgeForUser>>
+  > = ({ signal }) =>
+    searchLegalKnowledgeForUser(params, { signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof searchLegalKnowledgeForUser>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type SearchLegalKnowledgeForUserQueryResult = NonNullable<
+  Awaited<ReturnType<typeof searchLegalKnowledgeForUser>>
+>;
+export type SearchLegalKnowledgeForUserQueryError = ErrorType<unknown>;
+
+/**
+ * @summary Read-only hybrid search across legal sources and internal precedents
+for any signed-in user. Tenant-scoped. Powers the user-facing
+Wissensbasis page and the click-through view from AI citations.
+
+ */
+
+export function useSearchLegalKnowledgeForUser<
+  TData = Awaited<ReturnType<typeof searchLegalKnowledgeForUser>>,
+  TError = ErrorType<unknown>,
+>(
+  params?: SearchLegalKnowledgeForUserParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof searchLegalKnowledgeForUser>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getSearchLegalKnowledgeForUserQueryOptions(
+    params,
+    options,
+  );
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Fetch the full text of a legal source for citation drill-down.
+ */
+export const getGetLegalSourceForUserUrl = (id: string) => {
+  return `/api/v1/legal-knowledge/sources/${id}`;
+};
+
+export const getLegalSourceForUser = async (
+  id: string,
+  options?: RequestInit,
+): Promise<LegalSource> => {
+  return customFetch<LegalSource>(getGetLegalSourceForUserUrl(id), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getGetLegalSourceForUserQueryKey = (id: string) => {
+  return [`/api/v1/legal-knowledge/sources/${id}`] as const;
+};
+
+export const getGetLegalSourceForUserQueryOptions = <
+  TData = Awaited<ReturnType<typeof getLegalSourceForUser>>,
+  TError = ErrorType<void>,
+>(
+  id: string,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getLegalSourceForUser>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey =
+    queryOptions?.queryKey ?? getGetLegalSourceForUserQueryKey(id);
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof getLegalSourceForUser>>
+  > = ({ signal }) => getLegalSourceForUser(id, { signal, ...requestOptions });
+
+  return {
+    queryKey,
+    queryFn,
+    enabled: !!id,
+    ...queryOptions,
+  } as UseQueryOptions<
+    Awaited<ReturnType<typeof getLegalSourceForUser>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetLegalSourceForUserQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getLegalSourceForUser>>
+>;
+export type GetLegalSourceForUserQueryError = ErrorType<void>;
+
+/**
+ * @summary Fetch the full text of a legal source for citation drill-down.
+ */
+
+export function useGetLegalSourceForUser<
+  TData = Awaited<ReturnType<typeof getLegalSourceForUser>>,
+  TError = ErrorType<void>,
+>(
+  id: string,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getLegalSourceForUser>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetLegalSourceForUserQueryOptions(id, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Fetch the full text of an internal precedent for citation drill-down.
+ */
+export const getGetLegalPrecedentForUserUrl = (id: string) => {
+  return `/api/v1/legal-knowledge/precedents/${id}`;
+};
+
+export const getLegalPrecedentForUser = async (
+  id: string,
+  options?: RequestInit,
+): Promise<LegalPrecedent> => {
+  return customFetch<LegalPrecedent>(getGetLegalPrecedentForUserUrl(id), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getGetLegalPrecedentForUserQueryKey = (id: string) => {
+  return [`/api/v1/legal-knowledge/precedents/${id}`] as const;
+};
+
+export const getGetLegalPrecedentForUserQueryOptions = <
+  TData = Awaited<ReturnType<typeof getLegalPrecedentForUser>>,
+  TError = ErrorType<void>,
+>(
+  id: string,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getLegalPrecedentForUser>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey =
+    queryOptions?.queryKey ?? getGetLegalPrecedentForUserQueryKey(id);
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof getLegalPrecedentForUser>>
+  > = ({ signal }) =>
+    getLegalPrecedentForUser(id, { signal, ...requestOptions });
+
+  return {
+    queryKey,
+    queryFn,
+    enabled: !!id,
+    ...queryOptions,
+  } as UseQueryOptions<
+    Awaited<ReturnType<typeof getLegalPrecedentForUser>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetLegalPrecedentForUserQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getLegalPrecedentForUser>>
+>;
+export type GetLegalPrecedentForUserQueryError = ErrorType<void>;
+
+/**
+ * @summary Fetch the full text of an internal precedent for citation drill-down.
+ */
+
+export function useGetLegalPrecedentForUser<
+  TData = Awaited<ReturnType<typeof getLegalPrecedentForUser>>,
+  TError = ErrorType<void>,
+>(
+  id: string,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getLegalPrecedentForUser>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetLegalPrecedentForUserQueryOptions(id, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
 
 export const getListAuditEntriesUrl = (params?: ListAuditEntriesParams) => {
   const normalizedParams = new URLSearchParams();

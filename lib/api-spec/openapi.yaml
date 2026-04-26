@@ -31,6 +31,7 @@ tags:
   - name: copilot
   - name: activity
   - name: Storage
+  - name: legalKnowledge
 
 paths:
 
@@ -3460,6 +3461,251 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/HelpBotReply" }
+
+  # ───────────── JURISTISCHE WISSENSBASIS (Task #227) ─────────────
+
+  /admin/legal-sources:
+    get:
+      operationId: listLegalSources
+      tags: [legalKnowledge]
+      summary: List legal sources visible to this tenant (system + tenant-owned).
+      parameters:
+        - in: query
+          name: jurisdiction
+          schema: { type: string }
+        - in: query
+          name: areaOfLaw
+          schema: { type: string }
+      responses:
+        "200":
+          description: ok
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/LegalSource" }
+    post:
+      operationId: createLegalSource
+      tags: [legalKnowledge]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/LegalSourceInput" }
+      responses:
+        "201":
+          description: created
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/LegalSource" }
+
+  /admin/legal-sources/{id}:
+    get:
+      operationId: getLegalSource
+      tags: [legalKnowledge]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: ok
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/LegalSource" }
+        "404": { description: not found }
+    patch:
+      operationId: updateLegalSource
+      tags: [legalKnowledge]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/LegalSourcePatch" }
+      responses:
+        "200":
+          description: updated
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/LegalSource" }
+        "403": { description: system source — clone instead }
+        "404": { description: not found }
+    delete:
+      operationId: deleteLegalSource
+      tags: [legalKnowledge]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        "204": { description: deleted }
+        "403": { description: system source cannot be deleted }
+        "404": { description: not found }
+
+  /admin/legal-precedents:
+    get:
+      operationId: listLegalPrecedents
+      tags: [legalKnowledge]
+      parameters:
+        - in: query
+          name: family
+          schema: { type: string }
+        - in: query
+          name: outcome
+          schema:
+            type: string
+            enum: [standard, softened, hardened, custom]
+        - in: query
+          name: counterparty
+          schema: { type: string }
+      responses:
+        "200":
+          description: ok
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/LegalPrecedent" }
+
+  /admin/legal-precedents/{id}:
+    get:
+      operationId: getLegalPrecedent
+      tags: [legalKnowledge]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: ok
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/LegalPrecedent" }
+        "404": { description: not found }
+    delete:
+      operationId: deleteLegalPrecedent
+      tags: [legalKnowledge]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        "204": { description: deleted }
+        "404": { description: not found }
+
+  /admin/legal-precedents/backfill:
+    post:
+      operationId: backfillLegalPrecedents
+      tags: [legalKnowledge]
+      summary: Re-index every signed contract's clauses as precedents.
+      responses:
+        "200":
+          description: ok
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/LegalPrecedentBackfillResult" }
+
+  /admin/legal-knowledge/search:
+    get:
+      operationId: searchLegalKnowledge
+      tags: [legalKnowledge]
+      summary: Hybrid token-overlap search across norms and precedents.
+      parameters:
+        - in: query
+          name: q
+          schema: { type: string }
+        - in: query
+          name: family
+          schema: { type: string }
+        - in: query
+          name: jurisdiction
+          schema: { type: string }
+        - in: query
+          name: areaOfLaw
+          schema: { type: string }
+      responses:
+        "200":
+          description: ok
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/LegalKnowledgeSearchResult" }
+
+  /legal-knowledge/search:
+    get:
+      operationId: searchLegalKnowledgeForUser
+      tags: [legalKnowledge]
+      summary: |
+        Read-only hybrid search across legal sources and internal precedents
+        for any signed-in user. Tenant-scoped. Powers the user-facing
+        Wissensbasis page and the click-through view from AI citations.
+      parameters:
+        - in: query
+          name: q
+          schema: { type: string }
+        - in: query
+          name: family
+          schema: { type: string }
+        - in: query
+          name: jurisdiction
+          schema: { type: string }
+        - in: query
+          name: areaOfLaw
+          schema: { type: string }
+        - in: query
+          name: counterparty
+          schema: { type: string }
+          description: Convenience filter — augments the query with the counterparty name.
+      responses:
+        "200":
+          description: ok
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/LegalKnowledgeSearchResult" }
+
+  /legal-knowledge/sources/{id}:
+    get:
+      operationId: getLegalSourceForUser
+      tags: [legalKnowledge]
+      summary: Fetch the full text of a legal source for citation drill-down.
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: ok
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/LegalSource" }
+        "404": { description: not found }
+
+  /legal-knowledge/precedents/{id}:
+    get:
+      operationId: getLegalPrecedentForUser
+      tags: [legalKnowledge]
+      summary: Fetch the full text of an internal precedent for citation drill-down.
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: ok
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/LegalPrecedent" }
+        "404": { description: not found }
 
   # ───────────── AUDIT LOG ─────────────
 
@@ -9233,6 +9479,12 @@ components:
         recommendedAction:
           type: string
           enum: [none, open_quote, open_contract, open_approval, open_negotiation, open_price_increase]
+        # Quellenangaben aus der juristischen Wissensbasis (Task #227).
+        # Optional, weil ältere Aufrufe und Tenants ohne Wissensbasis das Feld
+        # nicht zwingend liefern.
+        relatedSources:
+          type: array
+          items: { $ref: "#/components/schemas/LegalKnowledgeSourceRef" }
         confidence: { type: string, enum: [low, medium, high] }
         confidenceReason: { type: string }
 
@@ -10918,3 +11170,256 @@ components:
           type: ["number", "null"]
           minimum: 0
           maximum: 1
+
+    # ─────────── Juristische Wissensbasis (Task #227) ───────────
+
+    LegalSource:
+      type: object
+      required:
+        - id
+        - tenantId
+        - isSystem
+        - normRef
+        - title
+        - jurisdiction
+        - areaOfLaw
+        - hierarchy
+        - fullText
+        - summary
+        - keywords
+        - validFrom
+        - validUntil
+        - url
+        - createdAt
+        - updatedAt
+      properties:
+        id: { type: string }
+        tenantId:
+          oneOf:
+            - { type: string }
+            - { type: "null" }
+        isSystem: { type: boolean }
+        normRef: { type: string }
+        title: { type: string }
+        jurisdiction: { type: string }
+        areaOfLaw:
+          type: string
+          enum: [contract, data_protection, competition, commercial, it, labor, tax, other]
+        hierarchy:
+          type: string
+          enum: [statute, regulation, judgment, guideline, standard]
+        fullText: { type: string }
+        summary: { type: string }
+        keywords:
+          type: array
+          items: { type: string }
+        validFrom:
+          oneOf:
+            - { type: string, format: date }
+            - { type: "null" }
+        validUntil:
+          oneOf:
+            - { type: string, format: date }
+            - { type: "null" }
+        url:
+          oneOf:
+            - { type: string }
+            - { type: "null" }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+
+    LegalSourceInput:
+      type: object
+      required: [normRef, title, areaOfLaw, fullText, summary]
+      properties:
+        normRef: { type: string, minLength: 2, maxLength: 160 }
+        title: { type: string, minLength: 2, maxLength: 240 }
+        jurisdiction: { type: string, maxLength: 4 }
+        areaOfLaw:
+          type: string
+          enum: [contract, data_protection, competition, commercial, it, labor, tax, other]
+        hierarchy:
+          type: string
+          enum: [statute, regulation, judgment, guideline, standard]
+        fullText: { type: string, minLength: 4 }
+        summary: { type: string, minLength: 4 }
+        keywords:
+          type: array
+          items: { type: string }
+        url:
+          oneOf:
+            - { type: string }
+            - { type: "null" }
+        validFrom:
+          oneOf:
+            - { type: string, format: date }
+            - { type: "null" }
+        validUntil:
+          oneOf:
+            - { type: string, format: date }
+            - { type: "null" }
+
+    LegalSourcePatch:
+      type: object
+      properties:
+        normRef: { type: string }
+        title: { type: string }
+        jurisdiction: { type: string }
+        areaOfLaw:
+          type: string
+          enum: [contract, data_protection, competition, commercial, it, labor, tax, other]
+        hierarchy:
+          type: string
+          enum: [statute, regulation, judgment, guideline, standard]
+        fullText: { type: string }
+        summary: { type: string }
+        keywords:
+          type: array
+          items: { type: string }
+        url:
+          oneOf:
+            - { type: string }
+            - { type: "null" }
+        validFrom:
+          oneOf:
+            - { type: string, format: date }
+            - { type: "null" }
+        validUntil:
+          oneOf:
+            - { type: string, format: date }
+            - { type: "null" }
+
+    LegalPrecedent:
+      type: object
+      required:
+        - id
+        - tenantId
+        - contractId
+        - contractClauseId
+        - family
+        - variantId
+        - negotiationOutcome
+        - counterpartyAccountId
+        - counterpartyName
+        - industry
+        - contractValueCents
+        - signedAt
+        - snippet
+        - keywords
+        - createdAt
+      properties:
+        id: { type: string }
+        tenantId: { type: string }
+        contractId: { type: string }
+        contractClauseId:
+          oneOf:
+            - { type: string }
+            - { type: "null" }
+        family: { type: string }
+        variantId:
+          oneOf:
+            - { type: string }
+            - { type: "null" }
+        negotiationOutcome:
+          type: string
+          enum: [standard, softened, hardened, custom]
+        counterpartyAccountId:
+          oneOf:
+            - { type: string }
+            - { type: "null" }
+        counterpartyName:
+          oneOf:
+            - { type: string }
+            - { type: "null" }
+        industry:
+          oneOf:
+            - { type: string }
+            - { type: "null" }
+        contractValueCents:
+          oneOf:
+            - { type: integer }
+            - { type: "null" }
+        signedAt:
+          oneOf:
+            - { type: string, format: date-time }
+            - { type: "null" }
+        snippet: { type: string }
+        keywords:
+          type: array
+          items: { type: string }
+        createdAt: { type: string, format: date-time }
+
+    LegalPrecedentBackfillResult:
+      type: object
+      required: [ok, contracts, indexed]
+      properties:
+        ok: { type: boolean, enum: [true] }
+        contracts: { type: integer }
+        indexed: { type: integer }
+
+    LegalKnowledgeNormHit:
+      type: object
+      required: [kind, id, ref, title, jurisdiction, areaOfLaw, hierarchy, snippet, score]
+      properties:
+        kind: { type: string, enum: [norm] }
+        id: { type: string }
+        ref: { type: string }
+        title: { type: string }
+        jurisdiction: { type: string }
+        areaOfLaw: { type: string }
+        hierarchy: { type: string }
+        snippet: { type: string }
+        url:
+          oneOf:
+            - { type: string }
+            - { type: "null" }
+        score: { type: number }
+
+    LegalKnowledgePrecedentHit:
+      type: object
+      required: [kind, id, contractId, family, outcome, snippet, score]
+      properties:
+        kind: { type: string, enum: [precedent] }
+        id: { type: string }
+        contractId: { type: string }
+        family: { type: string }
+        variantId:
+          oneOf:
+            - { type: string }
+            - { type: "null" }
+        outcome: { type: string }
+        counterpartyName:
+          oneOf:
+            - { type: string }
+            - { type: "null" }
+        industry:
+          oneOf:
+            - { type: string }
+            - { type: "null" }
+        signedAt:
+          oneOf:
+            - { type: string, format: date-time }
+            - { type: "null" }
+        snippet: { type: string }
+        score: { type: number }
+
+    LegalKnowledgeSearchResult:
+      type: object
+      required: [sources, precedents]
+      properties:
+        sources:
+          type: array
+          items: { $ref: "#/components/schemas/LegalKnowledgeNormHit" }
+        precedents:
+          type: array
+          items: { $ref: "#/components/schemas/LegalKnowledgePrecedentHit" }
+
+    LegalKnowledgeSourceRef:
+      type: object
+      required: [kind, id, ref]
+      properties:
+        kind: { type: string, enum: [norm, precedent] }
+        id: { type: string }
+        ref: { type: string }
+        note: { type: string }
+        snippet: { type: string }

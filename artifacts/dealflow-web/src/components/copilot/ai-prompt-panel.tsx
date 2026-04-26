@@ -17,6 +17,7 @@ import { Loader2, Sparkles } from "lucide-react";
 import { AIConfidenceBadge } from "./ai-confidence-badge";
 import { AIFeedbackButtons } from "./ai-feedback-buttons";
 import { SecondOpinionPanel } from "./second-opinion-panel";
+import { RelatedSourcesBlock, type RelatedSourceItem } from "./related-sources-block";
 
 type Mode = "deal.summary" | "pricing.review" | "approval.readiness" | "contract.risk";
 
@@ -269,6 +270,11 @@ function ResultBody<M extends Mode>({
             </ul>
           </div>
         )}
+        {/* Quellenangaben aus der juristischen Wissensbasis (Task #227).
+            `relatedSources` ist optional, weil ältere Empfehlungen ohne
+            Wissensbasis das Feld nicht enthalten. Klick öffnet den
+            Originaltext in einem Side-Sheet. */}
+        <RelatedSourcesBlock sources={(r.relatedSources ?? []) as RelatedSourceItem[]} />
       </div>
     );
   }

@@ -7,6 +7,7 @@ import {
   seedPlaceholderObjectsIdempotent,
   seedContractMvpAugmentationIdempotent,
 } from "./lib/seed";
+import { seedLegalSourcesIdempotent } from "./lib/seedLegalSources";
 import { pruneExpiredSessions } from "./lib/auth";
 import { runAllGenerators } from "./insights/generators";
 import { runRetentionSweep } from "./gdpr/service";
@@ -35,6 +36,10 @@ await seedPlaceholderObjectsIdempotent().catch((err) => {
 
 await seedContractMvpAugmentationIdempotent().catch((err) => {
   logger.error({ err }, "Contract MVP augmentation seed failed");
+});
+
+await seedLegalSourcesIdempotent().catch((err) => {
+  logger.error({ err }, "Legal sources seed failed");
 });
 
 await runAllGenerators().catch((err) => {

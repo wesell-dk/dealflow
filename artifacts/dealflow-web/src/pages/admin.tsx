@@ -60,6 +60,7 @@ import { CompanyFormDialog } from "@/components/admin/company-form-dialog";
 import { BrandFormDialog, parseAddressLine, composeAddressLine } from "@/components/admin/brand-form-dialog";
 import { ApprovalChainsCard } from "@/components/admin/approval-chains-card";
 import { AiRecommendationsMetricsCard } from "@/components/admin/ai-recommendations-metrics-card";
+import { LegalKnowledgeCard } from "@/components/admin/legal-knowledge-card";
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
@@ -416,6 +417,8 @@ export default function Admin() {
       <ApprovalChainsCard />
 
       <AiRecommendationsMetricsCard />
+
+      <LegalKnowledgeCard />
 
       {/* Erweiterte Einstellungen — Webhooks und DSGVO. Standardmäßig
           eingeklappt, weil die meisten Tenants hier mit den Defaults gut fahren

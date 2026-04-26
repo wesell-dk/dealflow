@@ -1800,3 +1800,90 @@ export const aiFeedbackTable = pgTable("ai_feedback", {
   index("ai_feedback_tenant_prompt_idx").on(t.tenantId, t.promptKey, t.createdAt),
   index("ai_feedback_tenant_outcome_idx").on(t.tenantId, t.outcome),
 ]);
+
+/* ─────────────────────────────────────────────────────────────────────────────
+ * Juristische Wissensbasis (Task #227)
+ * Zwei Tabellen:
+ *  - legal_sources     : externe Rechtsquellen (Gesetze, EU-VO, BGH-Urteile,
+ *                        Branchenstandards). tenantId NULL = vom System
+ *                        ausgeliefert; tenantId NOT NULL = Tenant-Override
+ *                        oder Tenant-eigene Quelle.
+ *  - legal_precedents  : interne Präzedenzfälle aus signierten Verträgen.
+ *                        Wird beim Vertragsabschluss automatisch indexiert.
+ * Beide Tabellen sind für deterministische Hybrid-Suche (Token-Overlap +
+ * Jurisdiktions-/Rechtsgebiet-Filter) optimiert. Pgvector wird bewusst
+ * nicht genutzt, damit kein zusätzlicher DB-Service nötig ist; die KI-
+ * Empfehlungen referenzieren die Treffer per ID + Snippet.
+ * ──────────────────────────────────────────────────────────────────────────── */
+
+export const legalSourcesTable = pgTable("legal_sources", {
+  id: id(),
+  // NULL = vom System bereitgestelltes Standard-Dokument (BGB, HGB, …).
+  // Sichtbar für jeden Tenant; nur Replit-Admins (oder Seed) ändern es.
+  tenantId: text("tenant_id"),
+  // Kanonische Norm-Referenz, z. B. "BGB § 305" oder "DSGVO Art. 28".
+  normRef: text("norm_ref").notNull(),
+  // Anzeige-Titel ("Allgemeine Geschäftsbedingungen — Einbeziehung").
+  title: text("title").notNull(),
+  // Jurisdiktion ISO (DE, EU, AT, CH …).
+  jurisdiction: text("jurisdiction").notNull().default("DE"),
+  // Rechtsgebiet: contract | data_protection | competition | commercial |
+  // it | labor | tax | other.
+  areaOfLaw: text("area_of_law").notNull(),
+  // Hierarchie-Stufe: statute | regulation | judgment | guideline | standard.
+  hierarchy: text("hierarchy").notNull().default("statute"),
+  // Volltext der Norm — wird tokenisiert für Hybrid-Suche.
+  fullText: text("full_text").notNull(),
+  // Kurz-Zusammenfassung als Snippet für KI-Citations.
+  summary: text("summary").notNull(),
+  // Themenstichwörter; manuelle Kuratierung erhöht Recall-Qualität.
+  keywords: jsonb("keywords").$type<string[]>().default([]).notNull(),
+  // Gültigkeitszeitraum — alte Fassungen bleiben für historische Verträge.
+  validFrom: date("valid_from"),
+  validUntil: date("valid_until"),
+  // Optionaler externer Link (z. B. dejure.org, eur-lex). Kein FK, nur Anzeige.
+  url: text("url"),
+  createdAt: ts("created_at"),
+  updatedAt: ts("updated_at"),
+}, (t) => [
+  index("legal_sources_tenant_area_idx").on(t.tenantId, t.areaOfLaw),
+  index("legal_sources_jurisdiction_idx").on(t.jurisdiction, t.areaOfLaw),
+  uniqueIndex("legal_sources_tenant_norm_uq").on(t.tenantId, t.normRef),
+]);
+
+export const legalPrecedentsTable = pgTable("legal_precedents", {
+  id: id(),
+  // Tenant ist hier IMMER gesetzt — Präzedenzfälle sind kunden-spezifisch.
+  tenantId: text("tenant_id").notNull(),
+  // Quell-Vertrag (signed). Bleibt referenziert auch nach Archivierung.
+  contractId: text("contract_id").notNull(),
+  // Klausel-Slot, aus dem die Vereinbarung kommt.
+  contractClauseId: text("contract_clause_id"),
+  // Klausel-Familie (kanonisch z. B. "liability_cap", "term", "data_processing").
+  family: text("family").notNull(),
+  // Verwendete Variante (kann NULL sein bei ad-hoc Klauseln).
+  variantId: text("variant_id"),
+  // Verhandlungs-Outcome im Verhältnis zum Standard-Variant:
+  //   standard   = unverändert akzeptiert
+  //   softened   = zu Gunsten Gegenpartei abgeschwächt
+  //   hardened   = zu unseren Gunsten verschärft
+  //   custom     = grundlegend neu formuliert
+  negotiationOutcome: text("negotiation_outcome").notNull().default("standard"),
+  counterpartyAccountId: text("counterparty_account_id"),
+  // Cached display-name, damit Listen ohne Account-Join schnell sind.
+  counterpartyName: text("counterparty_name"),
+  // Branche (cached vom Account) für Filter "ähnliche Branche".
+  industry: text("industry"),
+  // Auftragswert in Cent (vereinfacht — nur für Filter "ähnliche Größe").
+  contractValueCents: integer("contract_value_cents"),
+  signedAt: timestamp("signed_at", { withTimezone: true }),
+  // Faktischer Klausel-Text wie unterschrieben (edited_body || variant.body).
+  snippet: text("snippet").notNull(),
+  // Stichwörter für Hybrid-Suche.
+  keywords: jsonb("keywords").$type<string[]>().default([]).notNull(),
+  createdAt: ts("created_at"),
+}, (t) => [
+  index("legal_precedents_tenant_family_idx").on(t.tenantId, t.family),
+  index("legal_precedents_tenant_signed_idx").on(t.tenantId, t.signedAt),
+  uniqueIndex("legal_precedents_clause_uq").on(t.tenantId, t.contractClauseId),
+]);
