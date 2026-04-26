@@ -44,8 +44,18 @@ export interface BuiltInView {
   isBuiltIn: true;
 }
 
+export type SavedViewEntityType =
+  | "account"
+  | "deal"
+  | "quote"
+  | "contract"
+  | "signature"
+  | "negotiation"
+  | "obligation"
+  | "renewal";
+
 export interface SavedViewTabsProps {
-  entityType: "account" | "deal";
+  entityType: SavedViewEntityType;
   builtIns: BuiltInView[];
   activeViewId: string;
   currentState: ViewState;

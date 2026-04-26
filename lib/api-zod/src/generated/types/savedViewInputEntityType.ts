@@ -14,4 +14,10 @@ export type SavedViewInputEntityType =
 export const SavedViewInputEntityType = {
   account: "account",
   deal: "deal",
+  quote: "quote",
+  contract: "contract",
+  signature: "signature",
+  negotiation: "negotiation",
+  obligation: "obligation",
+  renewal: "renewal",
 } as const;

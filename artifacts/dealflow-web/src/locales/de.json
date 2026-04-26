@@ -85,7 +85,15 @@
     "internal": "Intern",
     "external": "Extern",
     "noResultsTitle": "Keine Treffer",
-    "noResultsBody": "Keine Einträge passen zur aktuellen Suche oder zum Filter."
+    "noResultsBody": "Keine Einträge passen zur aktuellen Suche oder zum Filter.",
+    "searchPlaceholder": "Suchen…",
+    "cancelled": "Storniert",
+    "noMatches": "Keine Treffer",
+    "noMatchesBody": "Keine Einträge passen zu Suche oder Filter.",
+    "resetFilters": "Filter zurücksetzen",
+    "riskLow": "Niedrig",
+    "riskMedium": "Mittel",
+    "riskHigh": "Hoch"
   },
   "actions": {
     "duplicate": "Duplizieren"
@@ -131,7 +139,17 @@
       "duplicateConfirmTitle": "Angebot duplizieren?",
       "duplicateConfirmBody": "Es wird eine vollständige Kopie von Angebot {{number}} als neuer Entwurf erstellt — inklusive Positionen, Sektionen und verknüpfter Anhänge.",
       "duplicated": "Angebot dupliziert",
-      "duplicateFailed": "Duplizieren fehlgeschlagen"
+      "duplicateFailed": "Duplizieren fehlgeschlagen",
+      "viewAll": "Alle",
+      "viewOpen": "Offen",
+      "viewDraft": "Entwürfe",
+      "viewAccepted": "Angenommen",
+      "statusDraft": "Entwurf",
+      "statusSent": "Gesendet",
+      "statusAccepted": "Angenommen",
+      "statusRejected": "Abgelehnt",
+      "statusExpired": "Abgelaufen",
+      "discount": "Rabatt"
     },
     "platformAdmin": {
       "title": "Plattform-Verwaltung",
@@ -301,7 +319,16 @@
       "extCollabEmailSentToast": "Einladungs-E-Mail an {{email}} gesendet.",
       "extCollabEmailFailedToast": "Magic-Link erstellt, aber Einladungs-E-Mail konnte nicht gesendet werden — bitte Link manuell teilen.",
       "extCollabEmailStatusSent": "E-Mail erfolgreich gesendet (Provider: {{provider}}).",
-      "extCollabEmailStatusFailed": "E-Mail-Versand fehlgeschlagen: {{error}} — bitte Link manuell teilen."
+      "extCollabEmailStatusFailed": "E-Mail-Versand fehlgeschlagen: {{error}} — bitte Link manuell teilen.",
+      "viewAll": "Alle",
+      "viewActive": "Aktiv",
+      "viewHighRisk": "Hohes Risiko",
+      "viewExternal": "Extern",
+      "statusDraft": "Entwurf",
+      "statusReview": "In Prüfung",
+      "statusSigned": "Signiert",
+      "statusActive": "Aktiv",
+      "statusExpired": "Abgelaufen"
     },
     "clauseSuggestions": {
       "title": "Klausel-Vorschläge",
@@ -498,7 +525,21 @@
       "round": "Runde {{n}}",
       "emptyTitle": "Keine Verhandlungen",
       "emptyBody": "Verhandlungen entstehen, sobald ein Kunde auf ein Angebot mit Einwand oder Gegenvorschlag reagiert.",
-      "emptyHint": "Tipp: Wechsle den Filter auf „Alle“, um auch abgeschlossene Verhandlungen zu sehen."
+      "emptyHint": "Tipp: Wechsle den Filter auf „Alle“, um auch abgeschlossene Verhandlungen zu sehen.",
+      "viewHighRisk": "Hohes Risiko",
+      "lastReaction": "Letzte Reaktion",
+      "reaction": {
+        "objection": "Einwand",
+        "counterproposal": "Gegenvorschlag",
+        "acceptance": "Zustimmung"
+      },
+      "sort": {
+        "label": "Sortieren",
+        "updatedDesc": "Zuletzt aktualisiert",
+        "updatedAsc": "Älteste Aktualisierung",
+        "riskDesc": "Risiko (hoch → niedrig)",
+        "roundDesc": "Runde (höchste zuerst)"
+      }
     },
     "signatures": {
       "title": "Unterschriften",
@@ -719,7 +760,10 @@
         "openFollowup": "Folgevertrag öffnen"
       },
       "followupCreated": "Folgevertrag-Draft angelegt",
-      "followupFailed": "Folgevertrag konnte nicht angelegt werden"
+      "followupFailed": "Folgevertrag konnte nicht angelegt werden",
+      "viewAll": "Alle",
+      "ymBadge": "Monat: {{ym}}",
+      "clearYm": "Monatsfilter entfernen"
     },
     "reports": {
       "title": "Berichte",
@@ -860,6 +904,52 @@
         "colReason": "Grund",
         "colStatus": "Status"
       }
+    },
+    "obligations": {
+      "title": "Pflichten (Obligations)",
+      "subtitle": "Vertragliche Pflichten aus aktiven Verträgen — automatisch abgeleitet bei Signatur, manuell ergänzbar im Vertrags-Workspace.",
+      "searchPlaceholder": "Suche Beschreibung / Vertrag / Kunde…",
+      "kpiOpen": "Offen gesamt",
+      "kpiOverdue": "Überfällig",
+      "kpiNext7": "Fällig in 7 Tagen",
+      "kpiDone30": "Erledigt (30 Tage)",
+      "viewOpen": "Alle offenen",
+      "viewOverdue": "Überfällig",
+      "viewNext7": "Fällig 7 Tage",
+      "viewDone": "Erledigt",
+      "viewAll": "Alle",
+      "statusOpen": "Offen",
+      "statusOverdue": "Überfällig",
+      "statusInProgress": "In Arbeit",
+      "statusDone": "Erledigt",
+      "statusWaived": "Verzichtet",
+      "statusUpdated": "Status aktualisiert",
+      "dueIn": "Fällig in",
+      "dueIn7": "≤ 7 Tagen",
+      "dueIn30": "≤ 30 Tagen",
+      "dueIn90": "≤ 90 Tagen",
+      "type": "Typ",
+      "typeDelivery": "Lieferung",
+      "typeReporting": "Reporting",
+      "typeSla": "SLA",
+      "typePayment": "Zahlung",
+      "typeNotice": "Mitteilung",
+      "typeAudit": "Audit",
+      "recurrenceNone": "Einmalig",
+      "recurrenceMonthly": "Monatlich",
+      "recurrenceQuarterly": "Quartalsweise",
+      "recurrenceAnnual": "Jährlich",
+      "emptyTitle": "Keine Pflichten gefunden",
+      "emptyBody": "Pflichten werden bei Vertrags-Signatur automatisch erkannt und im Vertrags-Workspace gepflegt.",
+      "emptyHint": "Tipp: Mit dem Filter „Alle offenen“ siehst Du laufende und überfällige Pflichten gemeinsam.",
+      "colObligation": "Pflicht",
+      "colContract": "Vertrag",
+      "colOwner": "Verantwortlich",
+      "colDue": "Fällig",
+      "colRecurrence": "Wiederholung",
+      "actionStart": "Start",
+      "actionDone": "Erledigt",
+      "actionWaive": "Verzicht"
     }
   },
   "quoteWizard": {

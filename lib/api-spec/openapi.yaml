@@ -3099,7 +3099,7 @@ paths:
         - in: query
           name: entityType
           required: false
-          schema: { type: string, enum: [account, deal] }
+          schema: { type: string, enum: [account, deal, quote, contract, signature, negotiation, obligation, renewal] }
       responses:
         "200":
           description: ok
@@ -5455,7 +5455,7 @@ components:
       properties:
         id: { type: string }
         userId: { type: string }
-        entityType: { type: string, enum: [account, deal] }
+        entityType: { type: string, enum: [account, deal, quote, contract, signature, negotiation, obligation, renewal] }
         name: { type: string }
         filters:
           type: object
@@ -5475,7 +5475,7 @@ components:
       type: object
       required: [entityType, name]
       properties:
-        entityType: { type: string, enum: [account, deal] }
+        entityType: { type: string, enum: [account, deal, quote, contract, signature, negotiation, obligation, renewal] }
         name: { type: string, minLength: 1, maxLength: 80 }
         filters:
           type: object

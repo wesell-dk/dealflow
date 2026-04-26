@@ -9604,8 +9604,18 @@ router.patch('/gdpr/retention-policy', async (req, res) => {
 });
 
 // ───────────── SAVED VIEWS ─────────────
+const SAVED_VIEW_ENTITY_TYPES = [
+  'account',
+  'deal',
+  'quote',
+  'contract',
+  'signature',
+  'negotiation',
+  'obligation',
+  'renewal',
+] as const;
 const savedViewInputSchema = z.object({
-  entityType: z.enum(['account', 'deal']),
+  entityType: z.enum(SAVED_VIEW_ENTITY_TYPES),
   name: z.string().min(1).max(80),
   filters: z.record(z.string(), z.unknown()).optional().default({}),
   columns: z.array(z.string()).optional().default([]),
@@ -9620,7 +9630,7 @@ const savedViewPatchSchema = savedViewInputSchema.partial().omit({ entityType: t
 router.get('/saved-views', async (req, res) => {
   const scope = getScope(req);
   const entityType = typeof req.query.entityType === 'string' ? req.query.entityType : null;
-  if (entityType && entityType !== 'account' && entityType !== 'deal') {
+  if (entityType && !(SAVED_VIEW_ENTITY_TYPES as readonly string[]).includes(entityType)) {
     res.status(422).json({ error: 'invalid entityType' });
     return;
   }

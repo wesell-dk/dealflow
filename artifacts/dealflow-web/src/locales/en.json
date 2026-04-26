@@ -85,7 +85,15 @@
     "internal": "Internal",
     "external": "External",
     "noResultsTitle": "No matches",
-    "noResultsBody": "No entries match the current search or filter."
+    "noResultsBody": "No entries match the current search or filter.",
+    "searchPlaceholder": "Search…",
+    "cancelled": "Cancelled",
+    "noMatches": "No matches",
+    "noMatchesBody": "No entries match your search or filters.",
+    "resetFilters": "Reset filters",
+    "riskLow": "Low",
+    "riskMedium": "Medium",
+    "riskHigh": "High"
   },
   "actions": {
     "duplicate": "Duplicate"
@@ -131,7 +139,17 @@
       "duplicateConfirmTitle": "Duplicate quote?",
       "duplicateConfirmBody": "A full copy of quote {{number}} will be created as a new draft — including line items, sections and linked attachments.",
       "duplicated": "Quote duplicated",
-      "duplicateFailed": "Duplicate failed"
+      "duplicateFailed": "Duplicate failed",
+      "viewAll": "All",
+      "viewOpen": "Open",
+      "viewDraft": "Drafts",
+      "viewAccepted": "Accepted",
+      "statusDraft": "Draft",
+      "statusSent": "Sent",
+      "statusAccepted": "Accepted",
+      "statusRejected": "Rejected",
+      "statusExpired": "Expired",
+      "discount": "Discount"
     },
     "platformAdmin": {
       "title": "Platform Administration",
@@ -486,7 +504,16 @@
       "extCollabEmailSentToast": "Invitation email sent to {{email}}.",
       "extCollabEmailFailedToast": "Magic link created, but the invitation email could not be sent — please share the link manually.",
       "extCollabEmailStatusSent": "Email delivered successfully (provider: {{provider}}).",
-      "extCollabEmailStatusFailed": "Email delivery failed: {{error}} — please share the link manually."
+      "extCollabEmailStatusFailed": "Email delivery failed: {{error}} — please share the link manually.",
+      "viewAll": "All",
+      "viewActive": "Active",
+      "viewHighRisk": "High risk",
+      "viewExternal": "External",
+      "statusDraft": "Draft",
+      "statusReview": "Review",
+      "statusSigned": "Signed",
+      "statusActive": "Active",
+      "statusExpired": "Expired"
     },
     "negotiations": {
       "title": "Negotiations",
@@ -498,7 +525,21 @@
       "round": "Round {{n}}",
       "emptyTitle": "No negotiations",
       "emptyBody": "Negotiations appear once a customer responds to a quote with an objection or counter-proposal.",
-      "emptyHint": "Tip: switch the filter to “All” to also see concluded negotiations."
+      "emptyHint": "Tip: switch the filter to “All” to also see concluded negotiations.",
+      "viewHighRisk": "High risk",
+      "lastReaction": "Last reaction",
+      "reaction": {
+        "objection": "Objection",
+        "counterproposal": "Counterproposal",
+        "acceptance": "Acceptance"
+      },
+      "sort": {
+        "label": "Sort",
+        "updatedDesc": "Recently updated",
+        "updatedAsc": "Oldest update",
+        "riskDesc": "Risk (high → low)",
+        "roundDesc": "Round (highest first)"
+      }
     },
     "signatures": {
       "title": "Signature Center",
@@ -671,6 +712,8 @@
       "snoozeRequiresDate": "Pick a date to snooze.",
       "tableTitle": "Renewal pipeline",
       "empty": "No renewal opportunities match the filter.",
+      "emptyTitle": "No renewals match the filter",
+      "emptyHint": "Tip: the engine detects renewals automatically from contracts with auto-renewal clauses. Reset the filter to see all.",
       "summary": {
         "totalOpen": "Open renewals",
         "thisMonth": "Due this month",
@@ -717,7 +760,10 @@
         "openFollowup": "Open followup contract"
       },
       "followupCreated": "Followup contract draft created",
-      "followupFailed": "Could not create followup contract"
+      "followupFailed": "Could not create followup contract",
+      "viewAll": "All",
+      "ymBadge": "Month: {{ym}}",
+      "clearYm": "Clear month filter"
     },
     "reports": {
       "title": "Reports",
@@ -858,6 +904,52 @@
         "colReason": "Reason",
         "colStatus": "Status"
       }
+    },
+    "obligations": {
+      "title": "Obligations",
+      "subtitle": "Contractual obligations from active contracts — auto-derived at signature, editable in the contract workspace.",
+      "searchPlaceholder": "Search description / contract / customer…",
+      "kpiOpen": "Total open",
+      "kpiOverdue": "Overdue",
+      "kpiNext7": "Due in 7 days",
+      "kpiDone30": "Completed (30 d)",
+      "viewOpen": "All open",
+      "viewOverdue": "Overdue",
+      "viewNext7": "Due 7 days",
+      "viewDone": "Completed",
+      "viewAll": "All",
+      "statusOpen": "Open",
+      "statusOverdue": "Overdue",
+      "statusInProgress": "In progress",
+      "statusDone": "Done",
+      "statusWaived": "Waived",
+      "statusUpdated": "Status updated",
+      "dueIn": "Due in",
+      "dueIn7": "≤ 7 days",
+      "dueIn30": "≤ 30 days",
+      "dueIn90": "≤ 90 days",
+      "type": "Type",
+      "typeDelivery": "Delivery",
+      "typeReporting": "Reporting",
+      "typeSla": "SLA",
+      "typePayment": "Payment",
+      "typeNotice": "Notice",
+      "typeAudit": "Audit",
+      "recurrenceNone": "One-off",
+      "recurrenceMonthly": "Monthly",
+      "recurrenceQuarterly": "Quarterly",
+      "recurrenceAnnual": "Annual",
+      "emptyTitle": "No obligations found",
+      "emptyBody": "Obligations are auto-detected at contract signature and managed in the contract workspace.",
+      "emptyHint": "Tip: Use the \"All open\" filter to see active and overdue obligations together.",
+      "colObligation": "Obligation",
+      "colContract": "Contract",
+      "colOwner": "Owner",
+      "colDue": "Due",
+      "colRecurrence": "Recurrence",
+      "actionStart": "Start",
+      "actionDone": "Done",
+      "actionWaive": "Waive"
     }
   },
   "quoteWizard": {

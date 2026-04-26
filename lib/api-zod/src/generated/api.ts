@@ -4950,13 +4950,33 @@ export const UpdateGdprRetentionPolicyResponse = zod.object({
 });
 
 export const ListSavedViewsQueryParams = zod.object({
-  entityType: zod.enum(["account", "deal"]).optional(),
+  entityType: zod
+    .enum([
+      "account",
+      "deal",
+      "quote",
+      "contract",
+      "signature",
+      "negotiation",
+      "obligation",
+      "renewal",
+    ])
+    .optional(),
 });
 
 export const ListSavedViewsResponseItem = zod.object({
   id: zod.string(),
   userId: zod.string(),
-  entityType: zod.enum(["account", "deal"]),
+  entityType: zod.enum([
+    "account",
+    "deal",
+    "quote",
+    "contract",
+    "signature",
+    "negotiation",
+    "obligation",
+    "renewal",
+  ]),
   name: zod.string(),
   filters: zod.record(zod.string(), zod.unknown()),
   columns: zod.array(zod.string()),
@@ -4975,7 +4995,16 @@ export const ListSavedViewsResponse = zod.array(ListSavedViewsResponseItem);
 export const createSavedViewBodyNameMax = 80;
 
 export const CreateSavedViewBody = zod.object({
-  entityType: zod.enum(["account", "deal"]),
+  entityType: zod.enum([
+    "account",
+    "deal",
+    "quote",
+    "contract",
+    "signature",
+    "negotiation",
+    "obligation",
+    "renewal",
+  ]),
   name: zod.string().min(1).max(createSavedViewBodyNameMax),
   filters: zod.record(zod.string(), zod.unknown()).optional(),
   columns: zod.array(zod.string()).optional(),
@@ -5006,7 +5035,16 @@ export const UpdateSavedViewBody = zod.object({
 export const UpdateSavedViewResponse = zod.object({
   id: zod.string(),
   userId: zod.string(),
-  entityType: zod.enum(["account", "deal"]),
+  entityType: zod.enum([
+    "account",
+    "deal",
+    "quote",
+    "contract",
+    "signature",
+    "negotiation",
+    "obligation",
+    "renewal",
+  ]),
   name: zod.string(),
   filters: zod.record(zod.string(), zod.unknown()),
   columns: zod.array(zod.string()),

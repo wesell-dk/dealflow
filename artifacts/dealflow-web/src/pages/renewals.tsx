@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
   useListRenewals,
@@ -18,13 +18,6 @@ import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/auth-context";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
@@ -35,12 +28,23 @@ import {
 } from "@/components/ui/sheet";
 import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
-import { CalendarClock, AlertTriangle, RefreshCcw, Calendar, FileSignature, X, FilePlus2 } from "lucide-react";
+import {
+  CalendarClock, AlertTriangle, RefreshCcw, Calendar, FileSignature, X, FilePlus2,
+  Search, ArrowDown, ArrowUp,
+} from "lucide-react";
 import { Link, useSearch, useLocation } from "wouter";
 import { PageHeader } from "@/components/patterns/page-header";
 import { EmptyStateCard } from "@/components/patterns/empty-state-card";
+import { SavedViewTabs, type ViewState, type BuiltInView } from "@/components/patterns/saved-view-tabs";
+import { FilterChip, FilterChipsRow } from "@/components/patterns/filter-chips";
+import { PaginationBar } from "@/components/patterns/pagination-bar";
 
-type Bucket = "" | "this_month" | "next_90" | "risk";
+const DEFAULT_VIEW: ViewState = {
+  filters: { status: "open" },
+  columns: [],
+  sortBy: "riskScore",
+  sortDir: "desc",
+};
 
 function fmtCurrency(v: number | null | undefined, currency: string | null | undefined) {
   if (v == null) return "—";
@@ -103,17 +107,34 @@ export default function RenewalsPage() {
     setLocation(qs ? `/renewals?${qs}` : "/renewals");
   }
 
-  const [bucket, setBucket] = useState<Bucket>("");
-  const [minRisk, setMinRisk] = useState<string>("");
-  const [status, setStatus] = useState<string>("open");
+  const builtIns: BuiltInView[] = useMemo(() => [
+    { id: "open",      name: t("pages.renewals.status.open"),         isBuiltIn: true, state: { ...DEFAULT_VIEW, filters: { status: "open" } } },
+    { id: "thisMonth", name: t("pages.renewals.summary.thisMonth"),   isBuiltIn: true, state: { ...DEFAULT_VIEW, filters: { status: "open", bucket: "this_month" } } },
+    { id: "next90",    name: t("pages.renewals.summary.next90"),      isBuiltIn: true, state: { ...DEFAULT_VIEW, filters: { status: "open", bucket: "next_90" } } },
+    { id: "atRisk",    name: t("pages.renewals.summary.atRisk"),      isBuiltIn: true, state: { ...DEFAULT_VIEW, filters: { status: "open", bucket: "risk", minRisk: "70" } } },
+    { id: "snoozed",   name: t("pages.renewals.status.snoozed"),      isBuiltIn: true, state: { ...DEFAULT_VIEW, filters: { status: "snoozed" } } },
+    { id: "all",       name: t("pages.renewals.viewAll"),             isBuiltIn: true, state: { ...DEFAULT_VIEW, filters: {} } },
+  ], [t]);
+
+  const [activeViewId, setActiveViewId] = useState<string>("open");
+  const [view, setView] = useState<ViewState>(builtIns[0].state);
+  const [textSearch, setTextSearch] = useState("");
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(25);
   const [selected, setSelected] = useState<RenewalOpportunity | null>(null);
   const [notes, setNotes] = useState<string>("");
   const [snoozeDate, setSnoozeDate] = useState<string>("");
 
-  const params: ListRenewalsParams = { status: status as ListRenewalsParams["status"] };
-  if (bucket) params.bucket = bucket as ListRenewalsParams["bucket"];
-  const minRiskN = Number(minRisk);
-  if (minRisk && !Number.isNaN(minRiskN)) params.minRisk = minRiskN;
+  useEffect(() => { setPage(1); }, [view.filters, view.sortBy, view.sortDir, textSearch, ymFilter]);
+
+  const f = view.filters as Record<string, unknown>;
+  const params: ListRenewalsParams = {};
+  if (f.status) params.status = f.status as ListRenewalsParams["status"];
+  if (f.bucket) params.bucket = f.bucket as ListRenewalsParams["bucket"];
+  if (f.minRisk) {
+    const n = Number(f.minRisk);
+    if (!Number.isNaN(n)) params.minRisk = n;
+  }
 
   const { data: summary, isLoading: isLoadingSummary } = useGetRenewalSummary();
   const { data: rows, isLoading: isLoadingRows } = useListRenewals(params);
@@ -126,13 +147,40 @@ export default function RenewalsPage() {
     qc.invalidateQueries({ queryKey: getGetRenewalSummaryQueryKey() });
   }
 
-  const sortedRows = useMemo(() => {
+  const filtered = useMemo(() => {
     let list = (rows ?? []).slice();
     if (ymFilter) {
       list = list.filter((r) => typeof r.dueDate === "string" && r.dueDate.slice(0, 7) === ymFilter);
     }
-    return list.sort((a, b) => b.riskScore - a.riskScore);
-  }, [rows, ymFilter]);
+    const s = textSearch.trim().toLowerCase();
+    if (s) {
+      list = list.filter((r) => {
+        const account = (r.accountName ?? r.accountId ?? "").toLowerCase();
+        const contract = (r.kind === "external"
+          ? r.externalContractTitle ?? r.externalContractId ?? ""
+          : r.contractTitle ?? r.contractId ?? "").toLowerCase();
+        return account.includes(s) || contract.includes(s);
+      });
+    }
+    const sortBy = view.sortBy ?? "riskScore";
+    const dir = view.sortDir === "desc" ? -1 : 1;
+    list = [...list].sort((a, b) => {
+      const get = (r: RenewalOpportunity) => {
+        if (sortBy === "riskScore") return r.riskScore;
+        if (sortBy === "dueDate")   return r.dueDate ? new Date(r.dueDate).getTime() : 0;
+        if (sortBy === "value")     return r.valueAmount ?? 0;
+        if (sortBy === "account")   return (r.accountName ?? "").toLowerCase();
+        return r.riskScore;
+      };
+      const av = get(a), bv = get(b);
+      if (typeof av === "number" && typeof bv === "number") return (av - bv) * dir;
+      return String(av).localeCompare(String(bv), "de") * dir;
+    });
+    return list;
+  }, [rows, ymFilter, textSearch, view]);
+
+  const total = filtered.length;
+  const pageRows = useMemo(() => filtered.slice((page - 1) * pageSize, page * pageSize), [filtered, page, pageSize]);
 
   const ymFilterLabel = useMemo(() => {
     if (!ymFilter) return "";
@@ -140,6 +188,24 @@ export default function RenewalsPage() {
     const d = new Date(Date.UTC(Number(y), Number(m) - 1, 1));
     return d.toLocaleDateString(undefined, { month: "long", year: "numeric" });
   }, [ymFilter]);
+
+  function selectView(id: string, state: ViewState) {
+    setActiveViewId(id);
+    setView(state);
+  }
+  function setFilter(k: string, v: unknown) {
+    setView((s) => {
+      const nf = { ...(s.filters ?? {}) };
+      if (v === null || v === "" || v === undefined) delete nf[k]; else nf[k] = v;
+      return { ...s, filters: nf };
+    });
+  }
+  function toggleSort(key: string) {
+    setView((s) => {
+      if (s.sortBy === key) return { ...s, sortDir: s.sortDir === "asc" ? "desc" : "asc" };
+      return { ...s, sortBy: key, sortDir: "asc" };
+    });
+  }
 
   function openDetail(r: RenewalOpportunity) {
     setSelected(r);
@@ -197,6 +263,15 @@ export default function RenewalsPage() {
     });
     refetchAll();
   }
+
+  const hasFilters = Object.keys(view.filters ?? {}).length > 0;
+
+  const sortableHeader = (key: string, label: string) => (
+    <button type="button" onClick={() => toggleSort(key)} className="inline-flex items-center gap-1 hover:text-foreground">
+      {label}
+      {view.sortBy === key && (view.sortDir === "desc" ? <ArrowDown className="h-3 w-3" /> : <ArrowUp className="h-3 w-3" />)}
+    </button>
+  );
 
   return (
     <div className="space-y-6 p-6">
@@ -285,55 +360,38 @@ export default function RenewalsPage() {
         </Card>
       </div>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>{t("pages.renewals.tableTitle")}</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="mb-4 flex flex-wrap items-center gap-2">
-            <Select value={bucket || "__all__"} onValueChange={(v) => setBucket(v === "__all__" ? "" : (v as Bucket))}>
-              <SelectTrigger className="w-48"><SelectValue placeholder={t("pages.renewals.filter.bucket")} /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="__all__">{t("pages.renewals.filter.allBuckets")}</SelectItem>
-                <SelectItem value="this_month">{t("pages.renewals.summary.thisMonth")}</SelectItem>
-                <SelectItem value="next_90">{t("pages.renewals.summary.next90")}</SelectItem>
-                <SelectItem value="risk">{t("pages.renewals.summary.atRisk")}</SelectItem>
-              </SelectContent>
-            </Select>
-            <Select value={status} onValueChange={setStatus}>
-              <SelectTrigger className="w-44"><SelectValue placeholder={t("pages.renewals.filter.status")} /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="open">{t("pages.renewals.status.open")}</SelectItem>
-                <SelectItem value="in_progress">{t("pages.renewals.status.in_progress")}</SelectItem>
-                <SelectItem value="snoozed">{t("pages.renewals.status.snoozed")}</SelectItem>
-                <SelectItem value="won">{t("pages.renewals.status.won")}</SelectItem>
-                <SelectItem value="lost">{t("pages.renewals.status.lost")}</SelectItem>
-                <SelectItem value="cancelled">{t("pages.renewals.status.cancelled")}</SelectItem>
-              </SelectContent>
-            </Select>
-            <Input
-              type="number"
-              min={0}
-              max={100}
-              placeholder={t("pages.renewals.filter.minRisk")}
-              value={minRisk}
-              onChange={(e) => setMinRisk(e.target.value)}
-              className="w-36"
-              data-testid="input-min-risk"
-            />
+      <SavedViewTabs
+        entityType="renewal"
+        builtIns={builtIns}
+        activeViewId={activeViewId}
+        currentState={view}
+        onSelect={selectView}
+      />
+
+      <FilterChipsRow
+        hasActive={hasFilters || !!ymFilter}
+        onClearAll={() => { setView((s) => ({ ...s, filters: {} })); if (ymFilter) clearYmFilter(); }}
+        extra={
+          <div className="flex items-center gap-2">
+            <div className="relative w-60">
+              <Search className="absolute left-2.5 top-2.5 h-3.5 w-3.5 text-muted-foreground" />
+              <Input
+                value={textSearch}
+                onChange={(e) => setTextSearch(e.target.value)}
+                placeholder={t("common.searchPlaceholder")}
+                className="h-8 pl-8 text-sm"
+                data-testid="renewals-search"
+              />
+            </div>
             {ymFilter && (
-              <Badge
-                variant="secondary"
-                className="flex items-center gap-1"
-                data-testid="badge-ym-filter"
-              >
+              <Badge variant="secondary" className="flex items-center gap-1" data-testid="badge-ym-filter">
                 <Calendar className="h-3 w-3" />
-                <span>Monat: {ymFilterLabel}</span>
+                <span>{t("pages.renewals.ymBadge", { defaultValue: "Monat: {{ym}}", ym: ymFilterLabel })}</span>
                 <button
                   type="button"
                   onClick={clearYmFilter}
                   className="ml-1 rounded-sm hover:bg-background/40"
-                  aria-label="Monatsfilter entfernen"
+                  aria-label={t("pages.renewals.clearYm")}
                   data-testid="button-clear-ym-filter"
                 >
                   <X className="h-3 w-3" />
@@ -341,61 +399,122 @@ export default function RenewalsPage() {
               </Badge>
             )}
           </div>
+        }
+      >
+        <FilterChip
+          label={t("pages.renewals.filter.status")}
+          value={(view.filters as Record<string, string>).status}
+          options={[
+            { value: "open",        label: t("pages.renewals.status.open") },
+            { value: "in_progress", label: t("pages.renewals.status.in_progress") },
+            { value: "snoozed",     label: t("pages.renewals.status.snoozed") },
+            { value: "won",         label: t("pages.renewals.status.won") },
+            { value: "lost",        label: t("pages.renewals.status.lost") },
+            { value: "cancelled",   label: t("pages.renewals.status.cancelled") },
+          ]}
+          onChange={(v) => setFilter("status", v)}
+          testId="chip-renewals-status"
+        />
+        <FilterChip
+          label={t("pages.renewals.filter.bucket")}
+          value={(view.filters as Record<string, string>).bucket}
+          options={[
+            { value: "this_month", label: t("pages.renewals.summary.thisMonth") },
+            { value: "next_90",    label: t("pages.renewals.summary.next90") },
+            { value: "risk",       label: t("pages.renewals.summary.atRisk") },
+          ]}
+          onChange={(v) => setFilter("bucket", v)}
+          testId="chip-renewals-bucket"
+        />
+        <FilterChip
+          label={t("pages.renewals.filter.minRisk")}
+          value={(view.filters as Record<string, string>).minRisk}
+          options={[
+            { value: "40", label: "≥ 40" },
+            { value: "60", label: "≥ 60" },
+            { value: "70", label: "≥ 70" },
+            { value: "85", label: "≥ 85" },
+          ]}
+          onChange={(v) => setFilter("minRisk", v)}
+          testId="chip-renewals-minrisk"
+        />
+      </FilterChipsRow>
 
-          {isLoadingRows ? (
-            <Skeleton className="h-40 w-full" />
-          ) : sortedRows.length === 0 ? (
-            <EmptyStateCard
-              icon={CalendarClock}
-              title={t("pages.renewals.emptyTitle")}
-              body={t("pages.renewals.empty")}
-              hint={t("pages.renewals.emptyHint")}
-              className="border-0 shadow-none"
-            />
-          ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>{t("pages.renewals.col.account")}</TableHead>
-                  <TableHead>{t("pages.renewals.col.contract")}</TableHead>
-                  <TableHead>{t("pages.renewals.col.notice")}</TableHead>
-                  <TableHead>{t("pages.renewals.col.due")}</TableHead>
-                  <TableHead>{t("pages.renewals.col.value")}</TableHead>
-                  <TableHead>{t("pages.renewals.col.risk")}</TableHead>
-                  <TableHead>{t("pages.renewals.col.status")}</TableHead>
+      {isLoadingRows ? (
+        <Skeleton className="h-40 w-full" />
+      ) : total === 0 ? (
+        (rows?.length ?? 0) === 0 && !textSearch && !hasFilters && !ymFilter ? (
+          <EmptyStateCard
+            icon={CalendarClock}
+            title={t("pages.renewals.emptyTitle")}
+            body={t("pages.renewals.empty")}
+            hint={t("pages.renewals.emptyHint")}
+          />
+        ) : (
+          <EmptyStateCard
+            icon={CalendarClock}
+            title={t("common.noMatches")}
+            body={t("common.noMatchesBody")}
+            primaryAction={{
+              label: t("common.resetFilters"),
+              onClick: () => { setView((s) => ({ ...s, filters: {} })); setTextSearch(""); if (ymFilter) clearYmFilter(); },
+            }}
+            testId="renewals-no-match"
+          />
+        )
+      ) : (
+        <div className="border rounded-md overflow-hidden">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>{sortableHeader("account", t("pages.renewals.col.account"))}</TableHead>
+                <TableHead>{t("pages.renewals.col.contract")}</TableHead>
+                <TableHead>{t("pages.renewals.col.notice")}</TableHead>
+                <TableHead>{sortableHeader("dueDate", t("pages.renewals.col.due"))}</TableHead>
+                <TableHead>{sortableHeader("value", t("pages.renewals.col.value"))}</TableHead>
+                <TableHead>{sortableHeader("riskScore", t("pages.renewals.col.risk"))}</TableHead>
+                <TableHead>{t("pages.renewals.col.status")}</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {pageRows.map((r) => (
+                <TableRow
+                  key={r.id}
+                  onClick={() => openDetail(r)}
+                  className="cursor-pointer"
+                  data-testid={`row-renewal-${r.id}`}
+                >
+                  <TableCell>{r.accountName ?? r.accountId}</TableCell>
+                  <TableCell>
+                    <span className="flex items-center gap-2">
+                      {r.kind === "external"
+                        ? r.externalContractTitle ?? r.externalContractId ?? "—"
+                        : r.contractTitle ?? r.contractId ?? "—"}
+                      {r.kind === "external" && (
+                        <Badge variant="secondary" className="text-[10px] uppercase">{t("pages.contracts.external")}</Badge>
+                      )}
+                    </span>
+                  </TableCell>
+                  <TableCell>{fmtDate(r.noticeDeadline)}</TableCell>
+                  <TableCell>{fmtDate(r.dueDate)}</TableCell>
+                  <TableCell>{fmtCurrency(r.valueAmount ?? null, r.currency ?? "EUR")}</TableCell>
+                  <TableCell>{riskBadge(r.riskScore)}</TableCell>
+                  <TableCell>{statusBadge(r.status, t)}</TableCell>
                 </TableRow>
-              </TableHeader>
-              <TableBody>
-                {sortedRows.map((r) => (
-                  <TableRow
-                    key={r.id}
-                    onClick={() => openDetail(r)}
-                    className="cursor-pointer"
-                    data-testid={`row-renewal-${r.id}`}
-                  >
-                    <TableCell>{r.accountName ?? r.accountId}</TableCell>
-                    <TableCell>
-                      <span className="flex items-center gap-2">
-                        {r.kind === "external"
-                          ? r.externalContractTitle ?? r.externalContractId ?? "—"
-                          : r.contractTitle ?? r.contractId ?? "—"}
-                        {r.kind === "external" && (
-                          <Badge variant="secondary" className="text-[10px] uppercase">Extern</Badge>
-                        )}
-                      </span>
-                    </TableCell>
-                    <TableCell>{fmtDate(r.noticeDeadline)}</TableCell>
-                    <TableCell>{fmtDate(r.dueDate)}</TableCell>
-                    <TableCell>{fmtCurrency(r.valueAmount ?? null, r.currency ?? "EUR")}</TableCell>
-                    <TableCell>{riskBadge(r.riskScore)}</TableCell>
-                    <TableCell>{statusBadge(r.status, t)}</TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          )}
-        </CardContent>
-      </Card>
+              ))}
+            </TableBody>
+          </Table>
+          <div className="border-t">
+            <PaginationBar
+              total={total}
+              page={page}
+              pageSize={pageSize}
+              onPageChange={setPage}
+              onPageSizeChange={(s) => { setPageSize(s); setPage(1); }}
+            />
+          </div>
+        </div>
+      )}
 
       <Sheet open={!!selected} onOpenChange={(o) => { if (!o) setSelected(null); }}>
         <SheetContent className="w-full sm:max-w-lg overflow-y-auto">
@@ -408,7 +527,7 @@ export default function RenewalsPage() {
                     ? selected.externalContractTitle ?? selected.externalContractId ?? "—"
                     : selected.contractTitle ?? selected.contractId ?? "—"}
                   {selected.kind === "external" && (
-                    <Badge variant="secondary" className="text-[10px] uppercase">Extern</Badge>
+                    <Badge variant="secondary" className="text-[10px] uppercase">{t("pages.contracts.external")}</Badge>
                   )}
                 </SheetTitle>
                 <SheetDescription>
@@ -458,9 +577,6 @@ export default function RenewalsPage() {
                 <div>
                   <div className="text-xs text-muted-foreground mb-1">{t("pages.renewals.detail.contract")}</div>
                   {selected.kind === "external" ? (
-                    // Externe Bestandsverträge haben keine eigene Detail-Seite —
-                    // wir verlinken stattdessen den Account, dort steht die
-                    // Externe-Verträge-Karte.
                     <Link href={`/accounts/${selected.accountId}`} className="inline-flex items-center gap-1 text-primary hover:underline">
                       <FileSignature className="h-4 w-4" />
                       {selected.externalContractTitle ?? selected.externalContractId ?? "—"}

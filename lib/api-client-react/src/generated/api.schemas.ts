@@ -931,6 +931,12 @@ export type SavedViewEntityType =
 export const SavedViewEntityType = {
   account: "account",
   deal: "deal",
+  quote: "quote",
+  contract: "contract",
+  signature: "signature",
+  negotiation: "negotiation",
+  obligation: "obligation",
+  renewal: "renewal",
 } as const;
 
 export type SavedViewFilters = { [key: string]: unknown };
@@ -971,6 +977,12 @@ export type SavedViewInputEntityType =
 export const SavedViewInputEntityType = {
   account: "account",
   deal: "deal",
+  quote: "quote",
+  contract: "contract",
+  signature: "signature",
+  negotiation: "negotiation",
+  obligation: "obligation",
+  renewal: "renewal",
 } as const;
 
 export type SavedViewInputFilters = { [key: string]: unknown };
@@ -4943,6 +4955,12 @@ export type ListSavedViewsEntityType =
 export const ListSavedViewsEntityType = {
   account: "account",
   deal: "deal",
+  quote: "quote",
+  contract: "contract",
+  signature: "signature",
+  negotiation: "negotiation",
+  obligation: "obligation",
+  renewal: "renewal",
 } as const;
 
 export type ListContractPlaybooksParams = {
