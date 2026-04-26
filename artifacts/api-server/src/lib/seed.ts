@@ -59,6 +59,30 @@ const now = new Date();
 const daysFromNow = (d: number) => new Date(now.getTime() + d * 86400000);
 const isoDate = (d: Date) => d.toISOString().slice(0, 10);
 
+/**
+ * Idempotent runtime DDL guard. We don't ship Drizzle migration files —
+ * schema is normally reconciled via `pnpm --filter db push` (also wired
+ * into the post-merge script). On databases that pre-date a column the
+ * code now relies on, push may have been skipped or failed, and the
+ * runtime would crash with `column "..." does not exist`.
+ *
+ * This function adds any such columns with `ADD COLUMN IF NOT EXISTS`
+ * so the API boots cleanly even on stale DBs. It MUST be called before
+ * any other startup work that touches the affected tables (seeds,
+ * insight generators, request handlers).
+ *
+ * Add new entries here whenever the Drizzle schema gains a column that
+ * an existing live database might not have yet.
+ */
+export async function ensureSchemaColumns(): Promise<void> {
+  await db.execute(
+    sql`ALTER TABLE "quotes" ADD COLUMN IF NOT EXISTS "archived_at" timestamp with time zone`,
+  );
+  await db.execute(
+    sql`ALTER TABLE "accounts" ADD COLUMN IF NOT EXISTS "archived_at" timestamp with time zone`,
+  );
+}
+
 export async function seedIfEmpty(): Promise<void> {
   const existing = await db.select({ c: sql<number>`count(*)::int` }).from(tenantsTable);
   if ((existing[0]?.c ?? 0) > 0) {

@@ -1,6 +1,7 @@
 import app from "./app";
 import { logger } from "./lib/logger";
 import {
+  ensureSchemaColumns,
   seedIfEmpty,
   seedQuoteTemplatesIdempotent,
   seedPlaceholderObjectsIdempotent,
@@ -9,6 +10,16 @@ import {
 import { pruneExpiredSessions } from "./lib/auth";
 import { runAllGenerators } from "./insights/generators";
 import { runRetentionSweep } from "./gdpr/service";
+
+// Self-healing DDL guard for stale databases that pre-date columns the
+// code now relies on (e.g. quotes.archived_at). Must run before seeds,
+// insight generators, or any request handler touches those tables.
+try {
+  await ensureSchemaColumns();
+} catch (err) {
+  logger.error({ err }, "Schema column guard failed");
+  throw err;
+}
 
 await seedIfEmpty().catch((err) => {
   logger.error({ err }, "Seed failed");
