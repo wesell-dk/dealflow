@@ -4538,16 +4538,19 @@ paths:
       operationId: sendOrderConfirmationToCustomer
       tags: [orderConfirmations]
       summary: >-
-        Versendet die Auftragsbestätigung an den Kunden (Statuswechsel auf
-        sent_to_customer) und erzeugt idempotent einen Vertrags-Draft, der via
-        sourceOrderConfirmationId zurück verlinkt ist.
+        Versendet die Auftragsbestätigung als echte Email mit PDF-Anhang an
+        den Kunden (Statuswechsel auf sent_to_customer) und erzeugt
+        idempotent einen Vertrags-Draft, der via sourceOrderConfirmationId
+        zurück verlinkt ist. Schlägt der Email-Versand fehl, bleibt die OC
+        in ready_for_handover und sendStatus ist 'failed' — der Versand kann
+        dann erneut ausgelöst werden.
       parameters:
         - in: path
           name: id
           required: true
           schema: { type: string }
       requestBody:
-        required: false
+        required: true
         content:
           application/json:
             schema: { $ref: "#/components/schemas/OrderConfirmationSendInput" }
@@ -4559,6 +4562,10 @@ paths:
               schema: { $ref: "#/components/schemas/OrderConfirmationDetail" }
         "409":
           description: status transition not allowed (e.g. handover already started)
+        "502":
+          description: >-
+            Email-Versand fehlgeschlagen. OC bleibt in ready_for_handover,
+            sendStatus ist 'failed' — der Aufruf kann erneut versucht werden.
 
   /gdpr/subjects:
     get:
@@ -10879,6 +10886,29 @@ components:
             sentToCustomerNote:
               type: ["string", "null"]
               description: Optionaler Vermerk, der mit dem Kunden-Versand mitgeschickt wurde.
+            sendStatus:
+              type: string
+              enum: [pending, sent, failed]
+              description: >-
+                Status des letzten Email-Versuchs. 'pending' = noch nie
+                versucht; 'sent' = letzter Versuch erfolgreich; 'failed' =
+                letzter Versuch fehlgeschlagen, Retry möglich.
+            sendError:
+              type: ["string", "null"]
+              description: Letzte Fehlermeldung des Email-Versands (nur bei sendStatus=failed).
+            sendProvider:
+              type: ["string", "null"]
+              description: Provider, der den letzten (erfolgreichen oder fehlgeschlagenen) Versand bedient hat (z.B. 'resend' oder 'log').
+            sendMessageId:
+              type: ["string", "null"]
+              description: Provider-Message-ID des erfolgreichen Email-Versands (zum Korrelieren mit Email-Send-Log).
+            sendAttempts:
+              type: integer
+              description: Wie viele Versand-Versuche gab es bisher.
+            lastSendAttemptAt:
+              type: ["string", "null"]
+              format: date-time
+              description: Zeitstempel des letzten Versand-Versuchs (egal ob erfolgreich oder fehlgeschlagen).
             contractNumber:
               type: ["string", "null"]
               description: >-
@@ -10913,16 +10943,21 @@ components:
 
     OrderConfirmationSendInput:
       type: object
+      required: [recipientEmail]
       description: >-
-        Eingabe für POST /order-confirmations/:id/send. Beide Felder optional —
-        ohne Recipient-Email wird der Versand nur intern protokolliert.
+        Eingabe für POST /order-confirmations/:id/send. Seit Task #273 wird
+        eine echte Email mit OC-PDF an `recipientEmail` versandt — das Feld
+        ist daher Pflicht. `note` wird dem Standard-Body als Zusatzhinweis
+        des Vertriebs angehängt.
       properties:
         recipientEmail:
-          type: ["string", "null"]
-          description: Optionale Empfänger-E-Mail beim Kunden (rein dokumentarisch).
+          type: string
+          format: email
+          maxLength: 320
+          description: Empfänger-E-Mail des Kunden (Pflichtfeld, echte Email-Zustellung).
         note:
           type: ["string", "null"]
-          description: Optionaler Vermerk, der mit dem Versand abgespeichert wird.
+          description: Optionaler Vermerk, der dem Email-Body als Zusatzhinweis angehängt wird.
 
     QuoteConvertToOrderInput:
       type: object

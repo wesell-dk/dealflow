@@ -1267,10 +1267,14 @@
       "sentToCustomer": "Sent to customer",
       "alreadySent": "This confirmation has already been sent to the customer.",
       "sendDialogTitle": "Send order confirmation to customer",
-      "sendDialogDescription": "Marks the confirmation as sent and automatically creates a draft contract that stays linked here.",
-      "recipientEmail": "Recipient email (optional)",
+      "sendDialogDescription": "Sends the order confirmation as a real email with PDF attachment, marks it as sent and creates a draft contract linked here.",
+      "recipientEmail": "Recipient email",
       "sendNote": "Note (optional)",
-      "confirmSend": "Confirm send",
+      "confirmSend": "Send email",
+      "sendFailedTitle": "Email delivery failed",
+      "sendFailedGeneric": "The order confirmation email could not be delivered.",
+      "sendFailedLastAttempt": "Last attempt: {{when}} ({{attempts}} attempts so far)",
+      "retrySend": "Retry send",
       "noConfirmations": "No order confirmations yet"
     },
     "copilot": {

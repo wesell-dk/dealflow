@@ -12623,6 +12623,12 @@ function buildOcDetail(
     sentToCustomerAt: iso(o.sentToCustomerAt),
     sentToCustomerEmail: o.sentToCustomerEmail ?? null,
     sentToCustomerNote: o.sentToCustomerNote ?? null,
+    sendStatus: (o.sendStatus ?? 'pending') as 'pending' | 'sent' | 'failed',
+    sendError: o.sendError ?? null,
+    sendProvider: o.sendProvider ?? null,
+    sendMessageId: o.sendMessageId ?? null,
+    sendAttempts: o.sendAttempts ?? 0,
+    lastSendAttemptAt: iso(o.lastSendAttemptAt),
     contractNumber: contractNumber ?? null,
     daysSinceHandover,
     slaDeadline,
@@ -12854,16 +12860,97 @@ async function createDraftContractFromOc(
   return { contract: created!, created: true };
 }
 
-// Task #237: POST /order-confirmations/:id/send
-// Setzt OC auf sent_to_customer (Übergang aus ready_for_handover) und legt
-// idempotent einen Draft-Vertrag an, der via sourceOrderConfirmationId zurück
-// verlinkt ist. Optionaler Body { recipientEmail?, note? } wird rein
-// dokumentarisch gespeichert — kein echtes E-Mail-Versenden im MVP.
+// Rendert die OC-PDF anhand der OC + dem ursprünglichen Quote-Snapshot.
+// Wird vom /send-Endpunkt genutzt, um die Datei als Anhang an den Kunden
+// zu schicken; die GET-/order-confirmation.pdf-Route bleibt für die UI.
+async function renderOcPdfBytes(
+  o: typeof orderConfirmationsTable.$inferSelect,
+  tenantId: string,
+): Promise<{ bytes: Buffer; brand: typeof brandsTable.$inferSelect | undefined; deal: typeof dealsTable.$inferSelect | undefined; account: typeof accountsTable.$inferSelect | undefined; ocNumber: string; language: 'de' | 'en' }> {
+  const [d] = await db.select().from(dealsTable).where(eq(dealsTable.id, o.dealId));
+  const [account] = d?.accountId
+    ? await db.select().from(accountsTable).where(eq(accountsTable.id, d.accountId))
+    : [];
+  // OCs hängen an einem Quote — sourceQuoteId ist seit Task #237 der
+  // Standardweg. Falls historische OCs ohne sourceQuoteId existieren, bricht
+  // der PDF-Render bewusst sauber ab (caller setzt dann send_failed).
+  if (!o.sourceQuoteId) {
+    throw new Error(`order confirmation ${o.id} has no source quote — cannot render PDF`);
+  }
+  const [q] = await db.select().from(quotesTable).where(eq(quotesTable.id, o.sourceQuoteId));
+  if (!q) throw new Error(`source quote ${o.sourceQuoteId} for OC ${o.id} not found`);
+  const versions = await db.select().from(quoteVersionsTable)
+    .where(eq(quoteVersionsTable.quoteId, q.id))
+    .orderBy(desc(quoteVersionsTable.version));
+  const current = versions.find(v => v.version === q.currentVersion) ?? versions[0];
+  const lines = current
+    ? await db.select().from(lineItemsTable).where(eq(lineItemsTable.quoteVersionId, current.id))
+    : [];
+
+  let brand: typeof brandsTable.$inferSelect | undefined;
+  if (d?.brandId) {
+    const [b] = await db.select().from(brandsTable).where(eq(brandsTable.id, d.brandId));
+    brand = b;
+  }
+  const profile = await loadReadyTemplateProfile(d?.brandId, 'order_confirmation');
+  const ocDefaultRate = await resolveDefaultTaxRatePct({ brandId: d?.brandId, tenantId });
+  const ocNumber = o.number;
+  const language: 'de' | 'en' = q.language === 'en' ? 'en' : 'de';
+  const { renderQuotePdf } = await import('../pdf/quote');
+  const stream = await renderQuotePdf({
+    number: ocNumber,
+    currency: q.currency,
+    status: q.status,
+    validUntil: String(q.validUntil),
+    language,
+    dealName: account?.name ?? d?.name ?? 'Kunde',
+    profile,
+    documentType: 'order_confirmation',
+    version: current?.version ?? 1,
+    totalAmount: num(current?.totalAmount),
+    discountPct: num(current?.discountPct),
+    marginPct: num(current?.marginPct),
+    notes: current?.notes ?? null,
+    lines: lines.map(l => {
+      const m = mapLineWithTax(l, ocDefaultRate);
+      return {
+        name: m.name,
+        description: m.description ?? null,
+        quantity: m.quantity,
+        unitPrice: m.unitPrice,
+        listPrice: m.listPrice,
+        discountPct: m.discountPct,
+        total: m.total,
+        taxRatePct: m.taxRatePct,
+      };
+    }),
+    brand: brand ? {
+      name: brand.name,
+      logoUrl: await resolveLogoForPdf(brand.logoUrl),
+      primaryColor: brand.primaryColor ?? brand.color,
+      secondaryColor: brand.secondaryColor ?? null,
+      legalEntityName: brand.legalEntityName ?? null,
+      addressLine: brand.addressLine ?? null,
+      tone: brand.tone ?? null,
+    } : null,
+  });
+  const bytes = await streamToBuffer(stream);
+  return { bytes, brand, deal: d, account, ocNumber, language };
+}
+
+// Task #237 + #273: POST /order-confirmations/:id/send
+// Versendet die Auftragsbestätigung als echte Email mit PDF-Anhang an den
+// angegebenen Empfänger. Bei Erfolg: OC → sent_to_customer, idempotenter
+// Vertrags-Draft (sourceOrderConfirmationId-Backlink). Bei Fehler bleibt die
+// OC in ready_for_handover, sendStatus=failed, sendError wird gesetzt — die
+// UI zeigt einen Banner mit Retry-Button.
 router.post('/order-confirmations/:id/send', async (req, res) => {
   const SendBody = z.object({
-    recipientEmail: z.string().trim().max(320).email().optional().nullable(),
+    // recipientEmail ist seit Task #273 Pflicht — wir versenden eine echte
+    // Email. Die UI fragt das Feld bereits zwingend ab.
+    recipientEmail: z.string().trim().max(320).email(),
     note: z.string().trim().max(2000).optional().nullable(),
-  }).optional();
+  });
   if (!validateInline(req, res, { body: SendBody })) return;
   const [o] = await db.select().from(orderConfirmationsTable).where(eq(orderConfirmationsTable.id, req.params.id));
   if (!o) { res.status(404).json({ error: 'not found' }); return; }
@@ -12890,29 +12977,134 @@ router.post('/order-confirmations/:id/send', async (req, res) => {
     res.status(400).json({ error: 'required checks not ok', readinessScore: o.readinessScore });
     return;
   }
-  const body = (req.body ?? {}) as { recipientEmail?: string | null; note?: string | null };
+  const body = req.body as { recipientEmail: string; note?: string | null };
+  const recipient = body.recipientEmail.trim();
+  const noteText = body.note?.trim() || null;
+  const scope = getScope(req);
   const now = new Date();
+
+  // 1) PDF rendern.
+  let pdfBytes: Buffer;
+  let brand: typeof brandsTable.$inferSelect | undefined;
+  let language: 'de' | 'en';
+  let ocNumber: string;
+  let dealRow: typeof dealsTable.$inferSelect | undefined;
+  let accountRow: typeof accountsTable.$inferSelect | undefined;
+  try {
+    const rendered = await renderOcPdfBytes(o, scope.tenantId);
+    pdfBytes = rendered.bytes;
+    brand = rendered.brand;
+    language = rendered.language;
+    ocNumber = rendered.ocNumber;
+    dealRow = rendered.deal;
+    accountRow = rendered.account;
+  } catch (err) {
+    const errMsg = err instanceof Error ? err.message : String(err);
+    await db.update(orderConfirmationsTable).set({
+      sendStatus: 'failed',
+      sendError: errMsg,
+      sendAttempts: (o.sendAttempts ?? 0) + 1,
+      lastSendAttemptAt: now,
+    }).where(eq(orderConfirmationsTable.id, o.id));
+    await writeAuditFromReq(req, {
+      entityType: 'order_confirmation', entityId: o.id, action: 'send_failed',
+      summary: `Order confirmation ${o.number}: PDF-Render fehlgeschlagen — ${errMsg}`,
+      after: { recipient, error: errMsg, stage: 'pdf_render' },
+    });
+    res.status(500).json({ error: 'failed to render order confirmation PDF', detail: errMsg });
+    return;
+  }
+
+  // 2) Email senden (mit gerendertem PDF als Anhang).
+  const brandName = brand?.name ?? dealRow?.name ?? 'DealFlow';
+  const customerLabel = accountRow?.name ?? dealRow?.name ?? recipient;
+  const { resolveOcEmailDefaults, sendOrderConfirmationEmail } = await import('../lib/orderConfirmationEmail');
+  const { subject, body: bodyText } = resolveOcEmailDefaults({
+    language,
+    vars: { number: ocNumber, customer: customerLabel, brand: brandName },
+    note: noteText,
+  });
+  const result = await sendOrderConfirmationEmail({
+    to: recipient,
+    subject,
+    body: bodyText,
+    language,
+    brandName,
+    legalEntityName: brand?.legalEntityName ?? null,
+    addressLine: brand?.addressLine ?? null,
+    primaryColor: brand?.primaryColor ?? brand?.color ?? null,
+    replyTo: scope.user.email ?? null,
+    pdf: { filename: `${ocNumber}.pdf`, bytes: pdfBytes },
+    ocNumber,
+    ocId: o.id,
+    channel: {
+      tenantId: scope.tenantId,
+      userId: scope.user.id ?? null,
+      brandId: brand?.id ?? null,
+    },
+  });
+
+  if (!result.ok) {
+    await db.update(orderConfirmationsTable).set({
+      sendStatus: 'failed',
+      sendError: result.error ?? 'unknown email error',
+      sendProvider: result.provider,
+      sendAttempts: (o.sendAttempts ?? 0) + 1,
+      lastSendAttemptAt: now,
+    }).where(eq(orderConfirmationsTable.id, o.id));
+    await writeAuditFromReq(req, {
+      entityType: 'order_confirmation', entityId: o.id, action: 'send_failed',
+      actor: scope.user.name,
+      summary: `Order confirmation ${o.number} email to ${recipient} failed (${result.provider})`,
+      after: { recipient, provider: result.provider, error: result.error ?? null },
+    });
+    await db.insert(timelineEventsTable).values({
+      id: `tl_${randomUUID().slice(0, 8)}`, tenantId: scope.tenantId, type: 'handover',
+      title: 'Versand der Auftragsbestätigung fehlgeschlagen',
+      description: `${o.number} an ${recipient} konnte nicht zugestellt werden (${result.provider}). ${result.error ?? ''}`.trim(),
+      actor: scope.user?.name ?? 'System',
+      dealId: o.dealId,
+    });
+    res.status(502).json({
+      error: 'email send failed',
+      detail: result.error ?? null,
+      provider: result.provider,
+    });
+    return;
+  }
+
+  // 3) Erfolg → OC-Status, sent-Felder + send-Status aktualisieren.
   await db.update(orderConfirmationsTable).set({
     status: 'sent_to_customer',
     sentToCustomerAt: now,
-    sentToCustomerEmail: body.recipientEmail?.trim() || null,
-    sentToCustomerNote: body.note?.trim() || null,
+    sentToCustomerEmail: recipient,
+    sentToCustomerNote: noteText,
+    sendStatus: 'sent',
+    sendError: null,
+    sendProvider: result.provider,
+    sendMessageId: result.messageId ?? null,
+    sendAttempts: (o.sendAttempts ?? 0) + 1,
+    lastSendAttemptAt: now,
   }).where(eq(orderConfirmationsTable.id, o.id));
   await writeAuditFromReq(req, {
     entityType: 'order_confirmation', entityId: o.id, action: 'sent_to_customer',
-    summary: `Order confirmation ${o.number} sent to customer`,
+    actor: scope.user.name,
+    summary: `Order confirmation ${o.number} sent to ${recipient} (${result.provider})`,
     before: { status: o.status },
     after: {
       status: 'sent_to_customer',
-      sentToCustomerEmail: body.recipientEmail ?? null,
-      sentToCustomerNote: body.note ?? null,
+      sentToCustomerEmail: recipient,
+      sentToCustomerNote: noteText,
+      provider: result.provider,
+      messageId: result.messageId ?? null,
+      pdfBytes: pdfBytes.length,
     },
   });
   await db.insert(timelineEventsTable).values({
-    id: `tl_${randomUUID().slice(0, 8)}`, tenantId: getScope(req).tenantId, type: 'handover',
+    id: `tl_${randomUUID().slice(0, 8)}`, tenantId: scope.tenantId, type: 'handover',
     title: 'Auftragsbestätigung an Kunden versandt',
-    description: `${o.number} wurde an den Kunden versandt.${body.recipientEmail ? ` (Empfänger: ${body.recipientEmail})` : ''}`,
-    actor: getScope(req).user?.name ?? 'System',
+    description: `${o.number} wurde per Email an ${recipient} versandt (${result.provider}).`,
+    actor: scope.user?.name ?? 'System',
     dealId: o.dealId,
   });
   // Re-load mit gesetzten sent-Feldern, damit der Helper sauber arbeiten kann.

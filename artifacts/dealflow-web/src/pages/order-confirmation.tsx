@@ -102,17 +102,50 @@ export default function OrderConfirmationDetail() {
     setDialogOpen(false);
   };
 
+  const [sendError, setSendError] = useState<string | null>(null);
   const submitSend = async () => {
-    await send.mutateAsync({
-      id,
-      data: {
-        recipientEmail: sendForm.recipientEmail.trim() || null,
-        note: sendForm.note.trim() || null,
-      },
-    });
-    qc.invalidateQueries({ queryKey: getGetOrderConfirmationQueryKey(id) });
-    setSendOpen(false);
-    setSendForm({ recipientEmail: "", note: "" });
+    setSendError(null);
+    try {
+      await send.mutateAsync({
+        id,
+        data: {
+          recipientEmail: sendForm.recipientEmail.trim(),
+          note: sendForm.note.trim() || null,
+        },
+      });
+      qc.invalidateQueries({ queryKey: getGetOrderConfirmationQueryKey(id) });
+      setSendOpen(false);
+      setSendForm({ recipientEmail: "", note: "" });
+    } catch (err) {
+      const detail = (err as { detail?: string; error?: string; message?: string } | undefined);
+      setSendError(detail?.detail || detail?.error || detail?.message || t("pages.orderConfirmations.sendFailedGeneric"));
+      // Trotzdem invalidieren, damit der Banner mit sendStatus=failed sichtbar wird.
+      qc.invalidateQueries({ queryKey: getGetOrderConfirmationQueryKey(id) });
+    }
+  };
+
+  const retrySend = async () => {
+    if (!data?.sentToCustomerEmail) {
+      // Ohne früheren Empfänger den Dialog öffnen.
+      setSendForm({ recipientEmail: "", note: data?.sentToCustomerNote ?? "" });
+      setSendOpen(true);
+      return;
+    }
+    setSendError(null);
+    try {
+      await send.mutateAsync({
+        id,
+        data: {
+          recipientEmail: data.sentToCustomerEmail,
+          note: data.sentToCustomerNote ?? null,
+        },
+      });
+      qc.invalidateQueries({ queryKey: getGetOrderConfirmationQueryKey(id) });
+    } catch (err) {
+      const detail = (err as { detail?: string; error?: string; message?: string } | undefined);
+      setSendError(detail?.detail || detail?.error || detail?.message || t("pages.orderConfirmations.sendFailedGeneric"));
+      qc.invalidateQueries({ queryKey: getGetOrderConfirmationQueryKey(id) });
+    }
   };
 
   const doComplete = async () => {
@@ -176,7 +209,7 @@ export default function OrderConfirmationDetail() {
         </div>
         {/* Task #237: Send-to-customer Aktion (legt Vertrag-Draft an) */}
         {(data.status === "ready_for_handover" || data.status === "sent_to_customer") && (
-          <Dialog open={sendOpen} onOpenChange={setSendOpen}>
+          <Dialog open={sendOpen} onOpenChange={(o) => { setSendOpen(o); if (!o) setSendError(null); }}>
             <DialogTrigger asChild>
               <Button
                 variant={data.status === "sent_to_customer" ? "outline" : "default"}
@@ -218,9 +251,21 @@ export default function OrderConfirmationDetail() {
                   />
                 </div>
               </div>
+              {sendError && (
+                <div
+                  className="text-xs text-rose-700 bg-rose-50 border border-rose-200 rounded px-3 py-2 dark:bg-rose-950/30 dark:text-rose-200 dark:border-rose-900"
+                  data-testid="oc-send-error"
+                >
+                  {sendError}
+                </div>
+              )}
               <DialogFooter>
-                <Button variant="ghost" onClick={() => setSendOpen(false)}>{t("common.cancel")}</Button>
-                <Button onClick={submitSend} disabled={send.isPending} data-testid="oc-send-confirm">
+                <Button variant="ghost" onClick={() => { setSendOpen(false); setSendError(null); }}>{t("common.cancel")}</Button>
+                <Button
+                  onClick={submitSend}
+                  disabled={send.isPending || !sendForm.recipientEmail.trim()}
+                  data-testid="oc-send-confirm"
+                >
                   {t("pages.orderConfirmations.confirmSend")}
                 </Button>
               </DialogFooter>
@@ -346,6 +391,41 @@ export default function OrderConfirmationDetail() {
                 </div>
               )}
             </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Send-Failure Banner mit Retry */}
+      {data.sendStatus === "failed" && (
+        <Card className="border-amber-300 bg-amber-50/50 dark:bg-amber-950/20">
+          <CardContent className="pt-6 flex items-start gap-3">
+            <AlertOctagon className="h-5 w-5 text-amber-600 shrink-0 mt-0.5" />
+            <div className="flex-1 space-y-1">
+              <div className="font-medium text-sm text-amber-900 dark:text-amber-100">
+                {t("pages.orderConfirmations.sendFailedTitle")}
+              </div>
+              <div className="text-xs text-amber-800 dark:text-amber-200 break-words">
+                {data.sendError || t("pages.orderConfirmations.sendFailedGeneric")}
+              </div>
+              {data.lastSendAttemptAt && (
+                <div className="text-xs text-amber-700 dark:text-amber-300">
+                  {t("pages.orderConfirmations.sendFailedLastAttempt", {
+                    when: new Date(data.lastSendAttemptAt).toLocaleString(),
+                    attempts: data.sendAttempts ?? 1,
+                  })}
+                </div>
+              )}
+            </div>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={retrySend}
+              disabled={send.isPending}
+              data-testid="button-retry-send"
+            >
+              <Send className="h-3.5 w-3.5 mr-1.5" />
+              {t("pages.orderConfirmations.retrySend")}
+            </Button>
           </CardContent>
         </Card>
       )}

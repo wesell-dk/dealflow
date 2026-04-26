@@ -9,16 +9,16 @@ Multi-tenant, multi-company, multi-brand. Deal-centric.
  */
 
 /**
- * Eingabe für POST /order-confirmations/:id/send. Beide Felder optional — ohne Recipient-Email wird der Versand nur intern protokolliert.
+ * Eingabe für POST /order-confirmations/:id/send. Seit Task #273 wird eine echte Email mit OC-PDF an `recipientEmail` versandt — das Feld ist daher Pflicht. `note` wird dem Standard-Body als Zusatzhinweis des Vertriebs angehängt.
  */
 export interface OrderConfirmationSendInput {
   /**
-   * Optionale Empfänger-E-Mail beim Kunden (rein dokumentarisch).
-   * @nullable
+   * Empfänger-E-Mail des Kunden (Pflichtfeld, echte Email-Zustellung).
+   * @maxLength 320
    */
-  recipientEmail?: string | null;
+  recipientEmail: string;
   /**
-   * Optionaler Vermerk, der mit dem Versand abgespeichert wird.
+   * Optionaler Vermerk, der dem Email-Body als Zusatzhinweis angehängt wird.
    * @nullable
    */
   note?: string | null;

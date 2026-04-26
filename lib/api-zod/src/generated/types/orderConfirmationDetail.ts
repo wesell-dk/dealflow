@@ -10,6 +10,7 @@ Multi-tenant, multi-company, multi-brand. Deal-centric.
 import type { OrderConfirmation } from "./orderConfirmation";
 import type { OrderConfirmationDetailChecksItem } from "./orderConfirmationDetailChecksItem";
 import type { OrderConfirmationDetailEscalationsItem } from "./orderConfirmationDetailEscalationsItem";
+import type { OrderConfirmationDetailSendStatus } from "./orderConfirmationDetailSendStatus";
 
 export type OrderConfirmationDetail = OrderConfirmation & {
   /** @nullable */
@@ -38,6 +39,30 @@ export type OrderConfirmationDetail = OrderConfirmation & {
    * @nullable
    */
   sentToCustomerNote?: string | null;
+  /** Status des letzten Email-Versuchs. 'pending' = noch nie versucht; 'sent' = letzter Versuch erfolgreich; 'failed' = letzter Versuch fehlgeschlagen, Retry möglich. */
+  sendStatus?: OrderConfirmationDetailSendStatus;
+  /**
+   * Letzte Fehlermeldung des Email-Versands (nur bei sendStatus=failed).
+   * @nullable
+   */
+  sendError?: string | null;
+  /**
+   * Provider, der den letzten (erfolgreichen oder fehlgeschlagenen) Versand bedient hat (z.B. 'resend' oder 'log').
+   * @nullable
+   */
+  sendProvider?: string | null;
+  /**
+   * Provider-Message-ID des erfolgreichen Email-Versands (zum Korrelieren mit Email-Send-Log).
+   * @nullable
+   */
+  sendMessageId?: string | null;
+  /** Wie viele Versand-Versuche gab es bisher. */
+  sendAttempts?: number;
+  /**
+   * Zeitstempel des letzten Versand-Versuchs (egal ob erfolgreich oder fehlgeschlagen).
+   * @nullable
+   */
+  lastSendAttemptAt?: Date | null;
   /**
    * Nummer/Titel des verlinkten Vertrags (gesetzt sobald per /send ein Draft-Vertrag automatisch erzeugt wurde).
    * @nullable

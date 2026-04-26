@@ -464,6 +464,7 @@ export * from "./orderConfirmationActiveOwner";
 export * from "./orderConfirmationDetail";
 export * from "./orderConfirmationDetailChecksItem";
 export * from "./orderConfirmationDetailEscalationsItem";
+export * from "./orderConfirmationDetailSendStatus";
 export * from "./orderConfirmationHandoverInput";
 export * from "./orderConfirmationSendInput";
 export * from "./orderConfirmationStatus";

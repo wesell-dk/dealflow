@@ -1362,6 +1362,15 @@ export const orderConfirmationsTable = pgTable("order_confirmations", {
   sentToCustomerAt: timestamp("sent_to_customer_at", { withTimezone: true }),
   sentToCustomerEmail: text("sent_to_customer_email"),
   sentToCustomerNote: text("sent_to_customer_note"),
+  // Task #273: Echtes Email-Versenden der OC.
+  // sendStatus: 'pending' (noch nie versucht), 'sent' (erfolgreich), 'failed'
+  // (letzter Versuch fehlgeschlagen — Banner mit Retry sichtbar machen).
+  sendStatus: text("send_status").notNull().default("pending"),
+  sendError: text("send_error"),
+  sendProvider: text("send_provider"),
+  sendMessageId: text("send_message_id"),
+  sendAttempts: integer("send_attempts").notNull().default(0),
+  lastSendAttemptAt: timestamp("last_send_attempt_at", { withTimezone: true }),
   createdAt: ts("created_at"),
 });
 

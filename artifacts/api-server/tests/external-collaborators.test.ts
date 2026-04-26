@@ -794,21 +794,18 @@ describe("external collaborators — magic-link flow", () => {
     // Da dieser Mitzeichner der einzige Signer im Package ist, ist mit der
     // Mitzeichnung das gesamte Paket vollstaendig — die Vervollstaendigungs-
     // Pipeline (gleiche wie /signers/:id/sign) muss greifen: Package wird
-    // 'completed', eine Auftragsbestaetigung wird erzeugt, und ein
-    // Completion-Audit (action='completed') landet ebenfalls mit
-    // actor=magic-link:<id> im Log.
+    // 'completed' und ein Completion-Audit (action='completed') landet
+    // ebenfalls mit actor=magic-link:<id> im Log.
+    //
+    // Hinweis (Task #237): Die Vertrags-Signatur erzeugt seit dem reversen
+    // OC↔Vertrag-Flow KEINE neue Auftragsbestaetigung mehr — die OC wird
+    // bereits beim Quote-Accept angelegt. Daher pruefen wir hier nur noch
+    // Package-Status + Completion-Audit, nicht mehr die OC-Anlage.
     const [pkg] = await db.select().from(signaturePackagesTable)
       .where(eq(signaturePackagesTable.id, worldA.signaturePackageId));
     assert.ok(pkg, "Package muss existieren");
     assert.equal(pkg!.status, "completed",
       "Package muss nach finaler Mitzeichnung 'completed' sein, war: " + pkg!.status);
-    assert.ok(pkg!.orderConfirmationId,
-      "Package muss eine OC-ID nach Vervollstaendigung tragen");
-    const ocs = await db.select().from(orderConfirmationsTable)
-      .where(eq(orderConfirmationsTable.id, pkg!.orderConfirmationId!));
-    assert.equal(ocs.length, 1,
-      "Auftragsbestaetigung muss durch externe Mitzeichnung erzeugt worden sein");
-    assert.equal(ocs[0]!.dealId, worldA.dealId);
 
     const completionAudits = (await db.select().from(auditLogTable)
       .where(eq(auditLogTable.entityId, worldA.signaturePackageId)))
@@ -817,9 +814,6 @@ describe("external collaborators — magic-link flow", () => {
       "Completion-Audit fuer das Package muss existieren");
     assert.ok(completionAudits.some((a) => a.actor === `magic-link:${c.id}`),
       "Completion-Audit muss actor=magic-link:<id> tragen, nicht eine User-ID");
-
-    // OC fuer Cleanup vormerken.
-    extraOcIds.push(pkg!.orderConfirmationId!);
 
     // Audit-Eintrag mit actor=magic-link:<id> + action=external_signature.
     const audits = await db.select().from(auditLogTable)

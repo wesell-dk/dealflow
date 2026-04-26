@@ -253,7 +253,9 @@ describe("Task #237 — reversed OC↔Contract creation flow", () => {
     assert.ok(oc, "expected OC from worldA");
     assert.notEqual(oc.status, "ready_for_handover", "precondition: OC not yet ready");
 
-    const r = await clientA.post(`/api/order-confirmations/${oc.id}/send`, {});
+    const r = await clientA.post(`/api/order-confirmations/${oc.id}/send`, {
+      recipientEmail: "buyer@example.test",
+    });
     assert.equal(r.status, 409, `expected 409, got ${r.status}: ${JSON.stringify(r.body)}`);
     const contractsAfter = await db.select().from(contractsTable)
       .where(eq(contractsTable.sourceOrderConfirmationId, oc.id));

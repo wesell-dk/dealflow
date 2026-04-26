@@ -4883,6 +4883,18 @@ export interface OrderConfirmation {
   createdAt: string;
 }
 
+/**
+ * Status des letzten Email-Versuchs. 'pending' = noch nie versucht; 'sent' = letzter Versuch erfolgreich; 'failed' = letzter Versuch fehlgeschlagen, Retry möglich.
+ */
+export type OrderConfirmationDetailSendStatus =
+  (typeof OrderConfirmationDetailSendStatus)[keyof typeof OrderConfirmationDetailSendStatus];
+
+export const OrderConfirmationDetailSendStatus = {
+  pending: "pending",
+  sent: "sent",
+  failed: "failed",
+} as const;
+
 export type OrderConfirmationDetailEscalationsItem = {
   checkId: string;
   label: string;
@@ -4925,6 +4937,30 @@ export type OrderConfirmationDetail = OrderConfirmation & {
    * @nullable
    */
   sentToCustomerNote?: string | null;
+  /** Status des letzten Email-Versuchs. 'pending' = noch nie versucht; 'sent' = letzter Versuch erfolgreich; 'failed' = letzter Versuch fehlgeschlagen, Retry möglich. */
+  sendStatus?: OrderConfirmationDetailSendStatus;
+  /**
+   * Letzte Fehlermeldung des Email-Versands (nur bei sendStatus=failed).
+   * @nullable
+   */
+  sendError?: string | null;
+  /**
+   * Provider, der den letzten (erfolgreichen oder fehlgeschlagenen) Versand bedient hat (z.B. 'resend' oder 'log').
+   * @nullable
+   */
+  sendProvider?: string | null;
+  /**
+   * Provider-Message-ID des erfolgreichen Email-Versands (zum Korrelieren mit Email-Send-Log).
+   * @nullable
+   */
+  sendMessageId?: string | null;
+  /** Wie viele Versand-Versuche gab es bisher. */
+  sendAttempts?: number;
+  /**
+   * Zeitstempel des letzten Versand-Versuchs (egal ob erfolgreich oder fehlgeschlagen).
+   * @nullable
+   */
+  lastSendAttemptAt?: string | null;
   /**
    * Nummer/Titel des verlinkten Vertrags (gesetzt sobald per /send ein Draft-Vertrag automatisch erzeugt wurde).
    * @nullable
@@ -4940,16 +4976,16 @@ export type OrderConfirmationDetail = OrderConfirmation & {
 };
 
 /**
- * Eingabe für POST /order-confirmations/:id/send. Beide Felder optional — ohne Recipient-Email wird der Versand nur intern protokolliert.
+ * Eingabe für POST /order-confirmations/:id/send. Seit Task #273 wird eine echte Email mit OC-PDF an `recipientEmail` versandt — das Feld ist daher Pflicht. `note` wird dem Standard-Body als Zusatzhinweis des Vertriebs angehängt.
  */
 export interface OrderConfirmationSendInput {
   /**
-   * Optionale Empfänger-E-Mail beim Kunden (rein dokumentarisch).
-   * @nullable
+   * Empfänger-E-Mail des Kunden (Pflichtfeld, echte Email-Zustellung).
+   * @maxLength 320
    */
-  recipientEmail?: string | null;
+  recipientEmail: string;
   /**
-   * Optionaler Vermerk, der mit dem Versand abgespeichert wird.
+   * Optionaler Vermerk, der dem Email-Body als Zusatzhinweis angehängt wird.
    * @nullable
    */
   note?: string | null;

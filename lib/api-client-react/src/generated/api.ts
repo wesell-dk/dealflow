@@ -19292,7 +19292,7 @@ export const useCompleteOrderConfirmation = <
 };
 
 /**
- * @summary Versendet die Auftragsbestätigung an den Kunden (Statuswechsel auf sent_to_customer) und erzeugt idempotent einen Vertrags-Draft, der via sourceOrderConfirmationId zurück verlinkt ist.
+ * @summary Versendet die Auftragsbestätigung als echte Email mit PDF-Anhang an den Kunden (Statuswechsel auf sent_to_customer) und erzeugt idempotent einen Vertrags-Draft, der via sourceOrderConfirmationId zurück verlinkt ist. Schlägt der Email-Versand fehl, bleibt die OC in ready_for_handover und sendStatus ist 'failed' — der Versand kann dann erneut ausgelöst werden.
  */
 export const getSendOrderConfirmationToCustomerUrl = (id: string) => {
   return `/api/v1/order-confirmations/${id}/send`;
@@ -19300,7 +19300,7 @@ export const getSendOrderConfirmationToCustomerUrl = (id: string) => {
 
 export const sendOrderConfirmationToCustomer = async (
   id: string,
-  orderConfirmationSendInput?: OrderConfirmationSendInput,
+  orderConfirmationSendInput: OrderConfirmationSendInput,
   options?: RequestInit,
 ): Promise<OrderConfirmationDetail> => {
   return customFetch<OrderConfirmationDetail>(
@@ -19360,7 +19360,7 @@ export type SendOrderConfirmationToCustomerMutationBody =
 export type SendOrderConfirmationToCustomerMutationError = ErrorType<void>;
 
 /**
- * @summary Versendet die Auftragsbestätigung an den Kunden (Statuswechsel auf sent_to_customer) und erzeugt idempotent einen Vertrags-Draft, der via sourceOrderConfirmationId zurück verlinkt ist.
+ * @summary Versendet die Auftragsbestätigung als echte Email mit PDF-Anhang an den Kunden (Statuswechsel auf sent_to_customer) und erzeugt idempotent einen Vertrags-Draft, der via sourceOrderConfirmationId zurück verlinkt ist. Schlägt der Email-Versand fehl, bleibt die OC in ready_for_handover und sendStatus ist 'failed' — der Versand kann dann erneut ausgelöst werden.
  */
 export const useSendOrderConfirmationToCustomer = <
   TError = ErrorType<void>,

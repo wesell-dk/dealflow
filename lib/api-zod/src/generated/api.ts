@@ -8762,6 +8762,40 @@ export const GetOrderConfirmationResponse = zod
         .describe(
           "Optionaler Vermerk, der mit dem Kunden-Versand mitgeschickt wurde.",
         ),
+      sendStatus: zod
+        .enum(["pending", "sent", "failed"])
+        .optional()
+        .describe(
+          "Status des letzten Email-Versuchs. 'pending' = noch nie versucht; 'sent' = letzter Versuch erfolgreich; 'failed' = letzter Versuch fehlgeschlagen, Retry möglich.",
+        ),
+      sendError: zod
+        .string()
+        .nullish()
+        .describe(
+          "Letzte Fehlermeldung des Email-Versands (nur bei sendStatus=failed).",
+        ),
+      sendProvider: zod
+        .string()
+        .nullish()
+        .describe(
+          "Provider, der den letzten (erfolgreichen oder fehlgeschlagenen) Versand bedient hat (z.B. 'resend' oder 'log').",
+        ),
+      sendMessageId: zod
+        .string()
+        .nullish()
+        .describe(
+          "Provider-Message-ID des erfolgreichen Email-Versands (zum Korrelieren mit Email-Send-Log).",
+        ),
+      sendAttempts: zod
+        .number()
+        .optional()
+        .describe("Wie viele Versand-Versuche gab es bisher."),
+      lastSendAttemptAt: zod.coerce
+        .date()
+        .nullish()
+        .describe(
+          "Zeitstempel des letzten Versand-Versuchs (egal ob erfolgreich oder fehlgeschlagen).",
+        ),
       contractNumber: zod
         .string()
         .nullish()
@@ -8860,6 +8894,40 @@ export const HandoverOrderConfirmationResponse = zod
         .describe(
           "Optionaler Vermerk, der mit dem Kunden-Versand mitgeschickt wurde.",
         ),
+      sendStatus: zod
+        .enum(["pending", "sent", "failed"])
+        .optional()
+        .describe(
+          "Status des letzten Email-Versuchs. 'pending' = noch nie versucht; 'sent' = letzter Versuch erfolgreich; 'failed' = letzter Versuch fehlgeschlagen, Retry möglich.",
+        ),
+      sendError: zod
+        .string()
+        .nullish()
+        .describe(
+          "Letzte Fehlermeldung des Email-Versands (nur bei sendStatus=failed).",
+        ),
+      sendProvider: zod
+        .string()
+        .nullish()
+        .describe(
+          "Provider, der den letzten (erfolgreichen oder fehlgeschlagenen) Versand bedient hat (z.B. 'resend' oder 'log').",
+        ),
+      sendMessageId: zod
+        .string()
+        .nullish()
+        .describe(
+          "Provider-Message-ID des erfolgreichen Email-Versands (zum Korrelieren mit Email-Send-Log).",
+        ),
+      sendAttempts: zod
+        .number()
+        .optional()
+        .describe("Wie viele Versand-Versuche gab es bisher."),
+      lastSendAttemptAt: zod.coerce
+        .date()
+        .nullish()
+        .describe(
+          "Zeitstempel des letzten Versand-Versuchs (egal ob erfolgreich oder fehlgeschlagen).",
+        ),
       contractNumber: zod
         .string()
         .nullish()
@@ -8949,6 +9017,40 @@ export const CompleteOrderConfirmationResponse = zod
         .describe(
           "Optionaler Vermerk, der mit dem Kunden-Versand mitgeschickt wurde.",
         ),
+      sendStatus: zod
+        .enum(["pending", "sent", "failed"])
+        .optional()
+        .describe(
+          "Status des letzten Email-Versuchs. 'pending' = noch nie versucht; 'sent' = letzter Versuch erfolgreich; 'failed' = letzter Versuch fehlgeschlagen, Retry möglich.",
+        ),
+      sendError: zod
+        .string()
+        .nullish()
+        .describe(
+          "Letzte Fehlermeldung des Email-Versands (nur bei sendStatus=failed).",
+        ),
+      sendProvider: zod
+        .string()
+        .nullish()
+        .describe(
+          "Provider, der den letzten (erfolgreichen oder fehlgeschlagenen) Versand bedient hat (z.B. 'resend' oder 'log').",
+        ),
+      sendMessageId: zod
+        .string()
+        .nullish()
+        .describe(
+          "Provider-Message-ID des erfolgreichen Email-Versands (zum Korrelieren mit Email-Send-Log).",
+        ),
+      sendAttempts: zod
+        .number()
+        .optional()
+        .describe("Wie viele Versand-Versuche gab es bisher."),
+      lastSendAttemptAt: zod.coerce
+        .date()
+        .nullish()
+        .describe(
+          "Zeitstempel des letzten Versand-Versuchs (egal ob erfolgreich oder fehlgeschlagen).",
+        ),
       contractNumber: zod
         .string()
         .nullish()
@@ -8978,27 +9080,32 @@ export const CompleteOrderConfirmationResponse = zod
   );
 
 /**
- * @summary Versendet die Auftragsbestätigung an den Kunden (Statuswechsel auf sent_to_customer) und erzeugt idempotent einen Vertrags-Draft, der via sourceOrderConfirmationId zurück verlinkt ist.
+ * @summary Versendet die Auftragsbestätigung als echte Email mit PDF-Anhang an den Kunden (Statuswechsel auf sent_to_customer) und erzeugt idempotent einen Vertrags-Draft, der via sourceOrderConfirmationId zurück verlinkt ist. Schlägt der Email-Versand fehl, bleibt die OC in ready_for_handover und sendStatus ist 'failed' — der Versand kann dann erneut ausgelöst werden.
  */
 export const SendOrderConfirmationToCustomerParams = zod.object({
   id: zod.coerce.string(),
 });
 
+export const sendOrderConfirmationToCustomerBodyRecipientEmailMax = 320;
+
 export const SendOrderConfirmationToCustomerBody = zod
   .object({
     recipientEmail: zod
       .string()
-      .nullish()
+      .email()
+      .max(sendOrderConfirmationToCustomerBodyRecipientEmailMax)
       .describe(
-        "Optionale Empfänger-E-Mail beim Kunden (rein dokumentarisch).",
+        "Empfänger-E-Mail des Kunden (Pflichtfeld, echte Email-Zustellung).",
       ),
     note: zod
       .string()
       .nullish()
-      .describe("Optionaler Vermerk, der mit dem Versand abgespeichert wird."),
+      .describe(
+        "Optionaler Vermerk, der dem Email-Body als Zusatzhinweis angehängt wird.",
+      ),
   })
   .describe(
-    "Eingabe für POST \/order-confirmations\/:id\/send. Beide Felder optional — ohne Recipient-Email wird der Versand nur intern protokolliert.",
+    "Eingabe für POST \/order-confirmations\/:id\/send. Seit Task #273 wird eine echte Email mit OC-PDF an `recipientEmail` versandt — das Feld ist daher Pflicht. `note` wird dem Standard-Body als Zusatzhinweis des Vertriebs angehängt.",
   );
 
 export const SendOrderConfirmationToCustomerResponse = zod
@@ -9057,6 +9164,40 @@ export const SendOrderConfirmationToCustomerResponse = zod
         .nullish()
         .describe(
           "Optionaler Vermerk, der mit dem Kunden-Versand mitgeschickt wurde.",
+        ),
+      sendStatus: zod
+        .enum(["pending", "sent", "failed"])
+        .optional()
+        .describe(
+          "Status des letzten Email-Versuchs. 'pending' = noch nie versucht; 'sent' = letzter Versuch erfolgreich; 'failed' = letzter Versuch fehlgeschlagen, Retry möglich.",
+        ),
+      sendError: zod
+        .string()
+        .nullish()
+        .describe(
+          "Letzte Fehlermeldung des Email-Versands (nur bei sendStatus=failed).",
+        ),
+      sendProvider: zod
+        .string()
+        .nullish()
+        .describe(
+          "Provider, der den letzten (erfolgreichen oder fehlgeschlagenen) Versand bedient hat (z.B. 'resend' oder 'log').",
+        ),
+      sendMessageId: zod
+        .string()
+        .nullish()
+        .describe(
+          "Provider-Message-ID des erfolgreichen Email-Versands (zum Korrelieren mit Email-Send-Log).",
+        ),
+      sendAttempts: zod
+        .number()
+        .optional()
+        .describe("Wie viele Versand-Versuche gab es bisher."),
+      lastSendAttemptAt: zod.coerce
+        .date()
+        .nullish()
+        .describe(
+          "Zeitstempel des letzten Versand-Versuchs (egal ob erfolgreich oder fehlgeschlagen).",
         ),
       contractNumber: zod
         .string()
