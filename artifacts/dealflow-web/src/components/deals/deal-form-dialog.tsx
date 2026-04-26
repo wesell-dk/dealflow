@@ -83,6 +83,20 @@ export function DealFormDialog({ open, onOpenChange, deal, defaultAccountId, onS
 
   const today = useMemo(() => new Date().toISOString().slice(0, 10), []);
 
+  // Marke ist die Quelle für die Company: jede Brand hängt fest an genau einer
+  // Company (`brands.company_id` notNull). Wir leiten die companyId immer aus
+  // der gewählten Marke ab, damit Nutzer keine widersprüchliche Kombination
+  // erzeugen können (vgl. Task #226).
+  const selectedBrand = useMemo(
+    () => brands?.find(b => b.id === brandId),
+    [brands, brandId],
+  );
+  const derivedCompanyId = selectedBrand?.companyId ?? "";
+  const derivedCompanyName = useMemo(() => {
+    if (!derivedCompanyId) return "";
+    return companies?.find(c => c.id === derivedCompanyId)?.name ?? "";
+  }, [companies, derivedCompanyId]);
+
   useEffect(() => {
     if (open) {
       setName(deal?.name ?? "");
@@ -102,6 +116,17 @@ export function DealFormDialog({ open, onOpenChange, deal, defaultAccountId, onS
     }
   }, [open, deal, defaultAccountId]);
 
+  // Company aus der gewählten Marke ableiten — sobald die Brand-Liste oder
+  // der ausgewählte Brand sich ändert, spiegeln wir die zugehörige companyId
+  // ins lokale Form-State, damit das (read-only) Company-Feld konsistent
+  // bleibt und beim Submit der korrekte Wert übermittelt wird.
+  useEffect(() => {
+    if (!open) return;
+    if (derivedCompanyId && derivedCompanyId !== companyId) {
+      setCompanyId(derivedCompanyId);
+    }
+  }, [open, derivedCompanyId, companyId]);
+
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     const trimmedName = name.trim();
@@ -118,8 +143,17 @@ export function DealFormDialog({ open, onOpenChange, deal, defaultAccountId, onS
       toast({ title: "Wert ungültig", description: "Bitte einen positiven Betrag angeben oder leer lassen.", variant: "destructive" });
       return;
     }
-    if (!isEdit && (!accountId || !brandId || !companyId || !ownerId || !expectedCloseDate)) {
-      toast({ title: "Pflichtfelder fehlen", description: "Kunde, Marke, Company, Verantwortlich und Abschlussdatum sind erforderlich.", variant: "destructive" });
+    // Company wird aus der gewählten Marke abgeleitet — die separate Pflicht-
+    // prüfung entfällt, sobald eine Marke gewählt ist.
+    if (!isEdit && (!accountId || !brandId || !ownerId || !expectedCloseDate)) {
+      toast({ title: "Pflichtfelder fehlen", description: "Kunde, Marke, Verantwortlich und Abschlussdatum sind erforderlich.", variant: "destructive" });
+      return;
+    }
+    // Sicherheits-Netz: ohne aufgelöste Brand-Daten haben wir keine companyId
+    // und dürfen nicht senden — sonst lehnt das Backend (Brand/Company-
+    // Konsistenzprüfung) den Request ab.
+    if (!isEdit && !derivedCompanyId) {
+      toast({ title: "Marke wird geladen", description: "Bitte einen Moment warten und erneut versuchen.", variant: "destructive" });
       return;
     }
     try {
@@ -160,7 +194,11 @@ export function DealFormDialog({ open, onOpenChange, deal, defaultAccountId, onS
             value: valueProvided ? numValue : 0,
             stage,
             brandId,
-            companyId,
+            // companyId wird aus der Marke abgeleitet (siehe useMemo oben).
+            // Wir senden den abgeleiteten Wert direkt, statt auf den
+            // useEffect-Sync zu vertrauen, damit ein synchrones Submit nach
+            // dem Brand-Wechsel garantiert die korrekte companyId enthält.
+            companyId: derivedCompanyId,
             ownerId,
             expectedCloseDate,
           },
@@ -283,15 +321,26 @@ export function DealFormDialog({ open, onOpenChange, deal, defaultAccountId, onS
               </div>
               <div className="space-y-2">
                 <div className="flex items-center gap-1.5">
-                  <Label htmlFor="deal-company">Company *</Label>
+                  <Label htmlFor="deal-company">Company</Label>
                   <FieldHint term={{ group: "concepts", value: "company" }} />
                 </div>
-                <Select value={companyId} onValueChange={setCompanyId} disabled={pending}>
-                  <SelectTrigger id="deal-company" data-testid="deal-form-company"><SelectValue placeholder="Company wählen…" /></SelectTrigger>
-                  <SelectContent>
-                    {companies?.map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
-                  </SelectContent>
-                </Select>
+                {/*
+                  Company ist read-only und wird aus der gewählten Marke
+                  abgeleitet. Wir zeigen den Wert als Input statt Select, damit
+                  klar ist, dass hier keine eigene Auswahl getroffen wird.
+                */}
+                <Input
+                  id="deal-company"
+                  data-testid="deal-form-company"
+                  value={derivedCompanyName}
+                  placeholder={brandId ? "Wird aus Marke abgeleitet…" : "Erst eine Marke wählen"}
+                  readOnly
+                  disabled
+                  aria-describedby="deal-company-hint"
+                />
+                <p id="deal-company-hint" className="text-xs text-muted-foreground">
+                  Wird automatisch aus der gewählten Marke übernommen.
+                </p>
               </div>
             </div>
           )}

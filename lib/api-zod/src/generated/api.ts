@@ -1772,6 +1772,18 @@ export const UpdateDealBody = zod.object({
   riskLevel: zod.string().optional(),
   nextStep: zod.string().optional(),
   expectedCloseDate: zod.coerce.date().optional(),
+  brandId: zod
+    .string()
+    .optional()
+    .describe(
+      "Optional. Beim Wechsel der Marke wird die Company serverseitig automatisch aus `brand.companyId` abgeleitet — eine separate Übermittlung von `companyId` ist nicht vorgesehen. Wird ein Wert übergeben, muss er zur gewählten Marke passen, sonst 422.",
+    ),
+  companyId: zod
+    .string()
+    .optional()
+    .describe(
+      "Optional. Wenn gesetzt, muss `companyId` zur (ggf. neu gesetzten) `brandId` passen — sonst 422. Üblicherweise wird `companyId` nicht gesendet, da sie automatisch aus der Marke abgeleitet wird.",
+    ),
 });
 
 export const UpdateDealResponse = zod.object({

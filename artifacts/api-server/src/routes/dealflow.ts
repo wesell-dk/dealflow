@@ -2606,6 +2606,23 @@ router.post('/deals', async (req, res) => {
   if (!company || company.tenantId !== scope.tenantId) {
     res.status(403).json({ error: 'forbidden (out of tenant)' }); return;
   }
+  // Brand/Company-Konsistenz (Task #226): jede Marke gehört im Datenmodell
+  // fest zu genau einer Company (`brands.company_id` notNull). Wir lehnen
+  // Requests, die eine companyId schicken, die nicht zur brandId passt, mit
+  // einer klaren Fehlermeldung ab — sonst könnte ein API-Client Deals mit
+  // widersprüchlicher Marke/Company anlegen.
+  const [brandRow] = await db.select().from(brandsTable).where(eq(brandsTable.id, b.brandId));
+  if (!brandRow) {
+    res.status(422).json({ error: 'invalid brandId', message: 'Marke nicht gefunden.' });
+    return;
+  }
+  if (brandRow.companyId !== b.companyId) {
+    res.status(422).json({
+      error: 'brand/company mismatch',
+      message: 'Die angegebene Company passt nicht zur gewählten Marke.',
+    });
+    return;
+  }
   // Intersection (Permission ∩ Active) für POST: aktive Sicht muss companyId
   // ODER brandId enthalten. Tenant-weit + kein aktiver Filter ⇒ pass-through.
   if (!scope.tenantWide || hasActiveScopeFilter(scope)) {
@@ -2701,15 +2718,50 @@ router.patch('/deals/:id', async (req, res) => {
     if (b[k] !== undefined) update[k] = b[k];
   }
   if (b.value !== undefined) update.value = String(b.value);
+
+  // Brand/Company-Konsistenz beim Update (Task #226):
+  // Wird `brandId` geändert, leiten wir `companyId` serverseitig aus
+  // `brand.companyId` ab — sonst entstünde ein Datensatz mit
+  // brand→company-A und gespeicherter company-B. Wenn der Client zusätzlich
+  // ein eigenes `companyId` schickt, muss es zur (ggf. neuen) Marke passen,
+  // sonst lehnen wir mit 422 ab. Das spiegelt das POST /deals-Verhalten.
   if (b.brandId !== undefined) {
     const bid = b.brandId === null ? null : String(b.brandId);
-    if (bid !== null) {
-      const [bb] = await db.select().from(brandsTable).where(eq(brandsTable.id, bid));
-      if (!bb) { res.status(400).json({ error: 'brandId not found' }); return; }
-      if (!(await brandVisible(req, bb))) { res.status(403).json({ error: 'brand not in scope' }); return; }
+    if (bid === null) {
+      // brandId ist im Schema notNull — null-Setzen wird abgelehnt.
+      res.status(422).json({ error: 'invalid brandId', message: 'Marke darf nicht leer sein.' });
+      return;
+    }
+    const [bb] = await db.select().from(brandsTable).where(eq(brandsTable.id, bid));
+    if (!bb) { res.status(422).json({ error: 'invalid brandId', message: 'Marke nicht gefunden.' }); return; }
+    if (!(await brandVisible(req, bb))) { res.status(403).json({ error: 'brand not in scope' }); return; }
+    if (b.companyId !== undefined && String(b.companyId) !== bb.companyId) {
+      res.status(422).json({
+        error: 'brand/company mismatch',
+        message: 'Die angegebene Company passt nicht zur gewählten Marke.',
+      });
+      return;
     }
     update.brandId = bid;
+    update.companyId = bb.companyId;
+  } else if (b.companyId !== undefined) {
+    // Company darf nicht ohne Marke geändert werden — sie ist immer aus
+    // der Marke abgeleitet. Wir vergleichen den Wunsch mit dem Brand des
+    // Deals und akzeptieren nur "no-op"-Übermittlungen, sonst 422.
+    const [d0] = await db.select({ brandId: dealsTable.brandId })
+      .from(dealsTable).where(eq(dealsTable.id, req.params.id));
+    if (d0) {
+      const [bb] = await db.select().from(brandsTable).where(eq(brandsTable.id, d0.brandId));
+      if (bb && String(b.companyId) !== bb.companyId) {
+        res.status(422).json({
+          error: 'brand/company mismatch',
+          message: 'Company kann nur über die Marke geändert werden.',
+        });
+        return;
+      }
+    }
   }
+
   await db.update(dealsTable).set(update).where(eq(dealsTable.id, req.params.id));
   const [d] = await db.select().from(dealsTable).where(eq(dealsTable.id, req.params.id));
   if (!d) { res.status(404).json({ error: 'not found' }); return; }

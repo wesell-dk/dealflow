@@ -16,4 +16,8 @@ export interface DealPatch {
   riskLevel?: string;
   nextStep?: string;
   expectedCloseDate?: Date;
+  /** Optional. Beim Wechsel der Marke wird die Company serverseitig automatisch aus `brand.companyId` abgeleitet — eine separate Übermittlung von `companyId` ist nicht vorgesehen. Wird ein Wert übergeben, muss er zur gewählten Marke passen, sonst 422. */
+  brandId?: string;
+  /** Optional. Wenn gesetzt, muss `companyId` zur (ggf. neu gesetzten) `brandId` passen — sonst 422. Üblicherweise wird `companyId` nicht gesendet, da sie automatisch aus der Marke abgeleitet wird. */
+  companyId?: string;
 }

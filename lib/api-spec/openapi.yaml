@@ -6455,6 +6455,19 @@ components:
         riskLevel: { type: string }
         nextStep: { type: string }
         expectedCloseDate: { type: string, format: date }
+        brandId:
+          type: string
+          description: >-
+            Optional. Beim Wechsel der Marke wird die Company serverseitig
+            automatisch aus `brand.companyId` abgeleitet — eine separate
+            Übermittlung von `companyId` ist nicht vorgesehen. Wird ein
+            Wert übergeben, muss er zur gewählten Marke passen, sonst 422.
+        companyId:
+          type: string
+          description: >-
+            Optional. Wenn gesetzt, muss `companyId` zur (ggf. neu gesetzten)
+            `brandId` passen — sonst 422. Üblicherweise wird `companyId` nicht
+            gesendet, da sie automatisch aus der Marke abgeleitet wird.
 
     DealDetail:
       allOf:
