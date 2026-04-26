@@ -8,6 +8,12 @@ import {
   Image,
   renderToStream,
 } from '@react-pdf/renderer';
+import {
+  applyProfileFooter,
+  formatPageNumber,
+  profileLabels,
+} from './profileApply.js';
+import type { DocumentLayoutProfile } from './profile.js';
 
 export interface ContractPdfBrand {
   name: string;
@@ -37,6 +43,8 @@ export interface ContractPdfData {
   clauses: ContractPdfClause[];
   brand: ContractPdfBrand | null;
   language?: 'de' | 'en';
+  /** Optional: AI-extrahiertes Layout-Profil aus brand_document_templates. */
+  profile?: DocumentLayoutProfile | null;
 }
 
 const CONTRACT_LABELS = {
@@ -67,10 +75,27 @@ const CONTRACT_LABELS = {
 } as const;
 
 export function ContractDocument({ data }: { data: ContractPdfData }) {
-  const primary = data.brand?.primaryColor || '#0b5fff';
-  const secondary = data.brand?.secondaryColor || '#1f2937';
-  const lang: 'de' | 'en' = data.language === 'en' ? 'en' : 'de';
+  const profileLang: 'de' | 'en' | undefined =
+    data.profile?.language === 'de' || data.profile?.language === 'en' ? data.profile.language : undefined;
+  const lang: 'de' | 'en' =
+    data.language === 'en' ? 'en' : data.language === 'de' ? 'de' : (profileLang ?? 'de');
   const L = CONTRACT_LABELS[lang];
+  const applied = profileLabels(data.profile, 'contract', lang, {
+    primaryFallback: data.brand?.primaryColor || '#0b5fff',
+    secondaryFallback: data.brand?.secondaryColor || '#1f2937',
+    docTitleFallback: L.docTitle,
+    subtotalLabelFallback: '',
+    taxLabelFallback: null,
+    grandTotalLabelFallback: '',
+    pageNumberFmtFallback: lang === 'en' ? 'Page {n}/{total}' : 'Seite {n}/{total}',
+  });
+  const footerCfg = applyProfileFooter(data.profile, {
+    addressFallback: data.brand?.addressLine ?? '',
+    legalFallback: data.brand?.legalEntityName ?? 'DealFlow One',
+    bankFallback: '',
+  });
+  const primary = applied.primary;
+  const secondary = applied.secondary;
 
   const styles = StyleSheet.create({
     page: { padding: 36, fontSize: 10, fontFamily: 'Helvetica', color: '#111827' },
@@ -116,8 +141,8 @@ export function ContractDocument({ data }: { data: ContractPdfData }) {
   });
 
   return (
-    <Document title={`${L.docTitle} ${data.number}`}>
-      <Page size="A4" style={styles.page}>
+    <Document title={`${applied.documentTitle} ${data.number}`}>
+      <Page size={data.profile?.pageSize === 'Letter' ? 'LETTER' : 'A4'} style={styles.page}>
         <View style={styles.headerBar}>
           <View>
             {data.brand?.logoUrl ? (
@@ -135,7 +160,7 @@ export function ContractDocument({ data }: { data: ContractPdfData }) {
           </View>
         </View>
 
-        <Text style={styles.h1}>{L.docTitle}</Text>
+        <Text style={styles.h1}>{applied.documentTitle}</Text>
         <View style={styles.meta}>
           <View style={styles.metaCol}>
             <Text style={styles.metaLabel}>{L.contractNumber}</Text>
@@ -172,9 +197,14 @@ export function ContractDocument({ data }: { data: ContractPdfData }) {
         ))}
 
         <Text style={styles.footer} fixed>
-          {data.brand?.legalEntityName ?? 'DealFlow One'} · {data.brand?.addressLine ?? ''}
-          {'  '}· {L.docTitle} {data.number}
+          {footerCfg.legalLine}{footerCfg.addressLine ? ` · ${footerCfg.addressLine}` : ''}
+          {'  '}· {applied.documentTitle} {data.number}
         </Text>
+        <Text
+          style={{ position: 'absolute', bottom: 12, right: 36, fontSize: 8, color: '#9ca3af' }}
+          render={({ pageNumber, totalPages }) => formatPageNumber(applied.pageNumberFormat, pageNumber, totalPages)}
+          fixed
+        />
       </Page>
     </Document>
   );

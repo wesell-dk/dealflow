@@ -24,6 +24,7 @@ import { fetchUploadUrlWithRetry } from "@/lib/upload-retry";
 import { Loader2, Upload, Image as ImageIcon, X, Sparkles } from "lucide-react";
 import { extractLogoColors, foregroundFor, isTooLightForPaper } from "@/lib/extract-logo-colors";
 import { toAssetSrc } from "@/lib/asset-url";
+import { BrandDocumentTemplates } from "./brand-document-templates";
 
 interface Props {
   open: boolean;
@@ -622,6 +623,19 @@ export function BrandFormDialog({ open, onOpenChange, companies, defaultCompanyI
               />
             </div>
           </div>
+
+          {isEdit && brand && (
+            <div className="space-y-2 pt-2 border-t">
+              <div>
+                <p className="text-sm font-medium">Dokument-Vorlagen</p>
+                <p className="text-xs text-muted-foreground">
+                  Lade pro Dokumentart eine Referenz-PDF hoch — die KI extrahiert das Layout (Farben, Header,
+                  Footer, Spalten, Beschriftungen) und wendet es auf neu erzeugte Dokumente dieser Brand an.
+                </p>
+              </div>
+              <BrandDocumentTemplates brandId={brand.id} />
+            </div>
+          )}
         </div>
 
         <DialogFooter>

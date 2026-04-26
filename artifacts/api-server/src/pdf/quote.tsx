@@ -8,6 +8,14 @@ import {
   Image,
   renderToStream,
 } from '@react-pdf/renderer';
+import {
+  applyProfileColumns,
+  applyProfileFooter,
+  formatPageNumber,
+  profileLabels,
+  type AppliedColumn,
+} from './profileApply.js';
+import type { DocumentLayoutProfile, DocumentTemplateType } from './profile.js';
 
 export interface QuotePdfBrand {
   name: string;
@@ -81,6 +89,15 @@ export interface QuotePdfData {
   sections?: QuotePdfSection[];
   attachments?: QuotePdfAttachment[];
   language?: 'de' | 'en';
+  /** Optional: AI-extrahiertes Layout-Profil aus brand_document_templates. */
+  profile?: DocumentLayoutProfile | null;
+  /**
+   * Welcher Dokumenttyp gerendert wird. Standard ist `quote`. Wird auf
+   * `order_confirmation` gesetzt, damit Sprach-Defaults (Titel, Totals)
+   * korrekt aufgeloest werden, wenn der Quote-Renderer fuer
+   * Auftragsbestaetigungen wiederverwendet wird.
+   */
+  documentType?: Extract<DocumentTemplateType, 'quote' | 'order_confirmation'>;
 }
 
 const QUOTE_LABELS = {
@@ -170,11 +187,69 @@ const formatBytes = (n: number) => {
   return `${(n / 1024 / 1024).toFixed(1)} MB`;
 };
 
+function renderQuoteCell(
+  semantic: AppliedColumn['semantic'],
+  l: QuotePdfLine,
+  index: number,
+  currency: string,
+  lang: 'de' | 'en',
+): string {
+  switch (semantic) {
+    case 'index': return String(index + 1);
+    case 'description': return l.description ?? '';
+    case 'qty': return String(l.quantity);
+    case 'unit': return '';
+    case 'unitPrice': return fmt(l.unitPrice, currency, lang);
+    case 'listPrice': return fmt(l.listPrice, currency, lang);
+    case 'discount': return `${l.discountPct.toFixed(1)}%`;
+    case 'tax': return `${formatTaxRate(l.taxRatePct)} %`;
+    case 'total': return fmt(l.total, currency, lang);
+    case 'name': return l.name; // fallback path; primary 'name' branch handles description block
+    default: return '';
+  }
+}
+
 export function QuoteDocument({ data }: { data: QuotePdfData }) {
-  const primary = data.brand?.primaryColor || '#0b5fff';
-  const secondary = data.brand?.secondaryColor || '#1f2937';
-  const lang: 'de' | 'en' = data.language === 'en' ? 'en' : 'de';
+  const profileLang: 'de' | 'en' | undefined =
+    data.profile?.language === 'de' || data.profile?.language === 'en' ? data.profile.language : undefined;
+  const lang: 'de' | 'en' =
+    data.language === 'en' ? 'en' : data.language === 'de' ? 'de' : (profileLang ?? 'de');
   const L = QUOTE_LABELS[lang];
+  const docType = data.documentType ?? 'quote';
+  // Sprach-Default-Titel fuer Auftragsbestaetigung (Quote-Renderer wird
+  // wiederverwendet — QUOTE_LABELS kennt nur Angebot/Quote).
+  const docTitleFallback =
+    docType === 'order_confirmation'
+      ? (lang === 'en' ? 'Order Confirmation' : 'Auftragsbestaetigung')
+      : L.docTitle;
+  const applied = profileLabels(data.profile, docType, lang, {
+    primaryFallback: data.brand?.primaryColor || '#0b5fff',
+    secondaryFallback: data.brand?.secondaryColor || '#1f2937',
+    docTitleFallback,
+    subtotalLabelFallback: L.subtotal,
+    taxLabelFallback: null,
+    grandTotalLabelFallback: L.grandTotal,
+    pageNumberFmtFallback: lang === 'en' ? 'Page {n}/{total}' : 'Seite {n}/{total}',
+  });
+  // Tabellen-Spalten 1:1 aus dem Profil uebernehmen, oder den klassischen
+  // 6-spaltigen Quote-Layout-Fallback nutzen, wenn keine Vorlage existiert.
+  // Die Steuer-Spalte ist Teil des Standard-Layouts, weil DACH-Angebote die
+  // USt typischerweise pro Position ausweisen.
+  const columns = applyProfileColumns(data.profile, [
+    { key: 'name', label: L.name, align: 'left', widthPct: 32 },
+    { key: 'qty', label: L.qty, align: 'right', widthPct: 8 },
+    { key: 'listPrice', label: L.listPrice, align: 'right', widthPct: 17 },
+    { key: 'discount', label: L.discount, align: 'right', widthPct: 12 },
+    { key: 'tax', label: L.tax, align: 'right', widthPct: 11 },
+    { key: 'total', label: L.sum, align: 'right', widthPct: 20 },
+  ]);
+  const footerCfg = applyProfileFooter(data.profile, {
+    addressFallback: data.brand?.addressLine ?? '',
+    legalFallback: data.brand?.legalEntityName ?? 'DealFlow One',
+    bankFallback: '',
+  });
+  const primary = applied.primary;
+  const secondary = applied.secondary;
 
   const styles = StyleSheet.create({
     page: { padding: 36, fontSize: 10, fontFamily: 'Helvetica', color: '#111827' },
@@ -267,12 +342,6 @@ export function QuoteDocument({ data }: { data: QuotePdfData }) {
       fontWeight: 'bold',
       color: secondary,
     },
-    colName: { width: '32%' },
-    colQty: { width: '8%', textAlign: 'right' },
-    colPrice: { width: '17%', textAlign: 'right' },
-    colDisc: { width: '12%', textAlign: 'right' },
-    colTax: { width: '11%', textAlign: 'right' },
-    colTotal: { width: '20%', textAlign: 'right' },
     totalsRow: { flexDirection: 'row', justifyContent: 'flex-end', marginTop: 10 },
     totalsBox: { width: 220, padding: 8, backgroundColor: '#f3f4f6' },
     totalsLine: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 2 },
@@ -358,7 +427,7 @@ export function QuoteDocument({ data }: { data: QuotePdfData }) {
   if (attachments.length > 0) toc.push({ title: `${L.attachments} (${attachments.length})` });
 
   return (
-    <Document title={`${L.docTitle} ${data.number}`}>
+    <Document title={`${applied.documentTitle} ${data.number}`}>
       {cover ? (
         <Page size="A4" style={styles.coverPage}>
           <View style={styles.coverTop}>
@@ -378,7 +447,7 @@ export function QuoteDocument({ data }: { data: QuotePdfData }) {
 
           <View style={styles.coverHeroBlock}>
             <Text style={styles.coverEyebrow}>{cover.title || L.coverEyebrow}</Text>
-            <Text style={styles.coverTitle}>{L.docTitle} {data.number}</Text>
+            <Text style={styles.coverTitle}>{applied.documentTitle} {data.number}</Text>
             <Text style={styles.coverFor}>{L.coverFor} {data.dealName}</Text>
           </View>
 
@@ -398,13 +467,13 @@ export function QuoteDocument({ data }: { data: QuotePdfData }) {
               <Text style={styles.coverBlockValue}>{data.validUntil}</Text>
             </View>
             <View style={styles.coverBlock}>
-              <Text style={styles.coverBlockLabel}>{L.grandTotal}</Text>
+              <Text style={styles.coverBlockLabel}>{applied.grandTotalLabel}</Text>
               <Text style={styles.coverBlockValue}>{fmt(data.totalAmount, data.currency, lang)}</Text>
             </View>
           </View>
 
           <Text style={styles.coverFooter} fixed>
-            {data.brand?.legalEntityName ?? 'DealFlow One'} · {data.brand?.addressLine ?? ''}
+            {footerCfg.legalLine}{footerCfg.addressLine ? ` · ${footerCfg.addressLine}` : ''}
           </Text>
         </Page>
       ) : null}
@@ -448,7 +517,7 @@ export function QuoteDocument({ data }: { data: QuotePdfData }) {
             ))}
           </View>
           <Text style={styles.footer} fixed>
-            {data.brand?.legalEntityName ?? 'DealFlow One'} · {L.docTitle} {data.number} · v{data.version}
+            {footerCfg.legalLine} · {applied.documentTitle} {data.number} · v{data.version}
           </Text>
         </Page>
       ) : null}
@@ -471,7 +540,7 @@ export function QuoteDocument({ data }: { data: QuotePdfData }) {
           </View>
         </View>
 
-        <Text style={styles.h1}>{L.docTitle}</Text>
+        <Text style={styles.h1}>{applied.documentTitle}</Text>
         <View style={styles.meta}>
           <View style={styles.metaCol}>
             <Text style={styles.metaLabel}>{L.quoteNumber}</Text>
@@ -509,31 +578,35 @@ export function QuoteDocument({ data }: { data: QuotePdfData }) {
 
         <Text style={styles.h2}>{L.positions}</Text>
         <View style={styles.tableHeader}>
-          <Text style={styles.colName}>{L.name}</Text>
-          <Text style={styles.colQty}>{L.qty}</Text>
-          <Text style={styles.colPrice}>{L.listPrice}</Text>
-          <Text style={styles.colDisc}>{L.discount}</Text>
-          <Text style={styles.colTax}>{L.tax}</Text>
-          <Text style={styles.colTotal}>{L.sum}</Text>
+          {columns.map((c, i) => (
+            <Text key={`h-${i}`} style={{ width: `${c.widthPct}%`, textAlign: c.align }}>
+              {c.label || L.name}
+            </Text>
+          ))}
         </View>
-        {data.lines.map((l, i) => (
+        {data.lines.map((l, lineIdx) => (
           l.kind === 'heading' ? (
-            <View key={i} style={styles.headingRow} wrap={false}>
+            <View key={lineIdx} style={styles.headingRow} wrap={false}>
               <Text style={styles.headingText}>{l.name}</Text>
             </View>
           ) : (
-            <View key={i} style={styles.tr} wrap={false}>
-              <View style={styles.colName}>
-                <Text>{l.name}</Text>
-                {l.description ? (
-                  <Text style={{ fontSize: 8, color: '#6b7280' }}>{l.description}</Text>
-                ) : null}
-              </View>
-              <Text style={styles.colQty}>{l.quantity}</Text>
-              <Text style={styles.colPrice}>{fmt(l.listPrice, data.currency, lang)}</Text>
-              <Text style={styles.colDisc}>{l.discountPct.toFixed(1)}%</Text>
-              <Text style={styles.colTax}>{`${formatTaxRate(l.taxRatePct)} %`}</Text>
-              <Text style={styles.colTotal}>{fmt(l.total, data.currency, lang)}</Text>
+            <View key={lineIdx} style={styles.tr} wrap={false}>
+              {columns.map((c, colIdx) => {
+                const colStyle = { width: `${c.widthPct}%`, textAlign: c.align } as const;
+                if (c.semantic === 'name') {
+                  return (
+                    <View key={colIdx} style={colStyle}>
+                      <Text>{l.name}</Text>
+                      {l.description ? (
+                        <Text style={{ fontSize: 8, color: '#6b7280' }}>{l.description}</Text>
+                      ) : null}
+                    </View>
+                  );
+                }
+                return (
+                  <Text key={colIdx} style={colStyle}>{renderQuoteCell(c.semantic, l, lineIdx, data.currency, lang)}</Text>
+                );
+              })}
             </View>
           )
         ))}
@@ -541,7 +614,7 @@ export function QuoteDocument({ data }: { data: QuotePdfData }) {
         <View style={styles.totalsRow}>
           <View style={styles.totalsBox}>
             <View style={styles.totalsLine}>
-              <Text>{L.subtotal}</Text>
+              <Text>{applied.subtotalLabel}</Text>
               <Text>{fmt(subtotal, data.currency, lang)}</Text>
             </View>
             <View style={styles.totalsLine}>
@@ -563,7 +636,7 @@ export function QuoteDocument({ data }: { data: QuotePdfData }) {
               <Text>{fmt(taxSummary.gross, data.currency, lang)}</Text>
             </View>
             <View style={styles.grandTotal}>
-              <Text>{L.total}</Text>
+              <Text>{applied.grandTotalLabel}</Text>
               <Text>{fmt(taxSummary.gross, data.currency, lang)}</Text>
             </View>
           </View>
@@ -617,9 +690,14 @@ export function QuoteDocument({ data }: { data: QuotePdfData }) {
         ) : null}
 
         <Text style={styles.footer} fixed>
-          {data.brand?.legalEntityName ?? 'DealFlow One'} · {data.brand?.addressLine ?? ''}
-          {'  '}· {L.docTitle} {data.number} · v{data.version}
+          {footerCfg.legalLine}{footerCfg.addressLine ? ` · ${footerCfg.addressLine}` : ''}
+          {'  '}· {applied.documentTitle} {data.number} · v{data.version}
         </Text>
+        <Text
+          style={{ position: 'absolute', bottom: 12, right: 36, fontSize: 8, color: '#9ca3af' }}
+          render={({ pageNumber, totalPages }) => formatPageNumber(applied.pageNumberFormat, pageNumber, totalPages)}
+          fixed
+        />
       </Page>
     </Document>
   );

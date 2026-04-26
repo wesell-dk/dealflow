@@ -138,10 +138,17 @@ export async function runStructured<I, O>(
   const startedAt = Date.now();
 
   try {
+    // Vision/Document-Override: Prompts wie brand.documentLayout.extract
+    // brauchen einen vollen messages-Array (mit `document` Content Block fürs
+    // PDF). Wenn das Prompt einen `buildMessages`-Hook setzt, nutzen wir den
+    // — sonst der klassische Single-User-Message-Pfad.
+    const messages = prompt.buildMessages
+      ? prompt.buildMessages(args.input)
+      : [{ role: 'user' as const, content: prompt.buildUser(args.input) }];
     const result = await provider.complete({
       config: { model: prompt.model },
       system: prompt.system,
-      messages: [{ role: 'user', content: prompt.buildUser(args.input) }],
+      messages,
       tool: toolFor(prompt),
     });
     const latencyMs = Date.now() - startedAt;

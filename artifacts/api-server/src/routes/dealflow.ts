@@ -114,6 +114,7 @@ import {
   quoteAttachmentsTable,
   industryProfilesTable,
   uploadedObjectsTable,
+  brandDocumentTemplatesTable,
   savedViewsTable,
   externalContractsTable,
   clauseImportJobsTable,
@@ -156,6 +157,8 @@ import { parseAsOf, resolveSnapshot, isInvalidAsOf } from '../lib/asOf';
 import { runStructured, isAIConfigured, AIOrchestrationError } from '../lib/ai';
 import { recordRecommendation, clampConfidence, confidenceLevelToScore } from '../lib/ai/recommendations.js';
 import type { HelpAssistantInput } from '../lib/ai/prompts/dealflow';
+import type { DocumentLayoutProfile } from '../pdf/profile.js';
+import { safeParseProfile as safeParseProfileSync } from '../pdf/profile.js';
 import { runAgent, type AgentTrace } from '../lib/ai/agent.js';
 import { HELP_BOT_TOOLS_AS_AGENT_TOOLS } from '../lib/ai/tools/dealflowAgent.js';
 import {
@@ -584,6 +587,577 @@ router.delete('/orgs/brands/:id', async (req, res) => {
     before: existing,
   });
   res.status(204).send();
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Brand Document Templates (Task #155)
+// Admin-only: pro Brand + documentType (quote/order_confirmation/invoice/
+// contract) eine Referenz-PDF hochladen, von der KI ein Layout-Profil
+// extrahieren und in `brand_document_templates` speichern. Renderer nutzen
+// das Profil, um neue Dokumente visuell der Vorlage anzugleichen.
+// ─────────────────────────────────────────────────────────────────────────────
+
+const BRAND_TEMPLATE_MIME = new Set<string>(['application/pdf']);
+const MAX_BRAND_TEMPLATE_BYTES = 25 * 1024 * 1024;
+const BRAND_TEMPLATE_TYPES = ['quote', 'order_confirmation', 'invoice', 'contract'] as const;
+type BrandTemplateType = typeof BRAND_TEMPLATE_TYPES[number];
+function isBrandTemplateType(v: string): v is BrandTemplateType {
+  return (BRAND_TEMPLATE_TYPES as readonly string[]).includes(v);
+}
+
+/**
+ * Stellt sicher, dass die Brand existiert und im Tenant des Aufrufers liegt.
+ * Liefert die Brand + Company. Bei 404/403 wird die Antwort selbst gesendet
+ * und null zurueckgegeben — der Caller bricht dann ab.
+ */
+async function loadBrandForTenant(
+  req: Request, res: Response, brandId: string,
+): Promise<{ brand: typeof brandsTable.$inferSelect; company: typeof companiesTable.$inferSelect } | null> {
+  const scope = getScope(req);
+  const [brand] = await db.select().from(brandsTable).where(eq(brandsTable.id, brandId));
+  if (!brand) { res.status(404).json({ error: 'brand not found' }); return null; }
+  const [company] = await db.select().from(companiesTable).where(eq(companiesTable.id, brand.companyId));
+  if (!company || company.tenantId !== scope.tenantId) {
+    res.status(403).json({ error: 'forbidden' });
+    return null;
+  }
+  return { brand, company };
+}
+
+/**
+ * Lesbare Zusammenfassung des Layout-Profils, die im Admin-UI direkt unter
+ * der Vorlage angezeigt wird — Admins sehen so, was die KI extrahiert hat,
+ * ohne das gesamte JSON laden zu muessen. Bewusst nicht das ganze Profil:
+ * (a) Datenmenge gering halten, (b) keine internen Schluessel exponieren.
+ */
+interface ProfileSummary {
+  language: 'de' | 'en';
+  pageSize: 'A4' | 'Letter';
+  documentTitle: string;
+  logoPosition: 'top-left' | 'top-right' | 'top-center';
+  accentPrimary: string;
+  accentSecondary: string | null;
+  fontHierarchy: { docTitlePt: number; sectionHeadingPt: number; bodyPt: number };
+  columns: Array<{ label: string; align: 'left' | 'right' | 'center'; widthPct: number }>;
+  totals: { subtotalLabel: string; taxLabel: string | null; grandTotalLabel: string };
+  pageNumberFormat: string;
+  footer: { addressLine: string; legalLine: string; bankLine: string };
+}
+
+function buildProfileSummary(raw: unknown): ProfileSummary | null {
+  // Wir parsen das Profil ueber das Zod-Schema, um eine typsichere
+  // Projektion zu erhalten — kein `any`, keine optimistischen Casts.
+  const profile = safeParseProfileSync(raw);
+  if (!profile) return null;
+  return {
+    language: profile.language,
+    pageSize: profile.pageSize,
+    documentTitle: profile.header.documentTitle,
+    logoPosition: profile.header.logoPosition,
+    accentPrimary: profile.accentColors.primary,
+    accentSecondary: profile.accentColors.secondary ?? null,
+    fontHierarchy: {
+      docTitlePt: profile.fontHierarchy.docTitlePt,
+      sectionHeadingPt: profile.fontHierarchy.sectionHeadingPt,
+      bodyPt: profile.fontHierarchy.bodyPt,
+    },
+    columns: profile.itemsTable.columns.slice(0, 8).map(c => ({
+      label: c.label,
+      align: c.align,
+      widthPct: c.widthPct,
+    })),
+    totals: {
+      subtotalLabel: profile.totals.subtotalLabel,
+      taxLabel: profile.totals.taxLabel ?? null,
+      grandTotalLabel: profile.totals.grandTotalLabel,
+    },
+    pageNumberFormat: profile.footer.pageNumberFormat,
+    footer: {
+      addressLine: profile.footer.addressLine ?? '',
+      legalLine: profile.footer.legalLine ?? '',
+      bankLine: profile.footer.bankLine ?? '',
+    },
+  };
+}
+
+function mapBrandTemplate(row: typeof brandDocumentTemplatesTable.$inferSelect) {
+  return {
+    id: row.id,
+    brandId: row.brandId,
+    documentType: row.documentType as BrandTemplateType,
+    fileName: row.fileName,
+    fileHash: row.fileHash,
+    status: row.status as 'pending' | 'ready' | 'failed',
+    errorText: row.errorText,
+    language: row.language,
+    hasProfile: !!row.profile,
+    profileSummary: row.status === 'ready' ? buildProfileSummary(row.profile) : null,
+    analysisInvocationId: row.analysisInvocationId,
+    createdBy: row.createdBy,
+    createdAt: iso(row.createdAt),
+    updatedAt: iso(row.updatedAt),
+  };
+}
+
+/**
+ * Liefert das `ready` Layout-Profil einer Brand fuer einen Dokumenttyp,
+ * oder null wenn keins existiert (oder nicht parsebar ist). Wird von den
+ * regulaeren PDF-Routen benutzt, um neu erzeugte Dokumente im Look der
+ * hochgeladenen Vorlage zu rendern.
+ */
+async function loadReadyTemplateProfile(
+  brandId: string | null | undefined,
+  documentType: BrandTemplateType,
+): Promise<DocumentLayoutProfile | null> {
+  if (!brandId) return null;
+  const [row] = await db
+    .select()
+    .from(brandDocumentTemplatesTable)
+    .where(and(
+      eq(brandDocumentTemplatesTable.brandId, brandId),
+      eq(brandDocumentTemplatesTable.documentType, documentType),
+      eq(brandDocumentTemplatesTable.status, 'ready'),
+    ));
+  if (!row?.profile) return null;
+  const { safeParseProfile } = await import('../pdf/profile.js');
+  return safeParseProfile(row.profile);
+}
+
+// 1) Signed PUT URL fuer eine Brand-Template-PDF.
+router.post('/orgs/brands/:id/document-templates/upload-url', async (req, res) => {
+  if (!requireAdmin(req, res)) return;
+  const Body = z.object({
+    fileName: z.string().min(1).max(240),
+    size: z.number().int().positive(),
+    contentType: z.string().min(1).max(200),
+    documentType: z.enum(BRAND_TEMPLATE_TYPES),
+  });
+  const parsed = Body.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: 'invalid request', details: parsed.error.issues });
+    return;
+  }
+  const { size, contentType } = parsed.data;
+  if (!BRAND_TEMPLATE_MIME.has(contentType)) {
+    res.status(400).json({ error: 'contentType must be application/pdf' });
+    return;
+  }
+  if (size <= 0 || size > MAX_BRAND_TEMPLATE_BYTES) {
+    res.status(400).json({ error: `size must be 1..${MAX_BRAND_TEMPLATE_BYTES} bytes` });
+    return;
+  }
+  const loaded = await loadBrandForTenant(req, res, req.params.id);
+  if (!loaded) return;
+  const scope = getScope(req);
+  try {
+    const svc = new ObjectStorageService();
+    const uploadURL = await svc.getObjectEntityUploadURL();
+    const objectPath = svc.normalizeObjectEntityPath(uploadURL);
+    await db.insert(uploadedObjectsTable).values({
+      objectPath,
+      tenantId: scope.tenantId,
+      userId: scope.user?.id ?? null,
+      kind: 'document',
+      contentType,
+      size,
+    }).onConflictDoNothing();
+    res.json({ uploadURL, objectPath });
+  } catch (err) {
+    req.log.error({ err }, 'brand document template upload-url failed');
+    res.status(500).json({ error: 'failed to generate upload url' });
+  }
+});
+
+// 2) Analyze + upsert. Body trimmt nur, was der Client braucht; alles andere
+//    wird aus DB/Storage gelesen. Bei AI-Fehler wird die Zeile mit
+//    status='failed' + errorText gespeichert, damit der Admin im UI sieht,
+//    was schiefging.
+router.post('/orgs/brands/:id/document-templates', async (req, res) => {
+  if (!requireAdmin(req, res)) return;
+  const Body = z.object({
+    documentType: z.enum(BRAND_TEMPLATE_TYPES),
+    objectPath: z.string().min(1),
+    fileName: z.string().min(1).max(240),
+  });
+  const parsed = Body.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: 'invalid request', details: parsed.error.issues });
+    return;
+  }
+  const { documentType, objectPath, fileName } = parsed.data;
+  const loaded = await loadBrandForTenant(req, res, req.params.id);
+  if (!loaded) return;
+  const scope = getScope(req);
+  if (!await assertOwnedObjectPath(req, res, scope, objectPath)) return;
+
+  // Lazy import — vermeidet Anthropic-SDK-Cold-Start in Routes, die nichts
+  // mit AI zu tun haben.
+  const { analyzeBrandTemplate, AIOrchestrationError } = await import('../lib/brandTemplate/analyze');
+  const { brand } = loaded;
+
+  let analysis: Awaited<ReturnType<typeof analyzeBrandTemplate>> | null = null;
+  let errorText: string | null = null;
+  try {
+    analysis = await analyzeBrandTemplate({
+      brandId: brand.id,
+      documentType,
+      objectPath,
+      scope,
+      brandHint: {
+        name: brand.name,
+        legalName: brand.legalEntityName ?? null,
+        addressLine: brand.addressLine ?? null,
+      },
+    });
+  } catch (err) {
+    if (err instanceof AIOrchestrationError) {
+      errorText = `${err.code}: ${err.message}`;
+      req.log.warn({ err, brandId: brand.id, documentType }, 'brand template AI analyze failed');
+    } else {
+      errorText = (err as Error).message ?? 'analyze failed';
+      req.log.error({ err, brandId: brand.id, documentType }, 'brand template analyze threw');
+    }
+  }
+
+  // sha256 fuer Reanalyze-Idempotenz — bei AI-Fehler nutzen wir einen
+  // Synthetik-Hash aus objectPath+timestamp, damit der UNIQUE-Index nicht
+  // bricht und ein Retry trotzdem moeglich ist.
+  const fileHash = analysis?.fileHash
+    ?? `pending:${objectPath}:${Date.now().toString(36)}`;
+  const status: 'ready' | 'failed' = analysis ? 'ready' : 'failed';
+
+  // Upsert per (brandId, documentType) — ein Brand kann pro Typ nur eine
+  // Vorlage haben (UNIQUE-Index in der DB).
+  const existing = await db
+    .select()
+    .from(brandDocumentTemplatesTable)
+    .where(and(
+      eq(brandDocumentTemplatesTable.brandId, brand.id),
+      eq(brandDocumentTemplatesTable.documentType, documentType),
+    ));
+
+  let row: typeof brandDocumentTemplatesTable.$inferSelect;
+  if (existing.length > 0) {
+    const [updated] = await db.update(brandDocumentTemplatesTable)
+      .set({
+        objectPath,
+        fileName,
+        fileHash,
+        status,
+        errorText,
+        language: analysis?.profile.language ?? null,
+        profile: analysis?.profile ?? null,
+        analysisInvocationId: analysis?.invocationId ?? null,
+        updatedAt: new Date(),
+      })
+      .where(eq(brandDocumentTemplatesTable.id, existing[0].id))
+      .returning();
+    row = updated!;
+  } else {
+    const [inserted] = await db.insert(brandDocumentTemplatesTable)
+      .values({
+        id: `bdt_${randomBytes(6).toString('hex')}`,
+        brandId: brand.id,
+        documentType,
+        objectPath,
+        fileName,
+        fileHash,
+        status,
+        errorText,
+        language: analysis?.profile.language ?? null,
+        profile: analysis?.profile ?? null,
+        analysisInvocationId: analysis?.invocationId ?? null,
+        createdBy: scope.user.id,
+      })
+      .returning();
+    row = inserted!;
+  }
+
+  await writeAuditFromReq(req, {
+    entityType: 'brand_document_template',
+    entityId: row.id,
+    action: existing.length > 0 ? 'update' : 'create',
+    actor: scope.user.name,
+    summary:
+      `Brand-Vorlage ${documentType} fuer "${brand.name}" ${existing.length ? 'aktualisiert' : 'angelegt'}` +
+      (status === 'failed' ? ` (Analyse fehlgeschlagen: ${errorText})` : ''),
+    after: { documentType, fileName, status, errorText },
+  });
+
+  res.status(existing.length > 0 ? 200 : 201).json(mapBrandTemplate(row));
+});
+
+// 3) List — alle hochgeladenen Vorlagen einer Brand. Admin-only:
+//    Vorlagen-Daten + Layout-Profil sind sensible Konfiguration und sollen
+//    nicht von normalen Tenant-Usern eingesehen werden.
+router.get('/orgs/brands/:id/document-templates', async (req, res) => {
+  if (!requireAdmin(req, res)) return;
+  const loaded = await loadBrandForTenant(req, res, req.params.id);
+  if (!loaded) return;
+  const rows = await db
+    .select()
+    .from(brandDocumentTemplatesTable)
+    .where(eq(brandDocumentTemplatesTable.brandId, loaded.brand.id))
+    .orderBy(asc(brandDocumentTemplatesTable.documentType));
+  res.json(rows.map(mapBrandTemplate));
+});
+
+// 4) Delete — entfernt Zeile + Profil. Storage-Objekt bleibt liegen
+//    (auffindbar ueber uploaded_objects, falls forensisch noetig).
+router.delete('/orgs/brands/:id/document-templates/:type', async (req, res) => {
+  if (!requireAdmin(req, res)) return;
+  const type = req.params.type;
+  if (!isBrandTemplateType(type)) {
+    res.status(400).json({ error: 'invalid documentType' });
+    return;
+  }
+  const loaded = await loadBrandForTenant(req, res, req.params.id);
+  if (!loaded) return;
+  const scope = getScope(req);
+  const [existing] = await db.select().from(brandDocumentTemplatesTable)
+    .where(and(
+      eq(brandDocumentTemplatesTable.brandId, loaded.brand.id),
+      eq(brandDocumentTemplatesTable.documentType, type),
+    ));
+  if (!existing) { res.status(404).json({ error: 'template not found' }); return; }
+  await db.delete(brandDocumentTemplatesTable).where(eq(brandDocumentTemplatesTable.id, existing.id));
+  await writeAuditFromReq(req, {
+    entityType: 'brand_document_template',
+    entityId: existing.id,
+    action: 'delete',
+    actor: scope.user.name,
+    summary: `Brand-Vorlage ${type} fuer "${loaded.brand.name}" geloescht`,
+    before: { documentType: type, fileName: existing.fileName },
+  });
+  res.status(204).send();
+});
+
+// 5) Reanalyze — laeuft die KI-Analyse nochmal auf der gespeicherten Datei.
+router.post('/orgs/brands/:id/document-templates/:type/reanalyze', async (req, res) => {
+  if (!requireAdmin(req, res)) return;
+  const type = req.params.type;
+  if (!isBrandTemplateType(type)) {
+    res.status(400).json({ error: 'invalid documentType' });
+    return;
+  }
+  const loaded = await loadBrandForTenant(req, res, req.params.id);
+  if (!loaded) return;
+  const scope = getScope(req);
+  const [existing] = await db.select().from(brandDocumentTemplatesTable)
+    .where(and(
+      eq(brandDocumentTemplatesTable.brandId, loaded.brand.id),
+      eq(brandDocumentTemplatesTable.documentType, type),
+    ));
+  if (!existing) { res.status(404).json({ error: 'template not found' }); return; }
+
+  const { analyzeBrandTemplate, AIOrchestrationError } = await import('../lib/brandTemplate/analyze');
+  let analysis: Awaited<ReturnType<typeof analyzeBrandTemplate>> | null = null;
+  let errorText: string | null = null;
+  try {
+    analysis = await analyzeBrandTemplate({
+      brandId: loaded.brand.id,
+      documentType: type,
+      objectPath: existing.objectPath,
+      scope,
+      brandHint: {
+        name: loaded.brand.name,
+        legalName: loaded.brand.legalEntityName ?? null,
+        addressLine: loaded.brand.addressLine ?? null,
+      },
+    });
+  } catch (err) {
+    if (err instanceof AIOrchestrationError) {
+      errorText = `${err.code}: ${err.message}`;
+    } else {
+      errorText = (err as Error).message ?? 'analyze failed';
+    }
+    req.log.warn({ err, brandId: loaded.brand.id, documentType: type }, 'brand template reanalyze failed');
+  }
+
+  const status: 'ready' | 'failed' = analysis ? 'ready' : 'failed';
+  const [updated] = await db.update(brandDocumentTemplatesTable)
+    .set({
+      status,
+      errorText,
+      fileHash: analysis?.fileHash ?? existing.fileHash,
+      language: analysis?.profile.language ?? existing.language,
+      profile: analysis?.profile ?? existing.profile,
+      analysisInvocationId: analysis?.invocationId ?? existing.analysisInvocationId,
+      updatedAt: new Date(),
+    })
+    .where(eq(brandDocumentTemplatesTable.id, existing.id))
+    .returning();
+
+  await writeAuditFromReq(req, {
+    entityType: 'brand_document_template',
+    entityId: existing.id,
+    action: 'update',
+    actor: scope.user.name,
+    summary:
+      `Brand-Vorlage ${type} fuer "${loaded.brand.name}" neu analysiert` +
+      (status === 'failed' ? ` (Fehler: ${errorText})` : ''),
+    after: { status, errorText },
+  });
+
+  res.json(mapBrandTemplate(updated!));
+});
+
+// 6) Source-PDF streamen — fuer "Original ansehen" im Admin-UI. Admin-only:
+//    die Original-Vorlage darf nur ein Tenant-Admin herunterladen.
+router.get('/orgs/brands/:id/document-templates/:type/source.pdf', async (req, res) => {
+  if (!requireAdmin(req, res)) return;
+  const type = req.params.type;
+  if (!isBrandTemplateType(type)) {
+    res.status(400).json({ error: 'invalid documentType' });
+    return;
+  }
+  const loaded = await loadBrandForTenant(req, res, req.params.id);
+  if (!loaded) return;
+  const [existing] = await db.select().from(brandDocumentTemplatesTable)
+    .where(and(
+      eq(brandDocumentTemplatesTable.brandId, loaded.brand.id),
+      eq(brandDocumentTemplatesTable.documentType, type),
+    ));
+  if (!existing) { res.status(404).json({ error: 'template not found' }); return; }
+  try {
+    const svc = new ObjectStorageService();
+    const file = await svc.getObjectEntityFile(existing.objectPath);
+    const [buf] = await file.download();
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `inline; filename="${encodeURIComponent(existing.fileName)}"`);
+    res.send(buf);
+  } catch (err) {
+    req.log.error({ err, objectPath: existing.objectPath }, 'brand template source download failed');
+    res.status(500).json({ error: 'source not available' });
+  }
+});
+
+// 7) Preview-PDF — rendert ein Sample-Dokument mit dem gespeicherten Profil,
+//    damit der Admin sofort sieht, wie ein neues Dokument aussehen wird.
+//    Admin-only — Vorschauen koennten Footer-Daten der Vorlage offenlegen.
+router.get('/orgs/brands/:id/document-templates/:type/preview.pdf', async (req, res) => {
+  if (!requireAdmin(req, res)) return;
+  const type = req.params.type;
+  if (!isBrandTemplateType(type)) {
+    res.status(400).json({ error: 'invalid documentType' });
+    return;
+  }
+  const loaded = await loadBrandForTenant(req, res, req.params.id);
+  if (!loaded) return;
+  const [existing] = await db.select().from(brandDocumentTemplatesTable)
+    .where(and(
+      eq(brandDocumentTemplatesTable.brandId, loaded.brand.id),
+      eq(brandDocumentTemplatesTable.documentType, type),
+    ));
+  if (!existing || existing.status !== 'ready') {
+    res.status(404).json({ error: 'no ready template' });
+    return;
+  }
+  const { safeParseProfile } = await import('../pdf/profile');
+  const profile = safeParseProfile(existing.profile);
+
+  const brandPayload = {
+    name: loaded.brand.name,
+    logoUrl: await resolveLogoForPdf(loaded.brand.logoUrl),
+    primaryColor: loaded.brand.primaryColor ?? null,
+    secondaryColor: loaded.brand.secondaryColor ?? null,
+    legalEntityName: loaded.brand.legalEntityName ?? null,
+    addressLine: loaded.brand.addressLine ?? null,
+    tone: loaded.brand.tone ?? null,
+  };
+
+  res.setHeader('Content-Type', 'application/pdf');
+  res.setHeader('Content-Disposition', `inline; filename="preview-${type}.pdf"`);
+
+  const lang = (profile?.language === 'en' ? 'en' : 'de') as 'de' | 'en';
+  const today = new Date().toISOString().slice(0, 10);
+  const sampleLines = [
+    { name: lang === 'de' ? 'Beispielposition A' : 'Sample item A',
+      description: lang === 'de' ? 'Demo — wird beim echten Dokument ersetzt.' : 'Demo — replaced in the real document.',
+      quantity: 2, unitPrice: 1500, total: 3000, listPrice: 1500, discountPct: 0 },
+    { name: lang === 'de' ? 'Beispielposition B' : 'Sample item B',
+      description: null,
+      quantity: 1, unitPrice: 850, total: 850, listPrice: 850, discountPct: 0 },
+  ];
+
+  if (type === 'invoice') {
+    const { renderInvoicePdf } = await import('../pdf/invoice');
+    const stream = await renderInvoicePdf({
+      number: 'PREVIEW-001',
+      currency: 'EUR',
+      issuedAt: today,
+      dueAt: today,
+      servicePeriod: null,
+      customerName: lang === 'de' ? 'Beispielkunde GmbH' : 'Sample Customer Ltd',
+      customerAddress: lang === 'de' ? 'Musterstrasse 1, 10115 Berlin' : '1 Sample Street, London',
+      notes: lang === 'de' ? 'Vorschau auf Basis Ihrer Vorlage.' : 'Preview based on your reference template.',
+      taxPct: 19,
+      lines: sampleLines.map(l => ({
+        name: l.name, description: l.description, quantity: l.quantity, unitPrice: l.unitPrice, total: l.total,
+      })),
+      brand: brandPayload,
+      language: lang,
+      profile,
+    });
+    stream.pipe(res);
+    return;
+  }
+  if (type === 'contract') {
+    const { renderContractPdf } = await import('../pdf/contract');
+    const stream = await renderContractPdf({
+      number: 'PREVIEW-001',
+      status: lang === 'de' ? 'Entwurf' : 'Draft',
+      dealName: lang === 'de' ? 'Vorschau-Deal' : 'Preview deal',
+      signedAt: null,
+      effectiveFrom: today,
+      effectiveTo: null,
+      clauses: [
+        {
+          family: lang === 'de' ? 'Laufzeit' : 'Term',
+          variant: lang === 'de' ? 'Standard 12 Monate' : 'Standard 12 months',
+          severity: 'low',
+          summary: lang === 'de' ? 'Beispielklausel.' : 'Sample clause.',
+          body: lang === 'de'
+            ? 'Dies ist ein Vorschau-Klauseltext, um das Layout Ihrer Vorlage zu pruefen.'
+            : 'This is a preview clause text to check your reference layout.',
+        },
+      ],
+      brand: brandPayload,
+      language: lang,
+      profile,
+    });
+    stream.pipe(res);
+    return;
+  }
+  // quote + order_confirmation rendern wir mit dem Quote-Renderer (gleiche
+  // Struktur). Order-Confirmation ist im Renderer aktuell ein Quote-Sample
+  // mit angepasstem Titel ueber das Profil.
+  const { renderQuotePdf } = await import('../pdf/quote');
+  const stream = await renderQuotePdf({
+    number: 'PREVIEW-001',
+    version: 1,
+    status: lang === 'de' ? 'Entwurf' : 'Draft',
+    dealName: lang === 'de' ? 'Vorschau-Deal' : 'Preview deal',
+    validUntil: today,
+    currency: 'EUR',
+    totalAmount: 3850,
+    discountPct: 0,
+    marginPct: 30,
+    notes: lang === 'de' ? 'Vorschau auf Basis Ihrer Vorlage.' : 'Preview based on your reference template.',
+    lines: sampleLines.map(l => ({
+      name: l.name, description: l.description, quantity: l.quantity,
+      unitPrice: l.unitPrice, listPrice: l.listPrice, discountPct: l.discountPct, total: l.total,
+      // Vorschau verwendet einen generischen 19 %-Satz — die Preview-Funktion
+      // hat keinen Tenant/Brand-Kontext für eine präzisere Auflösung.
+      taxRatePct: 19,
+    })),
+    brand: brandPayload,
+    sections: [],
+    attachments: [],
+    language: lang,
+    profile,
+  });
+  stream.pipe(res);
 });
 
 router.get('/orgs/users', async (req, res) => {
@@ -1755,6 +2329,10 @@ async function buildQuotePdfPayload(
   const taxSummary = computeTaxSummary(
     linesWithTax.map(l => ({ total: l.total, taxRatePct: l.taxRatePct })),
   );
+  // Task #155: Wenn die Brand eine hochgeladene Quote-Vorlage hat, das
+  // extrahierte Layout-Profil dem Renderer mitgeben — neue Angebote sehen
+  // dann visuell wie die Vorlage aus.
+  const profile = await loadReadyTemplateProfile(d?.brandId, 'quote');
   return {
     brand,
     payload: {
@@ -1764,6 +2342,7 @@ async function buildQuotePdfPayload(
       validUntil: String(q.validUntil),
       language: (q.language === 'en' ? 'en' : 'de') as 'de' | 'en',
       dealName: d?.name ?? 'Unknown',
+      profile,
       version: current?.version ?? 1,
       totalAmount: num(current?.totalAmount),
       discountPct: num(current?.discountPct),
@@ -1951,6 +2530,150 @@ router.post('/quotes/:id/send', async (req, res) => {
 
   const [updated] = await db.select().from(quotesTable).where(eq(quotesTable.id, q.id));
   res.json(await enrichQuote(updated!, d?.name ?? 'Unknown'));
+});
+
+// Task #155: Echte Rechnung aus einem Angebot erzeugen.
+// Wir haben (noch) keine eigenstaendige Invoice-Domain — Rechnungen werden
+// in DealFlow aus dem aktiven Quote-Snapshot abgeleitet (Positionen, Summen,
+// Kunde aus dem Account des Deals). Damit hat der Invoice-Renderer einen
+// echten Endpunkt jenseits der Admin-Vorschau und das Brand-Vorlagen-Layout
+// fuer 'invoice' wirkt sich auf live erzeugte Rechnungen aus.
+router.get('/quotes/:id/invoice.pdf', async (req, res) => {
+  const [q] = await db.select().from(quotesTable).where(eq(quotesTable.id, req.params.id));
+  if (!q) { res.status(404).json({ error: 'not found' }); return; }
+  if (!(await gateDeal(req, res, q.dealId))) return;
+  const [d] = await db.select().from(dealsTable).where(eq(dealsTable.id, q.dealId));
+  const [account] = d?.accountId
+    ? await db.select().from(accountsTable).where(eq(accountsTable.id, d.accountId))
+    : [];
+  const versions = await db.select().from(quoteVersionsTable)
+    .where(eq(quoteVersionsTable.quoteId, q.id))
+    .orderBy(desc(quoteVersionsTable.version));
+  const current = versions.find(v => v.version === q.currentVersion) ?? versions[0];
+  const lines = current
+    ? await db.select().from(lineItemsTable).where(eq(lineItemsTable.quoteVersionId, current.id))
+    : [];
+
+  let brand: typeof brandsTable.$inferSelect | undefined;
+  if (d?.brandId) {
+    const [b] = await db.select().from(brandsTable).where(eq(brandsTable.id, d.brandId));
+    brand = b;
+  }
+  const profile = await loadReadyTemplateProfile(d?.brandId, 'invoice');
+
+  const today = new Date().toISOString().slice(0, 10);
+  const language = (q.language === 'en' ? 'en' : 'de') as 'de' | 'en';
+  const invoiceNumber = `INV-${q.number}`;
+
+  const { renderInvoicePdf } = await import('../pdf/invoice');
+  const stream = await renderInvoicePdf({
+    number: invoiceNumber,
+    currency: q.currency,
+    issuedAt: today,
+    dueAt: null,
+    servicePeriod: null,
+    customerName: account?.name ?? d?.name ?? 'Kunde',
+    customerAddress: account?.billingAddress ?? null,
+    notes: current?.notes ?? null,
+    taxPct: 19,
+    lines: lines.map(l => ({
+      name: l.name,
+      description: l.description ?? null,
+      quantity: num(l.quantity),
+      unitPrice: num(l.unitPrice),
+      total: num(l.total),
+    })),
+    brand: brand ? {
+      name: brand.name,
+      logoUrl: await resolveLogoForPdf(brand.logoUrl),
+      primaryColor: brand.primaryColor ?? brand.color,
+      secondaryColor: brand.secondaryColor ?? null,
+      legalEntityName: brand.legalEntityName ?? null,
+      addressLine: brand.addressLine ?? null,
+      tone: brand.tone ?? null,
+    } : null,
+    language,
+    profile,
+  });
+  res.setHeader('Content-Type', 'application/pdf');
+  res.setHeader('Content-Disposition', `inline; filename="${invoiceNumber}.pdf"`);
+  stream.pipe(res);
+});
+
+// Task #155: Auftragsbestaetigung (Order Confirmation) live aus dem Angebot
+// rendern. Wir verwenden den Quote-Renderer wieder, setzen aber `documentType`
+// auf 'order_confirmation' und laden das passende Brand-Layout-Profil — der
+// Renderer uebernimmt damit Spalten/Farben/Footer der AB-Vorlage.
+router.get('/quotes/:id/order-confirmation.pdf', async (req, res) => {
+  const [q] = await db.select().from(quotesTable).where(eq(quotesTable.id, req.params.id));
+  if (!q) { res.status(404).json({ error: 'not found' }); return; }
+  if (!(await gateDeal(req, res, q.dealId))) return;
+  const [d] = await db.select().from(dealsTable).where(eq(dealsTable.id, q.dealId));
+  const [account] = d?.accountId
+    ? await db.select().from(accountsTable).where(eq(accountsTable.id, d.accountId))
+    : [];
+  const versions = await db.select().from(quoteVersionsTable)
+    .where(eq(quoteVersionsTable.quoteId, q.id))
+    .orderBy(desc(quoteVersionsTable.version));
+  const current = versions.find(v => v.version === q.currentVersion) ?? versions[0];
+  const lines = current
+    ? await db.select().from(lineItemsTable).where(eq(lineItemsTable.quoteVersionId, current.id))
+    : [];
+
+  let brand: typeof brandsTable.$inferSelect | undefined;
+  if (d?.brandId) {
+    const [b] = await db.select().from(brandsTable).where(eq(brandsTable.id, d.brandId));
+    brand = b;
+  }
+  const profile = await loadReadyTemplateProfile(d?.brandId, 'order_confirmation');
+  // Auftragsbestaetigung erbt USt-Auflösung 1:1 vom Angebot (Brand → Tenant → Fallback).
+  const ocDefaultRate = await resolveDefaultTaxRatePct({
+    brandId: d?.brandId, tenantId: getScope(req).tenantId,
+  });
+
+  const ocNumber = `OC-${q.number}`;
+  const language: 'de' | 'en' = q.language === 'en' ? 'en' : 'de';
+  const { renderQuotePdf } = await import('../pdf/quote');
+  const stream = await renderQuotePdf({
+    number: ocNumber,
+    currency: q.currency,
+    status: q.status,
+    validUntil: String(q.validUntil),
+    language,
+    dealName: account?.name ?? d?.name ?? 'Kunde',
+    profile,
+    documentType: 'order_confirmation',
+    version: current?.version ?? 1,
+    totalAmount: num(current?.totalAmount),
+    discountPct: num(current?.discountPct),
+    marginPct: num(current?.marginPct),
+    notes: current?.notes ?? null,
+    lines: lines.map(l => {
+      const m = mapLineWithTax(l, ocDefaultRate);
+      return {
+        name: m.name,
+        description: m.description ?? null,
+        quantity: m.quantity,
+        unitPrice: m.unitPrice,
+        listPrice: m.listPrice,
+        discountPct: m.discountPct,
+        total: m.total,
+        taxRatePct: m.taxRatePct,
+      };
+    }),
+    brand: brand ? {
+      name: brand.name,
+      logoUrl: await resolveLogoForPdf(brand.logoUrl),
+      primaryColor: brand.primaryColor ?? brand.color,
+      secondaryColor: brand.secondaryColor ?? null,
+      legalEntityName: brand.legalEntityName ?? null,
+      addressLine: brand.addressLine ?? null,
+      tone: brand.tone ?? null,
+    } : null,
+  });
+  res.setHeader('Content-Type', 'application/pdf');
+  res.setHeader('Content-Disposition', `inline; filename="${ocNumber}.pdf"`);
+  stream.pipe(res);
 });
 
 // PATCH quote — supports updating language, status (expired/rejected) and
@@ -4711,11 +5434,14 @@ router.get('/contracts/:id/pdf', async (req, res) => {
     const [b] = await db.select().from(brandsTable).where(eq(brandsTable.id, d.brandId));
     brand = b;
   }
+  // Task #155: Vertrags-Vorlage anwenden, falls vorhanden.
+  const profile = await loadReadyTemplateProfile(d?.brandId, 'contract');
   const { renderContractPdf } = await import('../pdf/contract');
   const stream = await renderContractPdf({
     number: `${c.title} · v${c.version}`,
     status: c.status,
     dealName: d?.name ?? 'Unknown',
+    profile,
     signedAt: null,
     effectiveFrom: null,
     effectiveTo: c.validUntil ? (typeof c.validUntil === 'string' ? c.validUntil : null) : null,

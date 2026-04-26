@@ -12,7 +12,7 @@
  */
 
 import { z } from 'zod';
-import type { Tool } from '@anthropic-ai/sdk/resources/messages';
+import type { MessageParam, Tool } from '@anthropic-ai/sdk/resources/messages';
 import { zodToToolSchema } from './structuredOutput.js';
 
 export interface PromptDefinition<TInput, TOutput> {
@@ -24,6 +24,12 @@ export interface PromptDefinition<TInput, TOutput> {
   system: string;
   /** Baut das User-Message-Pair aus dem typsicheren Input. */
   buildUser(input: TInput): string;
+  /**
+   * Optional: vollständiger messages-Array Override. Wird vom Orchestrator
+   * BEVORZUGT vor `buildUser`, wenn vorhanden. Genutzt für Vision/Document
+   * Content Blocks (z. B. Brand-Layout-Extract: PDF als `document` Block).
+   */
+  buildMessages?: (input: TInput) => MessageParam[];
   /** Zod-Schema, das die AI strukturiert füllen MUSS (via tool_use). */
   outputSchema: z.ZodType<TOutput>;
   /** Tool-Beschreibung für Anthropic — kurze Erläuterung was zurückkommt. */
@@ -89,6 +95,8 @@ export const diagnosticPing: PromptDefinition<
 
 // 10 Copilot-Modi der Spec — siehe ./prompts/dealflow.ts
 import { DEALFLOW_PROMPTS } from './prompts/dealflow.js';
+// Brand-Vorlagen-Analyse (Vision: PDF → Layout-Profil) — siehe ./prompts/brandTemplate.ts
+import { brandDocumentLayoutExtract } from './prompts/brandTemplate.js';
 
 /**
  * Map aller Prompts. Wird vom Orchestrator über key gelookuped.
@@ -96,6 +104,7 @@ import { DEALFLOW_PROMPTS } from './prompts/dealflow.js';
 export const PROMPT_REGISTRY = {
   [diagnosticPing.key]: diagnosticPing,
   ...DEALFLOW_PROMPTS,
+  [brandDocumentLayoutExtract.key]: brandDocumentLayoutExtract,
 } as const;
 
 export type PromptKey = keyof typeof PROMPT_REGISTRY;

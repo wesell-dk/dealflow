@@ -1539,6 +1539,48 @@ export const aiRecommendationsTable = pgTable("ai_recommendations", {
   index("ai_recommendations_tenant_status_idx").on(t.tenantId, t.status),
 ]);
 
+// Pro Brand × documentType (quote/order_confirmation/invoice/contract) ein
+// Referenz-PDF, das der Tenant-Admin hochlaedt. Die KI extrahiert daraus ein
+// Layout-Profil (header/footer/Spalten/Akzente/Sprache), das als JSON in
+// `profile` landet — der PDF-Renderer wendet das Profil dann auf neu erzeugte
+// Dokumente an, sodass diese visuell der Vorlage entsprechen.
+//
+// Status-Maschine:
+//   pending → ready (Erfolg) | failed (Analyse-Fehler, errorText gesetzt)
+// Bei DELETE wird die Zeile entfernt; das zugehoerige Storage-Objekt bleibt
+// liegen (ueber uploaded_objects auffindbar).
+//
+// `fileHash` ist sha-256 des hochgeladenen Bytes — wird genutzt, um beim
+// Reanalyze nicht versehentlich denselben Inhalt nochmal zu prozessieren,
+// wenn das nicht explizit gewuenscht ist (UI: "neu analysieren" force = true).
+export const brandDocumentTemplatesTable = pgTable("brand_document_templates", {
+  id: id(),
+  brandId: text("brand_id").notNull(),
+  // quote | order_confirmation | invoice | contract
+  documentType: text("document_type").notNull(),
+  objectPath: text("object_path").notNull(),
+  fileName: text("file_name").notNull(),
+  fileHash: text("file_hash").notNull(),
+  // pending | ready | failed
+  status: text("status").notNull().default("pending"),
+  errorText: text("error_text"),
+  language: text("language"),
+  // Strukturiertes Layout-Profil. Schema siehe pdf/profile.ts
+  // (schemaVersion, accentColors, header, metaFields, itemsTable, totals,
+  //  paymentTerms, footer, logo).
+  profile: jsonb("profile").$type<unknown>(),
+  // KI-Audit/Cost: Verknuepfung in ai_invocations.id (nullable wenn die
+  // Analyse noch laeuft oder ohne KI gespeichert wurde).
+  analysisInvocationId: text("analysis_invocation_id"),
+  createdBy: text("created_by"),
+  createdAt: ts("created_at"),
+  updatedAt: ts("updated_at"),
+}, (t) => [
+  uniqueIndex("brand_document_templates_brand_type_uq")
+    .on(t.brandId, t.documentType),
+  index("brand_document_templates_brand_idx").on(t.brandId),
+]);
+
 // Anonymisierter Lerneffekt-Datensatz pro KI-Entscheidung (Task #69).
 // Im Gegensatz zu `ai_recommendations` enthaelt diese Tabelle KEINE
 // Verbindung zum entscheidenden User und KEINEN modifiziert/Roh-Vorschlag,
