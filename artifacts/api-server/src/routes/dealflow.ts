@@ -130,6 +130,7 @@ import {
   aiInvocationsTable,
   externalCollaboratorEventsTable,
   contractCommentsTable,
+  leadsTable,
 } from '@workspace/db';
 import { createHash } from 'node:crypto';
 import {
@@ -1272,6 +1273,472 @@ router.patch('/orgs/me/active-scope', async (req, res) => {
       companyIds: [...permittedC],
       brandIds: [...permittedB],
     },
+  });
+});
+
+// ── LEADS ──
+//
+// Lead-Inbox: frühe Anfragen / Inbound-Kontakte vor dem Account/Deal-Stage.
+// Tenant-scoped (leads.tenantId), Visibility analog zu Accounts/Deals:
+//   - tenantWide-User sehen alle Leads des Tenants (auch unzugewiesene).
+//   - restricted-User sehen nur Leads, deren ownerId === user.id.
+// Statusübergänge: new → qualified | disqualified ; qualified → converted
+// erfolgt ausschließlich über POST /leads/{id}/convert (legt Account und
+// optional Deal an, persistiert Verlinkung).
+type LeadRow = typeof leadsTable.$inferSelect;
+
+function buildLead(l: LeadRow, opts: { ownerName?: string | null; accountName?: string | null; dealName?: string | null }) {
+  return {
+    id: l.id,
+    name: l.name,
+    companyName: l.companyName,
+    email: l.email,
+    phone: l.phone,
+    source: l.source,
+    status: l.status as 'new' | 'qualified' | 'disqualified' | 'converted',
+    ownerId: l.ownerId,
+    ownerName: opts.ownerName ?? null,
+    notes: l.notes,
+    disqualifyReason: l.disqualifyReason,
+    lastContactAt: iso(l.lastContactAt),
+    convertedAccountId: l.convertedAccountId,
+    convertedAccountName: opts.accountName ?? null,
+    convertedDealId: l.convertedDealId,
+    convertedDealName: opts.dealName ?? null,
+    convertedAt: iso(l.convertedAt),
+    createdAt: iso(l.createdAt)!,
+    updatedAt: iso(l.updatedAt)!,
+  };
+}
+
+// Wendet Tenant + Owner-Sichtbarkeit als SQL-Bedingung an.
+function leadsVisibilityWhere(req: Request): SQL {
+  const scope = getScope(req);
+  const tenant = eq(leadsTable.tenantId, scope.tenantId);
+  if (scope.tenantWide) return tenant;
+  return and(tenant, eq(leadsTable.ownerId, scope.user.id))!;
+}
+
+async function gateLead(req: Request, res: Response, leadId: string): Promise<boolean> {
+  const status = await entityScopeStatus(req, 'lead', leadId);
+  if (status === 'ok') return true;
+  res.status(status === 'missing' ? 404 : 403).json({ error: status === 'missing' ? 'not found' : 'forbidden' });
+  return false;
+}
+
+router.get('/leads', async (req, res) => {
+  if (!validateInline(req, res, { query: Z.ListLeadsQueryParams })) return;
+  const scope = getScope(req);
+  const search = typeof req.query.search === 'string' ? req.query.search.trim() : '';
+  const statusFilter = typeof req.query.status === 'string' ? req.query.status : 'all';
+  const ownerFilter = typeof req.query.ownerId === 'string' ? req.query.ownerId : null;
+  const sourceFilter = typeof req.query.source === 'string' ? req.query.source : null;
+  const page = Math.max(1, Number(req.query.page ?? 1));
+  const pageSize = Math.min(100, Math.max(1, Number(req.query.pageSize ?? 25)));
+  // Visibility: SQL-Tenant + (für restricted) Owner-Filter.
+  const baseWhere = leadsVisibilityWhere(req);
+  // Alle in der Sicht des Users → Status-Buckets bauen wir clientseitig
+  // aus dieser Liste (so bleiben Buckets vom UI-Status-Filter unabhängig).
+  const visibleAll = await db.select().from(leadsTable).where(baseWhere);
+  const counts = {
+    new: visibleAll.filter(l => l.status === 'new').length,
+    qualified: visibleAll.filter(l => l.status === 'qualified').length,
+    disqualified: visibleAll.filter(l => l.status === 'disqualified').length,
+    converted: visibleAll.filter(l => l.status === 'converted').length,
+    all: visibleAll.length,
+  };
+  // In-memory Filter (Liste klein, Volltextsuche über mehrere Felder).
+  let filtered = visibleAll;
+  if (statusFilter && statusFilter !== 'all') {
+    filtered = filtered.filter(l => l.status === statusFilter);
+  }
+  if (ownerFilter) {
+    if (ownerFilter === 'unassigned') {
+      filtered = filtered.filter(l => !l.ownerId);
+    } else {
+      filtered = filtered.filter(l => l.ownerId === ownerFilter);
+    }
+  }
+  if (sourceFilter) {
+    filtered = filtered.filter(l => l.source === sourceFilter);
+  }
+  if (search) {
+    const q = search.toLowerCase();
+    filtered = filtered.filter(l =>
+      l.name.toLowerCase().includes(q)
+      || (l.companyName ?? '').toLowerCase().includes(q)
+      || (l.email ?? '').toLowerCase().includes(q)
+      || (l.phone ?? '').toLowerCase().includes(q),
+    );
+  }
+  // Sort: jüngste zuerst (createdAt desc) — Inbox-Verhalten.
+  filtered = [...filtered].sort((a, b) => {
+    const at = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+    const bt = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+    return bt - at;
+  });
+  const total = filtered.length;
+  const slice = filtered.slice((page - 1) * pageSize, page * pageSize);
+  // Joins für Owner-/Account-/Deal-Namen anreichern.
+  const userMap = await getUserMap(scope.tenantId);
+  const accIds = [...new Set(slice.map(l => l.convertedAccountId).filter((x): x is string => !!x))];
+  const dealIds = [...new Set(slice.map(l => l.convertedDealId).filter((x): x is string => !!x))];
+  const accs = accIds.length
+    ? await db.select().from(accountsTable).where(inArray(accountsTable.id, accIds))
+    : [];
+  const accMap = new Map(accs.map(a => [a.id, a.name]));
+  const deals = dealIds.length
+    ? await db.select().from(dealsTable).where(inArray(dealsTable.id, dealIds))
+    : [];
+  const dealMap = new Map(deals.map(d => [d.id, d.name]));
+  res.json({
+    items: slice.map(l => buildLead(l, {
+      ownerName: l.ownerId ? userMap.get(l.ownerId)?.name ?? null : null,
+      accountName: l.convertedAccountId ? accMap.get(l.convertedAccountId) ?? null : null,
+      dealName: l.convertedDealId ? dealMap.get(l.convertedDealId) ?? null : null,
+    })),
+    total,
+    page,
+    pageSize,
+    statusCounts: counts,
+  });
+});
+
+router.post('/leads', async (req, res) => {
+  if (!validateInline(req, res, { body: Z.CreateLeadBody })) return;
+  const scope = getScope(req);
+  const b = req.body as {
+    name: string; source: string;
+    companyName?: string | null; email?: string | null; phone?: string | null;
+    ownerId?: string | null; notes?: string | null;
+    lastContactAt?: string | null;
+  };
+  let resolvedOwnerId: string | null = scope.user.id;
+  if (b.ownerId !== undefined) {
+    const ownerCheck = await resolveOwnerId(req, res, b.ownerId);
+    if (!ownerCheck.ok) return;
+    resolvedOwnerId = ownerCheck.value;
+  }
+  const id = `ld_${randomUUID().slice(0, 8)}`;
+  await db.insert(leadsTable).values({
+    id,
+    tenantId: scope.tenantId,
+    name: b.name.trim(),
+    companyName: b.companyName?.trim() || null,
+    email: b.email?.trim() || null,
+    phone: b.phone?.trim() || null,
+    source: b.source.trim(),
+    status: 'new',
+    ownerId: resolvedOwnerId,
+    notes: b.notes?.trim() || null,
+    lastContactAt: b.lastContactAt ? new Date(b.lastContactAt) : null,
+  });
+  const [created] = await db.select().from(leadsTable).where(eq(leadsTable.id, id));
+  await writeAuditFromReq(req, {
+    entityType: 'lead',
+    entityId: id,
+    action: 'create',
+    summary: `Lead "${created.name}" angelegt (Quelle: ${created.source})`,
+    after: created,
+  });
+  const userMap = await getUserMap(scope.tenantId);
+  res.status(201).json(buildLead(created, {
+    ownerName: created.ownerId ? userMap.get(created.ownerId)?.name ?? null : null,
+  }));
+});
+
+router.get('/leads/:id', async (req, res) => {
+  if (!(await gateLead(req, res, req.params.id))) return;
+  const [l] = await db.select().from(leadsTable).where(eq(leadsTable.id, req.params.id));
+  if (!l) { res.status(404).json({ error: 'not found' }); return; }
+  const scope = getScope(req);
+  const userMap = await getUserMap(scope.tenantId);
+  let accountName: string | null = null;
+  let dealName: string | null = null;
+  if (l.convertedAccountId) {
+    const [a] = await db.select().from(accountsTable).where(eq(accountsTable.id, l.convertedAccountId));
+    accountName = a?.name ?? null;
+  }
+  if (l.convertedDealId) {
+    const [d] = await db.select().from(dealsTable).where(eq(dealsTable.id, l.convertedDealId));
+    dealName = d?.name ?? null;
+  }
+  res.json(buildLead(l, {
+    ownerName: l.ownerId ? userMap.get(l.ownerId)?.name ?? null : null,
+    accountName,
+    dealName,
+  }));
+});
+
+router.patch('/leads/:id', async (req, res) => {
+  if (!validateInline(req, res, { body: Z.UpdateLeadBody })) return;
+  if (!(await gateLead(req, res, req.params.id))) return;
+  const [existing] = await db.select().from(leadsTable).where(eq(leadsTable.id, req.params.id));
+  if (!existing) { res.status(404).json({ error: 'not found' }); return; }
+  // Konvertierte Leads sind read-only — Statuswechsel zurück oder Owner-
+  // Wechsel wäre fachlich verwirrend (der Account hat dann längst eigene
+  // Owner-Geschichte). Stattdessen einen neuen Lead anlegen.
+  if (existing.status === 'converted') {
+    res.status(409).json({ error: 'lead converted', message: 'Konvertierte Leads sind read-only.' });
+    return;
+  }
+  const b = req.body as {
+    name?: string;
+    companyName?: string | null; email?: string | null; phone?: string | null;
+    source?: string;
+    status?: 'new' | 'qualified' | 'disqualified';
+    ownerId?: string | null; notes?: string | null;
+    disqualifyReason?: string | null;
+    lastContactAt?: string | null;
+  };
+  const update: Record<string, unknown> = { updatedAt: new Date() };
+  if (typeof b.name === 'string') {
+    const n = b.name.trim();
+    if (!n) { res.status(422).json({ error: 'name required' }); return; }
+    update.name = n;
+  }
+  if (typeof b.source === 'string') {
+    const s = b.source.trim();
+    if (!s) { res.status(422).json({ error: 'source required' }); return; }
+    update.source = s;
+  }
+  const optStr = (v: unknown): string | null | undefined => {
+    if (v === undefined) return undefined;
+    if (v === null) return null;
+    if (typeof v !== 'string') return undefined;
+    const t = v.trim();
+    return t === '' ? null : t;
+  };
+  for (const k of ['companyName', 'email', 'phone', 'notes', 'disqualifyReason'] as const) {
+    const norm = optStr((b as Record<string, unknown>)[k]);
+    if (norm !== undefined) update[k] = norm;
+  }
+  if (b.lastContactAt !== undefined) {
+    update.lastContactAt = b.lastContactAt ? new Date(b.lastContactAt) : null;
+  }
+  if (b.ownerId !== undefined) {
+    const ownerCheck = await resolveOwnerId(req, res, b.ownerId);
+    if (!ownerCheck.ok) return;
+    update.ownerId = ownerCheck.value;
+  }
+  if (b.status !== undefined) {
+    if (!['new', 'qualified', 'disqualified'].includes(b.status)) {
+      res.status(422).json({ error: 'invalid status' }); return;
+    }
+    if (b.status === 'disqualified') {
+      // Begründung nehmen wir entweder aus dem Patch oder fordern sie an,
+      // damit "Disqualifiziert" im Audit nicht ohne Grund landet.
+      const reason = optStr((b as Record<string, unknown>).disqualifyReason);
+      const finalReason = reason ?? existing.disqualifyReason;
+      if (!finalReason) {
+        res.status(422).json({ error: 'disqualifyReason required for disqualified status' });
+        return;
+      }
+      update.disqualifyReason = finalReason;
+    }
+    update.status = b.status;
+  }
+  await db.update(leadsTable).set(update).where(eq(leadsTable.id, req.params.id));
+  const [after] = await db.select().from(leadsTable).where(eq(leadsTable.id, req.params.id));
+  await writeAuditFromReq(req, {
+    entityType: 'lead',
+    entityId: req.params.id,
+    action: 'update',
+    summary: `Lead "${after.name}" aktualisiert${b.status ? ` → Status ${b.status}` : ''}`,
+    before: existing,
+    after,
+  });
+  const scope = getScope(req);
+  const userMap = await getUserMap(scope.tenantId);
+  res.json(buildLead(after, {
+    ownerName: after.ownerId ? userMap.get(after.ownerId)?.name ?? null : null,
+  }));
+});
+
+router.delete('/leads/:id', async (req, res) => {
+  if (!(await gateLead(req, res, req.params.id))) return;
+  const [existing] = await db.select().from(leadsTable).where(eq(leadsTable.id, req.params.id));
+  if (!existing) { res.status(404).json({ error: 'not found' }); return; }
+  if (existing.status === 'converted') {
+    res.status(409).json({ error: 'lead converted', message: 'Konvertierte Leads können nicht gelöscht werden — der angelegte Account bleibt erhalten.' });
+    return;
+  }
+  await db.delete(leadsTable).where(eq(leadsTable.id, req.params.id));
+  await writeAuditFromReq(req, {
+    entityType: 'lead',
+    entityId: req.params.id,
+    action: 'delete',
+    summary: `Lead "${existing.name}" gelöscht`,
+    before: existing,
+  });
+  res.status(204).end();
+});
+
+router.post('/leads/:id/convert', async (req, res) => {
+  if (!validateInline(req, res, { body: Z.ConvertLeadBody })) return;
+  if (!(await gateLead(req, res, req.params.id))) return;
+  const [lead] = await db.select().from(leadsTable).where(eq(leadsTable.id, req.params.id));
+  if (!lead) { res.status(404).json({ error: 'not found' }); return; }
+  // Lifecycle: nur `new` oder `qualified` dürfen konvertiert werden.
+  // - converted → 409 (idempotenz-freundliche Antwort mit IDs)
+  // - disqualified → 422 (zuerst reaktivieren oder neuen Lead anlegen)
+  if (lead.status === 'converted') {
+    res.status(409).json({ error: 'lead already converted', convertedAccountId: lead.convertedAccountId, convertedDealId: lead.convertedDealId });
+    return;
+  }
+  if (lead.status === 'disqualified') {
+    res.status(422).json({ error: 'invalid lead status', message: 'Disqualifizierte Leads können nicht konvertiert werden.' });
+    return;
+  }
+  const scope = getScope(req);
+  const b = req.body as {
+    accountId?: string | null;
+    newAccount?: { name: string; industry: string; country: string; website?: string | null; phone?: string | null } | null;
+    newDeal?: { name: string; value: number; currency: string; expectedCloseDate: string; companyId: string; brandId: string; stage?: string; probability?: number } | null;
+  };
+  if (!b.accountId && !b.newAccount) {
+    res.status(422).json({ error: 'accountId or newAccount required' });
+    return;
+  }
+  if (b.accountId && b.newAccount) {
+    res.status(422).json({ error: 'only one of accountId or newAccount allowed' });
+    return;
+  }
+  // ── 1) ALLE Validierungen vor jeglichem INSERT/UPDATE ──────────────────
+  // So können wir den ganzen Convert-Flow atomar in einer Transaktion
+  // ausführen, ohne halb angelegte Accounts oder Deals zu hinterlassen.
+  let existingAccountId: string | null = null;
+  if (b.accountId) {
+    const st = await entityScopeStatus(req, 'account', b.accountId);
+    if (st !== 'ok') {
+      res.status(st === 'missing' ? 404 : 403).json({ error: st === 'missing' ? 'account not found' : 'account forbidden' });
+      return;
+    }
+    existingAccountId = b.accountId;
+  }
+  if (b.newDeal) {
+    const nd = b.newDeal;
+    const [co] = await db.select().from(companiesTable).where(eq(companiesTable.id, nd.companyId));
+    if (!co || co.tenantId !== scope.tenantId) {
+      res.status(422).json({ error: 'invalid companyId for tenant' });
+      return;
+    }
+    const [br] = await db.select().from(brandsTable).where(eq(brandsTable.id, nd.brandId));
+    if (!br || br.companyId !== nd.companyId) {
+      res.status(422).json({ error: 'invalid brandId for company' });
+      return;
+    }
+    // Permission ∩ Active Scope: gleicher Check wie bei POST /deals.
+    // Restricted-User darf nicht über den Convert-Flow Deals in fremden
+    // Company-/Brand-Kontexten anlegen.
+    if (!scope.tenantWide || hasActiveScopeFilter(scope)) {
+      const okCompany = (await allowedCompanyIds(req)).includes(nd.companyId);
+      const okBrand = (await allowedBrandIds(req)).includes(nd.brandId);
+      if (!okCompany && !okBrand) {
+        res.status(403).json({ error: 'forbidden (out of scope)' });
+        return;
+      }
+    }
+  }
+
+  // ── 2) Inserts/Updates atomar in einer Transaktion ────────────────────
+  const accountId: string = existingAccountId ?? `acc_${randomUUID().slice(0, 8)}`;
+  const dealId: string | null = b.newDeal ? `dl_${randomUUID().slice(0, 8)}` : null;
+  const now = new Date();
+  const auditEntries: Array<Parameters<typeof writeAuditFromReq>[1]> = [];
+  try {
+    await db.transaction(async (tx) => {
+      if (!existingAccountId && b.newAccount) {
+        const na = b.newAccount;
+        await tx.insert(accountsTable).values({
+          id: accountId,
+          name: na.name.trim(),
+          industry: na.industry.trim(),
+          country: na.country.trim(),
+          healthScore: 70,
+          ownerId: lead.ownerId ?? scope.user.id,
+          website: na.website?.trim() || null,
+          phone: na.phone?.trim() || null,
+        });
+        auditEntries.push({
+          entityType: 'account',
+          entityId: accountId,
+          action: 'create',
+          summary: `Account "${na.name}" aus Lead "${lead.name}" angelegt`,
+          after: { id: accountId, name: na.name, industry: na.industry, country: na.country },
+        });
+      }
+      if (b.newDeal && dealId) {
+        const nd = b.newDeal;
+        await tx.insert(dealsTable).values({
+          id: dealId,
+          name: nd.name.trim(),
+          accountId,
+          stage: nd.stage ?? 'qualified',
+          value: String(nd.value),
+          currency: nd.currency,
+          probability: nd.probability ?? 30,
+          expectedCloseDate: nd.expectedCloseDate,
+          ownerId: lead.ownerId ?? scope.user.id,
+          brandId: nd.brandId,
+          companyId: nd.companyId,
+          riskLevel: 'low',
+          nextStep: 'Erste Schritte aus Lead-Konvertierung',
+        });
+        auditEntries.push({
+          entityType: 'deal',
+          entityId: dealId,
+          action: 'create',
+          summary: `Deal "${nd.name}" aus Lead "${lead.name}" angelegt`,
+          after: { id: dealId, name: nd.name, accountId, value: nd.value, currency: nd.currency },
+        });
+      }
+      await tx.update(leadsTable).set({
+        status: 'converted',
+        convertedAccountId: accountId,
+        convertedDealId: dealId,
+        convertedAt: now,
+        updatedAt: now,
+      }).where(eq(leadsTable.id, lead.id));
+    });
+  } catch (err) {
+    // Bei DB-Fehlern wurde dank Transaktion nichts persistiert.
+    res.status(500).json({ error: 'convert failed', message: (err as Error).message });
+    return;
+  }
+
+  // Audit erst nach erfolgreicher Transaktion schreiben, damit es bei
+  // Rollback keine "Geister-Einträge" gibt.
+  for (const entry of auditEntries) {
+    await writeAuditFromReq(req, entry);
+  }
+  const [after] = await db.select().from(leadsTable).where(eq(leadsTable.id, lead.id));
+  await writeAuditFromReq(req, {
+    entityType: 'lead',
+    entityId: lead.id,
+    action: 'convert',
+    summary: `Lead "${lead.name}" konvertiert zu Account ${accountId}${dealId ? ` + Deal ${dealId}` : ''}`,
+    before: lead,
+    after,
+  });
+  const [acc] = await db.select().from(accountsTable).where(eq(accountsTable.id, accountId));
+  let deal: unknown = null;
+  if (dealId) {
+    const [d] = await db.select().from(dealsTable).where(eq(dealsTable.id, dealId));
+    if (d) {
+      const ctx = await dealCtx(scope.tenantId);
+      deal = await buildDeal(d, ctx);
+    }
+  }
+  const userMap = await getUserMap(scope.tenantId);
+  res.json({
+    lead: buildLead(after, {
+      ownerName: after.ownerId ? userMap.get(after.ownerId)?.name ?? null : null,
+      accountName: acc?.name ?? null,
+      dealName: dealId ? (deal as { name?: string } | null)?.name ?? null : null,
+    }),
+    account: { ...acc, openDeals: dealId ? 1 : 0, totalValue: dealId ? (b.newDeal?.value ?? 0) : 0 },
+    deal,
   });
 });
 

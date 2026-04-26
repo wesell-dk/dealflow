@@ -14,6 +14,7 @@ import {
   orderConfirmationsTable,
   pricePositionsTable,
   priceIncreaseLettersTable,
+  leadsTable,
   usersTable,
 } from "@workspace/db";
 import type { Request } from "express";
@@ -443,6 +444,15 @@ export async function entityScopeStatus(
       const [l] = await db.select().from(priceIncreaseLettersTable).where(eq(priceIncreaseLettersTable.id, entityId));
       if (!l) return "missing";
       return accOk(l.accountId) ? "ok" : "forbidden";
+    }
+    case "lead": {
+      // Leads sind tenant-scoped; restricted-User sehen nur eigene (ownerId).
+      // tenantWide-User sehen alle Leads ihres Tenants — auch unzugewiesene.
+      const [l] = await db.select().from(leadsTable).where(eq(leadsTable.id, entityId));
+      if (!l) return "missing";
+      if (l.tenantId !== scope.tenantId) return "forbidden";
+      if (scope.tenantWide) return "ok";
+      return l.ownerId === scope.user.id ? "ok" : "forbidden";
     }
     default:
       // Unknown entity types: deny everyone.

@@ -143,6 +143,54 @@ export const sessionsTable = pgTable("sessions", {
   createdAt: ts("created_at"),
 });
 
+// Leads — frühe Anfragen / Inbound-Kontakte, bevor daraus ein Account/Deal wird.
+// Tenant-scoped wie Accounts/Deals; Visibility folgt der gleichen Regel:
+// tenantWide-User sehen alle Leads des Tenants, restricted-User nur eigene
+// (ownerId = userId). Statusübergänge:
+//   new → qualified | disqualified
+//   qualified → converted (legt Account/Deal an, setzt convertedAccountId)
+//   disqualified ist Endzustand (mit Begründung), kann manuell zurückgesetzt
+//   werden, wenn der Lead reaktiviert wird.
+export const leadsTable = pgTable("leads", {
+  id: id(),
+  tenantId: text("tenant_id").notNull().default("tn_root"),
+  // Anzeigename des Leads — typischerweise Personenname ("Anna Müller") oder
+  // beschreibender Anfragetitel ("Anfrage Acme Holding via Webformular").
+  name: text("name").notNull(),
+  // Optional: Firmenname aus dem Inbound-Kanal — wird beim Konvertieren als
+  // Vorschlag für den neu anzulegenden Account verwendet.
+  companyName: text("company_name"),
+  email: text("email"),
+  phone: text("phone"),
+  // Quelle der Anfrage (frei wählbarer Schlüssel; UI mappt Standardwerte:
+  // website | referral | inbound_email | event | outbound | partner | other).
+  source: text("source").notNull(),
+  // Lead-Status. Default = "new" (gerade reingekommen, Inbox).
+  status: text("status").notNull().default("new"),
+  // Zugewiesener Owner. Wenn null = "Unzugewiesen" (für Round-Robin /
+  // Rückfall-Sichtbarkeit nur tenantWide-User). FK weich (kein cascade), damit
+  // ein gelöschter User die Lead-Historie nicht mit reißt.
+  ownerId: text("owner_id"),
+  // Notizen aus Qualifizierungs-Calls; reines Freitext-Feld.
+  notes: text("notes"),
+  // Begründung für disqualified — Pflicht beim Statuswechsel im UI.
+  disqualifyReason: text("disqualify_reason"),
+  // Letzter manuell geloggter Kontakt (Telefonat / E-Mail). Optional.
+  lastContactAt: timestamp("last_contact_at", { withTimezone: true }),
+  // Verknüpfung beim Konvertieren — entweder bestehender Account wird
+  // verlinkt oder neuer Account wird angelegt; in beiden Fällen wird die
+  // ID hier gespiegelt. Optional auch ein dabei entstandener Deal.
+  convertedAccountId: text("converted_account_id"),
+  convertedDealId: text("converted_deal_id"),
+  convertedAt: timestamp("converted_at", { withTimezone: true }),
+  createdAt: ts("created_at"),
+  updatedAt: ts("updated_at"),
+}, (t) => [
+  index("leads_tenant_status_idx").on(t.tenantId, t.status),
+  index("leads_tenant_owner_idx").on(t.tenantId, t.ownerId),
+  index("leads_tenant_created_idx").on(t.tenantId, t.createdAt),
+]);
+
 // Accounts / contacts
 export const accountsTable = pgTable("accounts", {
   id: id(),

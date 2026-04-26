@@ -814,6 +814,159 @@ export interface ScopeTree {
   companies: ScopeTreeCompaniesItem[];
 }
 
+export type LeadStatus = (typeof LeadStatus)[keyof typeof LeadStatus];
+
+export const LeadStatus = {
+  new: "new",
+  qualified: "qualified",
+  disqualified: "disqualified",
+  converted: "converted",
+} as const;
+
+export interface Lead {
+  id: string;
+  name: string;
+  /** @nullable */
+  companyName?: string | null;
+  /** @nullable */
+  email?: string | null;
+  /** @nullable */
+  phone?: string | null;
+  /** z. B. website | referral | inbound_email | event | outbound | partner | other */
+  source: string;
+  status: LeadStatus;
+  /** @nullable */
+  ownerId?: string | null;
+  /** @nullable */
+  ownerName?: string | null;
+  /** @nullable */
+  notes?: string | null;
+  /** @nullable */
+  disqualifyReason?: string | null;
+  /** @nullable */
+  lastContactAt?: string | null;
+  /** @nullable */
+  convertedAccountId?: string | null;
+  /** @nullable */
+  convertedAccountName?: string | null;
+  /** @nullable */
+  convertedDealId?: string | null;
+  /** @nullable */
+  convertedDealName?: string | null;
+  /** @nullable */
+  convertedAt?: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface LeadInput {
+  /**
+   * @minLength 1
+   * @maxLength 200
+   */
+  name: string;
+  companyName?: string | null;
+  email?: string | null;
+  phone?: string | null;
+  /**
+   * @minLength 1
+   * @maxLength 60
+   */
+  source: string;
+  ownerId?: string | null;
+  notes?: string | null;
+  lastContactAt?: string | null;
+}
+
+export type LeadPatchStatus =
+  (typeof LeadPatchStatus)[keyof typeof LeadPatchStatus];
+
+export const LeadPatchStatus = {
+  new: "new",
+  qualified: "qualified",
+  disqualified: "disqualified",
+} as const;
+
+export interface LeadPatch {
+  name?: string;
+  /** @nullable */
+  companyName?: string | null;
+  /** @nullable */
+  email?: string | null;
+  /** @nullable */
+  phone?: string | null;
+  source?: string;
+  status?: LeadPatchStatus;
+  /** @nullable */
+  ownerId?: string | null;
+  /** @nullable */
+  notes?: string | null;
+  /** @nullable */
+  disqualifyReason?: string | null;
+  /** @nullable */
+  lastContactAt?: string | null;
+}
+
+/**
+ * Anzahl pro Status (immer alle Statusbuckets in der aktuellen Tenant/Owner-Sicht — unabhängig vom aktuell gewählten Status-Filter).
+ */
+export type LeadListResponseStatusCounts = {
+  new: number;
+  qualified: number;
+  disqualified: number;
+  converted: number;
+  all: number;
+};
+
+export interface LeadListResponse {
+  items: Lead[];
+  total: number;
+  page: number;
+  pageSize: number;
+  /** Anzahl pro Status (immer alle Statusbuckets in der aktuellen Tenant/Owner-Sicht — unabhängig vom aktuell gewählten Status-Filter). */
+  statusCounts?: LeadListResponseStatusCounts;
+}
+
+export interface LeadConvertNewAccount {
+  name: string;
+  industry: string;
+  country: string;
+  website?: string | null;
+  phone?: string | null;
+}
+
+export interface LeadConvertNewDeal {
+  name: string;
+  /** @minimum 0 */
+  value: number;
+  /**
+   * @minLength 3
+   * @maxLength 3
+   */
+  currency: string;
+  expectedCloseDate: string;
+  companyId: string;
+  brandId: string;
+  stage?: string;
+  /**
+   * @minimum 0
+   * @maximum 100
+   */
+  probability?: number;
+}
+
+/**
+ * Entweder `accountId` (bestehenden Account verlinken) ODER `newAccount`
+(neuen Account anlegen) angeben. Optional `newDeal` für Deal-Anlage
+in einem Aufwasch.
+
+ */
+export interface LeadConvertInput {
+  accountId?: string | null;
+  newAccount?: LeadConvertNewAccount | null;
+  newDeal?: LeadConvertNewDeal | null;
+}
+
 export interface Account {
   id: string;
   name: string;
@@ -858,17 +1011,6 @@ export interface Account {
   archivedAt?: string | null;
 }
 
-export interface Contact {
-  id: string;
-  accountId: string;
-  name: string;
-  email: string;
-  role: string;
-  isDecisionMaker: boolean;
-  /** @nullable */
-  phone?: string | null;
-}
-
 export interface Deal {
   id: string;
   name: string;
@@ -889,6 +1031,23 @@ export interface Deal {
   updatedAt: string;
   /** @nullable */
   nextStep?: string | null;
+}
+
+export interface LeadConvertResponse {
+  lead: Lead;
+  account: Account;
+  deal?: Deal | null;
+}
+
+export interface Contact {
+  id: string;
+  accountId: string;
+  name: string;
+  email: string;
+  role: string;
+  isDecisionMaker: boolean;
+  /** @nullable */
+  phone?: string | null;
 }
 
 export type AccountDetail = Account & {
@@ -4961,6 +5120,42 @@ Used by the scope picker so users can switch back from a restricted view.
  */
   permitted?: boolean;
 };
+
+export type ListLeadsParams = {
+  /**
+   * Volltext-Suche über name, companyName, email, phone.
+   */
+  search?: string;
+  /**
+   * Filter nach Lead-Status. Default: alle.
+   */
+  status?: ListLeadsStatus;
+  /**
+   * Filter nach Owner. Spezialwert 'unassigned' für Leads ohne Owner.
+   */
+  ownerId?: string;
+  source?: string;
+  /**
+   * @minimum 1
+   */
+  page?: number;
+  /**
+   * @minimum 1
+   * @maximum 100
+   */
+  pageSize?: number;
+};
+
+export type ListLeadsStatus =
+  (typeof ListLeadsStatus)[keyof typeof ListLeadsStatus];
+
+export const ListLeadsStatus = {
+  new: "new",
+  qualified: "qualified",
+  disqualified: "disqualified",
+  converted: "converted",
+  all: "all",
+} as const;
 
 export type ListAccountsParams = {
   /**

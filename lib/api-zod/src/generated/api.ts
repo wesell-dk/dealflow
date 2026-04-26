@@ -625,6 +625,323 @@ export const GetScopeTreeResponse = zod.object({
   ),
 });
 
+/**
+ * Tenant-scoped Liste aller Leads. Restricted-User sehen nur eigene
+Leads (ownerId = self), tenantWide-User sehen alle Leads des Tenants.
+
+ * @summary Lead-Inbox auflisten
+ */
+export const listLeadsQueryPageDefault = 1;
+
+export const listLeadsQueryPageSizeDefault = 25;
+export const listLeadsQueryPageSizeMax = 100;
+
+export const ListLeadsQueryParams = zod.object({
+  search: zod.coerce
+    .string()
+    .optional()
+    .describe("Volltext-Suche über name, companyName, email, phone."),
+  status: zod
+    .enum(["new", "qualified", "disqualified", "converted", "all"])
+    .optional()
+    .describe("Filter nach Lead-Status. Default: alle."),
+  ownerId: zod.coerce
+    .string()
+    .optional()
+    .describe(
+      "Filter nach Owner. Spezialwert 'unassigned' für Leads ohne Owner.",
+    ),
+  source: zod.coerce.string().optional(),
+  page: zod.coerce.number().min(1).default(listLeadsQueryPageDefault),
+  pageSize: zod.coerce
+    .number()
+    .min(1)
+    .max(listLeadsQueryPageSizeMax)
+    .default(listLeadsQueryPageSizeDefault),
+});
+
+export const ListLeadsResponse = zod.object({
+  items: zod.array(
+    zod.object({
+      id: zod.string(),
+      name: zod.string(),
+      companyName: zod.string().nullish(),
+      email: zod.string().nullish(),
+      phone: zod.string().nullish(),
+      source: zod
+        .string()
+        .describe(
+          "z. B. website | referral | inbound_email | event | outbound | partner | other",
+        ),
+      status: zod.enum(["new", "qualified", "disqualified", "converted"]),
+      ownerId: zod.string().nullish(),
+      ownerName: zod.string().nullish(),
+      notes: zod.string().nullish(),
+      disqualifyReason: zod.string().nullish(),
+      lastContactAt: zod.coerce.date().nullish(),
+      convertedAccountId: zod.string().nullish(),
+      convertedAccountName: zod.string().nullish(),
+      convertedDealId: zod.string().nullish(),
+      convertedDealName: zod.string().nullish(),
+      convertedAt: zod.coerce.date().nullish(),
+      createdAt: zod.coerce.date(),
+      updatedAt: zod.coerce.date(),
+    }),
+  ),
+  total: zod.number(),
+  page: zod.number(),
+  pageSize: zod.number(),
+  statusCounts: zod
+    .object({
+      new: zod.number(),
+      qualified: zod.number(),
+      disqualified: zod.number(),
+      converted: zod.number(),
+      all: zod.number(),
+    })
+    .optional()
+    .describe(
+      "Anzahl pro Status (immer alle Statusbuckets in der aktuellen Tenant\/Owner-Sicht — unabhängig vom aktuell gewählten Status-Filter).",
+    ),
+});
+
+export const createLeadBodyNameMax = 200;
+
+export const createLeadBodySourceMax = 60;
+
+export const CreateLeadBody = zod.object({
+  name: zod.string().min(1).max(createLeadBodyNameMax),
+  companyName: zod.string().nullish(),
+  email: zod.string().nullish(),
+  phone: zod.string().nullish(),
+  source: zod.string().min(1).max(createLeadBodySourceMax),
+  ownerId: zod.string().nullish(),
+  notes: zod.string().nullish(),
+  lastContactAt: zod.coerce.date().nullish(),
+});
+
+export const GetLeadParams = zod.object({
+  id: zod.coerce.string(),
+});
+
+export const GetLeadResponse = zod.object({
+  id: zod.string(),
+  name: zod.string(),
+  companyName: zod.string().nullish(),
+  email: zod.string().nullish(),
+  phone: zod.string().nullish(),
+  source: zod
+    .string()
+    .describe(
+      "z. B. website | referral | inbound_email | event | outbound | partner | other",
+    ),
+  status: zod.enum(["new", "qualified", "disqualified", "converted"]),
+  ownerId: zod.string().nullish(),
+  ownerName: zod.string().nullish(),
+  notes: zod.string().nullish(),
+  disqualifyReason: zod.string().nullish(),
+  lastContactAt: zod.coerce.date().nullish(),
+  convertedAccountId: zod.string().nullish(),
+  convertedAccountName: zod.string().nullish(),
+  convertedDealId: zod.string().nullish(),
+  convertedDealName: zod.string().nullish(),
+  convertedAt: zod.coerce.date().nullish(),
+  createdAt: zod.coerce.date(),
+  updatedAt: zod.coerce.date(),
+});
+
+export const UpdateLeadParams = zod.object({
+  id: zod.coerce.string(),
+});
+
+export const UpdateLeadBody = zod.object({
+  name: zod.string().optional(),
+  companyName: zod.string().nullish(),
+  email: zod.string().nullish(),
+  phone: zod.string().nullish(),
+  source: zod.string().optional(),
+  status: zod.enum(["new", "qualified", "disqualified"]).optional(),
+  ownerId: zod.string().nullish(),
+  notes: zod.string().nullish(),
+  disqualifyReason: zod.string().nullish(),
+  lastContactAt: zod.coerce.date().nullish(),
+});
+
+export const UpdateLeadResponse = zod.object({
+  id: zod.string(),
+  name: zod.string(),
+  companyName: zod.string().nullish(),
+  email: zod.string().nullish(),
+  phone: zod.string().nullish(),
+  source: zod
+    .string()
+    .describe(
+      "z. B. website | referral | inbound_email | event | outbound | partner | other",
+    ),
+  status: zod.enum(["new", "qualified", "disqualified", "converted"]),
+  ownerId: zod.string().nullish(),
+  ownerName: zod.string().nullish(),
+  notes: zod.string().nullish(),
+  disqualifyReason: zod.string().nullish(),
+  lastContactAt: zod.coerce.date().nullish(),
+  convertedAccountId: zod.string().nullish(),
+  convertedAccountName: zod.string().nullish(),
+  convertedDealId: zod.string().nullish(),
+  convertedDealName: zod.string().nullish(),
+  convertedAt: zod.coerce.date().nullish(),
+  createdAt: zod.coerce.date(),
+  updatedAt: zod.coerce.date(),
+});
+
+export const DeleteLeadParams = zod.object({
+  id: zod.coerce.string(),
+});
+
+/**
+ * Konvertiert einen qualifizierten Lead in einen Account. Es wird
+entweder ein bestehender Account verlinkt (`accountId`) oder ein
+neuer Account angelegt (`newAccount`). Optional kann gleichzeitig
+ein neuer Deal erzeugt werden (`newDeal`). Der Lead-Status wird
+auf `converted` gesetzt; die entstandenen IDs werden persistiert.
+
+ * @summary Lead in Account (und optional Deal) konvertieren
+ */
+export const ConvertLeadParams = zod.object({
+  id: zod.coerce.string(),
+});
+
+export const convertLeadBodyNewDealOneValueMin = 0;
+
+export const convertLeadBodyNewDealOneCurrencyMin = 3;
+export const convertLeadBodyNewDealOneCurrencyMax = 3;
+
+export const convertLeadBodyNewDealOneStageDefault = `qualified`;
+export const convertLeadBodyNewDealOneProbabilityDefault = 30;
+export const convertLeadBodyNewDealOneProbabilityMin = 0;
+export const convertLeadBodyNewDealOneProbabilityMax = 100;
+
+export const ConvertLeadBody = zod
+  .object({
+    accountId: zod.string().nullish(),
+    newAccount: zod
+      .object({
+        name: zod.string(),
+        industry: zod.string(),
+        country: zod.string(),
+        website: zod.string().nullish(),
+        phone: zod.string().nullish(),
+      })
+      .nullish(),
+    newDeal: zod
+      .object({
+        name: zod.string(),
+        value: zod.number().min(convertLeadBodyNewDealOneValueMin),
+        currency: zod
+          .string()
+          .min(convertLeadBodyNewDealOneCurrencyMin)
+          .max(convertLeadBodyNewDealOneCurrencyMax),
+        expectedCloseDate: zod.coerce.date(),
+        companyId: zod.string(),
+        brandId: zod.string(),
+        stage: zod.string().default(convertLeadBodyNewDealOneStageDefault),
+        probability: zod
+          .number()
+          .min(convertLeadBodyNewDealOneProbabilityMin)
+          .max(convertLeadBodyNewDealOneProbabilityMax)
+          .default(convertLeadBodyNewDealOneProbabilityDefault),
+      })
+      .nullish(),
+  })
+  .describe(
+    "Entweder `accountId` (bestehenden Account verlinken) ODER `newAccount`\n(neuen Account anlegen) angeben. Optional `newDeal` für Deal-Anlage\nin einem Aufwasch.\n",
+  );
+
+export const ConvertLeadResponse = zod.object({
+  lead: zod.object({
+    id: zod.string(),
+    name: zod.string(),
+    companyName: zod.string().nullish(),
+    email: zod.string().nullish(),
+    phone: zod.string().nullish(),
+    source: zod
+      .string()
+      .describe(
+        "z. B. website | referral | inbound_email | event | outbound | partner | other",
+      ),
+    status: zod.enum(["new", "qualified", "disqualified", "converted"]),
+    ownerId: zod.string().nullish(),
+    ownerName: zod.string().nullish(),
+    notes: zod.string().nullish(),
+    disqualifyReason: zod.string().nullish(),
+    lastContactAt: zod.coerce.date().nullish(),
+    convertedAccountId: zod.string().nullish(),
+    convertedAccountName: zod.string().nullish(),
+    convertedDealId: zod.string().nullish(),
+    convertedDealName: zod.string().nullish(),
+    convertedAt: zod.coerce.date().nullish(),
+    createdAt: zod.coerce.date(),
+    updatedAt: zod.coerce.date(),
+  }),
+  account: zod.object({
+    id: zod.string(),
+    name: zod.string(),
+    industry: zod.string(),
+    country: zod.string(),
+    healthScore: zod.number(),
+    openDeals: zod.number(),
+    totalValue: zod.number(),
+    ownerId: zod.string().nullish(),
+    website: zod
+      .string()
+      .nullish()
+      .describe("Optionale Website (z. B. https:\/\/example.com)."),
+    phone: zod.string().nullish().describe("Telefon-Hauptnummer."),
+    billingAddress: zod
+      .string()
+      .nullish()
+      .describe("Rechnungsadresse als Mehrzeiler."),
+    vatId: zod.string().nullish().describe("USt-IdNr. (z. B. DE123456789)."),
+    sizeBracket: zod
+      .string()
+      .nullish()
+      .describe(
+        "Mitarbeitergröße: 1-10 \/ 11-50 \/ 51-200 \/ 201-1000 \/ 1000+",
+      ),
+    primaryContactId: zod.string().nullish(),
+    archivedAt: zod.coerce
+      .date()
+      .nullish()
+      .describe(
+        "Wenn gesetzt, ist der Account archiviert (Soft-Delete) und erscheint nur in der Archiv-Ansicht.",
+      ),
+  }),
+  deal: zod
+    .union([
+      zod.object({
+        id: zod.string(),
+        name: zod.string(),
+        accountId: zod.string(),
+        accountName: zod.string(),
+        stage: zod.string(),
+        value: zod.number(),
+        currency: zod.string(),
+        probability: zod.number(),
+        expectedCloseDate: zod.coerce.date(),
+        ownerId: zod.string(),
+        ownerName: zod.string(),
+        brandId: zod.string(),
+        brandName: zod.string(),
+        companyId: zod.string(),
+        companyName: zod.string(),
+        riskLevel: zod.string(),
+        updatedAt: zod.coerce.date(),
+        nextStep: zod.string().nullish(),
+      }),
+      zod.null(),
+    ])
+    .optional(),
+});
+
 export const ListAccountsQueryParams = zod.object({
   status: zod
     .enum(["active", "archived", "all"])

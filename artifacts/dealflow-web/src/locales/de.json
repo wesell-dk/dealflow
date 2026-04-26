@@ -143,7 +143,115 @@
       "title": "Leads",
       "subtitle": "Frühe Kontakte und Anfragen, bevor daraus ein Kunde wird.",
       "emptyTitle": "Noch keine Leads",
-      "emptyBody": "Die eigentliche Lead-Verwaltung — Inbox, Qualifizierung und Konvertierung in Kunden oder Deals — folgt als nächste Ausbaustufe."
+      "emptyBody": "Lege deinen ersten Lead an — oder warte, bis ein Inbound-Kanal welche einliefert.",
+      "newLead": "Neuer Lead",
+      "searchPlaceholder": "Name, Firma, E-Mail oder Telefon suchen…",
+      "tabs": {
+        "all": "Alle",
+        "new": "Neu",
+        "qualified": "Qualifiziert",
+        "disqualified": "Disqualifiziert",
+        "converted": "Konvertiert"
+      },
+      "status": {
+        "new": "Neu",
+        "qualified": "Qualifiziert",
+        "disqualified": "Disqualifiziert",
+        "converted": "Konvertiert"
+      },
+      "filters": {
+        "owner": "Owner",
+        "ownerUnassigned": "Nicht zugewiesen",
+        "source": "Quelle"
+      },
+      "sources": {
+        "website": "Website",
+        "referral": "Empfehlung",
+        "inbound_email": "Inbound E-Mail",
+        "event": "Event/Messe",
+        "outbound": "Outbound",
+        "partner": "Partner",
+        "other": "Andere"
+      },
+      "columns": {
+        "name": "Name",
+        "company": "Firma",
+        "contact": "Kontakt",
+        "source": "Quelle",
+        "status": "Status",
+        "owner": "Owner",
+        "lastContact": "Letzter Kontakt",
+        "createdAt": "Angelegt"
+      },
+      "form": {
+        "createTitle": "Neuen Lead anlegen",
+        "editTitle": "Lead bearbeiten",
+        "name": "Name *",
+        "company": "Firma",
+        "email": "E-Mail",
+        "phone": "Telefon",
+        "source": "Quelle *",
+        "owner": "Owner",
+        "ownerSelf": "Mir zuweisen",
+        "ownerUnassigned": "Nicht zugewiesen",
+        "notes": "Notizen",
+        "lastContactAt": "Letzter Kontakt",
+        "save": "Speichern",
+        "cancel": "Abbrechen"
+      },
+      "actions": {
+        "open": "Details",
+        "qualify": "Qualifizieren",
+        "disqualify": "Disqualifizieren",
+        "convert": "Konvertieren",
+        "delete": "Löschen"
+      },
+      "disqualify": {
+        "title": "Lead disqualifizieren",
+        "body": "Bitte gib einen kurzen Grund an. Disqualifizierte Leads bleiben für Reporting erhalten.",
+        "reason": "Grund *",
+        "confirm": "Disqualifizieren"
+      },
+      "convert": {
+        "title": "Lead konvertieren",
+        "body": "Aus diesem Lead wird ein Kunde. Du kannst optional gleich einen ersten Deal anlegen.",
+        "accountLabel": "Kunde",
+        "dealLabel": "Deal",
+        "accountSection": "Kunde",
+        "useExistingAccount": "Bestehenden Kunden verlinken",
+        "createNewAccount": "Neuen Kunden anlegen",
+        "existingAccount": "Bestehender Kunde",
+        "newAccountName": "Name *",
+        "newAccountIndustry": "Branche *",
+        "newAccountCountry": "Land *",
+        "newAccountWebsite": "Website",
+        "newAccountPhone": "Telefon",
+        "dealSection": "Deal (optional)",
+        "createDeal": "Gleich Deal anlegen",
+        "dealName": "Deal-Name *",
+        "dealValue": "Wert *",
+        "dealCurrency": "Währung",
+        "dealCloseDate": "Geplanter Abschluss *",
+        "dealCompany": "Eigene Gesellschaft *",
+        "dealBrand": "Brand *",
+        "confirm": "Konvertieren",
+        "successTitle": "Lead konvertiert",
+        "successBody": "Kunde {{account}} wurde angelegt.",
+        "successWithDeal": "Kunde {{account}} und Deal {{deal}} wurden angelegt."
+      },
+      "delete": {
+        "title": "Lead löschen?",
+        "body": "Diese Aktion kann nicht rückgängig gemacht werden. Konvertierte Leads können nicht gelöscht werden.",
+        "confirm": "Löschen"
+      },
+      "toasts": {
+        "created": "Lead angelegt",
+        "updated": "Lead aktualisiert",
+        "deleted": "Lead gelöscht",
+        "qualified": "Lead qualifiziert",
+        "disqualified": "Lead disqualifiziert",
+        "convertedTitle": "Lead konvertiert"
+      }
     },
     "accounts": {
       "title": "Kunden",

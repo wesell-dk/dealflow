@@ -143,7 +143,115 @@
       "title": "Leads",
       "subtitle": "Early contacts and inquiries, before they become customers.",
       "emptyTitle": "No leads yet",
-      "emptyBody": "The full lead management — inbox, qualification, and conversion to accounts or deals — is coming in a follow-up step."
+      "emptyBody": "Create your first lead — or wait for inbound channels to deliver some.",
+      "newLead": "New lead",
+      "searchPlaceholder": "Search name, company, email or phone…",
+      "tabs": {
+        "all": "All",
+        "new": "New",
+        "qualified": "Qualified",
+        "disqualified": "Disqualified",
+        "converted": "Converted"
+      },
+      "status": {
+        "new": "New",
+        "qualified": "Qualified",
+        "disqualified": "Disqualified",
+        "converted": "Converted"
+      },
+      "filters": {
+        "owner": "Owner",
+        "ownerUnassigned": "Unassigned",
+        "source": "Source"
+      },
+      "sources": {
+        "website": "Website",
+        "referral": "Referral",
+        "inbound_email": "Inbound Email",
+        "event": "Event/Trade Show",
+        "outbound": "Outbound",
+        "partner": "Partner",
+        "other": "Other"
+      },
+      "columns": {
+        "name": "Name",
+        "company": "Company",
+        "contact": "Contact",
+        "source": "Source",
+        "status": "Status",
+        "owner": "Owner",
+        "lastContact": "Last contact",
+        "createdAt": "Created"
+      },
+      "form": {
+        "createTitle": "Create new lead",
+        "editTitle": "Edit lead",
+        "name": "Name *",
+        "company": "Company",
+        "email": "Email",
+        "phone": "Phone",
+        "source": "Source *",
+        "owner": "Owner",
+        "ownerSelf": "Assign to me",
+        "ownerUnassigned": "Unassigned",
+        "notes": "Notes",
+        "lastContactAt": "Last contact",
+        "save": "Save",
+        "cancel": "Cancel"
+      },
+      "actions": {
+        "open": "Details",
+        "qualify": "Qualify",
+        "disqualify": "Disqualify",
+        "convert": "Convert",
+        "delete": "Delete"
+      },
+      "disqualify": {
+        "title": "Disqualify lead",
+        "body": "Please provide a short reason. Disqualified leads are kept for reporting.",
+        "reason": "Reason *",
+        "confirm": "Disqualify"
+      },
+      "convert": {
+        "title": "Convert lead",
+        "body": "This lead becomes a customer. You can optionally create a first deal at the same time.",
+        "accountLabel": "Account",
+        "dealLabel": "Deal",
+        "accountSection": "Account",
+        "useExistingAccount": "Link existing account",
+        "createNewAccount": "Create new account",
+        "existingAccount": "Existing account",
+        "newAccountName": "Name *",
+        "newAccountIndustry": "Industry *",
+        "newAccountCountry": "Country *",
+        "newAccountWebsite": "Website",
+        "newAccountPhone": "Phone",
+        "dealSection": "Deal (optional)",
+        "createDeal": "Also create deal",
+        "dealName": "Deal name *",
+        "dealValue": "Value *",
+        "dealCurrency": "Currency",
+        "dealCloseDate": "Expected close *",
+        "dealCompany": "Internal company *",
+        "dealBrand": "Brand *",
+        "confirm": "Convert",
+        "successTitle": "Lead converted",
+        "successBody": "Account {{account}} was created.",
+        "successWithDeal": "Account {{account}} and deal {{deal}} were created."
+      },
+      "delete": {
+        "title": "Delete lead?",
+        "body": "This cannot be undone. Converted leads cannot be deleted.",
+        "confirm": "Delete"
+      },
+      "toasts": {
+        "created": "Lead created",
+        "updated": "Lead updated",
+        "deleted": "Lead deleted",
+        "qualified": "Lead qualified",
+        "disqualified": "Lead disqualified",
+        "convertedTitle": "Lead converted"
+      }
     },
     "accounts": {
       "title": "Accounts",
