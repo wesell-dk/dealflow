@@ -3505,6 +3505,22 @@ export interface QuoteDuplicateResult {
   dealId: string;
 }
 
+/**
+ * Options for the duplicate operation. Line items and prices are always
+copied — duplicating without them would be meaningless. All other
+fields are opt-in via include flags. If targetDealId is omitted, the
+duplicate stays on the original deal.
+
+ */
+export interface QuoteDuplicateOptions {
+  /** Deal the duplicate should belong to (default = source deal). */
+  targetDealId?: string;
+  includeAttachments?: boolean;
+  includeNotes?: boolean;
+  includeDiscount?: boolean;
+  includeValidUntil?: boolean;
+}
+
 export interface PriceBundleItem {
   id: string;
   pricePositionId: string;

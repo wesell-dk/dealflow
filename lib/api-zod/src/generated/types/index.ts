@@ -399,6 +399,7 @@ export * from "./quote";
 export * from "./quoteAttachment";
 export * from "./quoteAttachmentInput";
 export * from "./quoteDetail";
+export * from "./quoteDuplicateOptions";
 export * from "./quoteDuplicateResult";
 export * from "./quoteFromTemplateInput";
 export * from "./quoteInput";

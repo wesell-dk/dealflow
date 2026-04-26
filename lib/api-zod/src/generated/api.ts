@@ -5293,6 +5293,32 @@ export const DuplicateQuoteParams = zod.object({
   id: zod.coerce.string(),
 });
 
+export const duplicateQuoteBodyIncludeAttachmentsDefault = true;
+export const duplicateQuoteBodyIncludeNotesDefault = true;
+export const duplicateQuoteBodyIncludeDiscountDefault = true;
+export const duplicateQuoteBodyIncludeValidUntilDefault = true;
+
+export const DuplicateQuoteBody = zod
+  .object({
+    targetDealId: zod
+      .string()
+      .optional()
+      .describe("Deal the duplicate should belong to (default = source deal)."),
+    includeAttachments: zod
+      .boolean()
+      .default(duplicateQuoteBodyIncludeAttachmentsDefault),
+    includeNotes: zod.boolean().default(duplicateQuoteBodyIncludeNotesDefault),
+    includeDiscount: zod
+      .boolean()
+      .default(duplicateQuoteBodyIncludeDiscountDefault),
+    includeValidUntil: zod
+      .boolean()
+      .default(duplicateQuoteBodyIncludeValidUntilDefault),
+  })
+  .describe(
+    "Options for the duplicate operation. Line items and prices are always\ncopied — duplicating without them would be meaningless. All other\nfields are opt-in via include flags. If targetDealId is omitted, the\nduplicate stays on the original deal.\n",
+  );
+
 export const ListPriceBundlesResponseItem = zod.object({
   id: zod.string(),
   tenantId: zod.string(),

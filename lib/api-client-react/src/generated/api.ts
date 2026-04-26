@@ -230,6 +230,7 @@ import type {
   QuoteAttachment,
   QuoteAttachmentInput,
   QuoteDetail,
+  QuoteDuplicateOptions,
   QuoteDuplicateResult,
   QuoteFromTemplateInput,
   QuoteInput,
@@ -14704,11 +14705,14 @@ export const getDuplicateQuoteUrl = (id: string) => {
 
 export const duplicateQuote = async (
   id: string,
+  quoteDuplicateOptions?: QuoteDuplicateOptions,
   options?: RequestInit,
 ): Promise<QuoteDuplicateResult> => {
   return customFetch<QuoteDuplicateResult>(getDuplicateQuoteUrl(id), {
     ...options,
     method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(quoteDuplicateOptions),
   });
 };
 
@@ -14719,14 +14723,14 @@ export const getDuplicateQuoteMutationOptions = <
   mutation?: UseMutationOptions<
     Awaited<ReturnType<typeof duplicateQuote>>,
     TError,
-    { id: string },
+    { id: string; data: BodyType<QuoteDuplicateOptions> },
     TContext
   >;
   request?: SecondParameter<typeof customFetch>;
 }): UseMutationOptions<
   Awaited<ReturnType<typeof duplicateQuote>>,
   TError,
-  { id: string },
+  { id: string; data: BodyType<QuoteDuplicateOptions> },
   TContext
 > => {
   const mutationKey = ["duplicateQuote"];
@@ -14740,11 +14744,11 @@ export const getDuplicateQuoteMutationOptions = <
 
   const mutationFn: MutationFunction<
     Awaited<ReturnType<typeof duplicateQuote>>,
-    { id: string }
+    { id: string; data: BodyType<QuoteDuplicateOptions> }
   > = (props) => {
-    const { id } = props ?? {};
+    const { id, data } = props ?? {};
 
-    return duplicateQuote(id, requestOptions);
+    return duplicateQuote(id, data, requestOptions);
   };
 
   return { mutationFn, ...mutationOptions };
@@ -14753,7 +14757,7 @@ export const getDuplicateQuoteMutationOptions = <
 export type DuplicateQuoteMutationResult = NonNullable<
   Awaited<ReturnType<typeof duplicateQuote>>
 >;
-
+export type DuplicateQuoteMutationBody = BodyType<QuoteDuplicateOptions>;
 export type DuplicateQuoteMutationError = ErrorType<unknown>;
 
 /**
@@ -14766,14 +14770,14 @@ export const useDuplicateQuote = <
   mutation?: UseMutationOptions<
     Awaited<ReturnType<typeof duplicateQuote>>,
     TError,
-    { id: string },
+    { id: string; data: BodyType<QuoteDuplicateOptions> },
     TContext
   >;
   request?: SecondParameter<typeof customFetch>;
 }): UseMutationResult<
   Awaited<ReturnType<typeof duplicateQuote>>,
   TError,
-  { id: string },
+  { id: string; data: BodyType<QuoteDuplicateOptions> },
   TContext
 > => {
   return useMutation(getDuplicateQuoteMutationOptions(options));

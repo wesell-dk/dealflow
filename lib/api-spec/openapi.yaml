@@ -3275,6 +3275,11 @@ paths:
           name: id
           required: true
           schema: { type: string }
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/QuoteDuplicateOptions" }
       responses:
         "201":
           description: created
@@ -8006,6 +8011,30 @@ components:
         id: { type: string }
         number: { type: string }
         dealId: { type: string }
+
+    QuoteDuplicateOptions:
+      type: object
+      description: |
+        Options for the duplicate operation. Line items and prices are always
+        copied — duplicating without them would be meaningless. All other
+        fields are opt-in via include flags. If targetDealId is omitted, the
+        duplicate stays on the original deal.
+      properties:
+        targetDealId:
+          type: string
+          description: Deal the duplicate should belong to (default = source deal).
+        includeAttachments:
+          type: boolean
+          default: true
+        includeNotes:
+          type: boolean
+          default: true
+        includeDiscount:
+          type: boolean
+          default: true
+        includeValidUntil:
+          type: boolean
+          default: true
 
     PriceBundleItem:
       type: object

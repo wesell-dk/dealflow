@@ -10541,6 +10541,25 @@ router.post('/quotes/:id/duplicate', async (req, res) => {
   const [src] = await db.select().from(quotesTable).where(eq(quotesTable.id, sourceId));
   if (!src) { res.status(404).json({ error: 'quote not found' }); return; }
   if (!(await gateDeal(req, res, src.dealId))) return;
+  // Optionen aus dem Body — alle optional, defaults entsprechen dem alten
+  // Verhalten (alles übernehmen). Positionen & Preise sind immer dabei.
+  const body = (req.body ?? {}) as {
+    targetDealId?: unknown;
+    includeAttachments?: unknown;
+    includeNotes?: unknown;
+    includeDiscount?: unknown;
+    includeValidUntil?: unknown;
+  };
+  const includeAttachments = body.includeAttachments !== false;
+  const includeNotes = body.includeNotes !== false;
+  const includeDiscount = body.includeDiscount !== false;
+  const includeValidUntil = body.includeValidUntil !== false;
+  let targetDealId = src.dealId;
+  if (typeof body.targetDealId === 'string' && body.targetDealId && body.targetDealId !== src.dealId) {
+    // Ziel-Deal muss für den Nutzer sichtbar sein, sonst bricht gateDeal ab.
+    if (!(await gateDeal(req, res, body.targetDealId))) return;
+    targetDealId = body.targetDealId;
+  }
   // Aktuelle Version holen (höchste version)
   const versions = await db.select().from(quoteVersionsTable)
     .where(eq(quoteVersionsTable.quoteId, src.id))
@@ -10550,26 +10569,36 @@ router.post('/quotes/:id/duplicate', async (req, res) => {
   const newQuoteId = `qt_${randomUUID().slice(0, 8)}`;
   const newQvId = `qv_${randomUUID().slice(0, 8)}`;
   const newNumber = `${src.number}-COPY-${Math.floor(Math.random() * 9000) + 1000}`;
+  // Herkunfts-Hinweis ist eine technische Zeile und steht IMMER drin —
+  // unabhängig davon, ob die alten Notizen übernommen werden.
+  const originLine = `Dupliziert aus ${src.number}`;
+  const notesValue = includeNotes && srcVer?.notes
+    ? `${originLine}: ${srcVer.notes}`
+    : originLine;
+  // Gültig bis: bei Abwahl auf 30 Tage ab heute setzen (Spalte ist NOT NULL).
+  const validUntilValue = includeValidUntil
+    ? src.validUntil
+    : new Date(Date.now() + 30 * 86400 * 1000).toISOString().slice(0, 10);
   // Atomar: Header + Version + alle Lines + Attachments. Bei Teil-Fehler Rollback.
   await db.transaction(async (tx) => {
     await tx.insert(quotesTable).values({
       id: newQuoteId,
-      dealId: src.dealId,
+      dealId: targetDealId,
       number: newNumber,
       status: 'draft',
       currentVersion: 1,
       currency: src.currency,
-      validUntil: src.validUntil,
+      validUntil: validUntilValue,
     });
     await tx.insert(quoteVersionsTable).values({
       id: newQvId,
       quoteId: newQuoteId,
       version: 1,
       totalAmount: srcVer?.totalAmount ?? '0',
-      discountPct: srcVer?.discountPct ?? '0',
+      discountPct: includeDiscount ? (srcVer?.discountPct ?? '0') : '0',
       marginPct: srcVer?.marginPct ?? '30',
       status: 'draft',
-      notes: srcVer?.notes ? `Dupliziert aus ${src.number}: ${srcVer.notes}` : `Dupliziert aus ${src.number}`,
+      notes: notesValue,
       templateId: srcVer?.templateId ?? null,
       sectionsSnapshot: srcVer?.sectionsSnapshot ?? [],
     });
@@ -10577,33 +10606,65 @@ router.post('/quotes/:id/duplicate', async (req, res) => {
       const srcLines = await tx.select().from(lineItemsTable)
         .where(eq(lineItemsTable.quoteVersionId, srcVer.id));
       if (srcLines.length) {
-        await tx.insert(lineItemsTable).values(srcLines.map(l => ({
-          id: `li_${randomUUID().slice(0, 8)}`,
-          quoteVersionId: newQvId,
-          name: l.name,
-          description: l.description,
-          quantity: l.quantity,
-          unitPrice: l.unitPrice,
-          listPrice: l.listPrice,
-          discountPct: l.discountPct,
-          total: l.total,
-        })));
+        await tx.insert(lineItemsTable).values(srcLines.map(l => {
+          // Wenn Rabatt nicht übernommen wird, fällt der Preis auf den
+          // Listenpreis zurück — sonst wäre die Position rabattiert ohne dass
+          // man es im UI sieht.
+          if (!includeDiscount) {
+            const qty = Number(l.quantity);
+            const list = Number(l.listPrice);
+            const total = (qty * list).toFixed(2);
+            return {
+              id: `li_${randomUUID().slice(0, 8)}`,
+              quoteVersionId: newQvId,
+              name: l.name,
+              description: l.description,
+              quantity: l.quantity,
+              unitPrice: l.listPrice,
+              listPrice: l.listPrice,
+              discountPct: '0',
+              total,
+            };
+          }
+          return {
+            id: `li_${randomUUID().slice(0, 8)}`,
+            quoteVersionId: newQvId,
+            name: l.name,
+            description: l.description,
+            quantity: l.quantity,
+            unitPrice: l.unitPrice,
+            listPrice: l.listPrice,
+            discountPct: l.discountPct,
+            total: l.total,
+          };
+        }));
+        // Wenn Rabatt entfernt wurde, Gesamtsumme der Version neu berechnen.
+        if (!includeDiscount) {
+          const newTotal = srcLines
+            .reduce((s, l) => s + Number(l.quantity) * Number(l.listPrice), 0)
+            .toFixed(2);
+          await tx.update(quoteVersionsTable)
+            .set({ totalAmount: newTotal })
+            .where(eq(quoteVersionsTable.id, newQvId));
+        }
       }
-      // Auch Anhänge mitkopieren (Library-Asset-Verweise bleiben erhalten)
-      const srcAtts = await tx.select().from(quoteAttachmentsTable)
-        .where(eq(quoteAttachmentsTable.quoteVersionId, srcVer.id));
-      if (srcAtts.length) {
-        await tx.insert(quoteAttachmentsTable).values(srcAtts.map(a => ({
-          id: `qatt_${randomUUID().slice(0, 8)}`,
-          quoteVersionId: newQvId,
-          libraryAssetId: a.libraryAssetId,
-          name: a.name,
-          mimeType: a.mimeType,
-          size: a.size,
-          objectPath: a.objectPath,
-          label: a.label,
-          order: a.order,
-        })));
+      if (includeAttachments) {
+        // Auch Anhänge mitkopieren (Library-Asset-Verweise bleiben erhalten)
+        const srcAtts = await tx.select().from(quoteAttachmentsTable)
+          .where(eq(quoteAttachmentsTable.quoteVersionId, srcVer.id));
+        if (srcAtts.length) {
+          await tx.insert(quoteAttachmentsTable).values(srcAtts.map(a => ({
+            id: `qatt_${randomUUID().slice(0, 8)}`,
+            quoteVersionId: newQvId,
+            libraryAssetId: a.libraryAssetId,
+            name: a.name,
+            mimeType: a.mimeType,
+            size: a.size,
+            objectPath: a.objectPath,
+            label: a.label,
+            order: a.order,
+          })));
+        }
       }
     }
   });
@@ -10612,7 +10673,7 @@ router.post('/quotes/:id/duplicate', async (req, res) => {
     summary: `Angebot dupliziert aus ${src.number}`,
     actor: getScope(req).user.name,
   });
-  res.status(201).json({ id: newQuoteId, number: newNumber, dealId: src.dealId });
+  res.status(201).json({ id: newQuoteId, number: newNumber, dealId: targetDealId });
 });
 
 // ── PREIS-BUNDLES ──
