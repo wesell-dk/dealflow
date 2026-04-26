@@ -1,5 +1,5 @@
 import { Link } from "wouter";
-import { History, Building2, Briefcase, FileText, Quote as QuoteIcon, FileSignature, X } from "lucide-react";
+import { History, Building2, Briefcase, FileText, Quote as QuoteIcon, FileSignature, UserPlus, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -17,6 +17,7 @@ const ICONS: Record<RecentKind, typeof Building2> = {
   contract: FileText,
   quote: QuoteIcon,
   negotiation: FileSignature,
+  lead: UserPlus,
 };
 
 const KIND_LABEL: Record<RecentKind, string> = {
@@ -25,6 +26,7 @@ const KIND_LABEL: Record<RecentKind, string> = {
   contract: "Vertrag",
   quote: "Angebot",
   negotiation: "Verhandlung",
+  lead: "Lead",
 };
 
 export function RecentsDropdown() {

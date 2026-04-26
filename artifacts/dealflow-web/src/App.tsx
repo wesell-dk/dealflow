@@ -12,6 +12,7 @@ import NotFound from "@/pages/not-found";
 
 import Home from "@/pages/home";
 import Leads from "@/pages/leads";
+import LeadDetail from "@/pages/lead";
 import Deals from "@/pages/deals";
 import DealDetail from "@/pages/deal";
 import Quotes from "@/pages/quotes";
@@ -67,6 +68,7 @@ function ProtectedRoutes() {
         <Switch>
         <Route path="/" component={Home} />
         <Route path="/leads" component={Leads} />
+        <Route path="/leads/:id" component={LeadDetail} />
         <Route path="/deals" component={Deals} />
         <Route path="/deals/:id" component={DealDetail} />
         <Route path="/quotes" component={Quotes} />

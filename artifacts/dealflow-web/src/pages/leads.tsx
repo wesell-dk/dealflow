@@ -301,7 +301,15 @@ export default function Leads() {
                 )}
                 {!isLoading && items.map(lead => (
                   <TableRow key={lead.id} data-testid={`row-lead-${lead.id}`}>
-                    <TableCell className="font-medium">{lead.name}</TableCell>
+                    <TableCell className="font-medium">
+                      <Link
+                        href={`/leads/${lead.id}`}
+                        className="text-primary hover:underline"
+                        data-testid={`link-lead-${lead.id}`}
+                      >
+                        {lead.name}
+                      </Link>
+                    </TableCell>
                     <TableCell className="text-sm">{lead.companyName ?? "—"}</TableCell>
                     <TableCell className="text-sm">
                       <div className="flex flex-col gap-0.5">
@@ -358,6 +366,12 @@ export default function Leads() {
                           </Button>
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end">
+                          <DropdownMenuItem asChild data-testid={`item-open-${lead.id}`}>
+                            <Link href={`/leads/${lead.id}`}>
+                              <ArrowRight className="mr-2 h-3.5 w-3.5" /> {t("pages.leads.actions.open")}
+                            </Link>
+                          </DropdownMenuItem>
+                          <DropdownMenuSeparator />
                           {lead.status !== "converted" && (
                             <DropdownMenuItem onSelect={() => setEditLead(lead)} data-testid={`item-edit-${lead.id}`}>
                               <Pencil className="mr-2 h-3.5 w-3.5" /> {t("common.edit", { defaultValue: "Bearbeiten" })}
@@ -438,7 +452,7 @@ export default function Leads() {
 }
 
 // ─── Form (create + edit) ───────────────────────────────────────────────────
-function LeadFormDialog({
+export function LeadFormDialog({
   open, onOpenChange, users, currentUserId, lead,
 }: {
   open: boolean;
@@ -590,7 +604,7 @@ function LeadFormDialog({
 }
 
 // ─── Disqualify dialog ──────────────────────────────────────────────────────
-function DisqualifyDialog({
+export function DisqualifyDialog({
   lead, onOpenChange,
 }: {
   lead: Lead | null;
@@ -653,7 +667,7 @@ function DisqualifyDialog({
 }
 
 // ─── Convert dialog ─────────────────────────────────────────────────────────
-function ConvertDialog({
+export function ConvertDialog({
   lead, onOpenChange,
 }: {
   lead: Lead | null;
@@ -915,7 +929,7 @@ function ConvertDialog({
 }
 
 // ─── Delete confirm ─────────────────────────────────────────────────────────
-function DeleteConfirm({
+export function DeleteConfirm({
   lead, onOpenChange,
 }: {
   lead: Lead | null;

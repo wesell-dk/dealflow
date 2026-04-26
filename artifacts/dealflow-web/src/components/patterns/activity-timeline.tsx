@@ -3,6 +3,7 @@ import { useMemo, useState } from "react";
 import {
   Activity, FileText, ShieldCheck, PenTool, Edit, Plus, Trash2, RefreshCw, MessageSquare,
   Send, XCircle, AlertTriangle, Languages, Archive, ArchiveRestore, Copy, Clock,
+  Phone, Mail, CalendarClock, ClipboardList,
 } from "lucide-react";
 import { useListAuditEntries, type AuditEntry } from "@workspace/api-client-react";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -42,12 +43,20 @@ const ACTION_META: Record<string, { icon: typeof Activity; label: string; tone: 
   duplicate:        { icon: Copy,        label: "Dupliziert",    tone: "text-blue-600" },
   value_autofill:   { icon: Edit,        label: "Wert übernommen", tone: "text-emerald-600" },
   version_created:  { icon: FileText,    label: "Version angelegt", tone: "text-indigo-600" },
+  // Lead-Aktivitäten (note|call|email|meeting|task) + convert.
+  note:             { icon: MessageSquare, label: "Notiz",        tone: "text-slate-600" },
+  call:             { icon: Phone,         label: "Anruf",        tone: "text-emerald-600" },
+  email:            { icon: Mail,          label: "E-Mail",       tone: "text-sky-600" },
+  meeting:          { icon: CalendarClock, label: "Meeting",      tone: "text-violet-600" },
+  task:             { icon: ClipboardList, label: "Folgeaufgabe", tone: "text-amber-600" },
+  convert:          { icon: RefreshCw,     label: "Konvertiert",  tone: "text-violet-600" },
 };
 
-type FilterKey = "all" | "create" | "update" | "status" | "approval" | "signature" | "contract";
+type FilterKey = "all" | "activity" | "create" | "update" | "status" | "approval" | "signature" | "contract";
 
 const FILTER_LABELS: Record<FilterKey, string> = {
   all: "Alle",
+  activity: "Aktivitäten",
   create: "Neu",
   update: "Änderung",
   status: "Status",
@@ -60,7 +69,10 @@ const STATUS_ACTIONS = new Set([
   "status_changed", "sent", "send_failed", "rejected", "expired", "archived", "unarchived",
 ]);
 
+const ACTIVITY_ACTIONS = new Set(["note", "call", "email", "meeting", "task", "comment"]);
+
 function classify(action: string): FilterKey {
+  if (ACTIVITY_ACTIONS.has(action)) return "activity";
   if (action.startsWith("approval")) return "approval";
   if (action.startsWith("signature")) return "signature";
   if (action.startsWith("contract")) return "contract";

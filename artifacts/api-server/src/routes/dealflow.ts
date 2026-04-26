@@ -1900,6 +1900,77 @@ router.post('/leads/:id/convert', async (req, res) => {
   });
 });
 
+// ── LEAD ACTIVITIES ──
+//
+// Aktivitäten/Notizen am Lead werden als Audit-Log-Einträge mit den Actions
+// `note` | `call` | `email` | `meeting` | `task` persistiert. So nutzen wir
+// die bestehende Tenant-/Scope-Isolation, GDPR-Forget greift automatisch
+// und die Activity-Timeline der Detailseite zeigt sie ohne Sonderlogik.
+const LEAD_ACTIVITY_TYPES = ['note', 'call', 'email', 'meeting', 'task'] as const;
+type LeadActivityType = typeof LEAD_ACTIVITY_TYPES[number];
+
+function isLeadActivityType(v: unknown): v is LeadActivityType {
+  return typeof v === 'string' && (LEAD_ACTIVITY_TYPES as readonly string[]).includes(v);
+}
+
+router.get('/leads/:id/activities', async (req, res) => {
+  if (!(await gateLead(req, res, req.params.id))) return;
+  const scope = getScope(req);
+  const rows = await db.select().from(auditLogTable).where(and(
+    eq(auditLogTable.tenantId, scope.tenantId),
+    eq(auditLogTable.entityType, 'lead'),
+    eq(auditLogTable.entityId, req.params.id),
+    inArray(auditLogTable.action, LEAD_ACTIVITY_TYPES as unknown as string[]),
+  )).orderBy(desc(auditLogTable.at));
+  res.json(rows.map(r => ({
+    id: r.id,
+    leadId: r.entityId,
+    type: r.action as LeadActivityType,
+    body: r.summary,
+    actor: r.actor,
+    at: iso(r.at)!,
+  })));
+});
+
+router.post('/leads/:id/activities', async (req, res) => {
+  if (!validateInline(req, res, { body: Z.CreateLeadActivityBody })) return;
+  if (!(await gateLead(req, res, req.params.id))) return;
+  const b = req.body as { type: string; body: string; markContacted?: boolean };
+  if (!isLeadActivityType(b.type)) {
+    res.status(422).json({ error: 'invalid type' });
+    return;
+  }
+  const body = (b.body ?? '').trim();
+  if (!body) { res.status(422).json({ error: 'body required' }); return; }
+  // `lastContactAt` proaktiv setzen, damit die Lead-Liste/-Detailseite
+  // sofort sieht, dass etwas passiert ist (ohne zweiten PATCH-Aufruf).
+  if (b.markContacted) {
+    await db.update(leadsTable)
+      .set({ lastContactAt: new Date(), updatedAt: new Date() })
+      .where(eq(leadsTable.id, req.params.id));
+  }
+  // writeAuditFromReq liefert die kanonisch eingefügte id+at zurück, damit
+  // wir bei nebenläufigen Aktivitäten desselben Typs auf demselben Lead
+  // garantiert den frisch geschriebenen Datensatz an den Client zurückgeben
+  // (kein "select … order by at desc"-Race).
+  const scope = getScope(req);
+  const inserted = await writeAuditFromReq(req, {
+    entityType: 'lead',
+    entityId: req.params.id,
+    action: b.type,
+    summary: body,
+    actor: scope.user.name ?? scope.user.id,
+  });
+  res.status(201).json({
+    id: inserted.id,
+    leadId: req.params.id,
+    type: b.type as LeadActivityType,
+    body,
+    actor: inserted.actor,
+    at: iso(inserted.at)!,
+  });
+});
+
 // ── ACCOUNTS ──
 router.get('/accounts', async (req, res) => {
   // Tenant + scope-bound at the SQL level: only fetch accounts whose IDs
@@ -9740,19 +9811,24 @@ async function writeAudit(args: {
    * angegeben, wird `null` gespeichert (kein Filter aktiv / nicht relevant).
    */
   activeScope?: { tenantWide: boolean; companyIds: string[] | null; brandIds: string[] | null } | null;
-}) {
+}): Promise<{ id: string; at: Date; actor: string }> {
+  const id = `au_${randomUUID().slice(0, 10)}`;
+  const at = new Date();
+  const actor = args.actor ?? 'Priya Raman';
   await db.insert(auditLogTable).values({
-    id: `au_${randomUUID().slice(0, 10)}`,
+    id,
     tenantId: args.tenantId,
     entityType: args.entityType,
     entityId: args.entityId,
     action: args.action,
-    actor: args.actor ?? 'Priya Raman',
+    actor,
     beforeJson: args.before === undefined ? null : JSON.stringify(args.before),
     afterJson: args.after === undefined ? null : JSON.stringify(args.after),
     summary: args.summary,
     activeScopeJson: args.activeScope ? JSON.stringify(args.activeScope) : null,
+    at,
   });
+  return { id, at, actor };
 }
 
 /**
@@ -9764,10 +9840,10 @@ async function writeAudit(args: {
 async function writeAuditFromReq(
   req: Request,
   args: Omit<Parameters<typeof writeAudit>[0], 'activeScope' | 'tenantId'>,
-) {
+): Promise<{ id: string; at: Date; actor: string }> {
   const scope = getScope(req);
   const snapshot = activeScopeSnapshot(scope);
-  await writeAudit({ ...args, tenantId: scope.tenantId, activeScope: snapshot });
+  return writeAudit({ ...args, tenantId: scope.tenantId, activeScope: snapshot });
 }
 
 router.get('/audit', async (req, res) => {

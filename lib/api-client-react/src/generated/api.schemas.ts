@@ -1016,6 +1016,55 @@ export interface LeadListResponse {
   statusCounts?: LeadListResponseStatusCounts;
 }
 
+export type LeadActivityType =
+  (typeof LeadActivityType)[keyof typeof LeadActivityType];
+
+export const LeadActivityType = {
+  note: "note",
+  call: "call",
+  email: "email",
+  meeting: "meeting",
+  task: "task",
+} as const;
+
+/**
+ * Manuell an einem Lead erfasste Aktivität (Notiz, Anruf, E-Mail, Meeting,
+Folgeaufgabe). Wird zugleich im Audit-Log gespiegelt.
+
+ */
+export interface LeadActivity {
+  id: string;
+  leadId: string;
+  type: LeadActivityType;
+  body: string;
+  actor: string;
+  at: string;
+}
+
+export type LeadActivityInputType =
+  (typeof LeadActivityInputType)[keyof typeof LeadActivityInputType];
+
+export const LeadActivityInputType = {
+  note: "note",
+  call: "call",
+  email: "email",
+  meeting: "meeting",
+  task: "task",
+} as const;
+
+export interface LeadActivityInput {
+  type: LeadActivityInputType;
+  /**
+   * @minLength 1
+   * @maxLength 4000
+   */
+  body: string;
+  /** Wenn true, wird `lead.lastContactAt` zusätzlich auf den aktuellen
+Zeitpunkt gesetzt. Default false.
+ */
+  markContacted?: boolean;
+}
+
 export interface LeadConvertNewAccount {
   name: string;
   industry: string;

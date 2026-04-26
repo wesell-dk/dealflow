@@ -994,6 +994,57 @@ export const DeleteLeadParams = zod.object({
 });
 
 /**
+ * Liefert die manuell erfassten Aktivitäten (Notizen, Anrufe, E-Mails,
+Meetings, Folgeaufgaben) eines Leads — chronologisch absteigend.
+Tenant-isoliert; Sichtbarkeit identisch zum Lead selbst.
+
+ * @summary Aktivitäten und Notizen eines Leads auflisten
+ */
+export const ListLeadActivitiesParams = zod.object({
+  id: zod.coerce.string(),
+});
+
+export const ListLeadActivitiesResponseItem = zod
+  .object({
+    id: zod.string(),
+    leadId: zod.string(),
+    type: zod.enum(["note", "call", "email", "meeting", "task"]),
+    body: zod.string(),
+    actor: zod.string(),
+    at: zod.coerce.date(),
+  })
+  .describe(
+    "Manuell an einem Lead erfasste Aktivität (Notiz, Anruf, E-Mail, Meeting,\nFolgeaufgabe). Wird zugleich im Audit-Log gespiegelt.\n",
+  );
+export const ListLeadActivitiesResponse = zod.array(
+  ListLeadActivitiesResponseItem,
+);
+
+/**
+ * Legt einen Eintrag im Verlauf des Leads an. Der Eintrag landet sowohl
+im Audit-Log als auch in der Activity-Timeline der Detailseite.
+Optional kann `lastContactAt` automatisch auf "jetzt" gesetzt werden.
+
+ * @summary Aktivität oder Notiz an einem Lead erfassen
+ */
+export const CreateLeadActivityParams = zod.object({
+  id: zod.coerce.string(),
+});
+
+export const createLeadActivityBodyBodyMax = 4000;
+
+export const CreateLeadActivityBody = zod.object({
+  type: zod.enum(["note", "call", "email", "meeting", "task"]),
+  body: zod.string().min(1).max(createLeadActivityBodyBodyMax),
+  markContacted: zod
+    .boolean()
+    .optional()
+    .describe(
+      "Wenn true, wird `lead.lastContactAt` zusätzlich auf den aktuellen\nZeitpunkt gesetzt. Default false.\n",
+    ),
+});
+
+/**
  * Konvertiert einen qualifizierten Lead in einen Account. Es wird
 entweder ein bestehender Account verlinkt (`accountId`) oder ein
 neuer Account angelegt (`newAccount`). Optional kann gleichzeitig

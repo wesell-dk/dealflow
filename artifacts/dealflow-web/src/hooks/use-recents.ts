@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback } from "react";
 
-export type RecentKind = "account" | "deal" | "contract" | "quote" | "negotiation";
+export type RecentKind = "account" | "deal" | "contract" | "quote" | "negotiation" | "lead";
 
 export interface RecentItem {
   kind: RecentKind;

@@ -664,6 +664,58 @@ paths:
         "403": { description: forbidden }
         "404": { description: not found }
 
+  /leads/{id}/activities:
+    get:
+      operationId: listLeadActivities
+      tags: [leads, activity]
+      summary: Aktivitäten und Notizen eines Leads auflisten
+      description: |
+        Liefert die manuell erfassten Aktivitäten (Notizen, Anrufe, E-Mails,
+        Meetings, Folgeaufgaben) eines Leads — chronologisch absteigend.
+        Tenant-isoliert; Sichtbarkeit identisch zum Lead selbst.
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: ok
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/LeadActivity" }
+        "403": { description: forbidden }
+        "404": { description: not found }
+    post:
+      operationId: createLeadActivity
+      tags: [leads, activity]
+      summary: Aktivität oder Notiz an einem Lead erfassen
+      description: |
+        Legt einen Eintrag im Verlauf des Leads an. Der Eintrag landet sowohl
+        im Audit-Log als auch in der Activity-Timeline der Detailseite.
+        Optional kann `lastContactAt` automatisch auf "jetzt" gesetzt werden.
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/LeadActivityInput" }
+      responses:
+        "201":
+          description: created
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/LeadActivity" }
+        "403": { description: forbidden }
+        "404": { description: not found }
+        "422": { description: invalid input }
+
   /leads/{id}/convert:
     post:
       operationId: convertLead
@@ -5995,6 +6047,36 @@ components:
             disqualified: { type: integer }
             converted: { type: integer }
             all: { type: integer }
+
+    LeadActivity:
+      type: object
+      required: [id, leadId, type, body, actor, at]
+      description: |
+        Manuell an einem Lead erfasste Aktivität (Notiz, Anruf, E-Mail, Meeting,
+        Folgeaufgabe). Wird zugleich im Audit-Log gespiegelt.
+      properties:
+        id: { type: string }
+        leadId: { type: string }
+        type:
+          type: string
+          enum: [note, call, email, meeting, task]
+        body: { type: string }
+        actor: { type: string }
+        at: { type: string, format: date-time }
+
+    LeadActivityInput:
+      type: object
+      required: [type, body]
+      properties:
+        type:
+          type: string
+          enum: [note, call, email, meeting, task]
+        body: { type: string, minLength: 1, maxLength: 4000 }
+        markContacted:
+          type: boolean
+          description: |
+            Wenn true, wird `lead.lastContactAt` zusätzlich auf den aktuellen
+            Zeitpunkt gesetzt. Default false.
 
     LeadConvertNewAccount:
       type: object
