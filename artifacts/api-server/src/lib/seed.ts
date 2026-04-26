@@ -81,6 +81,7 @@ export async function ensureSchemaColumns(): Promise<void> {
   await db.execute(
     sql`ALTER TABLE "accounts" ADD COLUMN IF NOT EXISTS "archived_at" timestamp with time zone`,
   );
+
   // Juristische Wissensbasis (Task #227). DDL-Guard, falls drizzle push noch
   // nicht gelaufen ist — sonst crasht der erste seedLegalSourcesIdempotent().
   await db.execute(sql`
@@ -127,6 +128,93 @@ export async function ensureSchemaColumns(): Promise<void> {
   await db.execute(sql`CREATE INDEX IF NOT EXISTS "legal_precedents_tenant_family_idx" ON "legal_precedents" ("tenant_id","family")`);
   await db.execute(sql`CREATE INDEX IF NOT EXISTS "legal_precedents_tenant_signed_idx" ON "legal_precedents" ("tenant_id","signed_at")`);
   await db.execute(sql`CREATE UNIQUE INDEX IF NOT EXISTS "legal_precedents_clause_uq" ON "legal_precedents" ("tenant_id","contract_clause_id")`);
+
+  // ── Multi-channel email sending (Task #247) ────────────────────────────
+  // We create the new tables here (in addition to drizzle's static schema)
+  // so existing live databases can boot with the latest API binary without a
+  // separate migration step. Index creation is best-effort and idempotent.
+  await db.execute(sql`
+    CREATE TABLE IF NOT EXISTS "email_channels" (
+      "id" text PRIMARY KEY,
+      "tenant_id" text NOT NULL,
+      "type" text NOT NULL,
+      "name" text NOT NULL,
+      "is_active" boolean NOT NULL DEFAULT true,
+      "brand_id" text,
+      "user_id" text,
+      "is_default_transactional" boolean NOT NULL DEFAULT false,
+      "is_default_personal" boolean NOT NULL DEFAULT false,
+      "from_email" text NOT NULL,
+      "from_name" text,
+      "reply_to" text,
+      "config" jsonb NOT NULL DEFAULT '{}'::jsonb,
+      "credentials_cipher" text,
+      "last_test_status" text,
+      "last_test_at" timestamp with time zone,
+      "created_by" text,
+      "created_at" timestamp with time zone NOT NULL DEFAULT now(),
+      "updated_at" timestamp with time zone NOT NULL DEFAULT now()
+    )
+  `);
+  await db.execute(
+    sql`CREATE INDEX IF NOT EXISTS "email_channels_tenant_idx" ON "email_channels" ("tenant_id")`,
+  );
+  await db.execute(
+    sql`CREATE INDEX IF NOT EXISTS "email_channels_tenant_user_idx" ON "email_channels" ("tenant_id", "user_id")`,
+  );
+
+  await db.execute(sql`
+    CREATE TABLE IF NOT EXISTS "user_mailbox_connections" (
+      "id" text PRIMARY KEY,
+      "tenant_id" text NOT NULL,
+      "user_id" text NOT NULL,
+      "provider" text NOT NULL,
+      "email" text NOT NULL,
+      "display_name" text,
+      "scope" text,
+      "tokens_cipher" text NOT NULL,
+      "expires_at" timestamp with time zone,
+      "channel_id" text,
+      "created_at" timestamp with time zone NOT NULL DEFAULT now(),
+      "updated_at" timestamp with time zone NOT NULL DEFAULT now()
+    )
+  `);
+  await db.execute(
+    sql`CREATE UNIQUE INDEX IF NOT EXISTS "user_mailbox_connections_user_provider_uq" ON "user_mailbox_connections" ("user_id", "provider")`,
+  );
+  await db.execute(
+    sql`CREATE INDEX IF NOT EXISTS "user_mailbox_connections_tenant_idx" ON "user_mailbox_connections" ("tenant_id")`,
+  );
+
+  await db.execute(sql`
+    CREATE TABLE IF NOT EXISTS "email_send_log" (
+      "id" text PRIMARY KEY,
+      "tenant_id" text NOT NULL,
+      "channel_id" text,
+      "channel_type" text NOT NULL,
+      "use_case" text NOT NULL,
+      "context_entity_type" text,
+      "context_entity_id" text,
+      "brand_id" text,
+      "initiated_by_user_id" text,
+      "from_email" text NOT NULL,
+      "to_json" text NOT NULL,
+      "cc_json" text,
+      "subject_hash" text NOT NULL,
+      "status" text NOT NULL,
+      "provider_message_id" text,
+      "error_message" text,
+      "attachments_count" integer NOT NULL DEFAULT 0,
+      "attachments_bytes" integer NOT NULL DEFAULT 0,
+      "sent_at" timestamp with time zone NOT NULL DEFAULT now()
+    )
+  `);
+  await db.execute(
+    sql`CREATE INDEX IF NOT EXISTS "email_send_log_tenant_at_idx" ON "email_send_log" ("tenant_id", "sent_at")`,
+  );
+  await db.execute(
+    sql`CREATE INDEX IF NOT EXISTS "email_send_log_channel_idx" ON "email_send_log" ("channel_id", "sent_at")`,
+  );
 }
 
 export async function seedIfEmpty(): Promise<void> {

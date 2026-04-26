@@ -26,13 +26,15 @@
     "test:storage-request-url": "node --import tsx --test --test-reporter=spec tests/storage-request-url.test.ts",
     "test:quote-duplicate": "node --import tsx --test --test-reporter=spec tests/quote-duplicate-scope.test.ts",
     "test:deal-brand-company": "node --import tsx --test --test-reporter=spec tests/deal-brand-company-consistency.test.ts",
-    "test": "pnpm run test:risk-score && pnpm run test:isolation && pnpm run test:renewals && pnpm run test:approvals && pnpm run test:external && pnpm run test:clauses && pnpm run test:external-collab && pnpm run test:magic-link-url && pnpm run test:email-log && pnpm run test:airec && pnpm run test:cuad && pnpm run test:contract-lang && pnpm run test:bindings && pnpm run test:clause-import-extract && pnpm run test:clause-import-notes && pnpm run test:storage-request-url && pnpm run test:quote-duplicate && pnpm run test:deal-brand-company"
+    "test:email-channels": "node --import tsx --test --test-reporter=spec tests/email-channel-crypto.test.ts",
+    "test": "pnpm run test:risk-score && pnpm run test:isolation && pnpm run test:renewals && pnpm run test:approvals && pnpm run test:external && pnpm run test:clauses && pnpm run test:external-collab && pnpm run test:magic-link-url && pnpm run test:email-log && pnpm run test:airec && pnpm run test:cuad && pnpm run test:contract-lang && pnpm run test:bindings && pnpm run test:clause-import-extract && pnpm run test:clause-import-notes && pnpm run test:storage-request-url && pnpm run test:quote-duplicate && pnpm run test:deal-brand-company && pnpm run test:email-channels"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.90.0",
     "@google-cloud/storage": "^7.19.0",
     "@react-pdf/renderer": "^4.5.1",
     "@swc/helpers": "^0.5.21",
+    "@types/nodemailer": "^8.0.0",
     "@types/react": "catalog:",
     "@workspace/api-zod": "workspace:*",
     "@workspace/db": "workspace:*",
@@ -43,6 +45,7 @@
     "express": "^5",
     "google-auth-library": "^10.6.2",
     "mammoth": "1.8.0",
+    "nodemailer": "^8.0.6",
     "pdf-parse": "1.1.4",
     "pino": "^9",
     "pino-http": "^10",

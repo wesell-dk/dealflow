@@ -1,4 +1,26 @@
-import { sendEmail, type SendEmailResult } from "./email";
+import { type SendEmailResult } from "./email";
+import { dispatchEmail } from "./email/dispatcher";
+
+/**
+ * Optional multi-channel routing context. When provided, the dispatcher
+ * picks the right per-tenant / per-user channel; when omitted, every send
+ * falls back to the system channel — exactly the legacy behaviour.
+ */
+export interface EmailChannelContext {
+  tenantId: string;
+  userId: string | null;
+  brandId: string | null;
+  channelIdOverride?: string | null;
+}
+
+function legacyResult(result: { ok: boolean; channelType: string; providerMessageId: string | null; error?: string | null }): SendEmailResult {
+  return {
+    ok: result.ok,
+    provider: result.channelType === "system" ? "log" : "resend",
+    messageId: result.providerMessageId,
+    error: result.error ?? null,
+  };
+}
 
 export interface CollaboratorEmailInput {
   recipientEmail: string;
@@ -147,20 +169,31 @@ export function buildCollaboratorInviteContent(input: CollaboratorEmailInput): {
 
 export async function sendCollaboratorInviteEmail(
   input: CollaboratorEmailInput,
+  channel?: EmailChannelContext,
 ): Promise<SendEmailResult> {
   const { subject, html, text } = buildCollaboratorInviteContent(input);
-  const from = senderName(input.brandName);
-  return sendEmail({
-    to: input.recipientEmail,
-    from,
-    subject,
-    html,
-    text,
-    replyTo: input.inviterEmail,
-    tags: {
-      kind: "external_collaborator_invite",
+  void senderName; // sender now resolved by the dispatcher channel
+  const ch = channel ?? { tenantId: "tn_root", userId: null, brandId: null };
+  const result = await dispatchEmail(
+    {
+      to: [input.recipientEmail],
+      subject,
+      html,
+      text,
+      replyTo: input.inviterEmail,
+      tags: { kind: "external_collaborator_invite" },
     },
-  });
+    {
+      tenantId: ch.tenantId,
+      brandId: ch.brandId,
+      userId: ch.userId,
+      useCase: "personal",
+      channelIdOverride: ch.channelIdOverride ?? null,
+      contextEntityType: "collaborator_invite",
+      contextEntityId: input.recipientEmail,
+    },
+  );
+  return legacyResult(result);
 }
 
 // ─────────────────────────────────────────────────────────────────────────
@@ -304,20 +337,30 @@ export function buildCollaboratorSignConfirmationContent(
 
 export async function sendCollaboratorSignConfirmationEmail(
   input: CollaboratorSignConfirmationInput,
+  channel?: EmailChannelContext,
 ): Promise<SendEmailResult> {
   const { subject, html, text } = buildCollaboratorSignConfirmationContent(input);
-  const from = senderName(input.brandName);
-  return sendEmail({
-    to: input.recipientEmail,
-    from,
-    subject,
-    html,
-    text,
-    replyTo: input.ownerEmail,
-    tags: {
-      kind: "external_collaborator_sign_confirmation",
+  const ch = channel ?? { tenantId: "tn_root", userId: null, brandId: null };
+  const result = await dispatchEmail(
+    {
+      to: [input.recipientEmail],
+      subject,
+      html,
+      text,
+      replyTo: input.ownerEmail,
+      tags: { kind: "external_collaborator_sign_confirmation" },
     },
-  });
+    {
+      tenantId: ch.tenantId,
+      brandId: ch.brandId,
+      userId: ch.userId,
+      useCase: "transactional",
+      channelIdOverride: ch.channelIdOverride ?? null,
+      contextEntityType: "collaborator_sign_confirmation",
+      contextEntityId: input.recipientEmail,
+    },
+  );
+  return legacyResult(result);
 }
 
 export interface OwnerCounterSignNotificationInput {
@@ -428,18 +471,28 @@ export function buildOwnerCounterSignNotificationContent(
 
 export async function sendOwnerCounterSignNotificationEmail(
   input: OwnerCounterSignNotificationInput,
+  channel?: EmailChannelContext,
 ): Promise<SendEmailResult> {
   const { subject, html, text } = buildOwnerCounterSignNotificationContent(input);
-  const from = senderName(input.brandName);
-  return sendEmail({
-    to: input.recipientEmail,
-    from,
-    subject,
-    html,
-    text,
-    replyTo: input.signerEmail,
-    tags: {
-      kind: "external_collaborator_sign_owner_notification",
+  const ch = channel ?? { tenantId: "tn_root", userId: null, brandId: null };
+  const result = await dispatchEmail(
+    {
+      to: [input.recipientEmail],
+      subject,
+      html,
+      text,
+      replyTo: input.signerEmail,
+      tags: { kind: "external_collaborator_sign_owner_notification" },
     },
-  });
+    {
+      tenantId: ch.tenantId,
+      brandId: ch.brandId,
+      userId: ch.userId,
+      useCase: "transactional",
+      channelIdOverride: ch.channelIdOverride ?? null,
+      contextEntityType: "owner_counter_sign_notification",
+      contextEntityId: input.recipientEmail,
+    },
+  );
+  return legacyResult(result);
 }

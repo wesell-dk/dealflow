@@ -1,4 +1,5 @@
-import { sendEmail, type SendEmailResult, type EmailAttachment } from "./email";
+import { type SendEmailResult, type EmailAttachment } from "./email";
+import { dispatchEmail } from "./email/dispatcher";
 
 export interface QuoteEmailTemplateInput {
   number: string;
@@ -166,6 +167,18 @@ export interface SendQuoteEmailInput {
   pdf: { filename: string; bytes: Buffer };
   quoteNumber: string;
   quoteId: string;
+  /**
+   * Multi-channel context. When present, the dispatcher chooses an email
+   * channel (system / SMTP / Outlook / Gmail / Webhook) for this send.
+   * Legacy callers may omit it — the dispatcher then uses the system fallback,
+   * which is exactly the behaviour of the old direct sendEmail() call.
+   */
+  channel?: {
+    tenantId: string;
+    userId: string | null;
+    brandId: string | null;
+    channelIdOverride?: string | null;
+  };
 }
 
 export async function sendQuoteEmail(
@@ -186,16 +199,39 @@ export async function sendQuoteEmail(
       contentType: "application/pdf",
     },
   ];
-  const from = senderName(input.brandName);
-  return sendEmail({
-    to: input.to,
-    cc: input.cc,
-    from,
-    subject: input.subject,
-    html,
-    text: input.body,
-    replyTo: input.replyTo,
-    tags: { kind: "quote_send", quoteId: input.quoteId, quoteNumber: input.quoteNumber },
-    attachments,
-  });
+  // No channel context → keep legacy behaviour: tenant-less system send.
+  // We still go through the dispatcher so the send-log captures every email.
+  const ch = input.channel ?? {
+    tenantId: "tn_root",
+    userId: null,
+    brandId: null,
+    channelIdOverride: null,
+  };
+  const result = await dispatchEmail(
+    {
+      to: input.to,
+      cc: input.cc,
+      subject: input.subject,
+      html,
+      text: input.body,
+      replyTo: input.replyTo,
+      tags: { kind: "quote_send", quoteId: input.quoteId, quoteNumber: input.quoteNumber },
+      attachments,
+    },
+    {
+      tenantId: ch.tenantId,
+      brandId: ch.brandId,
+      userId: ch.userId,
+      useCase: "personal",
+      channelIdOverride: ch.channelIdOverride ?? null,
+      contextEntityType: "quote",
+      contextEntityId: input.quoteId,
+    },
+  );
+  return {
+    ok: result.ok,
+    provider: result.channelType === "system" ? "log" : "resend",
+    messageId: result.providerMessageId,
+    error: result.error ?? null,
+  };
 }

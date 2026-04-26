@@ -6,6 +6,7 @@ import router from "./routes";
 import authRouter from "./routes/auth";
 import cronRouter from "./routes/cron";
 import inboundEmailRouter from "./routes/inboundEmail";
+import mailboxOauthRouter from "./routes/mailboxOauth";
 import { requireAuth } from "./middlewares/auth";
 import { idempotency } from "./middlewares/idempotency";
 import { logger } from "./lib/logger";
@@ -53,6 +54,11 @@ app.use("/api", cronRouter);
 // Versions-Pfade konsistent funktionieren.
 app.use("/api", inboundEmailRouter);
 app.use("/api/v1", inboundEmailRouter);
+// Mailbox OAuth callbacks — mounted BEFORE requireAuth because the third-
+// party redirect carries no session cookie. The router validates a signed
+// `state` parameter (HMAC over user/tenant/expiry) to authenticate.
+app.use("/api", mailboxOauthRouter);
+app.use("/api/v1", mailboxOauthRouter);
 // All other /api routes require auth + idempotency.
 app.use("/api", requireAuth, idempotency(), router);
 app.use("/api/v1", requireAuth, idempotency(), router);

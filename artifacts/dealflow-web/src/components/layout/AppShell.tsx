@@ -400,6 +400,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                   </div>
                 </DropdownMenuLabel>
                 <DropdownMenuSeparator />
+                <DropdownMenuItem onClick={() => (window.location.href = `${import.meta.env.BASE_URL}profile`)} data-testid="menu-profile">
+                  Profil
+                </DropdownMenuItem>
                 <DropdownMenuItem>{t("common.settings")}</DropdownMenuItem>
                 <DropdownMenuItem>{t("common.support")}</DropdownMenuItem>
                 <DropdownMenuSeparator />

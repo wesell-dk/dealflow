@@ -61,6 +61,7 @@ import { BrandFormDialog, parseAddressLine, composeAddressLine } from "@/compone
 import { ApprovalChainsCard } from "@/components/admin/approval-chains-card";
 import { AiRecommendationsMetricsCard } from "@/components/admin/ai-recommendations-metrics-card";
 import { LegalKnowledgeCard } from "@/components/admin/legal-knowledge-card";
+import { EmailChannelsCard } from "@/components/admin/email-channels-card";
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
@@ -405,6 +406,8 @@ export default function Admin() {
       </AlertDialog>
 
       <UserRolesCard />
+
+      <EmailChannelsCard />
 
       <RolesCard />
 

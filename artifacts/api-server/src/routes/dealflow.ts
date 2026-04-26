@@ -20,6 +20,7 @@ import {
   isValidWzCode,
   mapToWzCode,
 } from '../lib/wz2008';
+import { dispatchEmail } from '../lib/email/dispatcher';
 import { buildMagicLinkUrl } from '../lib/magicLinkUrl';
 import {
   sanitizeCompanyName,
@@ -3802,7 +3803,7 @@ router.post('/quotes/:id/send', async (req, res) => {
   const [q] = await db.select().from(quotesTable).where(eq(quotesTable.id, req.params.id));
   if (!q) { res.status(404).json({ error: 'not found' }); return; }
   if (!(await gateDeal(req, res, q.dealId))) return;
-  const body = (req.body ?? {}) as { to?: unknown; cc?: unknown; subject?: unknown; message?: unknown };
+  const body = (req.body ?? {}) as { to?: unknown; cc?: unknown; subject?: unknown; message?: unknown; channelId?: unknown };
   const toRaw = Array.isArray(body.to) ? body.to : null;
   if (!toRaw || toRaw.length === 0) {
     res.status(422).json({ error: 'to must be a non-empty array of email addresses' }); return;
@@ -3882,6 +3883,12 @@ router.post('/quotes/:id/send', async (req, res) => {
     pdf: { filename: `quote-${q.number}.pdf`, bytes: pdfBytes },
     quoteNumber: q.number,
     quoteId: q.id,
+    channel: {
+      tenantId: scope.tenantId,
+      userId: scope.user.id ?? null,
+      brandId: brand?.id ?? null,
+      channelIdOverride: typeof body.channelId === 'string' && body.channelId.length > 0 ? body.channelId : null,
+    },
   });
 
   if (!result.ok) {
@@ -14884,14 +14891,23 @@ router.post('/quotes/:id/duplicate', async (req, res) => {
       const subject = `Neues Angebot ${newNumber} in Deinem Deal „${targetDeal.name}“`;
       const bodyText = `${scope.user.name} hat Angebot ${src.number} in Deinen Deal „${targetDeal.name}“ kopiert.\n\nDas neue Angebot ${newNumber} ist als Entwurf angelegt. Quelle: ${sourceDeal?.name ?? src.dealId}.`;
       const bodyHtml = `<p>${scope.user.name} hat Angebot <strong>${src.number}</strong> in Deinen Deal <strong>${targetDeal.name}</strong> kopiert.</p><p>Das neue Angebot <strong>${newNumber}</strong> ist als Entwurf angelegt.<br/>Quelle: ${sourceDeal?.name ?? src.dealId}.</p>`;
-      await sendEmail({
-        to: targetOwner.email,
-        from: { email: 'no-reply@dealflow.local', name: 'DealFlow One' },
-        subject,
-        text: bodyText,
-        html: bodyHtml,
-        tags: { kind: 'quote_duplicated_cross_owner' },
-      });
+      await dispatchEmail(
+        {
+          to: [targetOwner.email],
+          subject,
+          text: bodyText,
+          html: bodyHtml,
+          tags: { kind: 'quote_duplicated_cross_owner' },
+        },
+        {
+          tenantId: scope.tenantId,
+          userId: scope.user.id ?? null,
+          brandId: targetDeal.brandId ?? null,
+          useCase: 'transactional',
+          contextEntityType: 'quote',
+          contextEntityId: src.id,
+        },
+      );
     }
     ownerNotified = true;
   }
@@ -18525,6 +18541,10 @@ router.post('/contracts/:id/external-collaborators', async (req, res) => {
         expiresAt,
         magicLinkUrl: baseUrl,
         ipAllowlistCount: ipAllowlist.length,
+      }, {
+        tenantId: scope.tenantId,
+        userId: scope.user.id ?? null,
+        brandId: deal?.brandId ?? null,
       });
       emailSent = { ok: result.ok, provider: result.provider, error: result.error ?? null };
       await recordCollabEvent(row!, result.ok ? 'invite_emailed' : 'invite_email_failed', {
@@ -19161,6 +19181,10 @@ router.post('/external/:token/sign', async (req, res) => {
       magicLinkUrl: backLinkUrl,
       ownerName: ownerForNotify?.name ?? null,
       ownerEmail: ownerForNotify?.email ?? null,
+    }, {
+      tenantId: collab.tenantId,
+      userId: ownerForNotify?.id ?? null,
+      brandId: brandForNotify?.id ?? null,
     });
     await recordCollabEvent(
       collab,
@@ -19219,6 +19243,10 @@ router.post('/external/:token/sign', async (req, res) => {
         dealName: dealForNotify?.name ?? null,
         signedAt,
         magicLinkUrl: backLinkUrl,
+      }, {
+        tenantId: collab.tenantId,
+        userId: ownerForNotify.id ?? null,
+        brandId: brandForNotify?.id ?? null,
       });
       await recordCollabEvent(
         collab,

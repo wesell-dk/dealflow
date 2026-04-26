@@ -1887,3 +1887,112 @@ export const legalPrecedentsTable = pgTable("legal_precedents", {
   index("legal_precedents_tenant_signed_idx").on(t.tenantId, t.signedAt),
   uniqueIndex("legal_precedents_clause_uq").on(t.tenantId, t.contractClauseId),
 ]);
+
+// =============================================================================
+// Multi-channel email sending (Task #247)
+// =============================================================================
+
+// Tenant-konfigurierte Versand-Kanäle.
+// type ∈ system | smtp | microsoft_graph | gmail_api | webhook.
+// Sensible Felder (SMTP-Passwort, Webhook-Secret, OAuth-Tokens) werden
+// AES-GCM verschlüsselt in `credentialsCipher` abgelegt; Klartext landet
+// nie auf der Disk und niemals in API-Responses.
+export const emailChannelsTable = pgTable("email_channels", {
+  id: id(),
+  tenantId: text("tenant_id").notNull(),
+  type: text("type").notNull(),
+  name: text("name").notNull(),
+  isActive: boolean("is_active").notNull().default(true),
+  // Optional: Kanal gilt nur für eine Brand (NULL = tenant-weit verfügbar).
+  brandId: text("brand_id"),
+  // Optional: Kanal gilt nur für einen einzelnen User (NULL = team-weit).
+  // Wird gesetzt für per-User-Mailbox-Verbindungen (Outlook/Gmail OAuth).
+  userId: text("user_id"),
+  // Default-Flags. Pro (brandId, useCase) wertet der Resolver den ersten
+  // aktiven Kanal mit gesetztem Flag aus; bei Konflikt gewinnt der zuletzt
+  // aktualisierte (geringe Wahrscheinlichkeit, in Admin-UI verhindern).
+  isDefaultTransactional: boolean("is_default_transactional").notNull().default(false),
+  isDefaultPersonal: boolean("is_default_personal").notNull().default(false),
+  // Anzeige-Absender. fromEmail ist Pflicht; fromName optional.
+  // Bei microsoft_graph/gmail_api wird das Mailbox-Konto als From verwendet
+  // (Server überschreibt). replyTo nur gesetzt wenn der Operator es will.
+  fromEmail: text("from_email").notNull(),
+  fromName: text("from_name"),
+  replyTo: text("reply_to"),
+  // Provider-spezifische, NICHT geheime Konfiguration:
+  //   smtp: { host, port, secure, user, requireTls }
+  //   microsoft_graph: { tenantOauthId?, mailbox }
+  //   gmail_api: { mailbox }
+  //   webhook: { url, signingHeader? }
+  //   system: {}
+  config: jsonb("config").$type<Record<string, unknown>>().notNull().default({}),
+  // Geheime Felder als AES-256-GCM Ciphertext (base64).
+  // smtp: { password }
+  // webhook: { signingSecret }
+  // microsoft_graph/gmail_api: { accessToken, refreshToken, expiresAt, scope }
+  credentialsCipher: text("credentials_cipher"),
+  // Letzter Test-Sendestatus (Admin-UX). Frei-Form-String.
+  lastTestStatus: text("last_test_status"),
+  lastTestAt: timestamp("last_test_at", { withTimezone: true }),
+  createdBy: text("created_by"),
+  createdAt: ts("created_at"),
+  updatedAt: ts("updated_at"),
+}, (t) => [
+  index("email_channels_tenant_idx").on(t.tenantId),
+  index("email_channels_tenant_user_idx").on(t.tenantId, t.userId),
+]);
+
+// Per-User-Mailbox-Verbindungen (Outlook / Gmail) via OAuth2.
+// Verbindet sich mit `emailChannelsTable` (per-User-Kanal wird beim Connect
+// angelegt). Das Token-Refresh läuft im Adapter beim Sendezeitpunkt.
+export const userMailboxConnectionsTable = pgTable("user_mailbox_connections", {
+  id: id(),
+  tenantId: text("tenant_id").notNull(),
+  userId: text("user_id").notNull(),
+  // microsoft | google
+  provider: text("provider").notNull(),
+  // Mailbox-Adresse, wie vom Provider zurückgegeben.
+  email: text("email").notNull(),
+  displayName: text("display_name"),
+  // Gewährte Scopes (CSV) — debugging only, nicht security-relevant.
+  scope: text("scope"),
+  // Ciphertext (base64) eines JSON {accessToken, refreshToken, expiresAtIso}.
+  tokensCipher: text("tokens_cipher").notNull(),
+  expiresAt: timestamp("expires_at", { withTimezone: true }),
+  // Optionaler Verweis auf den email_channels-Eintrag, der auf dieser
+  // Verbindung basiert. Wird bei DELETE der Verbindung mit gelöscht.
+  channelId: text("channel_id"),
+  createdAt: ts("created_at"),
+  updatedAt: ts("updated_at"),
+}, (t) => [
+  uniqueIndex("user_mailbox_connections_user_provider_uq").on(t.userId, t.provider),
+  index("user_mailbox_connections_tenant_idx").on(t.tenantId),
+]);
+
+// Send-Log für Audit/Reporting (komplementär zum allgemeinen audit_log,
+// damit "alle E-Mails der letzten 30 Tage" eine günstige Query ist).
+export const emailSendLogTable = pgTable("email_send_log", {
+  id: id(),
+  tenantId: text("tenant_id").notNull(),
+  channelId: text("channel_id"),
+  channelType: text("channel_type").notNull(),
+  useCase: text("use_case").notNull(),
+  // Kontext (deal/quote/contract id, je nach use case).
+  contextEntityType: text("context_entity_type"),
+  contextEntityId: text("context_entity_id"),
+  brandId: text("brand_id"),
+  initiatedByUserId: text("initiated_by_user_id"),
+  fromEmail: text("from_email").notNull(),
+  toJson: text("to_json").notNull(),
+  ccJson: text("cc_json"),
+  subjectHash: text("subject_hash").notNull(),
+  status: text("status").notNull(),
+  providerMessageId: text("provider_message_id"),
+  errorMessage: text("error_message"),
+  attachmentsCount: integer("attachments_count").notNull().default(0),
+  attachmentsBytes: integer("attachments_bytes").notNull().default(0),
+  sentAt: ts("sent_at"),
+}, (t) => [
+  index("email_send_log_tenant_at_idx").on(t.tenantId, t.sentAt),
+  index("email_send_log_channel_idx").on(t.channelId, t.sentAt),
+]);

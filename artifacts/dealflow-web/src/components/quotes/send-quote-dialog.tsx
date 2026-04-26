@@ -24,8 +24,35 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { Loader2, Mail, AlertTriangle } from "lucide-react";
+
+interface SenderOption {
+  channelId: string | null;
+  type: string;
+  label: string;
+  fromEmail: string;
+  isDefault: boolean;
+}
+
+const SYSTEM_FALLBACK_VALUE = "__system__";
+
+async function fetchAvailableSenders(quoteId: string): Promise<SenderOption[]> {
+  const resp = await fetch(
+    `${import.meta.env.BASE_URL}api/quotes/${encodeURIComponent(quoteId)}/available-senders`,
+    { credentials: "include" },
+  );
+  if (!resp.ok) throw new Error(`${resp.status} ${await resp.text().catch(() => "")}`);
+  const json = (await resp.json()) as { senders: SenderOption[] };
+  return json.senders;
+}
 
 interface Props {
   quoteId: string;
@@ -117,6 +144,36 @@ export function SendQuoteDialog({ quoteId, quoteNumber, dealId, language }: Prop
   const [message, setMessage] = useState("");
   const [touchedSubject, setTouchedSubject] = useState(false);
   const [touchedMessage, setTouchedMessage] = useState(false);
+  // ── "Send as…" sender selection ─────────────────────────────────────────
+  // Defaults to whatever the backend marks as default (personal mailbox if
+  // connected, else tenant-default, else system fallback). Lazily loaded
+  // when the dialog opens.
+  const [senders, setSenders] = useState<SenderOption[] | null>(null);
+  const [senderValue, setSenderValue] = useState<string>(SYSTEM_FALLBACK_VALUE);
+  const [sendersError, setSendersError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    let cancelled = false;
+    setSendersError(null);
+    fetchAvailableSenders(quoteId)
+      .then((list) => {
+        if (cancelled) return;
+        setSenders(list);
+        const def = list.find((s) => s.isDefault) ?? list[0];
+        setSenderValue(def?.channelId ?? SYSTEM_FALLBACK_VALUE);
+      })
+      .catch((e: unknown) => {
+        if (cancelled) return;
+        // Non-fatal — fallback to system send keeps the dialog usable.
+        setSendersError(e instanceof Error ? e.message : String(e));
+        setSenders([]);
+        setSenderValue(SYSTEM_FALLBACK_VALUE);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [open, quoteId]);
 
   // Hydrate dialog defaults whenever it opens or context arrives.
   useEffect(() => {
@@ -175,14 +232,22 @@ export function SendQuoteDialog({ quoteId, quoteNumber, dealId, language }: Prop
   async function onSend() {
     if (!canSubmit) return;
     try {
+      // Pass-through channelId on the mutation body. The generated client
+      // forwards unknown JSON fields; the backend reads `channelId` from the
+      // body of POST /quotes/:id/send. SYSTEM_FALLBACK_VALUE means "let the
+      // server resolve the default" — we omit channelId in that case.
+      const data: Record<string, unknown> = {
+        to: allTo,
+        cc: ccList.length > 0 ? ccList : undefined,
+        subject: subject.trim(),
+        message,
+      };
+      if (senderValue && senderValue !== SYSTEM_FALLBACK_VALUE) {
+        data.channelId = senderValue;
+      }
       await sendMut.mutateAsync({
         id: quoteId,
-        data: {
-          to: allTo,
-          cc: ccList.length > 0 ? ccList : undefined,
-          subject: subject.trim(),
-          message,
-        },
+        data: data as unknown as Parameters<typeof sendMut.mutateAsync>[0]["data"],
       });
       toast({
         title: t("pages.quote.send.success"),
@@ -221,6 +286,34 @@ export function SendQuoteDialog({ quoteId, quoteNumber, dealId, language }: Prop
         </DialogHeader>
 
         <div className="space-y-4">
+          <div className="space-y-2">
+            <Label htmlFor="quote-send-sender">Versenden als</Label>
+            <Select value={senderValue} onValueChange={setSenderValue}>
+              <SelectTrigger id="quote-send-sender" data-testid="quote-send-sender">
+                <SelectValue placeholder="System (Standard)" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value={SYSTEM_FALLBACK_VALUE} data-testid="quote-send-sender-system">
+                  System (Standard)
+                </SelectItem>
+                {senders?.filter((s) => s.channelId).map((s) => (
+                  <SelectItem
+                    key={s.channelId!}
+                    value={s.channelId!}
+                    data-testid={`quote-send-sender-${s.channelId}`}
+                  >
+                    {s.label}{s.isDefault ? " · Standard" : ""}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            {sendersError && (
+              <p className="text-xs text-muted-foreground">
+                Konnte verfügbare Absender nicht laden — System-Versand wird genutzt.
+              </p>
+            )}
+          </div>
+
           <div className="space-y-2">
             <Label>{t("pages.quote.send.recipients")}</Label>
             {contactsLoading && (
