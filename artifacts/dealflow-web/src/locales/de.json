@@ -213,6 +213,17 @@
       "empty": "Noch keine Mandanten vorhanden."
     },
     "quote": {
+      "tabs": {
+        "overview": "Übersicht",
+        "items": "Positionen",
+        "attachments": "Anhänge",
+        "history": "Verlauf",
+        "linkedOrders": "Verlinkte Aufträge",
+        "noVersions": "Noch keine Versionen vorhanden.",
+        "noLinkedOrders": "Aus diesem Angebot wurde noch keine Auftragsbestätigung erstellt.",
+        "pdfPreview": "PDF-Vorschau",
+        "pdfMobileHint": "Tippe, um das PDF in einem neuen Tab zu öffnen."
+      },
       "lineItems": "Positionen",
       "summary": "Zusammenfassung",
       "margin": "Marge",
@@ -328,6 +339,14 @@
       "emptyHint": "Hinweis: Freigaben entstehen automatisch aus Rabatten, Risiko-Klauseln oder Vertragsabweichungen."
     },
     "contracts": {
+      "tabs": {
+        "overview": "Übersicht",
+        "clauses": "Klauseln",
+        "attachments": "Anhänge",
+        "activity": "Aktivität",
+        "approvals": "Approvals",
+        "noAttachments": "Keine Anhänge an diesen Vertrag angefügt."
+      },
       "title": "Verträge",
       "subtitle": "Alle Verträge über deine Deals hinweg.",
       "emptyTitle": "Noch keine Verträge",

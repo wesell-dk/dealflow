@@ -213,6 +213,17 @@
       "empty": "No tenants yet."
     },
     "quote": {
+      "tabs": {
+        "overview": "Overview",
+        "items": "Items",
+        "attachments": "Attachments",
+        "history": "History",
+        "linkedOrders": "Linked Orders",
+        "noVersions": "No versions yet.",
+        "noLinkedOrders": "No order confirmation has been derived from this quote yet.",
+        "pdfPreview": "PDF preview",
+        "pdfMobileHint": "Tap to open the PDF in a new tab."
+      },
       "lineItems": "Line Items",
       "summary": "Summary",
       "margin": "Margin",
@@ -513,6 +524,14 @@
       "errorGeneric": "An error occurred."
     },
     "contracts": {
+      "tabs": {
+        "overview": "Overview",
+        "clauses": "Clauses",
+        "attachments": "Attachments",
+        "activity": "Activity",
+        "approvals": "Approvals",
+        "noAttachments": "No attachments on this contract."
+      },
       "title": "Contracts",
       "subtitle": "All contracts across your deals.",
       "emptyTitle": "No contracts yet",

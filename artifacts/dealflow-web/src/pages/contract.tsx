@@ -52,6 +52,8 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { useTabState } from "@/hooks/use-tab-state";
 import {
   Select,
   SelectContent,
@@ -70,7 +72,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { FileText, ShieldAlert, ShieldCheck, Library, Activity, GitCompare, AlertTriangle, FileStack, Plus, Languages, Pencil, Sparkles, Inbox, RotateCcw, Eye, MessageSquare, Pencil as PencilIcon, Ban, ShieldOff, Filter as FilterIcon } from "lucide-react";
+import { FileText, ShieldAlert, ShieldCheck, Library, Activity, GitCompare, AlertTriangle, FileStack, Plus, Languages, Pencil, Sparkles, Inbox, RotateCcw, Eye, MessageSquare, Pencil as PencilIcon, Ban, ShieldOff, Filter as FilterIcon, Paperclip } from "lucide-react";
 import { EntityVersions } from "@/components/ui/entity-versions";
 import { useToast } from "@/hooks/use-toast";
 import { ApiError } from "@workspace/api-client-react";
@@ -149,6 +151,7 @@ export default function Contract() {
   const [pending, setPending] = useState<string | null>(null);
   const [editClause, setEditClause] = useState<ContractClause | null>(null);
   const [queueClause, setQueueClause] = useState<ContractClause | null>(null);
+  const [tab, setTab] = useTabState("overview");
 
   if (isLoadingContract || isLoadingFamilies || isLoadingClauses) {
     return <div className="p-8"><Skeleton className="h-64 w-full" /></div>;
@@ -208,13 +211,13 @@ export default function Contract() {
           { label: contract.title },
         ]}
       />
-      <div className="flex flex-col gap-2 border-b pb-4">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <FileText className="h-8 w-8 text-muted-foreground" />
-            <h1 className="text-3xl font-bold tracking-tight">{contract.title}</h1>
+      <div className="sticky top-0 z-20 -mx-4 px-4 md:-mx-6 md:px-6 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80 flex flex-col gap-2 border-b pb-4 pt-2">
+        <div className="flex items-center justify-between flex-wrap gap-2">
+          <div className="flex items-center gap-3 min-w-0">
+            <FileText className="h-8 w-8 text-muted-foreground shrink-0" />
+            <h1 className="text-3xl font-bold tracking-tight truncate">{contract.title}</h1>
           </div>
-          <div className="flex gap-2 items-center">
+          <div className="flex gap-2 items-center flex-wrap">
             <div className="flex items-center gap-1.5">
               <Languages className="h-4 w-4 text-muted-foreground" />
               <Select
@@ -261,40 +264,58 @@ export default function Contract() {
         </div>
       </div>
 
-      <Card>
-        <CardHeader className="flex flex-row items-center justify-between pb-2 space-y-0">
-          <CardTitle className="text-sm flex items-center gap-2 font-medium text-muted-foreground">
-            <Activity className="h-4 w-4" /> {t("pages.contracts.riskScore")}
-          </CardTitle>
-          <span className={`text-3xl font-bold tabular-nums ${riskColor}`}>{riskScore}</span>
-        </CardHeader>
-        <CardContent>
-          <Progress value={riskScore} className="h-2" />
-          <p className="text-xs text-muted-foreground mt-2">
-            {t("pages.contracts.riskScoreInfo", { count: clauses?.length ?? 0 })}
-          </p>
-        </CardContent>
-      </Card>
+      <Tabs value={tab} onValueChange={setTab} className="w-full">
+        <TabsList
+          className="w-full md:w-auto h-auto flex overflow-x-auto whitespace-nowrap justify-start"
+          data-testid="contract-tabs"
+        >
+          <TabsTrigger value="overview" data-testid="contract-tab-overview">
+            {t("pages.contracts.tabs.overview")}
+          </TabsTrigger>
+          <TabsTrigger value="clauses" data-testid="contract-tab-clauses">
+            {t("pages.contracts.tabs.clauses")}
+            {clauses && clauses.length > 0 && (
+              <Badge variant="secondary" className="ml-2">{clauses.length}</Badge>
+            )}
+          </TabsTrigger>
+          <TabsTrigger value="attachments" data-testid="contract-tab-attachments">
+            {t("pages.contracts.tabs.attachments")}
+          </TabsTrigger>
+          <TabsTrigger value="activity" data-testid="contract-tab-activity">
+            {t("pages.contracts.tabs.activity")}
+          </TabsTrigger>
+          <TabsTrigger value="approvals" data-testid="contract-tab-approvals">
+            {t("pages.contracts.tabs.approvals")}
+          </TabsTrigger>
+        </TabsList>
 
-      <AiPromptPanel mode="contract.risk" entityId={id} />
+        <TabsContent value="overview" className="mt-4 space-y-6" data-testid="contract-tabpanel-overview">
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between pb-2 space-y-0">
+              <CardTitle className="text-sm flex items-center gap-2 font-medium text-muted-foreground">
+                <Activity className="h-4 w-4" /> {t("pages.contracts.riskScore")}
+              </CardTitle>
+              <span className={`text-3xl font-bold tabular-nums ${riskColor}`}>{riskScore}</span>
+            </CardHeader>
+            <CardContent>
+              <Progress value={riskScore} className="h-2" />
+              <p className="text-xs text-muted-foreground mt-2">
+                {t("pages.contracts.riskScoreInfo", { count: clauses?.length ?? 0 })}
+              </p>
+            </CardContent>
+          </Card>
+          <AiPromptPanel mode="contract.risk" entityId={id} />
+          <EffectiveStateSection contractId={id} contractStatus={contract.status} />
+          <CuadCoverageSection contractId={id} />
+        </TabsContent>
 
-      <EntityVersions entityType="contract" entityId={id} />
-
-      <AmendmentsSection contractId={id} contractStatus={contract.status} />
-
-      <EffectiveStateSection contractId={id} contractStatus={contract.status} />
-
-      <CuadCoverageSection contractId={id} />
-
-      <DeviationsSection contractId={id} />
-
-      <ObligationsSection contractId={id} contractStatus={contract.status} />
-
-      <div className="space-y-4">
-        <div className="flex items-center gap-2 pb-2 border-b">
-          <ShieldAlert className="h-5 w-5 text-muted-foreground" />
-          <h2 className="text-xl font-semibold">{t("pages.contracts.currentClauses")}</h2>
-        </div>
+        <TabsContent value="clauses" className="mt-4 space-y-6" data-testid="contract-tabpanel-clauses">
+          <DeviationsSection contractId={id} />
+          <div className="space-y-4">
+            <div className="flex items-center gap-2 pb-2 border-b">
+              <ShieldAlert className="h-5 w-5 text-muted-foreground" />
+              <h2 className="text-xl font-semibold">{t("pages.contracts.currentClauses")}</h2>
+            </div>
 
         {(clauses?.length ?? 0) === 0 ? (
           <div className="p-8 text-center border rounded-md text-muted-foreground bg-muted/10">
@@ -426,42 +447,67 @@ export default function Contract() {
             })}
           </div>
         )}
-      </div>
-
-      <div className="space-y-4 pt-4">
-        <div className="flex items-center justify-between pb-2 border-b">
-          <div className="flex items-center gap-2">
-            <Library className="h-5 w-5 text-muted-foreground" />
-            <h2 className="text-xl font-semibold">{t("pages.contracts.clauseLibrary")}</h2>
           </div>
-          <Link href="/clauses" className="text-sm text-muted-foreground hover:text-foreground hover:underline">
-            {t("common.view")} →
-          </Link>
-        </div>
-        <div className="grid md:grid-cols-2 gap-3">
-          {families?.map(family => (
-            <Card key={family.id} className="bg-muted/5">
-              <CardHeader className="py-3 px-4">
-                <CardTitle className="text-base font-medium">{family.name}</CardTitle>
-                <p className="text-xs text-muted-foreground">{family.description}</p>
-              </CardHeader>
-              <CardContent className="py-0 px-4 pb-3">
-                <div className="flex flex-wrap gap-1.5">
-                  {family.variants.map(v => (
-                    <Badge key={v.id} variant="outline" className={`${toneClass(v.tone)} text-xs`}>
-                      {v.tone} ({v.severityScore})
-                    </Badge>
-                  ))}
-                </div>
-              </CardContent>
-            </Card>
-          ))}
-        </div>
-      </div>
 
-      <ExternalCollaboratorsCard contractId={id} />
+          <div className="space-y-4 pt-4">
+            <div className="flex items-center justify-between pb-2 border-b">
+              <div className="flex items-center gap-2">
+                <Library className="h-5 w-5 text-muted-foreground" />
+                <h2 className="text-xl font-semibold">{t("pages.contracts.clauseLibrary")}</h2>
+              </div>
+              <Link href="/clauses" className="text-sm text-muted-foreground hover:text-foreground hover:underline">
+                {t("common.view")} →
+              </Link>
+            </div>
+            <div className="grid md:grid-cols-2 gap-3">
+              {families?.map(family => (
+                <Card key={family.id} className="bg-muted/5">
+                  <CardHeader className="py-3 px-4">
+                    <CardTitle className="text-base font-medium">{family.name}</CardTitle>
+                    <p className="text-xs text-muted-foreground">{family.description}</p>
+                  </CardHeader>
+                  <CardContent className="py-0 px-4 pb-3">
+                    <div className="flex flex-wrap gap-1.5">
+                      {family.variants.map(v => (
+                        <Badge key={v.id} variant="outline" className={`${toneClass(v.tone)} text-xs`}>
+                          {v.tone} ({v.severityScore})
+                        </Badge>
+                      ))}
+                    </div>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          </div>
+        </TabsContent>
 
-      <ExternalAccessActivityCard contractId={id} />
+        <TabsContent value="attachments" className="mt-4" data-testid="contract-tabpanel-attachments">
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Paperclip className="h-4 w-4" />
+                {t("pages.contracts.tabs.attachments")}
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="text-sm text-muted-foreground text-center py-8">
+                {t("pages.contracts.tabs.noAttachments")}
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="activity" className="mt-4 space-y-6" data-testid="contract-tabpanel-activity">
+          <EntityVersions entityType="contract" entityId={id} />
+          <ObligationsSection contractId={id} contractStatus={contract.status} />
+          <ExternalAccessActivityCard contractId={id} />
+        </TabsContent>
+
+        <TabsContent value="approvals" className="mt-4 space-y-6" data-testid="contract-tabpanel-approvals">
+          <AmendmentsSection contractId={id} contractStatus={contract.status} />
+          <ExternalCollaboratorsCard contractId={id} />
+        </TabsContent>
+      </Tabs>
 
       <Dialog open={!!diff} onOpenChange={(o) => !o && setDiff(null)}>
         <DialogContent className="max-w-4xl">

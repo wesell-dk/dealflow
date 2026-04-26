@@ -40,6 +40,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   FileText,
   Download,
@@ -51,11 +52,13 @@ import {
   CheckCircle2,
   XCircle,
   ChevronDown,
+  History,
 } from "lucide-react";
 import { QuoteDuplicateButton } from "@/components/quotes/quote-duplicate-button";
 import { SendQuoteDialog } from "@/components/quotes/send-quote-dialog";
 import { QuoteEditor } from "@/components/quote-editor";
 import { useToast } from "@/hooks/use-toast";
+import { useTabState } from "@/hooks/use-tab-state";
 import { AiPromptPanel } from "@/components/copilot/ai-prompt-panel";
 import { Breadcrumbs } from "@/components/patterns/breadcrumbs";
 import { QuoteStatusBadge } from "@/components/patterns/status-badges";
@@ -85,6 +88,7 @@ export default function Quote() {
   >(null);
   const [rejectOpen, setRejectOpen] = useState(false);
   const [rejectReason, setRejectReason] = useState("");
+  const [tab, setTab] = useTabState("overview");
 
   async function changeLanguage(next: "de" | "en") {
     if (!quote || quote.language === next) return;
@@ -164,6 +168,7 @@ export default function Quote() {
 
   const canConvert = quote.status === "accepted";
   const linkedOrders = quote.orderConfirmations ?? [];
+  const versions = quote.versions ?? [];
 
   const displayStatus = (quote as { displayStatus?: string }).displayStatus ?? quote.status;
   const canEdit = (quote as { canEdit?: boolean }).canEdit === true;
@@ -183,6 +188,15 @@ export default function Quote() {
     }
   }
 
+  const taxSummary = (quote as {
+    taxSummary?: {
+      net: number;
+      tax: number;
+      gross: number;
+      breakdown: { ratePct: number; net: number; tax: number }[];
+    };
+  }).taxSummary;
+
   return (
     <div className="flex flex-col gap-6">
       <Breadcrumbs
@@ -191,96 +205,98 @@ export default function Quote() {
           { label: `${t("common.quote")} ${quote.number}` },
         ]}
       />
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight">{t("common.quote")} {quote.number}</h1>
-          <p className="text-muted-foreground mt-1">{quote.dealName}</p>
-        </div>
-        <div className="flex items-center gap-2">
-          <div className="flex items-center gap-1.5">
-            <Languages className="h-4 w-4 text-muted-foreground" />
-            <Select value={quote.language ?? "de"} onValueChange={(v) => changeLanguage(v as "de" | "en")}>
-              <SelectTrigger className="h-8 w-[120px]" data-testid="quote-language-select">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="de">DE</SelectItem>
-                <SelectItem value="en">EN</SelectItem>
-              </SelectContent>
-            </Select>
+      <div className="sticky top-0 z-20 -mx-4 px-4 md:-mx-6 md:px-6 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80 border-b pb-4 pt-2 flex flex-col gap-3">
+        <div className="flex items-start justify-between gap-4 flex-wrap">
+          <div className="min-w-0">
+            <h1 className="text-3xl font-bold tracking-tight">{t("common.quote")} {quote.number}</h1>
+            <p className="text-muted-foreground mt-1">{quote.dealName}</p>
           </div>
-          <Button variant="outline" size="sm" onClick={() => window.open(`/api/quotes/${id}/pdf`, '_blank')}>
-            <FileText className="h-4 w-4 mr-2" /> {t("pages.quote.openPdf")}
-          </Button>
-          <SendQuoteDialog
-            quoteId={quote.id}
-            quoteNumber={quote.number}
-            dealId={quote.dealId}
-            language={quote.language === "en" ? "en" : "de"}
-          />
-          <QuoteDuplicateButton quoteId={quote.id} quoteNumber={quote.number} />
-          {canConvert && (
-            <Button
-              size="sm"
-              onClick={() => { setConflict(null); setConvertOpen(true); }}
-              data-testid="quote-convert-to-order-btn"
-            >
-              <ClipboardCheck className="h-4 w-4 mr-2" />
-              {t("pages.quote.convertToOrder")}
+          <div className="flex items-center gap-2 flex-wrap">
+            <div className="flex items-center gap-1.5">
+              <Languages className="h-4 w-4 text-muted-foreground" />
+              <Select value={quote.language ?? "de"} onValueChange={(v) => changeLanguage(v as "de" | "en")}>
+                <SelectTrigger className="h-8 w-[120px]" data-testid="quote-language-select">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="de">DE</SelectItem>
+                  <SelectItem value="en">EN</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <Button variant="outline" size="sm" onClick={() => window.open(`/api/quotes/${id}/pdf`, '_blank')}>
+              <FileText className="h-4 w-4 mr-2" /> {t("pages.quote.openPdf")}
             </Button>
-          )}
-          {actions.length > 0 ? (
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="gap-1"
-                  disabled={transition.isPending}
-                  data-testid="quote-status-menu"
-                >
-                  <QuoteStatusBadge status={displayStatus} testId="quote-status-badge" />
-                  <ChevronDown className="h-3.5 w-3.5 opacity-60" />
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end">
-                {actions.map(({ key, label, icon: Icon, testId }) => (
-                  <DropdownMenuItem
-                    key={key}
-                    data-testid={testId}
-                    onSelect={() => {
-                      if (key === "rejected") openReject();
-                      else void runTransition(key);
-                    }}
+            <SendQuoteDialog
+              quoteId={quote.id}
+              quoteNumber={quote.number}
+              dealId={quote.dealId}
+              language={quote.language === "en" ? "en" : "de"}
+            />
+            <QuoteDuplicateButton quoteId={quote.id} quoteNumber={quote.number} />
+            {canConvert && (
+              <Button
+                size="sm"
+                onClick={() => { setConflict(null); setConvertOpen(true); }}
+                data-testid="quote-convert-to-order-btn"
+              >
+                <ClipboardCheck className="h-4 w-4 mr-2" />
+                {t("pages.quote.convertToOrder")}
+              </Button>
+            )}
+            {actions.length > 0 ? (
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="gap-1"
+                    disabled={transition.isPending}
+                    data-testid="quote-status-menu"
                   >
-                    <Icon className="h-4 w-4 mr-2" />
-                    {label}
-                  </DropdownMenuItem>
-                ))}
-              </DropdownMenuContent>
-            </DropdownMenu>
-          ) : (
-            <QuoteStatusBadge status={displayStatus} testId="quote-status-badge" />
-          )}
+                    <QuoteStatusBadge status={displayStatus} testId="quote-status-badge" />
+                    <ChevronDown className="h-3.5 w-3.5 opacity-60" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  {actions.map(({ key, label, icon: Icon, testId }) => (
+                    <DropdownMenuItem
+                      key={key}
+                      data-testid={testId}
+                      onSelect={() => {
+                        if (key === "rejected") openReject();
+                        else void runTransition(key);
+                      }}
+                    >
+                      <Icon className="h-4 w-4 mr-2" />
+                      {label}
+                    </DropdownMenuItem>
+                  ))}
+                </DropdownMenuContent>
+              </DropdownMenu>
+            ) : (
+              <QuoteStatusBadge status={displayStatus} testId="quote-status-badge" />
+            )}
+          </div>
         </div>
-      </div>
-      {quote.sentAt && (
-        <div
-          className="rounded-md border bg-muted/40 px-4 py-2 text-sm text-muted-foreground flex flex-wrap gap-x-4 gap-y-1"
-          data-testid="quote-sent-info"
-        >
-          <span>
-            <strong className="text-foreground">{t("pages.quote.send.lastSent")}:</strong>{" "}
-            {new Date(quote.sentAt).toLocaleString()}
-          </span>
-          {quote.sentTo && (
+        {quote.sentAt && (
+          <div
+            className="rounded-md border bg-muted/40 px-4 py-2 text-sm text-muted-foreground flex flex-wrap gap-x-4 gap-y-1"
+            data-testid="quote-sent-info"
+          >
             <span>
-              <strong className="text-foreground">{t("pages.quote.send.sentTo")}:</strong>{" "}
-              {quote.sentTo}
+              <strong className="text-foreground">{t("pages.quote.send.lastSent")}:</strong>{" "}
+              {new Date(quote.sentAt).toLocaleString()}
             </span>
-          )}
-        </div>
-      )}
+            {quote.sentTo && (
+              <span>
+                <strong className="text-foreground">{t("pages.quote.send.sentTo")}:</strong>{" "}
+                {quote.sentTo}
+              </span>
+            )}
+          </div>
+        )}
+      </div>
 
       {displayStatus === "rejected" && rejectionReason && (
         <Card className="border-rose-200 bg-rose-50/50 dark:border-rose-900/50 dark:bg-rose-950/20">
@@ -295,14 +311,125 @@ export default function Quote() {
         </Card>
       )}
 
-      {quote.status === "draft" && (
-        <QuoteEditor quoteId={id} />
-      )}
+      <Tabs value={tab} onValueChange={setTab} className="w-full">
+        <TabsList className="w-full md:w-auto h-auto flex overflow-x-auto whitespace-nowrap justify-start" data-testid="quote-tabs">
+          <TabsTrigger value="overview" data-testid="quote-tab-overview">
+            {t("pages.quote.tabs.overview")}
+          </TabsTrigger>
+          <TabsTrigger value="items" data-testid="quote-tab-items">
+            {t("pages.quote.tabs.items")}
+          </TabsTrigger>
+          <TabsTrigger value="attachments" data-testid="quote-tab-attachments">
+            {t("pages.quote.tabs.attachments")}
+            {attachments && attachments.length > 0 && (
+              <Badge variant="secondary" className="ml-2">{attachments.length}</Badge>
+            )}
+          </TabsTrigger>
+          <TabsTrigger value="history" data-testid="quote-tab-history">
+            {t("pages.quote.tabs.history")}
+          </TabsTrigger>
+          <TabsTrigger value="orders" data-testid="quote-tab-orders">
+            {t("pages.quote.tabs.linkedOrders")}
+            {linkedOrders.length > 0 && (
+              <Badge variant="secondary" className="ml-2">{linkedOrders.length}</Badge>
+            )}
+          </TabsTrigger>
+        </TabsList>
 
-      <div className="grid md:grid-cols-3 gap-6">
-        <div className="md:col-span-2 space-y-6">
-          <AiPromptPanel mode="pricing.review" entityId={id} />
-          {quote.status !== "draft" && (
+        <TabsContent value="overview" className="mt-4" data-testid="quote-tabpanel-overview">
+          <div className="grid md:grid-cols-3 gap-6">
+            <div className="md:col-span-2 space-y-6">
+              <AiPromptPanel mode="pricing.review" entityId={id} />
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <FileText className="h-4 w-4" />
+                    {t("pages.quote.tabs.pdfPreview")}
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="rounded-md border bg-muted/10 overflow-hidden">
+                    <iframe
+                      src={`/api/quotes/${id}/pdf`}
+                      title={`Quote ${quote.number} PDF`}
+                      className="w-full h-[600px] hidden md:block"
+                      data-testid="quote-pdf-preview"
+                    />
+                    <div className="md:hidden p-6 text-center text-sm text-muted-foreground">
+                      <p className="mb-3">{t("pages.quote.tabs.pdfMobileHint")}</p>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => window.open(`/api/quotes/${id}/pdf`, "_blank")}
+                      >
+                        <FileText className="h-4 w-4 mr-2" />
+                        {t("pages.quote.openPdf")}
+                      </Button>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+            <div>
+              <Card>
+                <CardHeader><CardTitle>{t("pages.quote.summary")}</CardTitle></CardHeader>
+                <CardContent className="space-y-2" data-testid="quote-summary-card">
+                  {!taxSummary ? (
+                    <div className="flex justify-between">
+                      <span>{t("common.total")}:</span>{" "}
+                      <strong>
+                        {quote.totalAmount.toLocaleString()} {quote.currency}
+                      </strong>
+                    </div>
+                  ) : (
+                    <>
+                      <div className="flex justify-between">
+                        <span>{t("pages.quote.netto")}:</span>{" "}
+                        <strong className="tabular-nums">
+                          {taxSummary.net.toLocaleString()} {quote.currency}
+                        </strong>
+                      </div>
+                      {taxSummary.breakdown.map((b) => (
+                        <div
+                          key={b.ratePct}
+                          className="flex justify-between text-sm text-muted-foreground"
+                          data-testid={`quote-tax-row-${b.ratePct}`}
+                        >
+                          <span>
+                            {b.ratePct === 0
+                              ? t("pages.quote.vatExempt")
+                              : t("pages.quote.vatAt", {
+                                  pct: (Math.round(b.ratePct * 100) / 100).toLocaleString(),
+                                })}
+                          </span>
+                          <span className="tabular-nums">
+                            {b.tax.toLocaleString()} {quote.currency}
+                          </span>
+                        </div>
+                      ))}
+                      <div className="flex justify-between border-t pt-2">
+                        <span className="font-semibold">
+                          {t("pages.quote.brutto")}:
+                        </span>{" "}
+                        <strong className="tabular-nums">
+                          {taxSummary.gross.toLocaleString()} {quote.currency}
+                        </strong>
+                      </div>
+                    </>
+                  )}
+                  <div className="flex justify-between"><span>{t("common.discount")}:</span> <strong>{quote.discountPct}%</strong></div>
+                  <div className="flex justify-between"><span>{t("pages.quote.margin")}:</span> <strong>{quote.marginPct}%</strong></div>
+                  <div className="flex justify-between"><span>{t("common.validUntil")}:</span> <strong>{new Date(quote.validUntil).toLocaleDateString()}</strong></div>
+                </CardContent>
+              </Card>
+            </div>
+          </div>
+        </TabsContent>
+
+        <TabsContent value="items" className="mt-4" data-testid="quote-tabpanel-items">
+          {quote.status === "draft" ? (
+            <QuoteEditor quoteId={id} />
+          ) : (
             <Card>
               <CardHeader><CardTitle>{t("pages.quote.lineItems")}</CardTitle></CardHeader>
               <CardContent>
@@ -338,11 +465,18 @@ export default function Quote() {
                       </div>
                     );
                   })}
+                  {quote.lineItems.length === 0 && (
+                    <div className="text-sm text-muted-foreground text-center py-6">
+                      {t("common.noData")}
+                    </div>
+                  )}
                 </div>
               </CardContent>
             </Card>
           )}
+        </TabsContent>
 
+        <TabsContent value="attachments" className="mt-4" data-testid="quote-tabpanel-attachments">
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
@@ -385,17 +519,67 @@ export default function Quote() {
               )}
             </CardContent>
           </Card>
+        </TabsContent>
 
-          {linkedOrders.length > 0 && (
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <ClipboardCheck className="h-4 w-4" />
-                  {t("pages.quote.linkedOrders")}
+        <TabsContent value="history" className="mt-4" data-testid="quote-tabpanel-history">
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <History className="h-4 w-4" />
+                {t("pages.quote.tabs.history")}
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              {versions.length === 0 ? (
+                <p className="text-sm text-muted-foreground">{t("pages.quote.tabs.noVersions")}</p>
+              ) : (
+                <ol className="space-y-3">
+                  {versions.map((v) => (
+                    <li
+                      key={v.id}
+                      className="border-l-2 pl-3 py-1 border-primary/40"
+                      data-testid={`quote-version-${v.id}`}
+                    >
+                      <div className="flex items-center gap-2 text-sm">
+                        <Badge variant="outline">v{v.version}</Badge>
+                        <Badge variant="secondary">{v.status}</Badge>
+                        <span className="text-muted-foreground tabular-nums">
+                          {v.totalAmount.toLocaleString()} {quote.currency}
+                        </span>
+                      </div>
+                      <div className="text-xs text-muted-foreground mt-1">
+                        {new Date(v.createdAt).toLocaleString()}
+                        {" · "}
+                        {t("common.discount")}: {v.discountPct}%
+                        {" · "}
+                        {t("pages.quote.margin")}: {v.marginPct}%
+                      </div>
+                      {v.notes && (
+                        <div className="text-xs mt-1 text-muted-foreground italic">{v.notes}</div>
+                      )}
+                    </li>
+                  ))}
+                </ol>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="orders" className="mt-4" data-testid="quote-tabpanel-orders">
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <ClipboardCheck className="h-4 w-4" />
+                {t("pages.quote.linkedOrders")}
+                {linkedOrders.length > 0 && (
                   <Badge variant="secondary">{linkedOrders.length}</Badge>
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
+                )}
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              {linkedOrders.length === 0 ? (
+                <p className="text-sm text-muted-foreground">{t("pages.quote.tabs.noLinkedOrders")}</p>
+              ) : (
                 <div className="space-y-2">
                   {linkedOrders.map((o) => (
                     <div
@@ -424,78 +608,11 @@ export default function Quote() {
                     </div>
                   ))}
                 </div>
-              </CardContent>
-            </Card>
-          )}
-        </div>
-
-        <div>
-          <Card>
-            <CardHeader><CardTitle>{t("pages.quote.summary")}</CardTitle></CardHeader>
-            <CardContent className="space-y-2" data-testid="quote-summary-card">
-              {(() => {
-                const taxSummary = (quote as {
-                  taxSummary?: {
-                    net: number;
-                    tax: number;
-                    gross: number;
-                    breakdown: { ratePct: number; net: number; tax: number }[];
-                  };
-                }).taxSummary;
-                if (!taxSummary) {
-                  return (
-                    <div className="flex justify-between">
-                      <span>{t("common.total")}:</span>{" "}
-                      <strong>
-                        {quote.totalAmount.toLocaleString()} {quote.currency}
-                      </strong>
-                    </div>
-                  );
-                }
-                return (
-                  <>
-                    <div className="flex justify-between">
-                      <span>{t("pages.quote.netto")}:</span>{" "}
-                      <strong className="tabular-nums">
-                        {taxSummary.net.toLocaleString()} {quote.currency}
-                      </strong>
-                    </div>
-                    {taxSummary.breakdown.map((b) => (
-                      <div
-                        key={b.ratePct}
-                        className="flex justify-between text-sm text-muted-foreground"
-                        data-testid={`quote-tax-row-${b.ratePct}`}
-                      >
-                        <span>
-                          {b.ratePct === 0
-                            ? t("pages.quote.vatExempt")
-                            : t("pages.quote.vatAt", {
-                                pct: (Math.round(b.ratePct * 100) / 100).toLocaleString(),
-                              })}
-                        </span>
-                        <span className="tabular-nums">
-                          {b.tax.toLocaleString()} {quote.currency}
-                        </span>
-                      </div>
-                    ))}
-                    <div className="flex justify-between border-t pt-2">
-                      <span className="font-semibold">
-                        {t("pages.quote.brutto")}:
-                      </span>{" "}
-                      <strong className="tabular-nums">
-                        {taxSummary.gross.toLocaleString()} {quote.currency}
-                      </strong>
-                    </div>
-                  </>
-                );
-              })()}
-              <div className="flex justify-between"><span>{t("common.discount")}:</span> <strong>{quote.discountPct}%</strong></div>
-              <div className="flex justify-between"><span>{t("pages.quote.margin")}:</span> <strong>{quote.marginPct}%</strong></div>
-              <div className="flex justify-between"><span>{t("common.validUntil")}:</span> <strong>{new Date(quote.validUntil).toLocaleDateString()}</strong></div>
+              )}
             </CardContent>
           </Card>
-        </div>
-      </div>
+        </TabsContent>
+      </Tabs>
 
       <Dialog open={convertOpen} onOpenChange={(o) => { setConvertOpen(o); if (!o) setConflict(null); }}>
         <DialogContent data-testid="quote-convert-dialog">
