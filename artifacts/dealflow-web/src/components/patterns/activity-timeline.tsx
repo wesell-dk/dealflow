@@ -1,6 +1,8 @@
+import type { ReactNode } from "react";
 import { useMemo, useState } from "react";
 import {
   Activity, FileText, ShieldCheck, PenTool, Edit, Plus, Trash2, RefreshCw, MessageSquare,
+  Send, XCircle, AlertTriangle, Languages, Archive, ArchiveRestore, Copy, Clock,
 } from "lucide-react";
 import { useListAuditEntries, type AuditEntry } from "@workspace/api-client-react";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -28,25 +30,86 @@ const ACTION_META: Record<string, { icon: typeof Activity; label: string; tone: 
   signature_created:{ icon: PenTool,     label: "Signatur angelegt", tone: "text-violet-600" },
   contract_created: { icon: FileText,    label: "Vertrag angelegt", tone: "text-indigo-600" },
   comment:          { icon: MessageSquare, label: "Kommentar",   tone: "text-muted-foreground" },
+  // Quote-spezifische Aktionen
+  status_changed:   { icon: RefreshCw,   label: "Statuswechsel", tone: "text-blue-600" },
+  sent:             { icon: Send,        label: "Versendet",     tone: "text-sky-600" },
+  send_failed:      { icon: AlertTriangle, label: "Versand fehlgeschlagen", tone: "text-destructive" },
+  language_changed: { icon: Languages,   label: "Sprache geändert", tone: "text-muted-foreground" },
+  archived:         { icon: Archive,     label: "Archiviert", tone: "text-muted-foreground" },
+  unarchived:       { icon: ArchiveRestore, label: "Wiederhergestellt", tone: "text-emerald-600" },
+  expired:          { icon: Clock,       label: "Abgelaufen",    tone: "text-muted-foreground" },
+  rejected:         { icon: XCircle,     label: "Abgelehnt",     tone: "text-rose-600" },
+  duplicate:        { icon: Copy,        label: "Dupliziert",    tone: "text-blue-600" },
+  value_autofill:   { icon: Edit,        label: "Wert übernommen", tone: "text-emerald-600" },
+  version_created:  { icon: FileText,    label: "Version angelegt", tone: "text-indigo-600" },
 };
 
-type FilterKey = "all" | "create" | "update" | "approval" | "signature" | "contract";
+type FilterKey = "all" | "create" | "update" | "status" | "approval" | "signature" | "contract";
 
 const FILTER_LABELS: Record<FilterKey, string> = {
   all: "Alle",
   create: "Neu",
   update: "Änderung",
+  status: "Status",
   approval: "Approvals",
   signature: "Signaturen",
   contract: "Verträge",
 };
 
+const STATUS_ACTIONS = new Set([
+  "status_changed", "sent", "send_failed", "rejected", "expired", "archived", "unarchived",
+]);
+
 function classify(action: string): FilterKey {
   if (action.startsWith("approval")) return "approval";
   if (action.startsWith("signature")) return "signature";
   if (action.startsWith("contract")) return "contract";
+  if (STATUS_ACTIONS.has(action)) return "status";
   if (action === "create") return "create";
   return "update";
+}
+
+const QUOTE_STATUS_LABEL: Record<string, string> = {
+  draft: "Entwurf",
+  sent: "Versendet",
+  accepted: "Angenommen",
+  rejected: "Abgelehnt",
+  expired: "Abgelaufen",
+};
+
+function safeParse(json: string | null | undefined): Record<string, unknown> | null {
+  if (!json) return null;
+  try {
+    const v = JSON.parse(json);
+    return v && typeof v === "object" ? (v as Record<string, unknown>) : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Status-Wechsel besonders deutlich darstellen: alter Status → neuer Status
+ * + optionaler Ablehnungsgrund. Fällt auf den serverseitigen Summary-Text
+ * zurück, falls keine before/after-Snapshots vorhanden sind.
+ */
+function renderStatusChange(e: AuditEntry): { headline: ReactNode; reason: string | null } | null {
+  if (e.action !== "status_changed") return null;
+  const before = safeParse(e.beforeJson);
+  const after = safeParse(e.afterJson);
+  const fromRaw = (before?.status as string | undefined) ?? null;
+  const toRaw = (after?.status as string | undefined) ?? null;
+  if (!fromRaw || !toRaw) return null;
+  const reason = (after?.rejectionReason as string | null | undefined)?.trim() || null;
+  return {
+    headline: (
+      <span className="inline-flex items-center gap-1 text-xs">
+        <Badge variant="secondary" className="font-normal">{QUOTE_STATUS_LABEL[fromRaw] ?? fromRaw}</Badge>
+        <span className="text-muted-foreground">→</span>
+        <Badge variant="outline" className="font-normal">{QUOTE_STATUS_LABEL[toRaw] ?? toRaw}</Badge>
+      </span>
+    ),
+    reason,
+  };
 }
 
 function timeAgo(iso: string | undefined): string {
@@ -114,6 +177,7 @@ export function ActivityTimeline({ entityType, entityId, limit = 50 }: ActivityT
         {filtered.map((e: AuditEntry) => {
           const meta = ACTION_META[e.action] ?? { icon: Activity, label: e.action, tone: "text-muted-foreground" };
           const Icon = meta.icon;
+          const statusInfo = renderStatusChange(e);
           return (
             <li key={e.id} className="relative" data-testid={`activity-item-${e.id}`}>
               <span className={cn(
@@ -124,13 +188,27 @@ export function ActivityTimeline({ entityType, entityId, limit = 50 }: ActivityT
               </span>
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0 flex-1">
-                  <div className="flex items-center gap-2 text-sm">
+                  <div className="flex items-center gap-2 text-sm flex-wrap">
                     <span className="font-medium">{e.actor || "System"}</span>
                     <Badge variant="outline" className="text-[10px] py-0 h-4">{meta.label}</Badge>
+                    {statusInfo?.headline}
                   </div>
-                  {e.summary && <p className="text-xs text-muted-foreground mt-0.5">{e.summary}</p>}
+                  {statusInfo?.reason && (
+                    <p
+                      className="text-xs text-rose-700 dark:text-rose-300 mt-1"
+                      data-testid={`activity-item-${e.id}-reason`}
+                    >
+                      <span className="font-medium">Grund:</span> {statusInfo.reason}
+                    </p>
+                  )}
+                  {e.summary && !statusInfo && (
+                    <p className="text-xs text-muted-foreground mt-0.5">{e.summary}</p>
+                  )}
                 </div>
-                <span className="text-[11px] text-muted-foreground whitespace-nowrap pt-0.5" title={e.at}>
+                <span
+                  className="text-[11px] text-muted-foreground whitespace-nowrap pt-0.5"
+                  title={new Date(e.at).toLocaleString("de-DE")}
+                >
                   {timeAgo(e.at)}
                 </span>
               </div>

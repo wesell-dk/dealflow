@@ -343,6 +343,7 @@
         "overview": "Overview",
         "items": "Items",
         "attachments": "Attachments",
+        "activity": "Activity",
         "history": "History",
         "linkedOrders": "Linked Orders",
         "noVersions": "No versions yet.",

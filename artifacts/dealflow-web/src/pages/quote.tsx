@@ -60,6 +60,7 @@ import { QuoteEditor } from "@/components/quote-editor";
 import { useToast } from "@/hooks/use-toast";
 import { useTabState } from "@/hooks/use-tab-state";
 import { AiPromptPanel } from "@/components/copilot/ai-prompt-panel";
+import { ActivityTimeline } from "@/components/patterns/activity-timeline";
 import { Breadcrumbs } from "@/components/patterns/breadcrumbs";
 import { QuoteStatusBadge } from "@/components/patterns/status-badges";
 
@@ -325,6 +326,9 @@ export default function Quote() {
               <Badge variant="secondary" className="ml-2">{attachments.length}</Badge>
             )}
           </TabsTrigger>
+          <TabsTrigger value="activity" data-testid="quote-tab-activity">
+            {t("pages.quote.tabs.activity")}
+          </TabsTrigger>
           <TabsTrigger value="history" data-testid="quote-tab-history">
             {t("pages.quote.tabs.history")}
           </TabsTrigger>
@@ -517,6 +521,20 @@ export default function Quote() {
                   ))}
                 </div>
               )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="activity" className="mt-4" data-testid="quote-tabpanel-activity">
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <History className="h-4 w-4" />
+                {t("pages.quote.tabs.activity")}
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <ActivityTimeline entityType="quote" entityId={id} />
             </CardContent>
           </Card>
         </TabsContent>
