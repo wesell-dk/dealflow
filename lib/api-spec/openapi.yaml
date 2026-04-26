@@ -2833,6 +2833,33 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/ForecastReport" }
 
+  /reports/leads:
+    get:
+      operationId: getLeadsReport
+      tags: [reports]
+      summary: Lead-Volumen, Conversion-Rate und Top-Quellen für den Reports-Workspace
+      description: |
+        Aggregiert Lead-Kennzahlen über alle für den Caller sichtbaren Leads
+        (Tenant-Scope, Restricted-User sehen nur eigene Leads). Zeitraum
+        bezieht sich auf `createdAt` der Leads. Konvertierte Leads werden
+        anhand von `convertedAt` ermittelt; `avgTimeToConvertDays` ist der
+        Mittelwert aus `convertedAt - createdAt` in Tagen für alle im
+        Zeitraum konvertierten Leads.
+      parameters:
+        - in: query
+          name: periodMonths
+          required: false
+          schema: { type: integer, minimum: 1, maximum: 36 }
+          description: |
+            Zeitraum in Monaten (rückwirkend ab heute). Ohne Parameter werden
+            alle Leads betrachtet (All-Time).
+      responses:
+        "200":
+          description: ok
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/LeadsReport" }
+
   # ───────────── COPILOT ─────────────
 
   /copilot/insights:
@@ -8034,6 +8061,70 @@ components:
               committed: { type: number }
               bestCase: { type: number }
               pipeline: { type: number }
+
+    LeadsReport:
+      type: object
+      required:
+        [
+          periodMonths, fromDate, toDate, totalLeads,
+          convertedLeads,
+          conversionRatePct, qualifiedConversionRatePct,
+          avgTimeToConvertDays, byStatus, topSources
+        ]
+      properties:
+        periodMonths:
+          type: integer
+          nullable: true
+          description: "Zeitraum in Monaten; null = All-Time."
+        fromDate:
+          type: string
+          format: date-time
+          nullable: true
+          description: "Untergrenze des Zeitraums (createdAt). null bei All-Time."
+        toDate:
+          type: string
+          format: date-time
+          description: "Obergrenze des Zeitraums (Server-Now zum Zeitpunkt der Anfrage)."
+        totalLeads:
+          type: integer
+          description: |
+            Anzahl Leads, die im Zeitraum **neu angelegt** wurden (Basis
+            aller Quoten und identisch mit der KPI „Neue Leads").
+            `byStatus` schlüsselt diese Menge nach aktuellem Status auf.
+        convertedLeads:
+          type: integer
+          description: "Davon zu einem Account konvertiert (status='converted')."
+        conversionRatePct:
+          type: number
+          description: "Konvertierte / Gesamte Leads im Zeitraum, in Prozent."
+        qualifiedConversionRatePct:
+          type: number
+          description: |
+            Konvertierte / (Qualifizierte + Konvertierte) im Zeitraum, in
+            Prozent. Funnel-Sicht „aus Qualified geworden Customer".
+        avgTimeToConvertDays:
+          type: number
+          nullable: true
+          description: "Ø Tage von Lead-Anlage bis Konvertierung; null wenn keine."
+        byStatus:
+          type: object
+          required: [new, qualified, disqualified, converted]
+          properties:
+            new: { type: integer }
+            qualified: { type: integer }
+            disqualified: { type: integer }
+            converted: { type: integer }
+        topSources:
+          type: array
+          description: "Bis zu 5 Quellen, sortiert nach Lead-Anzahl absteigend."
+          items:
+            type: object
+            required: [source, count, converted, conversionRatePct]
+            properties:
+              source: { type: string }
+              count: { type: integer }
+              converted: { type: integer }
+              conversionRatePct: { type: number }
 
     # ── Copilot ──
     ListCopilotInsightsResponse:

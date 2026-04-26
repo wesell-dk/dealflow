@@ -7,6 +7,7 @@ import {
   useGetDashboardSummary,
   useGetRenewalSummary,
   useGetRenewalTrend,
+  useGetLeadsReport,
   useListRenewals,
   useNotifyRenewalOwner,
   useUpdateRenewal,
@@ -42,7 +43,7 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { useToast } from "@/hooks/use-toast";
-import { Bell, CalendarClock, CheckCircle2, Clock, ExternalLink } from "lucide-react";
+import { Bell, CalendarClock, CheckCircle2, Clock, ExternalLink, UserPlus, ArrowRight } from "lucide-react";
 import { ResponsiveContainer, ComposedChart, AreaChart, Area, BarChart, Bar, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend } from "recharts";
 import { AiAcceptanceTile } from "@/components/reports/ai-acceptance-tile";
 import { TONE_TEXT_CLASSES } from "@/components/patterns/status-badges";
@@ -251,6 +252,26 @@ export default function Reports() {
       return row;
     });
   }, [renewalTrend, trendMode, groupedSeries]);
+
+  // Lead-Konvertierungen (Task #199): Kennzahlen aus der Lead-Inbox
+  // (Volumen, Conversion-Rate, Top-Quellen). Der `period`-Selector oben
+  // wird wiederverwendet ("3"/"6"/"12" Monate, "all" = ohne Filter).
+  const leadsPeriodMonths = period === "all" ? undefined : parseInt(period, 10);
+  const { data: leadsReport } = useGetLeadsReport(
+    leadsPeriodMonths !== undefined ? { periodMonths: leadsPeriodMonths } : undefined,
+  );
+  const KNOWN_SOURCE_KEYS = ["website", "referral", "inbound_email", "event", "outbound", "partner", "other"] as const;
+  function sourceLabel(source: string): string {
+    if ((KNOWN_SOURCE_KEYS as readonly string[]).includes(source)) {
+      return t(`pages.leads.sources.${source}`);
+    }
+    return source || t("common.unknown", { defaultValue: "—" });
+  }
+  function gotoLeads(params: Record<string, string>) {
+    const sp = new URLSearchParams(params);
+    const qs = sp.toString();
+    navigate(qs ? `/leads?${qs}` : "/leads");
+  }
 
   const ownerOptions = useMemo(() => performance?.byOwner ?? [], [performance]);
   const monthly = useMemo(() => {
@@ -498,6 +519,166 @@ export default function Reports() {
               </BarChart>
             </ResponsiveContainer>
           )}
+        </CardContent>
+      </Card>
+
+      {/* Leads & Conversion (Task #199) */}
+      <Card data-testid="card-leads-conversion">
+        <CardHeader>
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <CardTitle className="flex items-center gap-2">
+                <UserPlus className="h-5 w-5 text-muted-foreground" />
+                {t("pages.reports.leads.title")}
+              </CardTitle>
+              <p className="text-sm text-muted-foreground mt-1">
+                {t("pages.reports.leads.subtitle")}
+              </p>
+            </div>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => gotoLeads({})}
+              data-testid="btn-leads-open-inbox"
+            >
+              {t("pages.reports.leads.openInbox")}
+              <ArrowRight className="h-4 w-4 ml-1" />
+            </Button>
+          </div>
+        </CardHeader>
+        <CardContent className="grid gap-4">
+          <div className="grid gap-4 md:grid-cols-4" data-testid="kpi-row-leads">
+            <Card data-testid="kpi-leads-new">
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm font-medium">
+                  {t("pages.reports.leads.kpi.newLeads")}
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                {/*
+                 * "Neue Leads" = im Zeitraum erstellt (totalLeads), NICHT
+                 * der aktuelle Status-Bestand. Drilldown geht deshalb zur
+                 * Lead-Inbox ohne Status-Filter — sortiert nach createdAt
+                 * desc landen die jüngsten Leads ohnehin oben, und alle
+                 * im Zeitraum erstellten Leads (auch bereits konvertierte)
+                 * sind dort sichtbar.
+                 */}
+                <button
+                  type="button"
+                  onClick={() => gotoLeads({})}
+                  className="text-2xl font-bold text-left hover:underline"
+                  data-testid="kpi-leads-new-value"
+                >
+                  {leadsReport?.totalLeads ?? 0}
+                </button>
+                <div className="text-xs text-muted-foreground mt-1">
+                  {t("pages.reports.leads.kpi.newLeadsHint")}
+                </div>
+              </CardContent>
+            </Card>
+            <Card data-testid="kpi-leads-conversion-rate">
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm font-medium">
+                  {t("pages.reports.leads.kpi.conversionRate")}
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold text-primary" data-testid="kpi-leads-conversion-rate-value">
+                  {leadsReport ? `${leadsReport.qualifiedConversionRatePct}%` : "—"}
+                </div>
+                <div className="text-xs text-muted-foreground mt-1">
+                  {t("pages.reports.leads.kpi.conversionRateHint")}
+                </div>
+              </CardContent>
+            </Card>
+            <Card data-testid="kpi-leads-converted">
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm font-medium">
+                  {t("pages.reports.leads.kpi.totalConverted")}
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <button
+                  type="button"
+                  onClick={() => gotoLeads({ status: "converted" })}
+                  className="text-2xl font-bold text-left hover:underline"
+                  data-testid="kpi-leads-converted-value"
+                >
+                  {leadsReport?.convertedLeads ?? 0}
+                </button>
+                <div className="text-xs text-muted-foreground mt-1">
+                  {t("pages.reports.leads.kpi.totalConvertedHint", {
+                    count: leadsReport?.convertedLeads ?? 0,
+                    total: leadsReport?.totalLeads ?? 0,
+                  })}
+                </div>
+              </CardContent>
+            </Card>
+            <Card data-testid="kpi-leads-avg-ttc">
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm font-medium">
+                  {t("pages.reports.leads.kpi.avgTimeToConvert")}
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold">
+                  {leadsReport?.avgTimeToConvertDays != null
+                    ? t("pages.reports.leads.kpi.avgTimeToConvertValue", { days: leadsReport.avgTimeToConvertDays })
+                    : t("pages.reports.leads.kpi.avgTimeToConvertEmpty")}
+                </div>
+                <div className="text-xs text-muted-foreground mt-1">
+                  {t("pages.reports.leads.kpi.avgTimeToConvertHint")}
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+
+          <div className="rounded-md border bg-card" data-testid="leads-top-sources">
+            <div className="px-4 py-3 border-b">
+              <div className="text-sm font-medium">{t("pages.reports.leads.topSources.title")}</div>
+              <div className="text-xs text-muted-foreground mt-0.5">
+                {t("pages.reports.leads.topSources.hint")}
+              </div>
+            </div>
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>{t("pages.reports.leads.topSources.col.source")}</TableHead>
+                  <TableHead className="text-right">{t("pages.reports.leads.topSources.col.count")}</TableHead>
+                  <TableHead className="text-right">{t("pages.reports.leads.topSources.col.converted")}</TableHead>
+                  <TableHead className="text-right">{t("pages.reports.leads.topSources.col.rate")}</TableHead>
+                  <TableHead className="w-[1%]"></TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {(!leadsReport || leadsReport.topSources.length === 0) && (
+                  <TableRow>
+                    <TableCell colSpan={5} className="text-center text-sm text-muted-foreground py-6">
+                      {t("pages.reports.leads.topSources.empty")}
+                    </TableCell>
+                  </TableRow>
+                )}
+                {leadsReport?.topSources.map((s) => (
+                  <TableRow key={s.source} data-testid={`row-leads-source-${s.source}`}>
+                    <TableCell className="font-medium">{sourceLabel(s.source)}</TableCell>
+                    <TableCell className="text-right tabular-nums">{s.count}</TableCell>
+                    <TableCell className="text-right tabular-nums">{s.converted}</TableCell>
+                    <TableCell className="text-right tabular-nums">{s.conversionRatePct}%</TableCell>
+                    <TableCell className="text-right">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => gotoLeads({ source: s.source })}
+                        data-testid={`btn-drill-source-${s.source}`}
+                      >
+                        <ArrowRight className="h-4 w-4" />
+                      </Button>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
         </CardContent>
       </Card>
 

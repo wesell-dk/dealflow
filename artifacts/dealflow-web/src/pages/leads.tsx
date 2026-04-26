@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { Link } from "wouter";
+import { Link, useSearch } from "wouter";
 import {
   UserPlus,
   Plus,
@@ -98,11 +98,30 @@ export default function Leads() {
   const { user } = useAuth();
   const { toast } = useToast();
 
-  const [statusTab, setStatusTab] = useState<StatusTab>("all");
+  // Initial filters aus der URL (z. B. Drilldowns aus dem Reports-Workspace,
+  // siehe Task #199): /leads?status=qualified&source=website setzt sowohl
+  // den Status-Tab als auch den Quellen-Filter beim ersten Mount.
+  const initialSearchString = useSearch();
+  const initialUrlFilters = useMemo(() => {
+    const sp = new URLSearchParams(initialSearchString);
+    const status = sp.get("status");
+    const validStatuses: StatusTab[] = ["all", "new", "qualified", "disqualified", "converted"];
+    return {
+      status: (validStatuses as string[]).includes(status ?? "") ? (status as StatusTab) : null,
+      source: sp.get("source"),
+      ownerId: sp.get("ownerId"),
+    };
+    // Wir lesen die URL bewusst nur einmal beim Mount — danach fährt die
+    // Seite wieder mit lokalem State, damit User sie weiterklicken können,
+    // ohne dass die URL die Eingaben "zurückzieht".
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const [statusTab, setStatusTab] = useState<StatusTab>(initialUrlFilters.status ?? "all");
   const [search, setSearch] = useState("");
   const [searchInput, setSearchInput] = useState("");
-  const [ownerFilter, setOwnerFilter] = useState<string | null>(null);
-  const [sourceFilter, setSourceFilter] = useState<string | null>(null);
+  const [ownerFilter, setOwnerFilter] = useState<string | null>(initialUrlFilters.ownerId);
+  const [sourceFilter, setSourceFilter] = useState<string | null>(initialUrlFilters.source);
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(25);
 

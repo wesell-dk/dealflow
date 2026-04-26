@@ -1127,6 +1127,39 @@
       "aiAcceptanceWqs": "Quality",
       "aiAcceptanceWqsHint": "Acceptance rate × average confidence of decided recommendations.",
       "aiAcceptanceTrendLabel": "Decisions 7 days",
+      "leads": {
+        "title": "Leads & Conversion",
+        "subtitle": "Volume, conversion rate and top sources from the lead inbox.",
+        "kpi": {
+          "newLeads": "New leads",
+          "newLeadsHint": "Created in the selected period",
+          "conversionRate": "Conversion rate",
+          "conversionRateHint": "Converted / Qualified + Converted",
+          "totalConverted": "Converted leads",
+          "totalConvertedHint": "{{count}} of {{total}} total",
+          "avgTimeToConvert": "Avg. time to convert",
+          "avgTimeToConvertHint": "From lead intake to account",
+          "avgTimeToConvertValue": "{{days}} days",
+          "avgTimeToConvertEmpty": "—"
+        },
+        "topSources": {
+          "title": "Top sources",
+          "hint": "The five most common lead sources — click opens the lead inbox filtered by source.",
+          "empty": "No leads in the selected period.",
+          "col": {
+            "source": "Source",
+            "count": "Leads",
+            "converted": "Converted",
+            "rate": "Rate"
+          }
+        },
+        "openInbox": "Open in lead inbox",
+        "drilldown": {
+          "qualified": "Show qualified leads",
+          "converted": "Show converted leads",
+          "all": "All leads in period"
+        }
+      },
       "trendActions": {
         "title": "Renewals in {{month}}",
         "subtitle": "{{count}} renewals · {{value}} volume — act directly from the chart.",

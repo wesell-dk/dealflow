@@ -1137,6 +1137,39 @@
       "aiAcceptanceWqs": "Qualität",
       "aiAcceptanceWqsHint": "Annahmequote × Ø-Konfidenz der entschiedenen Empfehlungen.",
       "aiAcceptanceTrendLabel": "Entscheidungen 7 Tage",
+      "leads": {
+        "title": "Leads & Conversion",
+        "subtitle": "Volumen, Conversion-Rate und Top-Quellen aus der Lead-Inbox.",
+        "kpi": {
+          "newLeads": "Neue Leads",
+          "newLeadsHint": "Im gewählten Zeitraum erstellt",
+          "conversionRate": "Conversion-Rate",
+          "conversionRateHint": "Konvertiert / Qualifiziert + Konvertiert",
+          "totalConverted": "Konvertierte Leads",
+          "totalConvertedHint": "{{count}} von {{total}} insgesamt",
+          "avgTimeToConvert": "Ø Zeit bis Konvertierung",
+          "avgTimeToConvertHint": "Vom Lead-Eingang bis zum Account",
+          "avgTimeToConvertValue": "{{days}} Tage",
+          "avgTimeToConvertEmpty": "—"
+        },
+        "topSources": {
+          "title": "Top-Quellen",
+          "hint": "Die fünf häufigsten Lead-Quellen — Klick öffnet die Lead-Inbox mit Quellen-Filter.",
+          "empty": "Keine Leads im Zeitraum.",
+          "col": {
+            "source": "Quelle",
+            "count": "Leads",
+            "converted": "Konvertiert",
+            "rate": "Quote"
+          }
+        },
+        "openInbox": "In Lead-Inbox öffnen",
+        "drilldown": {
+          "qualified": "Qualifizierte Leads anzeigen",
+          "converted": "Konvertierte Leads anzeigen",
+          "all": "Alle Leads im Zeitraum"
+        }
+      },
       "trendActions": {
         "title": "Renewals im {{month}}",
         "subtitle": "{{count}} Renewals · {{value}} Volumen — direkt aus dem Trendchart bearbeiten.",

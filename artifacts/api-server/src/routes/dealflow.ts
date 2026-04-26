@@ -9364,6 +9364,90 @@ router.get('/reports/forecast', async (_req, res) => {
   res.json({ currency: 'EUR', months });
 });
 
+// Lead-KPIs (#199): Volumen, Conversion-Rate und Top-Quellen für den
+// Reports-Workspace. Visibility entspricht /leads (tenant + ownerId für
+// restricted-User), damit Vertriebsleitung dieselben Zahlen sieht wie
+// die Lead-Inbox. `periodMonths` filtert über `createdAt`.
+router.get('/reports/leads', async (req, res) => {
+  if (!validateInline(req, res, { query: Z.GetLeadsReportQueryParams })) return;
+  const periodMonths = req.query.periodMonths !== undefined
+    ? Number(req.query.periodMonths)
+    : null;
+  const now = new Date();
+  let fromDate: Date | null = null;
+  if (periodMonths !== null && Number.isFinite(periodMonths) && periodMonths > 0) {
+    fromDate = new Date(now);
+    fromDate.setMonth(fromDate.getMonth() - periodMonths);
+  }
+
+  const baseWhere = leadsVisibilityWhere(req);
+  const visibleAll = await db.select().from(leadsTable).where(baseWhere);
+  const inPeriod = fromDate
+    ? visibleAll.filter(l => l.createdAt && new Date(l.createdAt) >= fromDate!)
+    : visibleAll;
+
+  const byStatus = {
+    new: inPeriod.filter(l => l.status === 'new').length,
+    qualified: inPeriod.filter(l => l.status === 'qualified').length,
+    disqualified: inPeriod.filter(l => l.status === 'disqualified').length,
+    converted: inPeriod.filter(l => l.status === 'converted').length,
+  };
+  const totalLeads = inPeriod.length;
+  const convertedLeads = byStatus.converted;
+  const conversionRatePct = totalLeads === 0
+    ? 0
+    : Math.round((convertedLeads / totalLeads) * 1000) / 10;
+  const qualifiedDenom = byStatus.qualified + byStatus.converted;
+  const qualifiedConversionRatePct = qualifiedDenom === 0
+    ? 0
+    : Math.round((convertedLeads / qualifiedDenom) * 1000) / 10;
+
+  const ttcDays = inPeriod
+    .filter(l => l.status === 'converted' && l.convertedAt && l.createdAt)
+    .map(l => (new Date(l.convertedAt!).getTime() - new Date(l.createdAt!).getTime()) / 86400000)
+    .filter(d => d >= 0 && d < 365 * 3);
+  const avgTimeToConvertDays = ttcDays.length === 0
+    ? null
+    : Math.round((ttcDays.reduce((s, d) => s + d, 0) / ttcDays.length) * 10) / 10;
+
+  const sourceAgg = new Map<string, { count: number; converted: number }>();
+  for (const l of inPeriod) {
+    const src = l.source || 'unknown';
+    const cur = sourceAgg.get(src) ?? { count: 0, converted: 0 };
+    cur.count += 1;
+    if (l.status === 'converted') cur.converted += 1;
+    sourceAgg.set(src, cur);
+  }
+  const topSources = Array.from(sourceAgg.entries())
+    .map(([source, agg]) => ({
+      source,
+      count: agg.count,
+      converted: agg.converted,
+      conversionRatePct: agg.count === 0
+        ? 0
+        : Math.round((agg.converted / agg.count) * 1000) / 10,
+    }))
+    .sort((a, b) => b.count - a.count || a.source.localeCompare(b.source))
+    .slice(0, 5);
+
+  res.json({
+    periodMonths,
+    fromDate: iso(fromDate),
+    toDate: iso(now)!,
+    // totalLeads = "Neue Leads im Zeitraum" (im Zeitraum erstellt). Die KPI
+    // "Neue Leads" im Reports-Workspace zeigt genau diese Zahl. byStatus
+    // schluesselt sie nach aktuellem Status auf (so kann ein im Zeitraum
+    // erstellter Lead bereits "qualified" oder "converted" sein).
+    totalLeads,
+    convertedLeads,
+    conversionRatePct,
+    qualifiedConversionRatePct,
+    avgTimeToConvertDays,
+    byStatus,
+    topSources,
+  });
+});
+
 // ── COPILOT / ACTIVITY ──
 function mapInsight(
   c: typeof copilotInsightsTable.$inferSelect,

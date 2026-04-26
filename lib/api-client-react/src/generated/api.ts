@@ -162,6 +162,7 @@ import type {
   GetAiRecommendationMetricsParams,
   GetClauseSuggestionStatsParams,
   GetCurrentQuoteParams,
+  GetLeadsReportParams,
   GetRenewalTrendParams,
   HealthStatus,
   HelpBotInput,
@@ -176,6 +177,7 @@ import type {
   LeadInput,
   LeadListResponse,
   LeadPatch,
+  LeadsReport,
   ListAccountsParams,
   ListAiRecommendationsParams,
   ListApprovalsParams,
@@ -12311,6 +12313,107 @@ export function useGetForecast<
   request?: SecondParameter<typeof customFetch>;
 }): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
   const queryOptions = getGetForecastQueryOptions(options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * Aggregiert Lead-Kennzahlen über alle für den Caller sichtbaren Leads
+(Tenant-Scope, Restricted-User sehen nur eigene Leads). Zeitraum
+bezieht sich auf `createdAt` der Leads. Konvertierte Leads werden
+anhand von `convertedAt` ermittelt; `avgTimeToConvertDays` ist der
+Mittelwert aus `convertedAt - createdAt` in Tagen für alle im
+Zeitraum konvertierten Leads.
+
+ * @summary Lead-Volumen, Conversion-Rate und Top-Quellen für den Reports-Workspace
+ */
+export const getGetLeadsReportUrl = (params?: GetLeadsReportParams) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? "null" : value.toString());
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0
+    ? `/api/v1/reports/leads?${stringifiedParams}`
+    : `/api/v1/reports/leads`;
+};
+
+export const getLeadsReport = async (
+  params?: GetLeadsReportParams,
+  options?: RequestInit,
+): Promise<LeadsReport> => {
+  return customFetch<LeadsReport>(getGetLeadsReportUrl(params), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getGetLeadsReportQueryKey = (params?: GetLeadsReportParams) => {
+  return [`/api/v1/reports/leads`, ...(params ? [params] : [])] as const;
+};
+
+export const getGetLeadsReportQueryOptions = <
+  TData = Awaited<ReturnType<typeof getLeadsReport>>,
+  TError = ErrorType<unknown>,
+>(
+  params?: GetLeadsReportParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getLeadsReport>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getGetLeadsReportQueryKey(params);
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof getLeadsReport>>> = ({
+    signal,
+  }) => getLeadsReport(params, { signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getLeadsReport>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetLeadsReportQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getLeadsReport>>
+>;
+export type GetLeadsReportQueryError = ErrorType<unknown>;
+
+/**
+ * @summary Lead-Volumen, Conversion-Rate und Top-Quellen für den Reports-Workspace
+ */
+
+export function useGetLeadsReport<
+  TData = Awaited<ReturnType<typeof getLeadsReport>>,
+  TError = ErrorType<unknown>,
+>(
+  params?: GetLeadsReportParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getLeadsReport>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetLeadsReportQueryOptions(params, options);
 
   const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
     queryKey: QueryKey;

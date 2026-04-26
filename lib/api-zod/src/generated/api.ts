@@ -5162,6 +5162,81 @@ export const GetForecastResponse = zod.object({
 });
 
 /**
+ * Aggregiert Lead-Kennzahlen über alle für den Caller sichtbaren Leads
+(Tenant-Scope, Restricted-User sehen nur eigene Leads). Zeitraum
+bezieht sich auf `createdAt` der Leads. Konvertierte Leads werden
+anhand von `convertedAt` ermittelt; `avgTimeToConvertDays` ist der
+Mittelwert aus `convertedAt - createdAt` in Tagen für alle im
+Zeitraum konvertierten Leads.
+
+ * @summary Lead-Volumen, Conversion-Rate und Top-Quellen für den Reports-Workspace
+ */
+export const getLeadsReportQueryPeriodMonthsMax = 36;
+
+export const GetLeadsReportQueryParams = zod.object({
+  periodMonths: zod.coerce
+    .number()
+    .min(1)
+    .max(getLeadsReportQueryPeriodMonthsMax)
+    .optional()
+    .describe(
+      "Zeitraum in Monaten (rückwirkend ab heute). Ohne Parameter werden\nalle Leads betrachtet (All-Time).\n",
+    ),
+});
+
+export const GetLeadsReportResponse = zod.object({
+  periodMonths: zod
+    .number()
+    .nullable()
+    .describe("Zeitraum in Monaten; null = All-Time."),
+  fromDate: zod.coerce
+    .date()
+    .nullable()
+    .describe("Untergrenze des Zeitraums (createdAt). null bei All-Time."),
+  toDate: zod.coerce
+    .date()
+    .describe(
+      "Obergrenze des Zeitraums (Server-Now zum Zeitpunkt der Anfrage).",
+    ),
+  totalLeads: zod
+    .number()
+    .describe(
+      'Anzahl Leads, die im Zeitraum \*\*neu angelegt\*\* wurden (Basis\naller Quoten und identisch mit der KPI „Neue Leads\").\n`byStatus` schlüsselt diese Menge nach aktuellem Status auf.\n',
+    ),
+  convertedLeads: zod
+    .number()
+    .describe("Davon zu einem Account konvertiert (status='converted')."),
+  conversionRatePct: zod
+    .number()
+    .describe("Konvertierte \/ Gesamte Leads im Zeitraum, in Prozent."),
+  qualifiedConversionRatePct: zod
+    .number()
+    .describe(
+      'Konvertierte \/ (Qualifizierte + Konvertierte) im Zeitraum, in\nProzent. Funnel-Sicht „aus Qualified geworden Customer\".\n',
+    ),
+  avgTimeToConvertDays: zod
+    .number()
+    .nullable()
+    .describe("Ø Tage von Lead-Anlage bis Konvertierung; null wenn keine."),
+  byStatus: zod.object({
+    new: zod.number(),
+    qualified: zod.number(),
+    disqualified: zod.number(),
+    converted: zod.number(),
+  }),
+  topSources: zod
+    .array(
+      zod.object({
+        source: zod.string(),
+        count: zod.number(),
+        converted: zod.number(),
+        conversionRatePct: zod.number(),
+      }),
+    )
+    .describe("Bis zu 5 Quellen, sortiert nach Lead-Anzahl absteigend."),
+});
+
+/**
  * @summary AI-orchestrated next-best-actions and risks
  */
 export const ListCopilotInsightsQueryParams = zod.object({

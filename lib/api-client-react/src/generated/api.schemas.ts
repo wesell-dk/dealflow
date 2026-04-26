@@ -3183,6 +3183,47 @@ export interface ForecastReport {
   months: ForecastReportMonthsItem[];
 }
 
+export type LeadsReportByStatus = {
+  new: number;
+  qualified: number;
+  disqualified: number;
+  converted: number;
+};
+
+export type LeadsReportTopSourcesItem = {
+  source: string;
+  count: number;
+  converted: number;
+  conversionRatePct: number;
+};
+
+export interface LeadsReport {
+  /** Zeitraum in Monaten; null = All-Time. */
+  periodMonths: number | null;
+  /** Untergrenze des Zeitraums (createdAt). null bei All-Time. */
+  fromDate: string | null;
+  /** Obergrenze des Zeitraums (Server-Now zum Zeitpunkt der Anfrage). */
+  toDate: string;
+  /** Anzahl Leads, die im Zeitraum **neu angelegt** wurden (Basis
+aller Quoten und identisch mit der KPI „Neue Leads").
+`byStatus` schlüsselt diese Menge nach aktuellem Status auf.
+ */
+  totalLeads: number;
+  /** Davon zu einem Account konvertiert (status='converted'). */
+  convertedLeads: number;
+  /** Konvertierte / Gesamte Leads im Zeitraum, in Prozent. */
+  conversionRatePct: number;
+  /** Konvertierte / (Qualifizierte + Konvertierte) im Zeitraum, in
+Prozent. Funnel-Sicht „aus Qualified geworden Customer".
+ */
+  qualifiedConversionRatePct: number;
+  /** Ø Tage von Lead-Anlage bis Konvertierung; null wenn keine. */
+  avgTimeToConvertDays: number | null;
+  byStatus: LeadsReportByStatus;
+  /** Bis zu 5 Quellen, sortiert nach Lead-Anzahl absteigend. */
+  topSources: LeadsReportTopSourcesItem[];
+}
+
 /**
  * @nullable
  */
@@ -5619,6 +5660,17 @@ export type RequestApprovalFromReaction201 = {
 export type ListSignaturePackagesParams = {
   status?: string;
   amendmentId?: string;
+};
+
+export type GetLeadsReportParams = {
+  /**
+ * Zeitraum in Monaten (rückwirkend ab heute). Ohne Parameter werden
+alle Leads betrachtet (All-Time).
+
+ * @minimum 1
+ * @maximum 36
+ */
+  periodMonths?: number;
 };
 
 export type ListCopilotInsightsParams = {
