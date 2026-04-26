@@ -1045,6 +1045,56 @@ export const CreateLeadActivityBody = zod.object({
 });
 
 /**
+ * Aktualisiert den Text (`body`) eines bestehenden Aktivitätseintrags.
+Erlaubt nur dem ursprünglichen Autor oder einem Tenant-Admin
+(`tenantWide=true`); andere Nutzer erhalten 403. Der Eintragstyp
+(note/call/email/...) bleibt unverändert, um die kategorische
+Bedeutung des Eintrags nicht im Nachhinein zu verfälschen.
+
+ * @summary Aktivitätseintrag eines Leads bearbeiten
+ */
+export const UpdateLeadActivityParams = zod.object({
+  id: zod.coerce.string(),
+  activityId: zod.coerce.string(),
+});
+
+export const updateLeadActivityBodyBodyMax = 4000;
+
+export const UpdateLeadActivityBody = zod
+  .object({
+    body: zod.string().min(1).max(updateLeadActivityBodyBodyMax),
+  })
+  .describe(
+    "Update-Payload für einen bestehenden Aktivitätseintrag. Es kann nur\nder Text (`body`) geändert werden — der Eintragstyp bleibt fest, um\ndie kategorische Bedeutung im Nachhinein nicht zu verfälschen.\n",
+  );
+
+export const UpdateLeadActivityResponse = zod
+  .object({
+    id: zod.string(),
+    leadId: zod.string(),
+    type: zod.enum(["note", "call", "email", "meeting", "task"]),
+    body: zod.string(),
+    actor: zod.string(),
+    at: zod.coerce.date(),
+  })
+  .describe(
+    "Manuell an einem Lead erfasste Aktivität (Notiz, Anruf, E-Mail, Meeting,\nFolgeaufgabe). Wird zugleich im Audit-Log gespiegelt.\n",
+  );
+
+/**
+ * Entfernt einen Aktivitätseintrag dauerhaft. Erlaubt nur dem
+ursprünglichen Autor oder einem Tenant-Admin (`tenantWide=true`);
+andere Nutzer erhalten 403. Da der Eintrag als Audit-Log-Zeile
+gespeichert ist, verschwindet er auch aus der Activity-Timeline.
+
+ * @summary Aktivitätseintrag eines Leads löschen
+ */
+export const DeleteLeadActivityParams = zod.object({
+  id: zod.coerce.string(),
+  activityId: zod.coerce.string(),
+});
+
+/**
  * Konvertiert einen qualifizierten Lead in einen Account. Es wird
 entweder ein bestehender Account verlinkt (`accountId`) oder ein
 neuer Account angelegt (`newAccount`). Optional kann gleichzeitig

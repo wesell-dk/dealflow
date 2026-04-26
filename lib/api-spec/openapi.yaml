@@ -717,6 +717,63 @@ paths:
         "404": { description: not found }
         "422": { description: invalid input }
 
+  /leads/{id}/activities/{activityId}:
+    patch:
+      operationId: updateLeadActivity
+      tags: [leads, activity]
+      summary: Aktivitätseintrag eines Leads bearbeiten
+      description: |
+        Aktualisiert den Text (`body`) eines bestehenden Aktivitätseintrags.
+        Erlaubt nur dem ursprünglichen Autor oder einem Tenant-Admin
+        (`tenantWide=true`); andere Nutzer erhalten 403. Der Eintragstyp
+        (note/call/email/...) bleibt unverändert, um die kategorische
+        Bedeutung des Eintrags nicht im Nachhinein zu verfälschen.
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+        - in: path
+          name: activityId
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/LeadActivityUpdateInput" }
+      responses:
+        "200":
+          description: ok
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/LeadActivity" }
+        "403": { description: forbidden }
+        "404": { description: not found }
+        "422": { description: invalid input }
+    delete:
+      operationId: deleteLeadActivity
+      tags: [leads, activity]
+      summary: Aktivitätseintrag eines Leads löschen
+      description: |
+        Entfernt einen Aktivitätseintrag dauerhaft. Erlaubt nur dem
+        ursprünglichen Autor oder einem Tenant-Admin (`tenantWide=true`);
+        andere Nutzer erhalten 403. Da der Eintrag als Audit-Log-Zeile
+        gespeichert ist, verschwindet er auch aus der Activity-Timeline.
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+        - in: path
+          name: activityId
+          required: true
+          schema: { type: string }
+      responses:
+        "204": { description: deleted }
+        "403": { description: forbidden }
+        "404": { description: not found }
+
   /leads/{id}/convert:
     post:
       operationId: convertLead
@@ -6668,6 +6725,16 @@ components:
           description: |
             Wenn true, wird `lead.lastContactAt` zusätzlich auf den aktuellen
             Zeitpunkt gesetzt. Default false.
+
+    LeadActivityUpdateInput:
+      type: object
+      required: [body]
+      description: |
+        Update-Payload für einen bestehenden Aktivitätseintrag. Es kann nur
+        der Text (`body`) geändert werden — der Eintragstyp bleibt fest, um
+        die kategorische Bedeutung im Nachhinein nicht zu verfälschen.
+      properties:
+        body: { type: string, minLength: 1, maxLength: 4000 }
 
     LeadConvertNewAccount:
       type: object

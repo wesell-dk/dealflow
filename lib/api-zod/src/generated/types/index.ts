@@ -340,6 +340,7 @@ export * from "./leadActivity";
 export * from "./leadActivityInput";
 export * from "./leadActivityInputType";
 export * from "./leadActivityType";
+export * from "./leadActivityUpdateInput";
 export * from "./leadConvertInput";
 export * from "./leadConvertNewAccount";
 export * from "./leadConvertNewDeal";

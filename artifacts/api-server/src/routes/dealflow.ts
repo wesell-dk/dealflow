@@ -2016,6 +2016,61 @@ router.post('/leads/:id/activities', async (req, res) => {
   });
 });
 
+// Helfer: lädt einen Aktivitätseintrag UND prüft, ob der Caller ihn
+// bearbeiten/löschen darf. Ein Eintrag ist genau dann modifizierbar,
+// wenn der Caller entweder Tenant-Admin ist (`scope.tenantWide`) oder der
+// ursprüngliche Autor (`actor` stimmt mit `scope.user.name ?? scope.user.id`
+// überein — identisch zu der beim INSERT verwendeten Bildung). Damit ist
+// die UI-Sichtbarkeit der Buttons strukturell konsistent zur Backend-RBAC.
+async function loadEditableLeadActivity(
+  req: Request, res: Response, leadId: string, activityId: string,
+): Promise<typeof auditLogTable.$inferSelect | null> {
+  const scope = getScope(req);
+  const [row] = await db.select().from(auditLogTable).where(and(
+    eq(auditLogTable.id, activityId),
+    eq(auditLogTable.tenantId, scope.tenantId),
+    eq(auditLogTable.entityType, 'lead'),
+    eq(auditLogTable.entityId, leadId),
+    inArray(auditLogTable.action, LEAD_ACTIVITY_TYPES as unknown as string[]),
+  ));
+  if (!row) { res.status(404).json({ error: 'not found' }); return null; }
+  const callerActor = scope.user.name ?? scope.user.id;
+  const isAuthor = row.actor === callerActor;
+  if (!scope.tenantWide && !isAuthor) {
+    res.status(403).json({ error: 'forbidden' });
+    return null;
+  }
+  return row;
+}
+
+router.patch('/leads/:id/activities/:activityId', async (req, res) => {
+  if (!(await gateLead(req, res, req.params.id))) return;
+  const row = await loadEditableLeadActivity(req, res, req.params.id, req.params.activityId);
+  if (!row) return;
+  const body = typeof req.body?.body === 'string' ? req.body.body.trim() : '';
+  if (!body) { res.status(422).json({ error: 'body required' }); return; }
+  if (body.length > 4000) { res.status(422).json({ error: 'body too long' }); return; }
+  await db.update(auditLogTable)
+    .set({ summary: body })
+    .where(eq(auditLogTable.id, row.id));
+  res.json({
+    id: row.id,
+    leadId: row.entityId,
+    type: row.action as LeadActivityType,
+    body,
+    actor: row.actor,
+    at: iso(row.at)!,
+  });
+});
+
+router.delete('/leads/:id/activities/:activityId', async (req, res) => {
+  if (!(await gateLead(req, res, req.params.id))) return;
+  const row = await loadEditableLeadActivity(req, res, req.params.id, req.params.activityId);
+  if (!row) return;
+  await db.delete(auditLogTable).where(eq(auditLogTable.id, row.id));
+  res.status(204).end();
+});
+
 // ── ACCOUNTS ──
 router.get('/accounts', async (req, res) => {
   // Tenant + scope-bound at the SQL level: only fetch accounts whose IDs

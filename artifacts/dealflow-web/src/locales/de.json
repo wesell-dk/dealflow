@@ -275,7 +275,11 @@
         "disqualified": "Lead disqualifiziert",
         "convertedTitle": "Lead konvertiert",
         "activityAdded": "Eintrag hinzugefügt",
-        "activityFailed": "Eintrag konnte nicht gespeichert werden"
+        "activityFailed": "Eintrag konnte nicht gespeichert werden",
+        "activityUpdated": "Eintrag aktualisiert",
+        "activityUpdateFailed": "Eintrag konnte nicht aktualisiert werden",
+        "activityDeleted": "Eintrag gelöscht",
+        "activityDeleteFailed": "Eintrag konnte nicht gelöscht werden"
       },
       "detail": {
         "back": "Zurück zur Lead-Inbox",
@@ -307,7 +311,9 @@
         "typeCall": "Anruf",
         "typeEmail": "E-Mail",
         "typeMeeting": "Meeting",
-        "typeTask": "Folgeaufgabe"
+        "typeTask": "Folgeaufgabe",
+        "activityDeleteTitle": "Eintrag löschen?",
+        "activityDeleteDescription": "Der Aktivitätseintrag wird dauerhaft entfernt — auch aus dem Audit-Log. Diese Aktion kann nicht rückgängig gemacht werden."
       }
     },
     "accounts": {

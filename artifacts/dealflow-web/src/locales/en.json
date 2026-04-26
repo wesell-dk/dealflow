@@ -275,7 +275,11 @@
         "disqualified": "Lead disqualified",
         "convertedTitle": "Lead converted",
         "activityAdded": "Entry added",
-        "activityFailed": "Could not save entry"
+        "activityFailed": "Could not save entry",
+        "activityUpdated": "Entry updated",
+        "activityUpdateFailed": "Could not update entry",
+        "activityDeleted": "Entry deleted",
+        "activityDeleteFailed": "Could not delete entry"
       },
       "detail": {
         "back": "Back to lead inbox",
@@ -307,7 +311,9 @@
         "typeCall": "Call",
         "typeEmail": "Email",
         "typeMeeting": "Meeting",
-        "typeTask": "Follow-up"
+        "typeTask": "Follow-up",
+        "activityDeleteTitle": "Delete entry?",
+        "activityDeleteDescription": "The activity entry will be permanently removed — including from the audit log. This action cannot be undone."
       }
     },
     "accounts": {

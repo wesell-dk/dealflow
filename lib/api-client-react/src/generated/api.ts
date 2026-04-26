@@ -188,6 +188,7 @@ import type {
   Lead,
   LeadActivity,
   LeadActivityInput,
+  LeadActivityUpdateInput,
   LeadConvertInput,
   LeadConvertResponse,
   LeadInput,
@@ -3145,6 +3146,190 @@ export const useCreateLeadActivity = <
   TContext
 > => {
   return useMutation(getCreateLeadActivityMutationOptions(options));
+};
+
+/**
+ * Aktualisiert den Text (`body`) eines bestehenden Aktivitätseintrags.
+Erlaubt nur dem ursprünglichen Autor oder einem Tenant-Admin
+(`tenantWide=true`); andere Nutzer erhalten 403. Der Eintragstyp
+(note/call/email/...) bleibt unverändert, um die kategorische
+Bedeutung des Eintrags nicht im Nachhinein zu verfälschen.
+
+ * @summary Aktivitätseintrag eines Leads bearbeiten
+ */
+export const getUpdateLeadActivityUrl = (id: string, activityId: string) => {
+  return `/api/v1/leads/${id}/activities/${activityId}`;
+};
+
+export const updateLeadActivity = async (
+  id: string,
+  activityId: string,
+  leadActivityUpdateInput: LeadActivityUpdateInput,
+  options?: RequestInit,
+): Promise<LeadActivity> => {
+  return customFetch<LeadActivity>(getUpdateLeadActivityUrl(id, activityId), {
+    ...options,
+    method: "PATCH",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(leadActivityUpdateInput),
+  });
+};
+
+export const getUpdateLeadActivityMutationOptions = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof updateLeadActivity>>,
+    TError,
+    { id: string; activityId: string; data: BodyType<LeadActivityUpdateInput> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof updateLeadActivity>>,
+  TError,
+  { id: string; activityId: string; data: BodyType<LeadActivityUpdateInput> },
+  TContext
+> => {
+  const mutationKey = ["updateLeadActivity"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof updateLeadActivity>>,
+    { id: string; activityId: string; data: BodyType<LeadActivityUpdateInput> }
+  > = (props) => {
+    const { id, activityId, data } = props ?? {};
+
+    return updateLeadActivity(id, activityId, data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type UpdateLeadActivityMutationResult = NonNullable<
+  Awaited<ReturnType<typeof updateLeadActivity>>
+>;
+export type UpdateLeadActivityMutationBody = BodyType<LeadActivityUpdateInput>;
+export type UpdateLeadActivityMutationError = ErrorType<void>;
+
+/**
+ * @summary Aktivitätseintrag eines Leads bearbeiten
+ */
+export const useUpdateLeadActivity = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof updateLeadActivity>>,
+    TError,
+    { id: string; activityId: string; data: BodyType<LeadActivityUpdateInput> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof updateLeadActivity>>,
+  TError,
+  { id: string; activityId: string; data: BodyType<LeadActivityUpdateInput> },
+  TContext
+> => {
+  return useMutation(getUpdateLeadActivityMutationOptions(options));
+};
+
+/**
+ * Entfernt einen Aktivitätseintrag dauerhaft. Erlaubt nur dem
+ursprünglichen Autor oder einem Tenant-Admin (`tenantWide=true`);
+andere Nutzer erhalten 403. Da der Eintrag als Audit-Log-Zeile
+gespeichert ist, verschwindet er auch aus der Activity-Timeline.
+
+ * @summary Aktivitätseintrag eines Leads löschen
+ */
+export const getDeleteLeadActivityUrl = (id: string, activityId: string) => {
+  return `/api/v1/leads/${id}/activities/${activityId}`;
+};
+
+export const deleteLeadActivity = async (
+  id: string,
+  activityId: string,
+  options?: RequestInit,
+): Promise<void> => {
+  return customFetch<void>(getDeleteLeadActivityUrl(id, activityId), {
+    ...options,
+    method: "DELETE",
+  });
+};
+
+export const getDeleteLeadActivityMutationOptions = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof deleteLeadActivity>>,
+    TError,
+    { id: string; activityId: string },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof deleteLeadActivity>>,
+  TError,
+  { id: string; activityId: string },
+  TContext
+> => {
+  const mutationKey = ["deleteLeadActivity"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof deleteLeadActivity>>,
+    { id: string; activityId: string }
+  > = (props) => {
+    const { id, activityId } = props ?? {};
+
+    return deleteLeadActivity(id, activityId, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type DeleteLeadActivityMutationResult = NonNullable<
+  Awaited<ReturnType<typeof deleteLeadActivity>>
+>;
+
+export type DeleteLeadActivityMutationError = ErrorType<void>;
+
+/**
+ * @summary Aktivitätseintrag eines Leads löschen
+ */
+export const useDeleteLeadActivity = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof deleteLeadActivity>>,
+    TError,
+    { id: string; activityId: string },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof deleteLeadActivity>>,
+  TError,
+  { id: string; activityId: string },
+  TContext
+> => {
+  return useMutation(getDeleteLeadActivityMutationOptions(options));
 };
 
 /**

@@ -28,6 +28,8 @@ import {
   useListUsers,
   useListLeadActivities,
   useCreateLeadActivity,
+  useUpdateLeadActivity,
+  useDeleteLeadActivity,
   getGetLeadQueryKey,
   getListLeadActivitiesQueryKey,
   getListAuditEntriesQueryKey,
@@ -36,6 +38,7 @@ import {
   type LeadActivity,
   type LeadActivityInputType,
 } from "@workspace/api-client-react";
+import type { CurrentUser } from "@/lib/auth";
 import { useAuth } from "@/contexts/auth-context";
 import { useToast } from "@/hooks/use-toast";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -47,6 +50,10 @@ import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem,
   DropdownMenuSeparator, DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Breadcrumbs } from "@/components/patterns/breadcrumbs";
 import { ActivityTimeline } from "@/components/patterns/activity-timeline";
 import { useTrackRecent } from "@/hooks/use-recents";
@@ -340,7 +347,7 @@ export default function LeadDetail() {
               {lead.status !== "converted" && lead.status !== "disqualified" && (
                 <ActivityComposer leadId={lead.id} />
               )}
-              <ActivityList items={activities} loading={actLoading} />
+              <ActivityList items={activities} loading={actLoading} leadId={lead.id} currentUser={user} />
             </CardContent>
           </Card>
         </div>
@@ -491,7 +498,14 @@ function ActivityComposer({ leadId }: { leadId: string }) {
   );
 }
 
-function ActivityList({ items, loading }: { items: LeadActivity[]; loading: boolean }) {
+function ActivityList({
+  items, loading, leadId, currentUser,
+}: {
+  items: LeadActivity[];
+  loading: boolean;
+  leadId: string;
+  currentUser: CurrentUser | null;
+}) {
   const { t } = useTranslation();
   if (loading) {
     return <div className="space-y-2"><Skeleton className="h-12 w-full" /><Skeleton className="h-12 w-full" /></div>;
@@ -506,29 +520,211 @@ function ActivityList({ items, loading }: { items: LeadActivity[]; loading: bool
   }
   return (
     <ul className="space-y-2" data-testid="activity-list">
-      {items.map((a) => {
-        const Icon = ACTIVITY_ICON[a.type as LeadActivityInputType] ?? StickyNote;
-        const typeLabel = t(`pages.leads.detail.type${a.type.charAt(0).toUpperCase() + a.type.slice(1)}`);
-        return (
-          <li
-            key={a.id}
-            className="flex items-start gap-2 rounded-md border bg-card px-3 py-2"
-            data-testid={`activity-item-${a.id}`}
-          >
-            <Icon className="h-4 w-4 mt-0.5 text-muted-foreground shrink-0" />
-            <div className="min-w-0 flex-1">
-              <div className="flex flex-wrap items-baseline justify-between gap-x-2">
-                <div className="text-xs font-medium">
-                  {typeLabel}
-                  <span className="text-muted-foreground font-normal"> · {a.actor}</span>
-                </div>
-                <time className="text-xs text-muted-foreground tabular-nums">{fmtDateTime(a.at)}</time>
-              </div>
-              <div className="text-sm whitespace-pre-line break-words">{a.body}</div>
-            </div>
-          </li>
-        );
-      })}
+      {items.map((a) => (
+        <ActivityRow key={a.id} activity={a} leadId={leadId} currentUser={currentUser} />
+      ))}
     </ul>
+  );
+}
+
+// Strukturell identische Berechtigungslogik wie das Backend (siehe
+// `loadEditableLeadActivity` in dealflow.ts): ein Eintrag ist genau dann
+// modifizierbar, wenn der Caller Tenant-Admin ist ODER der Autor — wobei
+// der Autor aktuell als `name ?? id` persistiert wird. Wenn Backend und
+// Frontend hier divergieren, würde der UI-Button auftauchen aber die
+// Anfrage 403 liefern — daher diese Spiegelung exakt halten.
+function canModifyActivity(a: LeadActivity, user: CurrentUser | null): boolean {
+  if (!user) return false;
+  if (user.tenantWide) return true;
+  return a.actor === (user.name ?? user.id);
+}
+
+function ActivityRow({
+  activity: a, leadId, currentUser,
+}: {
+  activity: LeadActivity;
+  leadId: string;
+  currentUser: CurrentUser | null;
+}) {
+  const { t } = useTranslation();
+  const { toast } = useToast();
+  const qc = useQueryClient();
+
+  const Icon = ACTIVITY_ICON[a.type as LeadActivityInputType] ?? StickyNote;
+  const typeLabel = t(`pages.leads.detail.type${a.type.charAt(0).toUpperCase() + a.type.slice(1)}`);
+  const canModify = canModifyActivity(a, currentUser);
+
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(a.body);
+  const [confirmDelete, setConfirmDelete] = useState(false);
+
+  const update = useUpdateLeadActivity();
+  const del = useDeleteLeadActivity();
+
+  function invalidate() {
+    void qc.invalidateQueries({ queryKey: getListLeadActivitiesQueryKey(leadId) });
+    void qc.invalidateQueries({
+      queryKey: getListAuditEntriesQueryKey({ entityType: "lead", entityId: leadId }).slice(0, 1),
+    });
+  }
+
+  function startEdit() {
+    setDraft(a.body);
+    setEditing(true);
+  }
+
+  function cancelEdit() {
+    setEditing(false);
+    setDraft(a.body);
+  }
+
+  function saveEdit() {
+    const trimmed = draft.trim();
+    if (!trimmed || trimmed === a.body) { setEditing(false); return; }
+    update.mutate(
+      { id: leadId, activityId: a.id, data: { body: trimmed } },
+      {
+        onSuccess: () => {
+          toast({ title: t("pages.leads.toasts.activityUpdated") });
+          setEditing(false);
+          invalidate();
+        },
+        onError: (err) => {
+          toast({
+            title: t("pages.leads.toasts.activityUpdateFailed"),
+            description: err instanceof Error ? err.message : "",
+            variant: "destructive",
+          });
+        },
+      },
+    );
+  }
+
+  function doDelete() {
+    del.mutate(
+      { id: leadId, activityId: a.id },
+      {
+        onSuccess: () => {
+          toast({ title: t("pages.leads.toasts.activityDeleted") });
+          setConfirmDelete(false);
+          invalidate();
+        },
+        onError: (err) => {
+          toast({
+            title: t("pages.leads.toasts.activityDeleteFailed"),
+            description: err instanceof Error ? err.message : "",
+            variant: "destructive",
+          });
+        },
+      },
+    );
+  }
+
+  return (
+    <li
+      className="flex items-start gap-2 rounded-md border bg-card px-3 py-2"
+      data-testid={`activity-item-${a.id}`}
+    >
+      <Icon className="h-4 w-4 mt-0.5 text-muted-foreground shrink-0" />
+      <div className="min-w-0 flex-1">
+        <div className="flex flex-wrap items-baseline justify-between gap-x-2">
+          <div className="text-xs font-medium">
+            {typeLabel}
+            <span className="text-muted-foreground font-normal"> · {a.actor}</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <time className="text-xs text-muted-foreground tabular-nums">{fmtDateTime(a.at)}</time>
+            {canModify && !editing && (
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button
+                    size="icon"
+                    variant="ghost"
+                    className="h-6 w-6"
+                    data-testid={`activity-menu-${a.id}`}
+                    aria-label={t("common.actions")}
+                  >
+                    <MoreHorizontal className="h-3.5 w-3.5" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  <DropdownMenuItem
+                    onSelect={startEdit}
+                    data-testid={`activity-edit-${a.id}`}
+                  >
+                    <Pencil className="mr-2 h-3.5 w-3.5" /> {t("common.edit")}
+                  </DropdownMenuItem>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem
+                    className="text-destructive focus:text-destructive"
+                    onSelect={() => setConfirmDelete(true)}
+                    data-testid={`activity-delete-${a.id}`}
+                  >
+                    <Trash2 className="mr-2 h-3.5 w-3.5" /> {t("common.delete")}
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            )}
+          </div>
+        </div>
+        {editing ? (
+          <div className="mt-1 space-y-2">
+            <Textarea
+              rows={3}
+              value={draft}
+              onChange={(e) => setDraft(e.target.value)}
+              data-testid={`activity-edit-body-${a.id}`}
+            />
+            <div className="flex items-center justify-end gap-2">
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={cancelEdit}
+                disabled={update.isPending}
+                data-testid={`activity-edit-cancel-${a.id}`}
+              >
+                {t("common.cancel")}
+              </Button>
+              <Button
+                size="sm"
+                onClick={saveEdit}
+                disabled={update.isPending || !draft.trim()}
+                data-testid={`activity-edit-save-${a.id}`}
+              >
+                {update.isPending
+                  ? t("pages.leads.detail.saving")
+                  : t("pages.leads.detail.save")}
+              </Button>
+            </div>
+          </div>
+        ) : (
+          <div className="text-sm whitespace-pre-line break-words">{a.body}</div>
+        )}
+      </div>
+
+      <AlertDialog open={confirmDelete} onOpenChange={setConfirmDelete}>
+        <AlertDialogContent data-testid={`activity-delete-confirm-${a.id}`}>
+          <AlertDialogHeader>
+            <AlertDialogTitle>{t("pages.leads.detail.activityDeleteTitle")}</AlertDialogTitle>
+            <AlertDialogDescription>
+              {t("pages.leads.detail.activityDeleteDescription")}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={del.isPending}>
+              {t("common.cancel")}
+            </AlertDialogCancel>
+            <AlertDialogAction
+              onClick={(e) => { e.preventDefault(); doDelete(); }}
+              disabled={del.isPending}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              data-testid={`activity-delete-confirm-action-${a.id}`}
+            >
+              {del.isPending ? t("pages.leads.detail.saving") : t("common.delete")}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </li>
   );
 }

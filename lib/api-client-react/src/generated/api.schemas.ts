@@ -1065,6 +1065,20 @@ Zeitpunkt gesetzt. Default false.
   markContacted?: boolean;
 }
 
+/**
+ * Update-Payload für einen bestehenden Aktivitätseintrag. Es kann nur
+der Text (`body`) geändert werden — der Eintragstyp bleibt fest, um
+die kategorische Bedeutung im Nachhinein nicht zu verfälschen.
+
+ */
+export interface LeadActivityUpdateInput {
+  /**
+   * @minLength 1
+   * @maxLength 4000
+   */
+  body: string;
+}
+
 export interface LeadConvertNewAccount {
   name: string;
   industry: string;
