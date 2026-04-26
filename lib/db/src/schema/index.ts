@@ -47,6 +47,21 @@ export const tenantsTable = pgTable("tenants", {
   // Tenant-weiter Default-USt-Satz (in Prozent). Wird angewendet, wenn weder
   // Brand- noch Positions-Override gesetzt ist. Standard 19 (DE).
   defaultTaxRatePct: numeric("default_tax_rate_pct").notNull().default("19"),
+  // Konfiguration für die Inbound-E-Mail-Pipeline (Task #198): externes
+  // System (Webformular, Mailgun-Webhook, IMAP-Brücke) postet Lead-Anfragen
+  // an POST /webhooks/inbound-email. `inboundEmailToken` dient als Shared-
+  // Secret und wird gleichzeitig zur Tenant-Auflösung verwendet (NULL =
+  // Inbound-Pipeline für diesen Tenant deaktiviert).
+  // `inboundEmailDefaultOwnerId` ist der Fallback-Owner, wenn das Mapping
+  // keinen Treffer liefert. `inboundEmailAddressMap` mappt Empfänger-Adresse
+  // (lowercase, z. B. "sales@brand.tld") auf einen userId — der erste
+  // Treffer aus der `to`-Liste gewinnt.
+  inboundEmailToken: text("inbound_email_token"),
+  inboundEmailDefaultOwnerId: text("inbound_email_default_owner_id"),
+  inboundEmailAddressMap: jsonb("inbound_email_address_map")
+    .$type<Record<string, string>>()
+    .default({})
+    .notNull(),
   createdAt: ts("created_at"),
 });
 

@@ -280,6 +280,164 @@ router.get('/orgs/tenant', async (req, res) => {
   });
 });
 
+// ── INBOUND-E-MAIL-KONFIGURATION (Task #198) ──
+// GET liefert die aktuelle Konfiguration ohne Token-Klartext (nur Preview).
+// PUT pflegt addressMap/defaultOwnerId und kann optional den Token rotieren
+// oder die Pipeline deaktivieren. Tenant-Admin only — wer den Token kennt,
+// kann beliebige Leads im Tenant erzeugen.
+function maskInboundToken(t: string | null | undefined): string | null {
+  if (!t) return null;
+  if (t.length <= 8) return `${'•'.repeat(t.length)}`;
+  return `${t.slice(0, 4)}…${t.slice(-4)}`;
+}
+
+function buildInboundWebhookUrl(req: Request): string {
+  const canonical = process.env['APP_BASE_URL']?.trim();
+  if (canonical) {
+    try {
+      const u = new URL(canonical);
+      return `${u.origin}/api/webhooks/inbound-email`;
+    } catch {
+      // fall through
+    }
+  }
+  // Dev-Fallback: aus Request-Headern, damit das UI im lokalen Setup
+  // trotzdem etwas Sinnvolles anzeigen kann.
+  const proto = (req.headers['x-forwarded-proto'] as string | undefined)?.split(',')[0]?.trim()
+    || (req.protocol ?? 'http');
+  const host = (req.headers['x-forwarded-host'] as string | undefined)?.split(',')[0]?.trim()
+    || req.headers.host
+    || 'localhost';
+  return `${proto}://${host}/api/webhooks/inbound-email`;
+}
+
+async function validateInboundOwnerForTenant(
+  tenantId: string,
+  ownerId: string,
+): Promise<boolean> {
+  const [u] = await db.select({ id: usersTable.id, tenantId: usersTable.tenantId })
+    .from(usersTable).where(eq(usersTable.id, ownerId));
+  return !!u && u.tenantId === tenantId;
+}
+
+router.get('/orgs/tenant/inbound-email', async (req, res) => {
+  if (!requireAdmin(req, res)) return;
+  const scope = getScope(req);
+  const [t] = await db.select().from(tenantsTable).where(eq(tenantsTable.id, scope.tenantId));
+  if (!t) { res.status(404).json({ error: 'no tenant' }); return; }
+  res.json({
+    enabled: !!t.inboundEmailToken,
+    defaultOwnerId: t.inboundEmailDefaultOwnerId,
+    addressMap: t.inboundEmailAddressMap ?? {},
+    tokenPreview: maskInboundToken(t.inboundEmailToken),
+    token: null,
+    webhookUrl: buildInboundWebhookUrl(req),
+  });
+});
+
+router.put('/orgs/tenant/inbound-email', async (req, res) => {
+  if (!requireAdmin(req, res)) return;
+  const scope = getScope(req);
+  const [t] = await db.select().from(tenantsTable).where(eq(tenantsTable.id, scope.tenantId));
+  if (!t) { res.status(404).json({ error: 'no tenant' }); return; }
+  const body = (req.body ?? {}) as {
+    defaultOwnerId?: string | null;
+    addressMap?: Record<string, unknown>;
+    rotateToken?: boolean;
+    disable?: boolean;
+  };
+  const patch: Partial<typeof tenantsTable.$inferInsert> = {};
+  let issuedToken: string | null = null;
+
+  if (body.disable === true) {
+    patch.inboundEmailToken = null;
+  } else if (body.rotateToken === true) {
+    const { generateInboundEmailToken } = await import('./inboundEmail');
+    issuedToken = generateInboundEmailToken();
+    patch.inboundEmailToken = issuedToken;
+  }
+
+  if (body.defaultOwnerId !== undefined) {
+    if (body.defaultOwnerId === null || body.defaultOwnerId === '') {
+      patch.inboundEmailDefaultOwnerId = null;
+    } else if (typeof body.defaultOwnerId !== 'string') {
+      res.status(422).json({ error: 'defaultOwnerId must be a string or null' });
+      return;
+    } else {
+      const ok = await validateInboundOwnerForTenant(scope.tenantId, body.defaultOwnerId);
+      if (!ok) {
+        res.status(422).json({ error: 'defaultOwnerId not in tenant' });
+        return;
+      }
+      patch.inboundEmailDefaultOwnerId = body.defaultOwnerId;
+    }
+  }
+
+  if (body.addressMap !== undefined) {
+    if (typeof body.addressMap !== 'object' || body.addressMap === null || Array.isArray(body.addressMap)) {
+      res.status(422).json({ error: 'addressMap must be an object' });
+      return;
+    }
+    const cleaned: Record<string, string> = {};
+    for (const [rawAddr, rawUserId] of Object.entries(body.addressMap)) {
+      const addr = rawAddr.trim().toLowerCase();
+      if (!addr) {
+        res.status(422).json({ error: 'addressMap keys must be non-empty addresses' });
+        return;
+      }
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(addr)) {
+        res.status(422).json({ error: `addressMap key "${rawAddr}" is not a valid e-mail address` });
+        return;
+      }
+      if (typeof rawUserId !== 'string' || !rawUserId.trim()) {
+        res.status(422).json({ error: `addressMap[${addr}] must be a userId string` });
+        return;
+      }
+      const userId = rawUserId.trim();
+      const ok = await validateInboundOwnerForTenant(scope.tenantId, userId);
+      if (!ok) {
+        res.status(422).json({ error: `addressMap[${addr}] → userId "${userId}" not in tenant` });
+        return;
+      }
+      cleaned[addr] = userId;
+    }
+    patch.inboundEmailAddressMap = cleaned;
+  }
+
+  if (Object.keys(patch).length) {
+    await db.update(tenantsTable).set(patch).where(eq(tenantsTable.id, scope.tenantId));
+  }
+  const [after] = await db.select().from(tenantsTable).where(eq(tenantsTable.id, scope.tenantId));
+  await writeAuditFromReq(req, {
+    entityType: 'tenant',
+    entityId: scope.tenantId,
+    action: 'update',
+    summary: body.rotateToken
+      ? 'Inbound-E-Mail-Token rotiert'
+      : body.disable
+        ? 'Inbound-E-Mail-Pipeline deaktiviert'
+        : 'Inbound-E-Mail-Konfiguration aktualisiert',
+    before: {
+      inboundEmailDefaultOwnerId: t.inboundEmailDefaultOwnerId,
+      inboundEmailAddressMap: t.inboundEmailAddressMap,
+      inboundTokenSet: !!t.inboundEmailToken,
+    },
+    after: {
+      inboundEmailDefaultOwnerId: after.inboundEmailDefaultOwnerId,
+      inboundEmailAddressMap: after.inboundEmailAddressMap,
+      inboundTokenSet: !!after.inboundEmailToken,
+    },
+  });
+  res.json({
+    enabled: !!after.inboundEmailToken,
+    defaultOwnerId: after.inboundEmailDefaultOwnerId,
+    addressMap: after.inboundEmailAddressMap ?? {},
+    tokenPreview: maskInboundToken(after.inboundEmailToken),
+    token: issuedToken,
+    webhookUrl: buildInboundWebhookUrl(req),
+  });
+});
+
 router.get('/orgs/companies', async (req, res) => {
   const scope = getScope(req);
   const usePermitted = req.query.permitted === 'true' || req.query.permitted === '1';

@@ -165,6 +165,8 @@ import type {
   HealthStatus,
   HelpBotInput,
   HelpBotReply,
+  InboundEmailWebhookPayload,
+  InboundEmailWebhookResponse,
   IndustryProfile,
   IndustryProfileInput,
   Lead,
@@ -282,6 +284,8 @@ import type {
   SignaturePackage,
   SignaturePackageDetail,
   Tenant,
+  TenantInboundEmailConfig,
+  TenantInboundEmailConfigInput,
   TimelineEvent,
   UpdateActiveScopeBody,
   UploadUrlRequest,
@@ -526,6 +530,283 @@ export function useGetTenant<
 
   return { ...query, queryKey: queryOptions.queryKey };
 }
+
+/**
+ * Liefert die Konfiguration für die automatische Lead-Erzeugung aus
+eingehenden E-Mails (Webhook-URL für externes Mail-Gateway, Mapping
+Empfangsadresse → Owner, Default-Owner). Token wird nur bei
+ausdrücklicher Anforderung (Rotation) im PUT-Response zurückgegeben.
+Tenant-Admin only.
+
+ * @summary Aktuelle Inbound-E-Mail-Konfiguration des Tenants lesen
+ */
+export const getGetInboundEmailConfigUrl = () => {
+  return `/api/v1/orgs/tenant/inbound-email`;
+};
+
+export const getInboundEmailConfig = async (
+  options?: RequestInit,
+): Promise<TenantInboundEmailConfig> => {
+  return customFetch<TenantInboundEmailConfig>(getGetInboundEmailConfigUrl(), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getGetInboundEmailConfigQueryKey = () => {
+  return [`/api/v1/orgs/tenant/inbound-email`] as const;
+};
+
+export const getGetInboundEmailConfigQueryOptions = <
+  TData = Awaited<ReturnType<typeof getInboundEmailConfig>>,
+  TError = ErrorType<void>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getInboundEmailConfig>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getGetInboundEmailConfigQueryKey();
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof getInboundEmailConfig>>
+  > = ({ signal }) => getInboundEmailConfig({ signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getInboundEmailConfig>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetInboundEmailConfigQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getInboundEmailConfig>>
+>;
+export type GetInboundEmailConfigQueryError = ErrorType<void>;
+
+/**
+ * @summary Aktuelle Inbound-E-Mail-Konfiguration des Tenants lesen
+ */
+
+export function useGetInboundEmailConfig<
+  TData = Awaited<ReturnType<typeof getInboundEmailConfig>>,
+  TError = ErrorType<void>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getInboundEmailConfig>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetInboundEmailConfigQueryOptions(options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * Pflegt Default-Owner und Adress-Mapping. Token kann optional rotiert
+oder neu erzeugt werden (`rotateToken=true`); ein neu generierter
+Token wird in der Antwort einmalig im Klartext zurückgegeben.
+
+ * @summary Inbound-E-Mail-Konfiguration aktualisieren
+ */
+export const getUpdateInboundEmailConfigUrl = () => {
+  return `/api/v1/orgs/tenant/inbound-email`;
+};
+
+export const updateInboundEmailConfig = async (
+  tenantInboundEmailConfigInput: TenantInboundEmailConfigInput,
+  options?: RequestInit,
+): Promise<TenantInboundEmailConfig> => {
+  return customFetch<TenantInboundEmailConfig>(
+    getUpdateInboundEmailConfigUrl(),
+    {
+      ...options,
+      method: "PUT",
+      headers: { "Content-Type": "application/json", ...options?.headers },
+      body: JSON.stringify(tenantInboundEmailConfigInput),
+    },
+  );
+};
+
+export const getUpdateInboundEmailConfigMutationOptions = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof updateInboundEmailConfig>>,
+    TError,
+    { data: BodyType<TenantInboundEmailConfigInput> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof updateInboundEmailConfig>>,
+  TError,
+  { data: BodyType<TenantInboundEmailConfigInput> },
+  TContext
+> => {
+  const mutationKey = ["updateInboundEmailConfig"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof updateInboundEmailConfig>>,
+    { data: BodyType<TenantInboundEmailConfigInput> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return updateInboundEmailConfig(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type UpdateInboundEmailConfigMutationResult = NonNullable<
+  Awaited<ReturnType<typeof updateInboundEmailConfig>>
+>;
+export type UpdateInboundEmailConfigMutationBody =
+  BodyType<TenantInboundEmailConfigInput>;
+export type UpdateInboundEmailConfigMutationError = ErrorType<void>;
+
+/**
+ * @summary Inbound-E-Mail-Konfiguration aktualisieren
+ */
+export const useUpdateInboundEmailConfig = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof updateInboundEmailConfig>>,
+    TError,
+    { data: BodyType<TenantInboundEmailConfigInput> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof updateInboundEmailConfig>>,
+  TError,
+  { data: BodyType<TenantInboundEmailConfigInput> },
+  TContext
+> => {
+  return useMutation(getUpdateInboundEmailConfigMutationOptions(options));
+};
+
+/**
+ * Öffentlicher Endpoint, der von einem externen Mail-Gateway
+(Mailgun/Postmark/SendGrid Inbound, n8n, IMAP-Brücke) aufgerufen
+wird. Authentifiziert wird über den `X-Inbound-Email-Token`-Header,
+der mit `Tenant.inboundEmailToken` übereinstimmen muss; der Tenant
+wird ausschließlich aus dem Token aufgelöst, nie aus dem Body.
+
+Verhalten:
+- Quelle wird hart auf `inbound_email` gesetzt.
+- Dedupliziert anhand der Absender-E-Mail (case-insensitive,
+  tenant-scoped). Bestehender Lead → `lastContactAt` aktualisieren
+  und Notiz anhängen statt neuen Datensatz anzulegen. Konvertierte
+  Leads bleiben unangetastet (es entsteht ein frischer Lead).
+- Owner-Auflösung: erstes Mapping aus `to[]` ∩ `addressMap` gewinnt,
+  danach `defaultOwnerId`, sonst null (unzugewiesen).
+
+ * @summary Webhook für eingehende E-Mails — erzeugt oder aktualisiert einen Lead
+ */
+export const getInboundEmailWebhookUrl = () => {
+  return `/api/v1/webhooks/inbound-email`;
+};
+
+export const inboundEmailWebhook = async (
+  inboundEmailWebhookPayload: InboundEmailWebhookPayload,
+  options?: RequestInit,
+): Promise<InboundEmailWebhookResponse> => {
+  return customFetch<InboundEmailWebhookResponse>(getInboundEmailWebhookUrl(), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(inboundEmailWebhookPayload),
+  });
+};
+
+export const getInboundEmailWebhookMutationOptions = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof inboundEmailWebhook>>,
+    TError,
+    { data: BodyType<InboundEmailWebhookPayload> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof inboundEmailWebhook>>,
+  TError,
+  { data: BodyType<InboundEmailWebhookPayload> },
+  TContext
+> => {
+  const mutationKey = ["inboundEmailWebhook"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof inboundEmailWebhook>>,
+    { data: BodyType<InboundEmailWebhookPayload> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return inboundEmailWebhook(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type InboundEmailWebhookMutationResult = NonNullable<
+  Awaited<ReturnType<typeof inboundEmailWebhook>>
+>;
+export type InboundEmailWebhookMutationBody =
+  BodyType<InboundEmailWebhookPayload>;
+export type InboundEmailWebhookMutationError = ErrorType<void>;
+
+/**
+ * @summary Webhook für eingehende E-Mails — erzeugt oder aktualisiert einen Lead
+ */
+export const useInboundEmailWebhook = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof inboundEmailWebhook>>,
+    TError,
+    { data: BodyType<InboundEmailWebhookPayload> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof inboundEmailWebhook>>,
+  TError,
+  { data: BodyType<InboundEmailWebhookPayload> },
+  TContext
+> => {
+  return useMutation(getInboundEmailWebhookMutationOptions(options));
+};
 
 export const getListCompaniesUrl = (params?: ListCompaniesParams) => {
   const normalizedParams = new URLSearchParams();

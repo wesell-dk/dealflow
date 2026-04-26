@@ -82,6 +82,96 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/Tenant" }
 
+  /orgs/tenant/inbound-email:
+    get:
+      operationId: getInboundEmailConfig
+      tags: [orgs]
+      summary: Aktuelle Inbound-E-Mail-Konfiguration des Tenants lesen
+      description: |
+        Liefert die Konfiguration für die automatische Lead-Erzeugung aus
+        eingehenden E-Mails (Webhook-URL für externes Mail-Gateway, Mapping
+        Empfangsadresse → Owner, Default-Owner). Token wird nur bei
+        ausdrücklicher Anforderung (Rotation) im PUT-Response zurückgegeben.
+        Tenant-Admin only.
+      responses:
+        "200":
+          description: ok
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/TenantInboundEmailConfig" }
+        "403":
+          description: tenant admin rights required
+    put:
+      operationId: updateInboundEmailConfig
+      tags: [orgs]
+      summary: Inbound-E-Mail-Konfiguration aktualisieren
+      description: |
+        Pflegt Default-Owner und Adress-Mapping. Token kann optional rotiert
+        oder neu erzeugt werden (`rotateToken=true`); ein neu generierter
+        Token wird in der Antwort einmalig im Klartext zurückgegeben.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/TenantInboundEmailConfigInput" }
+      responses:
+        "200":
+          description: updated
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/TenantInboundEmailConfig" }
+        "403":
+          description: tenant admin rights required
+        "422":
+          description: invalid input (e.g. unknown defaultOwnerId or address map entry)
+
+  /webhooks/inbound-email:
+    post:
+      operationId: inboundEmailWebhook
+      tags: [leads]
+      summary: Webhook für eingehende E-Mails — erzeugt oder aktualisiert einen Lead
+      description: |
+        Öffentlicher Endpoint, der von einem externen Mail-Gateway
+        (Mailgun/Postmark/SendGrid Inbound, n8n, IMAP-Brücke) aufgerufen
+        wird. Authentifiziert wird über den `X-Inbound-Email-Token`-Header,
+        der mit `Tenant.inboundEmailToken` übereinstimmen muss; der Tenant
+        wird ausschließlich aus dem Token aufgelöst, nie aus dem Body.
+
+        Verhalten:
+        - Quelle wird hart auf `inbound_email` gesetzt.
+        - Dedupliziert anhand der Absender-E-Mail (case-insensitive,
+          tenant-scoped). Bestehender Lead → `lastContactAt` aktualisieren
+          und Notiz anhängen statt neuen Datensatz anzulegen. Konvertierte
+          Leads bleiben unangetastet (es entsteht ein frischer Lead).
+        - Owner-Auflösung: erstes Mapping aus `to[]` ∩ `addressMap` gewinnt,
+          danach `defaultOwnerId`, sonst null (unzugewiesen).
+      parameters:
+        - in: header
+          name: X-Inbound-Email-Token
+          required: true
+          schema: { type: string }
+          description: Shared-Secret aus der Inbound-Konfiguration des Tenants.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/InboundEmailWebhookPayload" }
+      responses:
+        "200":
+          description: existing lead updated
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/InboundEmailWebhookResponse" }
+        "201":
+          description: new lead created
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/InboundEmailWebhookResponse" }
+        "401":
+          description: missing or invalid token
+        "422":
+          description: payload missing required fields
+
   /orgs/companies:
     get:
       operationId: listCompanies
@@ -5271,6 +5361,108 @@ components:
             Tenant-weiter Default-USt-Satz in Prozent. Wird verwendet, wenn
             weder Brand- noch Positions-Override gesetzt ist.
         createdAt: { type: string, format: date-time }
+
+    TenantInboundEmailConfig:
+      type: object
+      required: [enabled, addressMap]
+      properties:
+        enabled:
+          type: boolean
+          description: True, sobald ein Token gesetzt ist (Inbound aktiv).
+        defaultOwnerId:
+          type: ["string", "null"]
+          description: Fallback-Owner, wenn das Adress-Mapping nicht greift.
+        addressMap:
+          type: object
+          additionalProperties: { type: string }
+          description: >-
+            Mapping `recipient@brand.tld` → `userId` (lowercase Schlüssel).
+            Erster Treffer aus der `to`-Liste der Inbound-Mail gewinnt.
+        tokenPreview:
+          type: ["string", "null"]
+          description: >-
+            Maskierte Vorschau des hinterlegten Tokens (z. B. "abcd…wxyz"),
+            damit Admins erkennen, ob/welcher Token aktiv ist, ohne das
+            Geheimnis im Klartext zu lesen.
+        token:
+          type: ["string", "null"]
+          description: >-
+            Klartext-Token. Wird NUR als Antwort auf eine Token-Rotation
+            zurückgegeben (`rotateToken=true`); GET liefert hier immer null.
+        webhookUrl:
+          type: string
+          description: >-
+            Voll qualifizierte URL des Inbound-Webhooks (`POST` mit Header
+            `X-Inbound-Email-Token`). Vom Server ausgegeben, damit das UI sie
+            ohne Konfigurations-Magie anzeigen kann.
+
+    TenantInboundEmailConfigInput:
+      type: object
+      properties:
+        defaultOwnerId:
+          type: ["string", "null"]
+          description: Fallback-Owner. `null` löscht den Default.
+        addressMap:
+          type: object
+          additionalProperties: { type: string }
+          description: Komplettes Adress-Mapping (Replace-Semantik).
+        rotateToken:
+          type: boolean
+          description: >-
+            True erzeugt einen neuen Token (alter wird sofort ungültig);
+            der neue Token kommt im Response zurück.
+        disable:
+          type: boolean
+          description: True löscht den Token und deaktiviert den Inbound-Pfad.
+
+    InboundEmailWebhookPayload:
+      type: object
+      required: [from]
+      description: |
+        Schlankes, providerneutrales Payload-Format. Adapter (Mailgun,
+        Postmark, n8n, IMAP-Brücke) übersetzen das jeweilige Format auf
+        diese Felder.
+      properties:
+        from:
+          type: object
+          required: [email]
+          description: Absender der Mail.
+          properties:
+            email: { type: string, description: "RFC-5321-Adresse" }
+            name: { type: string, nullable: true, description: "Anzeigename" }
+        to:
+          oneOf:
+            - { type: string }
+            - { type: array, items: { type: string } }
+          description: |
+            Empfänger-Adressen, anhand derer das Owner-Mapping greift.
+            Akzeptiert sowohl einen einzelnen String als auch eine Liste.
+        subject: { type: string, nullable: true }
+        text: { type: string, nullable: true, description: "Plain-Text-Body" }
+        html: { type: string, nullable: true, description: "HTML-Body (Fallback, wenn text fehlt)" }
+        companyName:
+          type: string
+          nullable: true
+          description: >-
+            Optional aus dem Webformular bekannter Firmenname; wird beim
+            Konvertieren als Vorschlag für den neuen Account übernommen.
+        phone: { type: string, nullable: true }
+        receivedAt:
+          type: string
+          format: date-time
+          nullable: true
+          description: >-
+            Original-Zeitstempel der Mail; landet als `lastContactAt` am
+            Lead. Default = jetzt.
+
+    InboundEmailWebhookResponse:
+      type: object
+      required: [lead, created]
+      properties:
+        created:
+          type: boolean
+          description: true = neuer Lead, false = bestehender Lead aktualisiert.
+        lead: { $ref: "#/components/schemas/Lead" }
 
     Company:
       type: object

@@ -492,6 +492,140 @@ export interface Tenant {
   createdAt: string;
 }
 
+/**
+ * Mapping `recipient@brand.tld` → `userId` (lowercase Schlüssel). Erster Treffer aus der `to`-Liste der Inbound-Mail gewinnt.
+ */
+export type TenantInboundEmailConfigAddressMap = { [key: string]: string };
+
+export interface TenantInboundEmailConfig {
+  /** True, sobald ein Token gesetzt ist (Inbound aktiv). */
+  enabled: boolean;
+  /**
+   * Fallback-Owner, wenn das Adress-Mapping nicht greift.
+   * @nullable
+   */
+  defaultOwnerId?: string | null;
+  /** Mapping `recipient@brand.tld` → `userId` (lowercase Schlüssel). Erster Treffer aus der `to`-Liste der Inbound-Mail gewinnt. */
+  addressMap: TenantInboundEmailConfigAddressMap;
+  /**
+   * Maskierte Vorschau des hinterlegten Tokens (z. B. "abcd…wxyz"), damit Admins erkennen, ob/welcher Token aktiv ist, ohne das Geheimnis im Klartext zu lesen.
+   * @nullable
+   */
+  tokenPreview?: string | null;
+  /**
+   * Klartext-Token. Wird NUR als Antwort auf eine Token-Rotation zurückgegeben (`rotateToken=true`); GET liefert hier immer null.
+   * @nullable
+   */
+  token?: string | null;
+  /** Voll qualifizierte URL des Inbound-Webhooks (`POST` mit Header `X-Inbound-Email-Token`). Vom Server ausgegeben, damit das UI sie ohne Konfigurations-Magie anzeigen kann. */
+  webhookUrl?: string;
+}
+
+/**
+ * Komplettes Adress-Mapping (Replace-Semantik).
+ */
+export type TenantInboundEmailConfigInputAddressMap = { [key: string]: string };
+
+export interface TenantInboundEmailConfigInput {
+  /**
+   * Fallback-Owner. `null` löscht den Default.
+   * @nullable
+   */
+  defaultOwnerId?: string | null;
+  /** Komplettes Adress-Mapping (Replace-Semantik). */
+  addressMap?: TenantInboundEmailConfigInputAddressMap;
+  /** True erzeugt einen neuen Token (alter wird sofort ungültig); der neue Token kommt im Response zurück. */
+  rotateToken?: boolean;
+  /** True löscht den Token und deaktiviert den Inbound-Pfad. */
+  disable?: boolean;
+}
+
+/**
+ * Absender der Mail.
+ */
+export type InboundEmailWebhookPayloadFrom = {
+  /** RFC-5321-Adresse */
+  email: string;
+  /** Anzeigename */
+  name?: string | null;
+};
+
+/**
+ * Schlankes, providerneutrales Payload-Format. Adapter (Mailgun,
+Postmark, n8n, IMAP-Brücke) übersetzen das jeweilige Format auf
+diese Felder.
+
+ */
+export interface InboundEmailWebhookPayload {
+  /** Absender der Mail. */
+  from: InboundEmailWebhookPayloadFrom;
+  /** Empfänger-Adressen, anhand derer das Owner-Mapping greift.
+Akzeptiert sowohl einen einzelnen String als auch eine Liste.
+ */
+  to?: string | string[];
+  subject?: string | null;
+  /** Plain-Text-Body */
+  text?: string | null;
+  /** HTML-Body (Fallback, wenn text fehlt) */
+  html?: string | null;
+  /** Optional aus dem Webformular bekannter Firmenname; wird beim Konvertieren als Vorschlag für den neuen Account übernommen. */
+  companyName?: string | null;
+  phone?: string | null;
+  /** Original-Zeitstempel der Mail; landet als `lastContactAt` am Lead. Default = jetzt. */
+  receivedAt?: string | null;
+}
+
+export type LeadStatus = (typeof LeadStatus)[keyof typeof LeadStatus];
+
+export const LeadStatus = {
+  new: "new",
+  qualified: "qualified",
+  disqualified: "disqualified",
+  converted: "converted",
+} as const;
+
+export interface Lead {
+  id: string;
+  name: string;
+  /** @nullable */
+  companyName?: string | null;
+  /** @nullable */
+  email?: string | null;
+  /** @nullable */
+  phone?: string | null;
+  /** z. B. website | referral | inbound_email | event | outbound | partner | other */
+  source: string;
+  status: LeadStatus;
+  /** @nullable */
+  ownerId?: string | null;
+  /** @nullable */
+  ownerName?: string | null;
+  /** @nullable */
+  notes?: string | null;
+  /** @nullable */
+  disqualifyReason?: string | null;
+  /** @nullable */
+  lastContactAt?: string | null;
+  /** @nullable */
+  convertedAccountId?: string | null;
+  /** @nullable */
+  convertedAccountName?: string | null;
+  /** @nullable */
+  convertedDealId?: string | null;
+  /** @nullable */
+  convertedDealName?: string | null;
+  /** @nullable */
+  convertedAt?: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface InboundEmailWebhookResponse {
+  /** true = neuer Lead, false = bestehender Lead aktualisiert. */
+  created: boolean;
+  lead: Lead;
+}
+
 export interface Company {
   id: string;
   tenantId: string;
@@ -812,51 +946,6 @@ export type ScopeTreeCompaniesItem = {
 
 export interface ScopeTree {
   companies: ScopeTreeCompaniesItem[];
-}
-
-export type LeadStatus = (typeof LeadStatus)[keyof typeof LeadStatus];
-
-export const LeadStatus = {
-  new: "new",
-  qualified: "qualified",
-  disqualified: "disqualified",
-  converted: "converted",
-} as const;
-
-export interface Lead {
-  id: string;
-  name: string;
-  /** @nullable */
-  companyName?: string | null;
-  /** @nullable */
-  email?: string | null;
-  /** @nullable */
-  phone?: string | null;
-  /** z. B. website | referral | inbound_email | event | outbound | partner | other */
-  source: string;
-  status: LeadStatus;
-  /** @nullable */
-  ownerId?: string | null;
-  /** @nullable */
-  ownerName?: string | null;
-  /** @nullable */
-  notes?: string | null;
-  /** @nullable */
-  disqualifyReason?: string | null;
-  /** @nullable */
-  lastContactAt?: string | null;
-  /** @nullable */
-  convertedAccountId?: string | null;
-  /** @nullable */
-  convertedAccountName?: string | null;
-  /** @nullable */
-  convertedDealId?: string | null;
-  /** @nullable */
-  convertedDealName?: string | null;
-  /** @nullable */
-  convertedAt?: string | null;
-  createdAt: string;
-  updatedAt: string;
 }
 
 export interface LeadInput {

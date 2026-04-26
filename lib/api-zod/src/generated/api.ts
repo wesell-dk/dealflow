@@ -64,6 +64,202 @@ export const GetTenantResponse = zod.object({
   createdAt: zod.coerce.date(),
 });
 
+/**
+ * Liefert die Konfiguration für die automatische Lead-Erzeugung aus
+eingehenden E-Mails (Webhook-URL für externes Mail-Gateway, Mapping
+Empfangsadresse → Owner, Default-Owner). Token wird nur bei
+ausdrücklicher Anforderung (Rotation) im PUT-Response zurückgegeben.
+Tenant-Admin only.
+
+ * @summary Aktuelle Inbound-E-Mail-Konfiguration des Tenants lesen
+ */
+export const GetInboundEmailConfigResponse = zod.object({
+  enabled: zod
+    .boolean()
+    .describe("True, sobald ein Token gesetzt ist (Inbound aktiv)."),
+  defaultOwnerId: zod
+    .string()
+    .nullish()
+    .describe("Fallback-Owner, wenn das Adress-Mapping nicht greift."),
+  addressMap: zod
+    .record(zod.string(), zod.string())
+    .describe(
+      "Mapping `recipient@brand.tld` → `userId` (lowercase Schlüssel). Erster Treffer aus der `to`-Liste der Inbound-Mail gewinnt.",
+    ),
+  tokenPreview: zod
+    .string()
+    .nullish()
+    .describe(
+      'Maskierte Vorschau des hinterlegten Tokens (z. B. \"abcd…wxyz\"), damit Admins erkennen, ob\/welcher Token aktiv ist, ohne das Geheimnis im Klartext zu lesen.',
+    ),
+  token: zod
+    .string()
+    .nullish()
+    .describe(
+      "Klartext-Token. Wird NUR als Antwort auf eine Token-Rotation zurückgegeben (`rotateToken=true`); GET liefert hier immer null.",
+    ),
+  webhookUrl: zod
+    .string()
+    .optional()
+    .describe(
+      "Voll qualifizierte URL des Inbound-Webhooks (`POST` mit Header `X-Inbound-Email-Token`). Vom Server ausgegeben, damit das UI sie ohne Konfigurations-Magie anzeigen kann.",
+    ),
+});
+
+/**
+ * Pflegt Default-Owner und Adress-Mapping. Token kann optional rotiert
+oder neu erzeugt werden (`rotateToken=true`); ein neu generierter
+Token wird in der Antwort einmalig im Klartext zurückgegeben.
+
+ * @summary Inbound-E-Mail-Konfiguration aktualisieren
+ */
+export const UpdateInboundEmailConfigBody = zod.object({
+  defaultOwnerId: zod
+    .string()
+    .nullish()
+    .describe("Fallback-Owner. `null` löscht den Default."),
+  addressMap: zod
+    .record(zod.string(), zod.string())
+    .optional()
+    .describe("Komplettes Adress-Mapping (Replace-Semantik)."),
+  rotateToken: zod
+    .boolean()
+    .optional()
+    .describe(
+      "True erzeugt einen neuen Token (alter wird sofort ungültig); der neue Token kommt im Response zurück.",
+    ),
+  disable: zod
+    .boolean()
+    .optional()
+    .describe("True löscht den Token und deaktiviert den Inbound-Pfad."),
+});
+
+export const UpdateInboundEmailConfigResponse = zod.object({
+  enabled: zod
+    .boolean()
+    .describe("True, sobald ein Token gesetzt ist (Inbound aktiv)."),
+  defaultOwnerId: zod
+    .string()
+    .nullish()
+    .describe("Fallback-Owner, wenn das Adress-Mapping nicht greift."),
+  addressMap: zod
+    .record(zod.string(), zod.string())
+    .describe(
+      "Mapping `recipient@brand.tld` → `userId` (lowercase Schlüssel). Erster Treffer aus der `to`-Liste der Inbound-Mail gewinnt.",
+    ),
+  tokenPreview: zod
+    .string()
+    .nullish()
+    .describe(
+      'Maskierte Vorschau des hinterlegten Tokens (z. B. \"abcd…wxyz\"), damit Admins erkennen, ob\/welcher Token aktiv ist, ohne das Geheimnis im Klartext zu lesen.',
+    ),
+  token: zod
+    .string()
+    .nullish()
+    .describe(
+      "Klartext-Token. Wird NUR als Antwort auf eine Token-Rotation zurückgegeben (`rotateToken=true`); GET liefert hier immer null.",
+    ),
+  webhookUrl: zod
+    .string()
+    .optional()
+    .describe(
+      "Voll qualifizierte URL des Inbound-Webhooks (`POST` mit Header `X-Inbound-Email-Token`). Vom Server ausgegeben, damit das UI sie ohne Konfigurations-Magie anzeigen kann.",
+    ),
+});
+
+/**
+ * Öffentlicher Endpoint, der von einem externen Mail-Gateway
+(Mailgun/Postmark/SendGrid Inbound, n8n, IMAP-Brücke) aufgerufen
+wird. Authentifiziert wird über den `X-Inbound-Email-Token`-Header,
+der mit `Tenant.inboundEmailToken` übereinstimmen muss; der Tenant
+wird ausschließlich aus dem Token aufgelöst, nie aus dem Body.
+
+Verhalten:
+- Quelle wird hart auf `inbound_email` gesetzt.
+- Dedupliziert anhand der Absender-E-Mail (case-insensitive,
+  tenant-scoped). Bestehender Lead → `lastContactAt` aktualisieren
+  und Notiz anhängen statt neuen Datensatz anzulegen. Konvertierte
+  Leads bleiben unangetastet (es entsteht ein frischer Lead).
+- Owner-Auflösung: erstes Mapping aus `to[]` ∩ `addressMap` gewinnt,
+  danach `defaultOwnerId`, sonst null (unzugewiesen).
+
+ * @summary Webhook für eingehende E-Mails — erzeugt oder aktualisiert einen Lead
+ */
+export const InboundEmailWebhookHeader = zod.object({
+  "X-Inbound-Email-Token": zod
+    .string()
+    .describe("Shared-Secret aus der Inbound-Konfiguration des Tenants."),
+});
+
+export const InboundEmailWebhookBody = zod
+  .object({
+    from: zod
+      .object({
+        email: zod.string().describe("RFC-5321-Adresse"),
+        name: zod.string().nullish().describe("Anzeigename"),
+      })
+      .describe("Absender der Mail."),
+    to: zod
+      .union([zod.string(), zod.array(zod.string())])
+      .optional()
+      .describe(
+        "Empfänger-Adressen, anhand derer das Owner-Mapping greift.\nAkzeptiert sowohl einen einzelnen String als auch eine Liste.\n",
+      ),
+    subject: zod.string().nullish(),
+    text: zod.string().nullish().describe("Plain-Text-Body"),
+    html: zod
+      .string()
+      .nullish()
+      .describe("HTML-Body (Fallback, wenn text fehlt)"),
+    companyName: zod
+      .string()
+      .nullish()
+      .describe(
+        "Optional aus dem Webformular bekannter Firmenname; wird beim Konvertieren als Vorschlag für den neuen Account übernommen.",
+      ),
+    phone: zod.string().nullish(),
+    receivedAt: zod.coerce
+      .date()
+      .nullish()
+      .describe(
+        "Original-Zeitstempel der Mail; landet als `lastContactAt` am Lead. Default = jetzt.",
+      ),
+  })
+  .describe(
+    "Schlankes, providerneutrales Payload-Format. Adapter (Mailgun,\nPostmark, n8n, IMAP-Brücke) übersetzen das jeweilige Format auf\ndiese Felder.\n",
+  );
+
+export const InboundEmailWebhookResponse = zod.object({
+  created: zod
+    .boolean()
+    .describe("true = neuer Lead, false = bestehender Lead aktualisiert."),
+  lead: zod.object({
+    id: zod.string(),
+    name: zod.string(),
+    companyName: zod.string().nullish(),
+    email: zod.string().nullish(),
+    phone: zod.string().nullish(),
+    source: zod
+      .string()
+      .describe(
+        "z. B. website | referral | inbound_email | event | outbound | partner | other",
+      ),
+    status: zod.enum(["new", "qualified", "disqualified", "converted"]),
+    ownerId: zod.string().nullish(),
+    ownerName: zod.string().nullish(),
+    notes: zod.string().nullish(),
+    disqualifyReason: zod.string().nullish(),
+    lastContactAt: zod.coerce.date().nullish(),
+    convertedAccountId: zod.string().nullish(),
+    convertedAccountName: zod.string().nullish(),
+    convertedDealId: zod.string().nullish(),
+    convertedDealName: zod.string().nullish(),
+    convertedAt: zod.coerce.date().nullish(),
+    createdAt: zod.coerce.date(),
+    updatedAt: zod.coerce.date(),
+  }),
+});
+
 export const ListCompaniesQueryParams = zod.object({
   permitted: zod.coerce
     .boolean()
