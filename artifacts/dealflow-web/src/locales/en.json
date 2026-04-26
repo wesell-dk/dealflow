@@ -251,7 +251,12 @@
         "sentTo": "To",
         "defaultCustomer": "customer",
         "defaultBrand": "Your DealFlow team"
-      }
+      },
+      "netto": "Net",
+      "brutto": "Gross (incl. VAT)",
+      "vatAt": "VAT {{pct}}%",
+      "vatExempt": "Tax-exempt (0%)",
+      "taxRateLine": "VAT {{pct}}%"
     },
     "templates": {
       "title": "Quote Templates",
@@ -1075,6 +1080,13 @@
     "openQuote": "Go to quote",
     "defaultDiscount": "Default discount",
     "defaultMargin": "Default margin",
+    "tax": "VAT",
+    "taxDefault": "Default ({{pct}}%)",
+    "taxCustom": "Custom…",
+    "netto": "Net",
+    "brutto": "Gross",
+    "vatAt": "VAT {{pct}}%",
+    "vatExempt": "Tax-exempt (0%)",
     "configurator": {
       "title": "Industry profile not configured yet",
       "subtitle": "There is no profile for this industry yet. You can still pick a template and attachments; create a profile later to persist defaults."

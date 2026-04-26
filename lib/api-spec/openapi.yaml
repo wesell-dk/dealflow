@@ -5079,12 +5079,19 @@ components:
     # ── Org ──
     Tenant:
       type: object
-      required: [id, name, plan, region, createdAt]
+      required: [id, name, plan, region, createdAt, defaultTaxRatePct]
       properties:
         id: { type: string }
         name: { type: string }
         plan: { type: string }
         region: { type: string }
+        defaultTaxRatePct:
+          type: number
+          minimum: 0
+          maximum: 100
+          description: >-
+            Tenant-weiter Default-USt-Satz in Prozent. Wird verwendet, wenn
+            weder Brand- noch Positions-Override gesetzt ist.
         createdAt: { type: string, format: date-time }
 
     Company:
@@ -5130,6 +5137,13 @@ components:
             Bevorzugter Vertragstyp dieser Brand. Wird in POST /contracts
             verwendet, wenn der Aufruf keinen expliziten contractTypeId angibt
             (vor der Template-Heuristik). NULL → Heuristik nutzen.
+        defaultTaxRatePct:
+          type: number
+          nullable: true
+          minimum: 0
+          maximum: 100
+          description: >-
+            Brand-Override für USt-Satz in Prozent. NULL → Tenant-Default.
 
     BrandUpdate:
       type: object
@@ -5154,6 +5168,14 @@ components:
           description: >-
             Bevorzugter Vertragstyp. Muss tenant-eigen oder ein tn_root-Seed sein
             und aktiv sein. NULL setzt zurück auf Heuristik.
+        defaultTaxRatePct:
+          type: number
+          nullable: true
+          minimum: 0
+          maximum: 100
+          description: >-
+            Brand-Override für USt-Satz in Prozent. NULL setzt zurück auf
+            Tenant-Default.
 
     CompanyCreate:
       type: object
@@ -5205,6 +5227,14 @@ components:
           description: >-
             Optional bei Anlage: bevorzugter Vertragstyp für POST /contracts.
             Muss tenant-eigen oder ein tn_root-Seed sein und aktiv sein.
+        defaultTaxRatePct:
+          type: number
+          nullable: true
+          minimum: 0
+          maximum: 100
+          description: >-
+            Optional bei Anlage: Brand-Override für USt-Satz in Prozent.
+            NULL → Tenant-Default.
 
     DeleteOrgConflict:
       type: object
@@ -5891,7 +5921,7 @@ components:
 
     LineItem:
       type: object
-      required: [id, quoteVersionId, name, quantity, unitPrice, listPrice, discountPct, total]
+      required: [id, quoteVersionId, name, quantity, unitPrice, listPrice, discountPct, total, taxRatePct]
       properties:
         id: { type: string }
         quoteVersionId: { type: string }
@@ -5902,13 +5932,46 @@ components:
         unitPrice: { type: number }
         listPrice: { type: number }
         discountPct: { type: number }
-        total: { type: number }
+        total: { type: number, description: "Netto-Positionssumme (ohne USt)." }
+        taxRatePct:
+          type: number
+          minimum: 0
+          maximum: 100
+          description: >-
+            Effektiver USt-Satz dieser Position in Prozent (Position →
+            Brand-Default → Tenant-Default → 19).
+        taxRatePctSource:
+          type: string
+          enum: [line, brand, tenant, fallback]
+          description: >-
+            Herkunft des effektiven Satzes (line=Override, brand=Brand-Default,
+            tenant=Tenant-Default, fallback=hardcoded 19).
+
+    TaxBreakdownEntry:
+      type: object
+      required: [ratePct, net, tax]
+      properties:
+        ratePct: { type: number, minimum: 0, maximum: 100 }
+        net: { type: number, description: "Netto-Anteil zu diesem Satz." }
+        tax: { type: number, description: "USt-Betrag zu diesem Satz." }
+
+    TaxSummary:
+      type: object
+      required: [net, tax, gross, breakdown]
+      properties:
+        net: { type: number, description: "Gesamtnetto (Summe aller Positions-Totals)." }
+        tax: { type: number, description: "Gesamt-USt (Summe aller Brutto-Steuerbeträge)." }
+        gross: { type: number, description: "Bruttosumme = net + tax." }
+        breakdown:
+          type: array
+          description: Aggregation pro USt-Satz, sortiert nach Satz aufsteigend.
+          items: { $ref: "#/components/schemas/TaxBreakdownEntry" }
 
     QuoteDetail:
       allOf:
         - $ref: "#/components/schemas/Quote"
         - type: object
-          required: [versions, lineItems]
+          required: [versions, lineItems, taxSummary]
           properties:
             versions:
               type: array
@@ -5922,6 +5985,7 @@ components:
                 Aus diesem Angebot bereits abgeleitete Auftragsbestätigungen.
                 Leeres Array, solange noch keiner umgewandelt wurde.
               items: { $ref: "#/components/schemas/QuoteOrderConfirmationLink" }
+            taxSummary: { $ref: "#/components/schemas/TaxSummary" }
 
     QuoteVersionInput:
       type: object
@@ -5940,6 +6004,14 @@ components:
         unitPrice: { type: number }
         listPrice: { type: number }
         discountPct: { type: number }
+        taxRatePct:
+          type: number
+          nullable: true
+          minimum: 0
+          maximum: 100
+          description: >-
+            Optional. Wenn gesetzt → Position-Override. NULL/weggelassen →
+            Brand- bzw. Tenant-Default.
 
     QuoteFromTemplateInput:
       type: object
@@ -6010,6 +6082,14 @@ components:
         unitPrice: { type: number }
         listPrice: { type: number }
         discountPct: { type: number }
+        taxRatePct:
+          type: number
+          nullable: true
+          minimum: 0
+          maximum: 100
+          description: >-
+            Optionaler USt-Satz pro Vorlagen-Position. NULL/weggelassen →
+            Brand- bzw. Tenant-Default beim Anlegen des Angebots.
 
     QuoteTemplate:
       type: object

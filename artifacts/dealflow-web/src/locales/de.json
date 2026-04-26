@@ -251,7 +251,12 @@
         "sentTo": "An",
         "defaultCustomer": "Kunde",
         "defaultBrand": "Ihr DealFlow-Team"
-      }
+      },
+      "netto": "Netto",
+      "brutto": "Brutto (inkl. USt.)",
+      "vatAt": "USt. {{pct}}%",
+      "vatExempt": "Steuerfrei (0%)",
+      "taxRateLine": "USt. {{pct}}%"
     },
     "templates": {
       "title": "Angebots-Vorlagen",
@@ -1081,6 +1086,13 @@
     "openQuote": "Zum Angebot",
     "defaultDiscount": "Standard-Rabatt",
     "defaultMargin": "Standard-Marge",
+    "tax": "USt.",
+    "taxDefault": "Standard ({{pct}}%)",
+    "taxCustom": "Frei…",
+    "netto": "Netto",
+    "brutto": "Brutto",
+    "vatAt": "USt. {{pct}}%",
+    "vatExempt": "Steuerfrei (0%)",
     "configurator": {
       "title": "Branche noch nicht konfiguriert",
       "subtitle": "Für diese Branche existiert noch kein Profil. Standard-Vorlage und Anhänge können trotzdem ausgewählt werden; lege später ein Profil an, um Defaults zu speichern."

@@ -15,4 +15,10 @@ export interface LineItemInput {
   unitPrice: number;
   listPrice: number;
   discountPct: number;
+  /**
+   * Optional. Wenn gesetzt → Position-Override. NULL/weggelassen → Brand- bzw. Tenant-Default.
+   * @minimum 0
+   * @maximum 100
+   */
+  taxRatePct?: number | null;
 }

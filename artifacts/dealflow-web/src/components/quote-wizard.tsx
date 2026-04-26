@@ -54,6 +54,8 @@ import {
   useCreateQuoteFromTemplate,
   useReplaceQuoteLineItems,
   useGetQuote,
+  useGetTenant,
+  useListBrands,
 } from "@workspace/api-client-react";
 import { PricebookPickerDialog, type PricebookPickedItem } from "@/components/pricing/pricebook-picker-dialog";
 import { BundlePickerDialog } from "@/components/pricing/bundle-picker-dialog";
@@ -71,7 +73,19 @@ type LineItemForm = {
   listPrice: number;
   unitPrice: number;
   discountPct: number;
+  /** Per-Position USt-Satz; `null` ⇒ effektiv aus Brand→Tenant-Default. */
+  taxRatePct: number | null;
 };
+
+const TAX_PRESETS = [0, 7, 19] as const;
+const TAX_CUSTOM = "__custom__";
+const TAX_DEFAULT = "__default__";
+
+/** Strip trailing zeros so 19.00 ⇒ "19", 5.50 ⇒ "5,5". */
+function formatTaxRate(n: number, lang: string = "de"): string {
+  const rounded = Math.round(n * 100) / 100;
+  return rounded.toLocaleString(lang, { maximumFractionDigits: 2 });
+}
 
 const INDUSTRIES = ["saas", "consulting", "manufacturing", "services", "other"] as const;
 const BLANK_TEMPLATE_ID = "__blank__";
@@ -108,6 +122,8 @@ export function QuoteWizard({ open, onOpenChange, initialDealId }: Props) {
   const { data: createdQuote } = useGetQuote(createdQuoteId ?? "", {
     query: { enabled: !!createdQuoteId, queryKey: ["wizardCreatedQuote", createdQuoteId] },
   });
+  const { data: tenant } = useGetTenant();
+  const { data: brands } = useListBrands();
 
   const createMut = useCreateQuoteFromTemplate();
   const replaceLinesMut = useReplaceQuoteLineItems();
@@ -189,6 +205,7 @@ export function QuoteWizard({ open, onOpenChange, initialDealId }: Props) {
           listPrice: li.listPrice,
           unitPrice: li.unitPrice,
           discountPct: li.discountPct,
+          taxRatePct: li.taxRatePct ?? null,
         })),
       );
       setValidityDays(selectedTemplate.defaultValidityDays);
@@ -212,6 +229,46 @@ export function QuoteWizard({ open, onOpenChange, initialDealId }: Props) {
       return sum + (sub - disc);
     }, 0);
   }, [items]);
+
+  // Effektiver Brand→Tenant USt-Default für Vorbelegung & Anzeige der Default-Option.
+  const effectiveDefaultTaxRate: number = useMemo(() => {
+    const tenantDefault = tenant?.defaultTaxRatePct;
+    const tenantNum = tenantDefault === null || tenantDefault === undefined
+      ? 19
+      : Number(tenantDefault);
+    if (!dealDetail?.brandId || !brands) return tenantNum;
+    const brand = brands.find((b) => b.id === dealDetail.brandId);
+    const brandDefault = brand?.defaultTaxRatePct;
+    if (brandDefault === null || brandDefault === undefined) return tenantNum;
+    return Number(brandDefault);
+  }, [tenant, brands, dealDetail]);
+
+  // Lines deren taxRatePct null ist erben den effektiven Default — für Preview-Aggregation.
+  const taxBreakdown = useMemo(() => {
+    const byRate = new Map<number, { net: number; tax: number }>();
+    let net = 0;
+    let tax = 0;
+    for (const it of items) {
+      const sub = it.quantity * it.unitPrice;
+      const lineTotal = sub - sub * (it.discountPct / 100);
+      const rate = it.taxRatePct ?? effectiveDefaultTaxRate;
+      const lineTax = Math.round(lineTotal * (rate / 100) * 100) / 100;
+      net += lineTotal;
+      tax += lineTax;
+      const cur = byRate.get(rate) ?? { net: 0, tax: 0 };
+      cur.net += lineTotal;
+      cur.tax += lineTax;
+      byRate.set(rate, cur);
+    }
+    return {
+      net,
+      tax,
+      gross: net + tax,
+      breakdown: [...byRate.entries()]
+        .sort(([a], [b]) => a - b)
+        .map(([ratePct, v]) => ({ ratePct, net: v.net, tax: v.tax })),
+    };
+  }, [items, effectiveDefaultTaxRate]);
 
   const totalDiscountPct = useMemo(() => {
     if (!items.length) return 0;
@@ -266,6 +323,7 @@ export function QuoteWizard({ open, onOpenChange, initialDealId }: Props) {
               unitPrice: it.unitPrice,
               listPrice: it.listPrice,
               discountPct: it.discountPct,
+              taxRatePct: it.taxRatePct,
             })),
           },
         });
@@ -295,7 +353,7 @@ export function QuoteWizard({ open, onOpenChange, initialDealId }: Props) {
   const addItem = () =>
     setItems((curr) => [
       ...curr,
-      { name: "", quantity: 1, listPrice: 0, unitPrice: 0, discountPct: 0 },
+      { name: "", quantity: 1, listPrice: 0, unitPrice: 0, discountPct: 0, taxRatePct: null },
     ]);
   const addItemsFromPicker = (picked: PricebookPickedItem[]) => {
     if (!picked.length) return;
@@ -308,6 +366,7 @@ export function QuoteWizard({ open, onOpenChange, initialDealId }: Props) {
         listPrice: p.listPrice,
         unitPrice: p.unitPrice,
         discountPct: p.discountPct,
+        taxRatePct: null,
       })),
     ]);
     toast({
@@ -664,11 +723,12 @@ export function QuoteWizard({ open, onOpenChange, initialDealId }: Props) {
               </div>
               <div className="rounded-md border">
                 <div className="grid grid-cols-12 gap-2 px-3 py-2 text-xs font-medium text-muted-foreground bg-muted/40">
-                  <div className="col-span-4">{t("common.name")}</div>
+                  <div className="col-span-3">{t("common.name")}</div>
                   <div className="col-span-1 text-right">{t("quoteWizard.qty")}</div>
                   <div className="col-span-2 text-right">{t("quoteWizard.listPrice")}</div>
                   <div className="col-span-2 text-right">{t("quoteWizard.unitPrice")}</div>
                   <div className="col-span-1 text-right">%</div>
+                  <div className="col-span-1 text-right">{t("quoteWizard.tax")}</div>
                   <div className="col-span-1 text-right">{t("common.total")}</div>
                   <div className="col-span-1"></div>
                 </div>
@@ -682,7 +742,7 @@ export function QuoteWizard({ open, onOpenChange, initialDealId }: Props) {
                       key={idx}
                       className="grid grid-cols-12 gap-2 px-3 py-2 border-t items-start"
                     >
-                      <div className="col-span-4">
+                      <div className="col-span-3">
                         <Input
                           value={it.name}
                           onChange={(e) => updateItem(idx, { name: e.target.value })}
@@ -743,6 +803,80 @@ export function QuoteWizard({ open, onOpenChange, initialDealId }: Props) {
                           className="text-right"
                         />
                       </div>
+                      <div className="col-span-1">
+                        {(() => {
+                          const isCustom =
+                            it.taxRatePct !== null &&
+                            !TAX_PRESETS.includes(it.taxRatePct as 0 | 7 | 19);
+                          const selectValue =
+                            it.taxRatePct === null
+                              ? TAX_DEFAULT
+                              : isCustom
+                                ? TAX_CUSTOM
+                                : String(it.taxRatePct);
+                          return (
+                            <>
+                              <Select
+                                value={selectValue}
+                                onValueChange={(v) => {
+                                  if (v === TAX_DEFAULT) {
+                                    updateItem(idx, { taxRatePct: null });
+                                  } else if (v === TAX_CUSTOM) {
+                                    updateItem(idx, {
+                                      taxRatePct: isCustom
+                                        ? it.taxRatePct
+                                        : 5.5,
+                                    });
+                                  } else {
+                                    updateItem(idx, { taxRatePct: Number(v) });
+                                  }
+                                }}
+                              >
+                                <SelectTrigger
+                                  className="h-9 text-xs px-2"
+                                  data-testid={`wizard-line-tax-${idx}`}
+                                >
+                                  <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value={TAX_DEFAULT}>
+                                    {t("quoteWizard.taxDefault", {
+                                      pct: formatTaxRate(
+                                        effectiveDefaultTaxRate,
+                                        lang,
+                                      ),
+                                    })}
+                                  </SelectItem>
+                                  {TAX_PRESETS.map((p) => (
+                                    <SelectItem key={p} value={String(p)}>
+                                      {`${formatTaxRate(p, lang)} %`}
+                                    </SelectItem>
+                                  ))}
+                                  <SelectItem value={TAX_CUSTOM}>
+                                    {t("quoteWizard.taxCustom")}
+                                  </SelectItem>
+                                </SelectContent>
+                              </Select>
+                              {isCustom && (
+                                <Input
+                                  type="number"
+                                  step="0.1"
+                                  min={0}
+                                  max={100}
+                                  value={it.taxRatePct ?? 0}
+                                  onChange={(e) =>
+                                    updateItem(idx, {
+                                      taxRatePct: Number(e.target.value),
+                                    })
+                                  }
+                                  className="mt-1 text-right text-xs h-8 px-1"
+                                  data-testid={`wizard-line-tax-custom-${idx}`}
+                                />
+                              )}
+                            </>
+                          );
+                        })()}
+                      </div>
                       <div className="col-span-1 text-right pt-2">
                         <div className="text-sm font-medium">
                           {lineTotal.toLocaleString(lang, {
@@ -766,19 +900,53 @@ export function QuoteWizard({ open, onOpenChange, initialDealId }: Props) {
                   );
                 })}
               </div>
-              <div className="flex items-center justify-between">
+              <div className="flex items-start justify-between gap-4">
                 <Button variant="outline" size="sm" onClick={addItem}>
                   <Plus className="h-4 w-4 mr-1" />
                   {t("quoteWizard.addLine")}
                 </Button>
-                <div className="text-right">
+                <div className="text-right space-y-0.5" data-testid="wizard-totals-tax">
                   <div className="text-xs text-muted-foreground">
                     Ø {t("common.discount")}: {totalDiscountPct}%
                   </div>
-                  <div className="text-lg font-bold">
-                    {totalAmount.toLocaleString(lang, {
-                      maximumFractionDigits: 2,
-                    })}
+                  <div className="flex justify-end gap-3 text-sm">
+                    <span className="text-muted-foreground">
+                      {t("quoteWizard.netto")}
+                    </span>
+                    <span className="font-medium tabular-nums min-w-[5rem]">
+                      {taxBreakdown.net.toLocaleString(lang, {
+                        maximumFractionDigits: 2,
+                      })}
+                    </span>
+                  </div>
+                  {taxBreakdown.breakdown.map((b) => (
+                    <div
+                      key={b.ratePct}
+                      className="flex justify-end gap-3 text-xs text-muted-foreground"
+                    >
+                      <span>
+                        {b.ratePct === 0
+                          ? t("quoteWizard.vatExempt")
+                          : t("quoteWizard.vatAt", {
+                              pct: formatTaxRate(b.ratePct, lang),
+                            })}
+                      </span>
+                      <span className="tabular-nums min-w-[5rem]">
+                        {b.tax.toLocaleString(lang, {
+                          maximumFractionDigits: 2,
+                        })}
+                      </span>
+                    </div>
+                  ))}
+                  <div className="flex justify-end gap-3 text-base pt-1 border-t">
+                    <span className="font-semibold">
+                      {t("quoteWizard.brutto")}
+                    </span>
+                    <span className="font-bold tabular-nums min-w-[5rem]">
+                      {taxBreakdown.gross.toLocaleString(lang, {
+                        maximumFractionDigits: 2,
+                      })}
+                    </span>
                   </div>
                 </div>
               </div>

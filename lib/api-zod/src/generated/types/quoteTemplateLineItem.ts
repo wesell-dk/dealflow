@@ -15,4 +15,10 @@ export interface QuoteTemplateLineItem {
   unitPrice: number;
   listPrice: number;
   discountPct: number;
+  /**
+   * Optionaler USt-Satz pro Vorlagen-Position. NULL/weggelassen → Brand- bzw. Tenant-Default beim Anlegen des Angebots.
+   * @minimum 0
+   * @maximum 100
+   */
+  taxRatePct?: number | null;
 }

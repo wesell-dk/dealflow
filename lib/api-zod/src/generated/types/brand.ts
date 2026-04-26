@@ -31,4 +31,10 @@ export interface Brand {
   defaultLanguage?: BrandDefaultLanguage;
   /** Bevorzugter Vertragstyp dieser Brand. Wird in POST /contracts verwendet, wenn der Aufruf keinen expliziten contractTypeId angibt (vor der Template-Heuristik). NULL → Heuristik nutzen. */
   defaultContractTypeId?: string | null;
+  /**
+   * Brand-Override für USt-Satz in Prozent. NULL → Tenant-Default.
+   * @minimum 0
+   * @maximum 100
+   */
+  defaultTaxRatePct?: number | null;
 }

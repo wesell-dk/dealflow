@@ -674,6 +674,7 @@ function BrandRow({ brand }: { brand: Brand }) {
     parentBrandId: brand.parentBrandId ?? null,
     defaultLanguage: brand.defaultLanguage ?? "de",
     defaultContractTypeId: brand.defaultContractTypeId ?? null,
+    defaultTaxRatePct: brand.defaultTaxRatePct ?? null,
   });
   const contractTypesQ = useListContractTypes();
   // Address kept in three independent fields for editing; composed back into

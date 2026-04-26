@@ -99,6 +99,9 @@ export function BrandFormDialog({ open, onOpenChange, companies, defaultCompanyI
   const [city, setCity] = useState("");
   const [logoUrl, setLogoUrl] = useState("");
   const [defaultContractTypeId, setDefaultContractTypeId] = useState<string>(NO_CONTRACT_TYPE);
+  // Tax-Default: Modus + (für "custom") freier Eingabewert.
+  const [taxRateMode, setTaxRateMode] = useState<"tenant" | "0" | "7" | "19" | "custom">("tenant");
+  const [customTaxRate, setCustomTaxRate] = useState<string>("");
   const [uploading, setUploading] = useState(false);
   const [dragOver, setDragOver] = useState(false);
   const [primaryTouched, setPrimaryTouched] = useState(false);
@@ -124,6 +127,17 @@ export function BrandFormDialog({ open, onOpenChange, companies, defaultCompanyI
       setCity(parsed.city);
       setLogoUrl(brand?.logoUrl ?? "");
       setDefaultContractTypeId(brand?.defaultContractTypeId ?? NO_CONTRACT_TYPE);
+      const tax = brand?.defaultTaxRatePct;
+      if (tax === null || tax === undefined) {
+        setTaxRateMode("tenant");
+        setCustomTaxRate("");
+      } else {
+        const n = Number(tax);
+        if (n === 0) { setTaxRateMode("0"); setCustomTaxRate(""); }
+        else if (n === 7) { setTaxRateMode("7"); setCustomTaxRate(""); }
+        else if (n === 19) { setTaxRateMode("19"); setCustomTaxRate(""); }
+        else { setTaxRateMode("custom"); setCustomTaxRate(String(tax)); }
+      }
       setPrimaryTouched(false);
       setSecondaryTouched(false);
       primaryTouchedRef.current = false;
@@ -241,6 +255,18 @@ export function BrandFormDialog({ open, onOpenChange, companies, defaultCompanyI
     }
     const parent = parentBrandId === NO_PARENT ? null : parentBrandId;
     const ctDefault = defaultContractTypeId === NO_CONTRACT_TYPE ? null : defaultContractTypeId;
+    let resolvedTaxRate: number | null;
+    if (taxRateMode === "tenant") resolvedTaxRate = null;
+    else if (taxRateMode === "custom") {
+      const v = parseFloat(customTaxRate.replace(",", "."));
+      if (!Number.isFinite(v) || v < 0 || v > 100) {
+        toast({ title: "USt-Satz ungültig", description: "Bitte 0–100 %.", variant: "destructive" });
+        return;
+      }
+      resolvedTaxRate = Math.round(v * 100) / 100;
+    } else {
+      resolvedTaxRate = Number(taxRateMode);
+    }
     const composedAddress = composeAddressLine(street, postalCode, city);
     try {
       if (isEdit && brand) {
@@ -258,6 +284,7 @@ export function BrandFormDialog({ open, onOpenChange, companies, defaultCompanyI
             logoUrl: logoUrl.trim() || null,
             parentBrandId: parent,
             defaultContractTypeId: ctDefault,
+            defaultTaxRatePct: resolvedTaxRate,
           },
         });
         toast({ title: "Brand aktualisiert", description: trimmed });
@@ -276,6 +303,7 @@ export function BrandFormDialog({ open, onOpenChange, companies, defaultCompanyI
             addressLine: composedAddress || null,
             logoUrl: logoUrl.trim() || null,
             defaultContractTypeId: ctDefault,
+            defaultTaxRatePct: resolvedTaxRate,
           },
         });
         toast({ title: "Brand angelegt", description: trimmed });
@@ -529,6 +557,34 @@ export function BrandFormDialog({ open, onOpenChange, companies, defaultCompanyI
             <p className="text-xs text-muted-foreground">
               Wird in „Vertrag erstellen" verwendet, wenn kein Vertragstyp explizit gewählt wurde — bevor die
               Schlagwort-Heuristik aus dem Templatenamen greift.
+            </p>
+          </div>
+
+          <div className="space-y-1.5">
+            <Label htmlFor="brand-default-tax">Standard-USt-Satz</Label>
+            <Select value={taxRateMode} onValueChange={(v) => setTaxRateMode(v as typeof taxRateMode)}>
+              <SelectTrigger id="brand-default-tax" data-testid="select-brand-default-tax">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="tenant">— Tenant-Standard —</SelectItem>
+                <SelectItem value="19">19 % (Regelsatz)</SelectItem>
+                <SelectItem value="7">7 % (ermäßigt)</SelectItem>
+                <SelectItem value="0">0 % (steuerfrei)</SelectItem>
+                <SelectItem value="custom">Anderer Satz…</SelectItem>
+              </SelectContent>
+            </Select>
+            {taxRateMode === "custom" && (
+              <Input
+                value={customTaxRate}
+                onChange={(e) => setCustomTaxRate(e.target.value)}
+                placeholder="z. B. 5,5"
+                inputMode="decimal"
+                data-testid="input-brand-default-tax-custom"
+              />
+            )}
+            <p className="text-xs text-muted-foreground">
+              Vorbelegung für neue Angebotspositionen dieser Marke. Lässt sich pro Position weiterhin überschreiben.
             </p>
           </div>
 

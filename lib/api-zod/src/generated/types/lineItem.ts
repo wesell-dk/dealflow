@@ -7,6 +7,7 @@ Multi-tenant, multi-company, multi-brand. Deal-centric.
 
  * OpenAPI spec version: 0.1.0
  */
+import type { LineItemTaxRatePctSource } from "./lineItemTaxRatePctSource";
 
 export interface LineItem {
   id: string;
@@ -18,5 +19,14 @@ export interface LineItem {
   unitPrice: number;
   listPrice: number;
   discountPct: number;
+  /** Netto-Positionssumme (ohne USt). */
   total: number;
+  /**
+   * Effektiver USt-Satz dieser Position in Prozent (Position → Brand-Default → Tenant-Default → 19).
+   * @minimum 0
+   * @maximum 100
+   */
+  taxRatePct: number;
+  /** Herkunft des effektiven Satzes (line=Override, brand=Brand-Default, tenant=Tenant-Default, fallback=hardcoded 19). */
+  taxRatePctSource?: LineItemTaxRatePctSource;
 }

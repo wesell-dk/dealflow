@@ -269,7 +269,11 @@ router.get('/orgs/tenant', async (req, res) => {
   const scope = getScope(req);
   const [t] = await db.select().from(tenantsTable).where(eq(tenantsTable.id, scope.tenantId));
   if (!t) { res.status(404).json({ error: 'no tenant' }); return; }
-  res.json({ ...t, createdAt: iso(t.createdAt) });
+  res.json({
+    ...t,
+    defaultTaxRatePct: Number(t.defaultTaxRatePct ?? '19'),
+    createdAt: iso(t.createdAt),
+  });
 });
 
 router.get('/orgs/companies', async (req, res) => {
@@ -467,6 +471,7 @@ router.post('/orgs/brands', async (req, res) => {
     logoUrl?: string | null; primaryColor?: string | null; secondaryColor?: string | null;
     tone?: string | null; legalEntityName?: string | null; addressLine?: string | null;
     defaultContractTypeId?: string | null;
+    defaultTaxRatePct?: number | string | null;
   };
   const [company] = await db.select().from(companiesTable).where(eq(companiesTable.id, b.companyId));
   if (!company) { res.status(404).json({ error: 'company not found' }); return; }
@@ -499,6 +504,12 @@ router.post('/orgs/brands', async (req, res) => {
     if (!ct.active) { res.status(422).json({ error: 'defaultContractTypeId is inactive' }); return; }
     defaultContractTypeId = ct.id;
   }
+  let defaultTaxRatePct: string | null = null;
+  if ('defaultTaxRatePct' in b) {
+    const parsed = parseTaxRatePct(b.defaultTaxRatePct);
+    if (!parsed.ok) { res.status(422).json({ error: parsed.error }); return; }
+    defaultTaxRatePct = parsed.value === null ? null : String(parsed.value);
+  }
   // Defaults & Hex-Validierung.
   const color = (b.color ?? b.primaryColor ?? '#2D6CDF').trim();
   if (!HEX_RE.test(color)) { res.status(422).json({ error: 'color must be #RRGGBB hex' }); return; }
@@ -523,6 +534,7 @@ router.post('/orgs/brands', async (req, res) => {
     legalEntityName: b.legalEntityName?.trim() || null,
     addressLine: b.addressLine?.trim() || null,
     defaultContractTypeId,
+    defaultTaxRatePct,
   };
   await db.insert(brandsTable).values(row);
   const [inserted] = await db.select().from(brandsTable).where(eq(brandsTable.id, newId));
@@ -1589,6 +1601,13 @@ router.get('/quotes/:id', async (req, res) => {
     }).from(orderConfirmationsTable)
       .where(eq(orderConfirmationsTable.sourceQuoteId, q.id))
       .orderBy(desc(orderConfirmationsTable.createdAt));
+    const defaultRateA = await resolveDefaultTaxRatePct({
+      brandId: d?.brandId, tenantId: getScope(req).tenantId,
+    });
+    const lineItemsOutA = lines.map(l => mapLineWithTax(l, defaultRateA));
+    const taxSummaryA = computeTaxSummary(
+      lineItemsOutA.map(l => ({ total: l.total, taxRatePct: l.taxRatePct })),
+    );
     res.json({
       ...base,
       versions: allVersions.map(v => ({
@@ -1597,12 +1616,8 @@ router.get('/quotes/:id', async (req, res) => {
         marginPct: num(v.marginPct), status: v.status, notes: v.notes,
         createdAt: iso(v.createdAt)!,
       })),
-      lineItems: lines.map(l => ({
-        id: l.id, quoteVersionId: l.quoteVersionId, name: l.name,
-        description: l.description, quantity: num(l.quantity),
-        unitPrice: num(l.unitPrice), listPrice: num(l.listPrice),
-        discountPct: num(l.discountPct), total: num(l.total),
-      })),
+      lineItems: lineItemsOutA,
+      taxSummary: taxSummaryA,
       orderConfirmations: ocs.map(o => ({
         id: o.id, number: o.number, status: o.status, createdAt: iso(o.createdAt)!,
       })),
@@ -1634,6 +1649,13 @@ router.get('/quotes/:id', async (req, res) => {
   }).from(orderConfirmationsTable)
     .where(eq(orderConfirmationsTable.sourceQuoteId, q.id))
     .orderBy(desc(orderConfirmationsTable.createdAt));
+  const defaultRate = await resolveDefaultTaxRatePct({
+    brandId: d?.brandId, tenantId: getScope(req).tenantId,
+  });
+  const lineItemsOut = lines.map(l => mapLineWithTax(l, defaultRate));
+  const taxSummary = computeTaxSummary(
+    lineItemsOut.map(l => ({ total: l.total, taxRatePct: l.taxRatePct })),
+  );
   res.json({
     ...base,
     versions: versions.map(v => ({
@@ -1642,12 +1664,8 @@ router.get('/quotes/:id', async (req, res) => {
       marginPct: num(v.marginPct), status: v.status, notes: v.notes,
       createdAt: iso(v.createdAt)!,
     })),
-    lineItems: lines.map(l => ({
-      id: l.id, quoteVersionId: l.quoteVersionId, name: l.name,
-      description: l.description, quantity: num(l.quantity),
-      unitPrice: num(l.unitPrice), listPrice: num(l.listPrice),
-      discountPct: num(l.discountPct), total: num(l.total),
-    })),
+    lineItems: lineItemsOut,
+    taxSummary,
     orderConfirmations: ocs.map(o => ({
       id: o.id, number: o.number, status: o.status, createdAt: iso(o.createdAt)!,
     })),
@@ -1669,6 +1687,7 @@ router.get('/quotes/:id', async (req, res) => {
 async function buildQuotePdfPayload(
   q: typeof quotesTable.$inferSelect,
   d: typeof dealsTable.$inferSelect | undefined,
+  tenantId: string,
 ) {
   const versions = await db.select().from(quoteVersionsTable)
     .where(eq(quoteVersionsTable.quoteId, q.id))
@@ -1687,6 +1706,13 @@ async function buildQuotePdfPayload(
     const [b] = await db.select().from(brandsTable).where(eq(brandsTable.id, d.brandId));
     brand = b;
   }
+  const defaultRate = await resolveDefaultTaxRatePct({
+    brandId: d?.brandId, tenantId,
+  });
+  const linesWithTax = lines.map(l => mapLineWithTax(l, defaultRate));
+  const taxSummary = computeTaxSummary(
+    linesWithTax.map(l => ({ total: l.total, taxRatePct: l.taxRatePct })),
+  );
   return {
     brand,
     payload: {
@@ -1701,15 +1727,17 @@ async function buildQuotePdfPayload(
       discountPct: num(current?.discountPct),
       marginPct: num(current?.marginPct),
       notes: current?.notes ?? null,
-      lines: lines.map(l => ({
+      lines: linesWithTax.map(l => ({
         name: l.name,
         description: l.description ?? null,
-        quantity: num(l.quantity),
-        unitPrice: num(l.unitPrice),
-        listPrice: num(l.listPrice),
-        discountPct: num(l.discountPct),
-        total: num(l.total),
+        quantity: l.quantity,
+        unitPrice: l.unitPrice,
+        listPrice: l.listPrice,
+        discountPct: l.discountPct,
+        total: l.total,
+        taxRatePct: l.taxRatePct,
       })),
+      taxSummary,
       brand: brand ? {
         name: brand.name,
         logoUrl: await resolveLogoForPdf(brand.logoUrl),
@@ -1744,7 +1772,7 @@ router.get('/quotes/:id/pdf', async (req, res) => {
   if (!q) { res.status(404).json({ error: 'not found' }); return; }
   if (!(await gateDeal(req, res, q.dealId))) return;
   const [d] = await db.select().from(dealsTable).where(eq(dealsTable.id, q.dealId));
-  const { payload } = await buildQuotePdfPayload(q, d);
+  const { payload } = await buildQuotePdfPayload(q, d, getScope(req).tenantId);
   const { renderQuotePdf } = await import('../pdf/quote');
   const stream = await renderQuotePdf(payload);
   res.setHeader('Content-Type', 'application/pdf');
@@ -1801,7 +1829,7 @@ router.post('/quotes/:id/send', async (req, res) => {
   }
 
   const [d] = await db.select().from(dealsTable).where(eq(dealsTable.id, q.dealId));
-  const { brand, payload } = await buildQuotePdfPayload(q, d);
+  const { brand, payload } = await buildQuotePdfPayload(q, d, getScope(req).tenantId);
   const { renderQuotePdf } = await import('../pdf/quote');
   const { sendQuoteEmail } = await import('../lib/quoteEmail');
 
@@ -2158,6 +2186,10 @@ const QuoteTemplateLineItemInput = z.object({
   unitPrice: z.number().nonnegative(),
   listPrice: z.number().nonnegative(),
   discountPct: z.number().min(0).max(100),
+  // Optionaler USt-Override pro Vorlagen-Position. Wird beim Erzeugen eines
+  // Angebots aus der Vorlage in die line_items übernommen; null/undefined →
+  // Brand-/Tenant-Default greift zur Render-Zeit.
+  taxRatePct: z.number().min(0).max(100).nullable().optional(),
 });
 const QuoteTemplateBody = z.object({
   name: z.string().min(1).max(200),
@@ -2478,6 +2510,9 @@ router.post('/quotes/from-template', async (req, res) => {
       quantity: String(li.quantity), unitPrice: String(li.unitPrice),
       listPrice: String(li.listPrice), discountPct: String(li.discountPct),
       total: String(total),
+      taxRatePct: li.taxRatePct === null || li.taxRatePct === undefined
+        ? null
+        : String(li.taxRatePct),
     };
   });
   const totalAmount = lineRows.reduce((s, l) => s + Number(l.total), 0);
@@ -2529,6 +2564,13 @@ router.post('/quotes/from-template', async (req, res) => {
   const versions = await db.select().from(quoteVersionsTable).where(eq(quoteVersionsTable.quoteId, id));
   const lines = await db.select().from(lineItemsTable).where(eq(lineItemsTable.quoteVersionId, qvId));
   const base = await enrichQuote(q!, d.name);
+  const defaultRate = await resolveDefaultTaxRatePct({
+    brandId: d.brandId, tenantId: scope.tenantId,
+  });
+  const lineItemsOut = lines.map(l => mapLineWithTax(l, defaultRate));
+  const taxSummary = computeTaxSummary(
+    lineItemsOut.map(l => ({ total: l.total, taxRatePct: l.taxRatePct })),
+  );
   res.status(201).json({
     ...base,
     versions: versions.map(v => ({
@@ -2537,12 +2579,8 @@ router.post('/quotes/from-template', async (req, res) => {
       marginPct: num(v.marginPct), status: v.status, notes: v.notes,
       createdAt: iso(v.createdAt)!,
     })),
-    lineItems: lines.map(l => ({
-      id: l.id, quoteVersionId: l.quoteVersionId, name: l.name,
-      description: l.description, quantity: num(l.quantity),
-      unitPrice: num(l.unitPrice), listPrice: num(l.listPrice),
-      discountPct: num(l.discountPct), total: num(l.total),
-    })),
+    lineItems: lineItemsOut,
+    taxSummary,
     meta: {
       source: 'live', validFrom: iso(q!.createdAt), validTo: null,
       generatedAt: new Date().toISOString(), version: 1,
@@ -2558,6 +2596,8 @@ const ReplaceLineItemsBody = z.object({
     unitPrice: z.number().nonnegative(),
     listPrice: z.number().nonnegative(),
     discountPct: z.number().min(0).max(100),
+    // Optionaler Positions-Override für USt. Null/undefined → Brand-/Tenant-Default.
+    taxRatePct: z.number().min(0).max(100).nullable().optional(),
   })),
 });
 
@@ -2580,6 +2620,9 @@ async function replaceLineItemsHandler(req: Request, res: Response, qvIdParam: s
       quantity: String(li.quantity), unitPrice: String(li.unitPrice),
       listPrice: String(li.listPrice), discountPct: String(li.discountPct),
       total: String(total),
+      taxRatePct: li.taxRatePct === null || li.taxRatePct === undefined
+        ? null
+        : String(li.taxRatePct),
     };
   });
   if (rows.length) await db.insert(lineItemsTable).values(rows);
@@ -2587,15 +2630,27 @@ async function replaceLineItemsHandler(req: Request, res: Response, qvIdParam: s
   await db.update(quoteVersionsTable)
     .set({ totalAmount: String(totalAmount) })
     .where(eq(quoteVersionsTable.id, qv.id));
-  res.json({
-    items: rows.map(r => ({
+  // Default-USt für die Aggregation nach Brand → Tenant → 19 auflösen.
+  const [d] = await db.select().from(dealsTable).where(eq(dealsTable.id, q.dealId));
+  const scope = getScope(req);
+  const defaultRate = await resolveDefaultTaxRatePct({
+    brandId: d?.brandId, tenantId: scope.tenantId,
+  });
+  const itemsOut = rows.map(r => {
+    const eff = effectiveTaxRateFor(r.taxRatePct, defaultRate);
+    return {
       id: r.id, quoteVersionId: r.quoteVersionId, name: r.name,
       description: r.description, quantity: Number(r.quantity),
       unitPrice: Number(r.unitPrice), listPrice: Number(r.listPrice),
       discountPct: Number(r.discountPct), total: Number(r.total),
-    })),
-    totalAmount,
+      taxRatePct: eff.ratePct,
+      taxRatePctSource: eff.source,
+    };
   });
+  const taxSummary = computeTaxSummary(
+    itemsOut.map(i => ({ total: i.total, taxRatePct: i.taxRatePct })),
+  );
+  res.json({ items: itemsOut, totalAmount, taxSummary });
 }
 
 router.put('/quote-versions/:id/line-items', (req, res) =>
@@ -3429,6 +3484,85 @@ async function resolveDefaultLanguage(opts: {
   return 'de';
 }
 
+// ── Tax (USt.) resolution & aggregation ──
+// Effektiver USt-Satz pro Position kommt aus dem ersten gesetzten Wert in der
+// Reihenfolge: line-item override → brand default → tenant default → 19 %.
+// Wir cachen Brand+Tenant pro Aufruf, damit die Auflösung pro Quote nur einmal
+// die DB trifft (für lange Positionen-Listen relevant).
+const TAX_FALLBACK_PCT = 19;
+type TaxRateSource = 'line' | 'brand' | 'tenant' | 'fallback';
+
+async function resolveDefaultTaxRatePct(opts: {
+  brandId?: string | null;
+  tenantId: string;
+}): Promise<{ ratePct: number; source: 'brand' | 'tenant' | 'fallback' }> {
+  if (opts.brandId) {
+    const [b] = await db.select().from(brandsTable).where(eq(brandsTable.id, opts.brandId));
+    if (b?.defaultTaxRatePct !== null && b?.defaultTaxRatePct !== undefined) {
+      const n = Number(b.defaultTaxRatePct);
+      if (Number.isFinite(n)) return { ratePct: n, source: 'brand' };
+    }
+  }
+  const [t] = await db.select().from(tenantsTable).where(eq(tenantsTable.id, opts.tenantId));
+  if (t?.defaultTaxRatePct !== null && t?.defaultTaxRatePct !== undefined) {
+    const n = Number(t.defaultTaxRatePct);
+    if (Number.isFinite(n)) return { ratePct: n, source: 'tenant' };
+  }
+  return { ratePct: TAX_FALLBACK_PCT, source: 'fallback' };
+}
+
+function effectiveTaxRateFor(
+  lineRatePct: string | number | null | undefined,
+  defaultRate: { ratePct: number; source: 'brand' | 'tenant' | 'fallback' },
+): { ratePct: number; source: TaxRateSource } {
+  if (lineRatePct !== null && lineRatePct !== undefined && lineRatePct !== '') {
+    const n = typeof lineRatePct === 'string' ? Number(lineRatePct) : lineRatePct;
+    if (Number.isFinite(n)) return { ratePct: n, source: 'line' };
+  }
+  return defaultRate;
+}
+
+// Aggregiert Netto/USt/Brutto und liefert pro Satz einen Breakdown-Eintrag.
+// `lines` enthält bereits den effektiven Satz (über effectiveTaxRateFor).
+function computeTaxSummary(lines: Array<{ total: number; taxRatePct: number }>): {
+  net: number; tax: number; gross: number;
+  breakdown: Array<{ ratePct: number; net: number; tax: number }>;
+} {
+  const byRate = new Map<number, { net: number; tax: number }>();
+  let netSum = 0;
+  let taxSum = 0;
+  for (const l of lines) {
+    const rate = l.taxRatePct;
+    const tax = Math.round(l.total * (rate / 100));
+    netSum += l.total;
+    taxSum += tax;
+    const cur = byRate.get(rate) ?? { net: 0, tax: 0 };
+    cur.net += l.total;
+    cur.tax += tax;
+    byRate.set(rate, cur);
+  }
+  const breakdown = [...byRate.entries()]
+    .sort(([a], [b]) => a - b)
+    .map(([ratePct, v]) => ({ ratePct, net: v.net, tax: v.tax }));
+  return { net: netSum, tax: taxSum, gross: netSum + taxSum, breakdown };
+}
+
+// Mappt eine DB-Line auf das API-Shape inkl. effektivem USt-Satz + Quelle.
+function mapLineWithTax(
+  l: typeof lineItemsTable.$inferSelect,
+  defaultRate: { ratePct: number; source: 'brand' | 'tenant' | 'fallback' },
+) {
+  const eff = effectiveTaxRateFor(l.taxRatePct, defaultRate);
+  return {
+    id: l.id, quoteVersionId: l.quoteVersionId, name: l.name,
+    description: l.description, quantity: num(l.quantity),
+    unitPrice: num(l.unitPrice), listPrice: num(l.listPrice),
+    discountPct: num(l.discountPct), total: num(l.total),
+    taxRatePct: eff.ratePct,
+    taxRatePctSource: eff.source,
+  };
+}
+
 async function loadVariantTranslations(variantIds: string[]): Promise<Map<string, Map<string, typeof clauseVariantTranslationsTable.$inferSelect>>> {
   if (variantIds.length === 0) return new Map();
   const rows = await db.select().from(clauseVariantTranslationsTable)
@@ -3719,7 +3853,21 @@ function mapBrand(b: typeof brandsTable.$inferSelect) {
     addressLine: b.addressLine ?? null,
     parentBrandId: b.parentBrandId ?? null,
     defaultContractTypeId: b.defaultContractTypeId ?? null,
+    defaultTaxRatePct: b.defaultTaxRatePct === null || b.defaultTaxRatePct === undefined
+      ? null
+      : Number(b.defaultTaxRatePct),
   };
+}
+
+// Validiert + normalisiert einen optionalen USt-Satz aus einem Body-Feld.
+// Liefert { ok: true, value: number | null } bei Erfolg oder { ok: false, error }
+// für 400/422 Antworten. Akzeptiert: number 0..100 oder null/'' (→ null).
+function parseTaxRatePct(v: unknown): { ok: true; value: number | null } | { ok: false; error: string } {
+  if (v === null || v === '' || v === undefined) return { ok: true, value: null };
+  const n = typeof v === 'string' ? Number(v) : v;
+  if (typeof n !== 'number' || !Number.isFinite(n)) return { ok: false, error: 'taxRatePct must be a number' };
+  if (n < 0 || n > 100) return { ok: false, error: 'taxRatePct must be between 0 and 100' };
+  return { ok: true, value: n };
 }
 
 async function brandVisible(req: Request, b: typeof brandsTable.$inferSelect): Promise<boolean> {
@@ -3785,6 +3933,12 @@ router.patch('/brands/:id', async (req, res) => {
       if (!ct.active) { res.status(422).json({ error: 'defaultContractTypeId is inactive' }); return; }
       patch.defaultContractTypeId = ct.id;
     }
+  }
+  // defaultTaxRatePct (nullable, 0..100). NULL setzt zurück auf Tenant-Default.
+  if ('defaultTaxRatePct' in body) {
+    const parsed = parseTaxRatePct(body.defaultTaxRatePct);
+    if (!parsed.ok) { res.status(422).json({ error: parsed.error }); return; }
+    patch.defaultTaxRatePct = parsed.value === null ? null : String(parsed.value);
   }
   // parentBrandId separat behandeln (nullable, mit Self-/Company-Validation).
   if ('parentBrandId' in body) {
@@ -10941,6 +11095,7 @@ router.post('/quotes/:id/duplicate', async (req, res) => {
               listPrice: l.listPrice,
               discountPct: '0',
               total,
+              taxRatePct: l.taxRatePct,
             };
           }
           return {
@@ -10953,6 +11108,7 @@ router.post('/quotes/:id/duplicate', async (req, res) => {
             listPrice: l.listPrice,
             discountPct: l.discountPct,
             total: l.total,
+            taxRatePct: l.taxRatePct,
           };
         }));
         // Wenn Rabatt entfernt wurde, Gesamtsumme der Version neu berechnen.

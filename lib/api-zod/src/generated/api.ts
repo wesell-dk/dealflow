@@ -46,11 +46,21 @@ export const HealthCheckResponse = zod.object({
 /**
  * @summary Get the currently active tenant (single-tenant demo)
  */
+export const getTenantResponseDefaultTaxRatePctMin = 0;
+export const getTenantResponseDefaultTaxRatePctMax = 100;
+
 export const GetTenantResponse = zod.object({
   id: zod.string(),
   name: zod.string(),
   plan: zod.string(),
   region: zod.string(),
+  defaultTaxRatePct: zod
+    .number()
+    .min(getTenantResponseDefaultTaxRatePctMin)
+    .max(getTenantResponseDefaultTaxRatePctMax)
+    .describe(
+      "Tenant-weiter Default-USt-Satz in Prozent. Wird verwendet, wenn weder Brand- noch Positions-Override gesetzt ist.",
+    ),
   createdAt: zod.coerce.date(),
 });
 
@@ -158,6 +168,9 @@ export const ListBrandsQueryParams = zod.object({
     ),
 });
 
+export const listBrandsResponseDefaultTaxRatePctMin = 0;
+export const listBrandsResponseDefaultTaxRatePctMax = 100;
+
 export const ListBrandsResponseItem = zod.object({
   id: zod.string(),
   companyId: zod.string(),
@@ -188,6 +201,12 @@ export const ListBrandsResponseItem = zod.object({
     .describe(
       "Bevorzugter Vertragstyp dieser Brand. Wird in POST \/contracts verwendet, wenn der Aufruf keinen expliziten contractTypeId angibt (vor der Template-Heuristik). NULL → Heuristik nutzen.",
     ),
+  defaultTaxRatePct: zod
+    .number()
+    .min(listBrandsResponseDefaultTaxRatePctMin)
+    .max(listBrandsResponseDefaultTaxRatePctMax)
+    .nullish()
+    .describe("Brand-Override für USt-Satz in Prozent. NULL → Tenant-Default."),
 });
 export const ListBrandsResponse = zod.array(ListBrandsResponseItem);
 
@@ -195,6 +214,9 @@ export const ListBrandsResponse = zod.array(ListBrandsResponseItem);
  * @summary Neuen Brand zu einer Gesellschaft hinzufügen
  */
 export const createBrandBodyNameMax = 200;
+
+export const createBrandBodyDefaultTaxRatePctMin = 0;
+export const createBrandBodyDefaultTaxRatePctMax = 100;
 
 export const CreateBrandBody = zod.object({
   companyId: zod.string(),
@@ -222,6 +244,14 @@ export const CreateBrandBody = zod.object({
     .describe(
       "Optional bei Anlage: bevorzugter Vertragstyp für POST \/contracts. Muss tenant-eigen oder ein tn_root-Seed sein und aktiv sein.",
     ),
+  defaultTaxRatePct: zod
+    .number()
+    .min(createBrandBodyDefaultTaxRatePctMin)
+    .max(createBrandBodyDefaultTaxRatePctMax)
+    .nullish()
+    .describe(
+      "Optional bei Anlage: Brand-Override für USt-Satz in Prozent. NULL → Tenant-Default.",
+    ),
 });
 
 /**
@@ -230,6 +260,9 @@ export const CreateBrandBody = zod.object({
 export const DeleteBrandParams = zod.object({
   id: zod.coerce.string(),
 });
+
+export const listBrandsWithDefaultsResponseDefaultTaxRatePctMin = 0;
+export const listBrandsWithDefaultsResponseDefaultTaxRatePctMax = 100;
 
 export const ListBrandsWithDefaultsResponseItem = zod.object({
   id: zod.string(),
@@ -261,6 +294,12 @@ export const ListBrandsWithDefaultsResponseItem = zod.object({
     .describe(
       "Bevorzugter Vertragstyp dieser Brand. Wird in POST \/contracts verwendet, wenn der Aufruf keinen expliziten contractTypeId angibt (vor der Template-Heuristik). NULL → Heuristik nutzen.",
     ),
+  defaultTaxRatePct: zod
+    .number()
+    .min(listBrandsWithDefaultsResponseDefaultTaxRatePctMin)
+    .max(listBrandsWithDefaultsResponseDefaultTaxRatePctMax)
+    .nullish()
+    .describe("Brand-Override für USt-Satz in Prozent. NULL → Tenant-Default."),
 });
 export const ListBrandsWithDefaultsResponse = zod.array(
   ListBrandsWithDefaultsResponseItem,
@@ -269,6 +308,9 @@ export const ListBrandsWithDefaultsResponse = zod.array(
 export const UpdateBrandParams = zod.object({
   id: zod.coerce.string(),
 });
+
+export const updateBrandBodyDefaultTaxRatePctMin = 0;
+export const updateBrandBodyDefaultTaxRatePctMax = 100;
 
 export const UpdateBrandBody = zod.object({
   name: zod.string().optional(),
@@ -288,7 +330,18 @@ export const UpdateBrandBody = zod.object({
     .describe(
       "Bevorzugter Vertragstyp. Muss tenant-eigen oder ein tn_root-Seed sein und aktiv sein. NULL setzt zurück auf Heuristik.",
     ),
+  defaultTaxRatePct: zod
+    .number()
+    .min(updateBrandBodyDefaultTaxRatePctMin)
+    .max(updateBrandBodyDefaultTaxRatePctMax)
+    .nullish()
+    .describe(
+      "Brand-Override für USt-Satz in Prozent. NULL setzt zurück auf Tenant-Default.",
+    ),
 });
+
+export const updateBrandResponseDefaultTaxRatePctMin = 0;
+export const updateBrandResponseDefaultTaxRatePctMax = 100;
 
 export const UpdateBrandResponse = zod.object({
   id: zod.string(),
@@ -320,6 +373,12 @@ export const UpdateBrandResponse = zod.object({
     .describe(
       "Bevorzugter Vertragstyp dieser Brand. Wird in POST \/contracts verwendet, wenn der Aufruf keinen expliziten contractTypeId angibt (vor der Template-Heuristik). NULL → Heuristik nutzen.",
     ),
+  defaultTaxRatePct: zod
+    .number()
+    .min(updateBrandResponseDefaultTaxRatePctMin)
+    .max(updateBrandResponseDefaultTaxRatePctMax)
+    .nullish()
+    .describe("Brand-Override für USt-Satz in Prozent. NULL → Tenant-Default."),
 });
 
 export const UpdateBrandDefaultClausesParams = zod.object({
@@ -329,6 +388,9 @@ export const UpdateBrandDefaultClausesParams = zod.object({
 export const UpdateBrandDefaultClausesBody = zod.object({
   defaults: zod.record(zod.string(), zod.string()),
 });
+
+export const updateBrandDefaultClausesResponseDefaultTaxRatePctMin = 0;
+export const updateBrandDefaultClausesResponseDefaultTaxRatePctMax = 100;
 
 export const UpdateBrandDefaultClausesResponse = zod.object({
   id: zod.string(),
@@ -360,6 +422,12 @@ export const UpdateBrandDefaultClausesResponse = zod.object({
     .describe(
       "Bevorzugter Vertragstyp dieser Brand. Wird in POST \/contracts verwendet, wenn der Aufruf keinen expliziten contractTypeId angibt (vor der Template-Heuristik). NULL → Heuristik nutzen.",
     ),
+  defaultTaxRatePct: zod
+    .number()
+    .min(updateBrandDefaultClausesResponseDefaultTaxRatePctMin)
+    .max(updateBrandDefaultClausesResponseDefaultTaxRatePctMax)
+    .nullish()
+    .describe("Brand-Override für USt-Satz in Prozent. NULL → Tenant-Default."),
 });
 
 export const ListUsersResponseItem = zod.object({
@@ -1202,6 +1270,12 @@ export const GetQuoteParams = zod.object({
   id: zod.coerce.string(),
 });
 
+export const getQuoteResponseTwoLineItemsItemTaxRatePctMin = 0;
+export const getQuoteResponseTwoLineItemsItemTaxRatePctMax = 100;
+
+export const getQuoteResponseTwoTaxSummaryBreakdownItemRatePctMin = 0;
+export const getQuoteResponseTwoTaxSummaryBreakdownItemRatePctMax = 100;
+
 export const GetQuoteResponse = zod
   .object({
     id: zod.string(),
@@ -1255,7 +1329,20 @@ export const GetQuoteResponse = zod
           unitPrice: zod.number(),
           listPrice: zod.number(),
           discountPct: zod.number(),
-          total: zod.number(),
+          total: zod.number().describe("Netto-Positionssumme (ohne USt)."),
+          taxRatePct: zod
+            .number()
+            .min(getQuoteResponseTwoLineItemsItemTaxRatePctMin)
+            .max(getQuoteResponseTwoLineItemsItemTaxRatePctMax)
+            .describe(
+              "Effektiver USt-Satz dieser Position in Prozent (Position → Brand-Default → Tenant-Default → 19).",
+            ),
+          taxRatePctSource: zod
+            .enum(["line", "brand", "tenant", "fallback"])
+            .optional()
+            .describe(
+              "Herkunft des effektiven Satzes (line=Override, brand=Brand-Default, tenant=Tenant-Default, fallback=hardcoded 19).",
+            ),
         }),
       ),
       orderConfirmations: zod
@@ -1272,6 +1359,29 @@ export const GetQuoteResponse = zod
         .describe(
           "Aus diesem Angebot bereits abgeleitete Auftragsbestätigungen. Leeres Array, solange noch keiner umgewandelt wurde.",
         ),
+      taxSummary: zod.object({
+        net: zod
+          .number()
+          .describe("Gesamtnetto (Summe aller Positions-Totals)."),
+        tax: zod
+          .number()
+          .describe("Gesamt-USt (Summe aller Brutto-Steuerbeträge)."),
+        gross: zod.number().describe("Bruttosumme = net + tax."),
+        breakdown: zod
+          .array(
+            zod.object({
+              ratePct: zod
+                .number()
+                .min(getQuoteResponseTwoTaxSummaryBreakdownItemRatePctMin)
+                .max(getQuoteResponseTwoTaxSummaryBreakdownItemRatePctMax),
+              net: zod.number().describe("Netto-Anteil zu diesem Satz."),
+              tax: zod.number().describe("USt-Betrag zu diesem Satz."),
+            }),
+          )
+          .describe(
+            "Aggregation pro USt-Satz, sortiert nach Satz aufsteigend.",
+          ),
+      }),
     }),
   );
 
@@ -1442,6 +1552,9 @@ export const ReplaceQuoteLineItemsParams = zod.object({
   id: zod.coerce.string(),
 });
 
+export const replaceQuoteLineItemsBodyItemsItemTaxRatePctMin = 0;
+export const replaceQuoteLineItemsBodyItemsItemTaxRatePctMax = 100;
+
 export const ReplaceQuoteLineItemsBody = zod.object({
   items: zod.array(
     zod.object({
@@ -1451,9 +1564,20 @@ export const ReplaceQuoteLineItemsBody = zod.object({
       unitPrice: zod.number(),
       listPrice: zod.number(),
       discountPct: zod.number(),
+      taxRatePct: zod
+        .number()
+        .min(replaceQuoteLineItemsBodyItemsItemTaxRatePctMin)
+        .max(replaceQuoteLineItemsBodyItemsItemTaxRatePctMax)
+        .nullish()
+        .describe(
+          "Optional. Wenn gesetzt → Position-Override. NULL\/weggelassen → Brand- bzw. Tenant-Default.",
+        ),
     }),
   ),
 });
+
+export const replaceQuoteLineItemsResponseItemsItemTaxRatePctMin = 0;
+export const replaceQuoteLineItemsResponseItemsItemTaxRatePctMax = 100;
 
 export const ReplaceQuoteLineItemsResponse = zod.object({
   items: zod.array(
@@ -1466,7 +1590,20 @@ export const ReplaceQuoteLineItemsResponse = zod.object({
       unitPrice: zod.number(),
       listPrice: zod.number(),
       discountPct: zod.number(),
-      total: zod.number(),
+      total: zod.number().describe("Netto-Positionssumme (ohne USt)."),
+      taxRatePct: zod
+        .number()
+        .min(replaceQuoteLineItemsResponseItemsItemTaxRatePctMin)
+        .max(replaceQuoteLineItemsResponseItemsItemTaxRatePctMax)
+        .describe(
+          "Effektiver USt-Satz dieser Position in Prozent (Position → Brand-Default → Tenant-Default → 19).",
+        ),
+      taxRatePctSource: zod
+        .enum(["line", "brand", "tenant", "fallback"])
+        .optional()
+        .describe(
+          "Herkunft des effektiven Satzes (line=Override, brand=Brand-Default, tenant=Tenant-Default, fallback=hardcoded 19).",
+        ),
     }),
   ),
   totalAmount: zod.number(),
@@ -1514,6 +1651,9 @@ export const ListQuoteTemplatesQueryParams = zod.object({
   industry: zod.coerce.string().optional(),
 });
 
+export const listQuoteTemplatesResponseDefaultLineItemsItemTaxRatePctMin = 0;
+export const listQuoteTemplatesResponseDefaultLineItemsItemTaxRatePctMax = 100;
+
 export const ListQuoteTemplatesResponseItem = zod.object({
   id: zod.string(),
   tenantId: zod.string(),
@@ -1534,6 +1674,14 @@ export const ListQuoteTemplatesResponseItem = zod.object({
       unitPrice: zod.number(),
       listPrice: zod.number(),
       discountPct: zod.number(),
+      taxRatePct: zod
+        .number()
+        .min(listQuoteTemplatesResponseDefaultLineItemsItemTaxRatePctMin)
+        .max(listQuoteTemplatesResponseDefaultLineItemsItemTaxRatePctMax)
+        .nullish()
+        .describe(
+          "Optionaler USt-Satz pro Vorlagen-Position. NULL\/weggelassen → Brand- bzw. Tenant-Default beim Anlegen des Angebots.",
+        ),
     }),
   ),
   defaultAttachmentLibraryIds: zod.array(zod.string()),
@@ -1551,6 +1699,9 @@ export const ListQuoteTemplatesResponseItem = zod.object({
 export const ListQuoteTemplatesResponse = zod.array(
   ListQuoteTemplatesResponseItem,
 );
+
+export const createQuoteTemplateBodyDefaultLineItemsItemTaxRatePctMin = 0;
+export const createQuoteTemplateBodyDefaultLineItemsItemTaxRatePctMax = 100;
 
 export const CreateQuoteTemplateBody = zod.object({
   name: zod.string(),
@@ -1570,6 +1721,14 @@ export const CreateQuoteTemplateBody = zod.object({
         unitPrice: zod.number(),
         listPrice: zod.number(),
         discountPct: zod.number(),
+        taxRatePct: zod
+          .number()
+          .min(createQuoteTemplateBodyDefaultLineItemsItemTaxRatePctMin)
+          .max(createQuoteTemplateBodyDefaultLineItemsItemTaxRatePctMax)
+          .nullish()
+          .describe(
+            "Optionaler USt-Satz pro Vorlagen-Position. NULL\/weggelassen → Brand- bzw. Tenant-Default beim Anlegen des Angebots.",
+          ),
       }),
     )
     .optional(),
@@ -1589,6 +1748,9 @@ export const CreateQuoteTemplateBody = zod.object({
 export const GetQuoteTemplateParams = zod.object({
   id: zod.coerce.string(),
 });
+
+export const getQuoteTemplateResponseDefaultLineItemsItemTaxRatePctMin = 0;
+export const getQuoteTemplateResponseDefaultLineItemsItemTaxRatePctMax = 100;
 
 export const GetQuoteTemplateResponse = zod.object({
   id: zod.string(),
@@ -1610,6 +1772,14 @@ export const GetQuoteTemplateResponse = zod.object({
       unitPrice: zod.number(),
       listPrice: zod.number(),
       discountPct: zod.number(),
+      taxRatePct: zod
+        .number()
+        .min(getQuoteTemplateResponseDefaultLineItemsItemTaxRatePctMin)
+        .max(getQuoteTemplateResponseDefaultLineItemsItemTaxRatePctMax)
+        .nullish()
+        .describe(
+          "Optionaler USt-Satz pro Vorlagen-Position. NULL\/weggelassen → Brand- bzw. Tenant-Default beim Anlegen des Angebots.",
+        ),
     }),
   ),
   defaultAttachmentLibraryIds: zod.array(zod.string()),
@@ -1629,6 +1799,9 @@ export const UpdateQuoteTemplateParams = zod.object({
   id: zod.coerce.string(),
 });
 
+export const updateQuoteTemplateBodyDefaultLineItemsItemTaxRatePctMin = 0;
+export const updateQuoteTemplateBodyDefaultLineItemsItemTaxRatePctMax = 100;
+
 export const UpdateQuoteTemplateBody = zod.object({
   name: zod.string(),
   description: zod.string().optional(),
@@ -1647,6 +1820,14 @@ export const UpdateQuoteTemplateBody = zod.object({
         unitPrice: zod.number(),
         listPrice: zod.number(),
         discountPct: zod.number(),
+        taxRatePct: zod
+          .number()
+          .min(updateQuoteTemplateBodyDefaultLineItemsItemTaxRatePctMin)
+          .max(updateQuoteTemplateBodyDefaultLineItemsItemTaxRatePctMax)
+          .nullish()
+          .describe(
+            "Optionaler USt-Satz pro Vorlagen-Position. NULL\/weggelassen → Brand- bzw. Tenant-Default beim Anlegen des Angebots.",
+          ),
       }),
     )
     .optional(),
@@ -1662,6 +1843,9 @@ export const UpdateQuoteTemplateBody = zod.object({
     )
     .optional(),
 });
+
+export const updateQuoteTemplateResponseDefaultLineItemsItemTaxRatePctMin = 0;
+export const updateQuoteTemplateResponseDefaultLineItemsItemTaxRatePctMax = 100;
 
 export const UpdateQuoteTemplateResponse = zod.object({
   id: zod.string(),
@@ -1683,6 +1867,14 @@ export const UpdateQuoteTemplateResponse = zod.object({
       unitPrice: zod.number(),
       listPrice: zod.number(),
       discountPct: zod.number(),
+      taxRatePct: zod
+        .number()
+        .min(updateQuoteTemplateResponseDefaultLineItemsItemTaxRatePctMin)
+        .max(updateQuoteTemplateResponseDefaultLineItemsItemTaxRatePctMax)
+        .nullish()
+        .describe(
+          "Optionaler USt-Satz pro Vorlagen-Position. NULL\/weggelassen → Brand- bzw. Tenant-Default beim Anlegen des Angebots.",
+        ),
     }),
   ),
   defaultAttachmentLibraryIds: zod.array(zod.string()),

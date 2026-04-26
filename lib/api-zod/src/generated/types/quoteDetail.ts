@@ -11,10 +11,12 @@ import type { LineItem } from "./lineItem";
 import type { Quote } from "./quote";
 import type { QuoteOrderConfirmationLink } from "./quoteOrderConfirmationLink";
 import type { QuoteVersion } from "./quoteVersion";
+import type { TaxSummary } from "./taxSummary";
 
 export type QuoteDetail = Quote & {
   versions: QuoteVersion[];
   lineItems: LineItem[];
   /** Aus diesem Angebot bereits abgeleitete Auftragsbestätigungen. Leeres Array, solange noch keiner umgewandelt wurde. */
   orderConfirmations?: QuoteOrderConfirmationLink[];
+  taxSummary: TaxSummary;
 };

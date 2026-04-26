@@ -29,4 +29,10 @@ export interface BrandCreate {
   addressLine?: string | null;
   /** Optional bei Anlage: bevorzugter Vertragstyp für POST /contracts. Muss tenant-eigen oder ein tn_root-Seed sein und aktiv sein. */
   defaultContractTypeId?: string | null;
+  /**
+   * Optional bei Anlage: Brand-Override für USt-Satz in Prozent. NULL → Tenant-Default.
+   * @minimum 0
+   * @maximum 100
+   */
+  defaultTaxRatePct?: number | null;
 }

@@ -483,6 +483,12 @@ export interface Tenant {
   name: string;
   plan: string;
   region: string;
+  /**
+   * Tenant-weiter Default-USt-Satz in Prozent. Wird verwendet, wenn weder Brand- noch Positions-Override gesetzt ist.
+   * @minimum 0
+   * @maximum 100
+   */
+  defaultTaxRatePct: number;
   createdAt: string;
 }
 
@@ -533,6 +539,12 @@ export interface Brand {
   defaultLanguage?: BrandDefaultLanguage;
   /** Bevorzugter Vertragstyp dieser Brand. Wird in POST /contracts verwendet, wenn der Aufruf keinen expliziten contractTypeId angibt (vor der Template-Heuristik). NULL → Heuristik nutzen. */
   defaultContractTypeId?: string | null;
+  /**
+   * Brand-Override für USt-Satz in Prozent. NULL → Tenant-Default.
+   * @minimum 0
+   * @maximum 100
+   */
+  defaultTaxRatePct?: number | null;
 }
 
 export type BrandUpdateDefaultLanguage =
@@ -558,6 +570,12 @@ export interface BrandUpdate {
   defaultLanguage?: BrandUpdateDefaultLanguage;
   /** Bevorzugter Vertragstyp. Muss tenant-eigen oder ein tn_root-Seed sein und aktiv sein. NULL setzt zurück auf Heuristik. */
   defaultContractTypeId?: string | null;
+  /**
+   * Brand-Override für USt-Satz in Prozent. NULL setzt zurück auf Tenant-Default.
+   * @minimum 0
+   * @maximum 100
+   */
+  defaultTaxRatePct?: number | null;
 }
 
 export interface CompanyCreate {
@@ -629,6 +647,12 @@ export interface BrandCreate {
   addressLine?: string | null;
   /** Optional bei Anlage: bevorzugter Vertragstyp für POST /contracts. Muss tenant-eigen oder ein tn_root-Seed sein und aktiv sein. */
   defaultContractTypeId?: string | null;
+  /**
+   * Optional bei Anlage: Brand-Override für USt-Satz in Prozent. NULL → Tenant-Default.
+   * @minimum 0
+   * @maximum 100
+   */
+  defaultTaxRatePct?: number | null;
 }
 
 /**
@@ -1456,6 +1480,19 @@ export interface QuoteVersion {
   notes?: string | null;
 }
 
+/**
+ * Herkunft des effektiven Satzes (line=Override, brand=Brand-Default, tenant=Tenant-Default, fallback=hardcoded 19).
+ */
+export type LineItemTaxRatePctSource =
+  (typeof LineItemTaxRatePctSource)[keyof typeof LineItemTaxRatePctSource];
+
+export const LineItemTaxRatePctSource = {
+  line: "line",
+  brand: "brand",
+  tenant: "tenant",
+  fallback: "fallback",
+} as const;
+
 export interface LineItem {
   id: string;
   quoteVersionId: string;
@@ -1466,7 +1503,39 @@ export interface LineItem {
   unitPrice: number;
   listPrice: number;
   discountPct: number;
+  /** Netto-Positionssumme (ohne USt). */
   total: number;
+  /**
+   * Effektiver USt-Satz dieser Position in Prozent (Position → Brand-Default → Tenant-Default → 19).
+   * @minimum 0
+   * @maximum 100
+   */
+  taxRatePct: number;
+  /** Herkunft des effektiven Satzes (line=Override, brand=Brand-Default, tenant=Tenant-Default, fallback=hardcoded 19). */
+  taxRatePctSource?: LineItemTaxRatePctSource;
+}
+
+export interface TaxBreakdownEntry {
+  /**
+   * @minimum 0
+   * @maximum 100
+   */
+  ratePct: number;
+  /** Netto-Anteil zu diesem Satz. */
+  net: number;
+  /** USt-Betrag zu diesem Satz. */
+  tax: number;
+}
+
+export interface TaxSummary {
+  /** Gesamtnetto (Summe aller Positions-Totals). */
+  net: number;
+  /** Gesamt-USt (Summe aller Brutto-Steuerbeträge). */
+  tax: number;
+  /** Bruttosumme = net + tax. */
+  gross: number;
+  /** Aggregation pro USt-Satz, sortiert nach Satz aufsteigend. */
+  breakdown: TaxBreakdownEntry[];
 }
 
 export interface QuoteOrderConfirmationLink {
@@ -1483,6 +1552,7 @@ export type QuoteDetail = Quote & {
   lineItems: LineItem[];
   /** Aus diesem Angebot bereits abgeleitete Auftragsbestätigungen. Leeres Array, solange noch keiner umgewandelt wurde. */
   orderConfirmations?: QuoteOrderConfirmationLink[];
+  taxSummary: TaxSummary;
 };
 
 export interface QuoteVersionInput {
@@ -1497,6 +1567,12 @@ export interface LineItemInput {
   unitPrice: number;
   listPrice: number;
   discountPct: number;
+  /**
+   * Optional. Wenn gesetzt → Position-Override. NULL/weggelassen → Brand- bzw. Tenant-Default.
+   * @minimum 0
+   * @maximum 100
+   */
+  taxRatePct?: number | null;
 }
 
 export interface QuoteFromTemplateInput {
@@ -1555,6 +1631,12 @@ export interface QuoteTemplateLineItem {
   unitPrice: number;
   listPrice: number;
   discountPct: number;
+  /**
+   * Optionaler USt-Satz pro Vorlagen-Position. NULL/weggelassen → Brand- bzw. Tenant-Default beim Anlegen des Angebots.
+   * @minimum 0
+   * @maximum 100
+   */
+  taxRatePct?: number | null;
 }
 
 export interface QuoteTemplate {

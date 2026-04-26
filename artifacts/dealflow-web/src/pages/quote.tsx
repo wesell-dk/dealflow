@@ -192,15 +192,30 @@ export default function Quote() {
             <CardHeader><CardTitle>{t("pages.quote.lineItems")}</CardTitle></CardHeader>
             <CardContent>
               <div className="space-y-4">
-                {quote.lineItems.map(item => (
-                  <div key={item.id} className="flex justify-between items-center border-b pb-2">
-                    <div>
-                      <div className="font-medium">{item.name}</div>
-                      <div className="text-xs text-muted-foreground">{t("quoteWizard.qty")}: {item.quantity} &times; {item.unitPrice}</div>
+                {quote.lineItems.map(item => {
+                  const ratePctRaw = (item as { taxRatePct?: number | null }).taxRatePct;
+                  const ratePct = ratePctRaw == null ? null : Number(ratePctRaw);
+                  const ratePctDisplay = ratePct == null
+                    ? null
+                    : (Math.round(ratePct * 100) / 100).toLocaleString();
+                  return (
+                    <div key={item.id} className="flex justify-between items-center border-b pb-2" data-testid={`quote-line-${item.id}`}>
+                      <div>
+                        <div className="font-medium">{item.name}</div>
+                        <div className="text-xs text-muted-foreground">
+                          {t("quoteWizard.qty")}: {item.quantity} &times; {item.unitPrice}
+                          {ratePctDisplay !== null && (
+                            <>
+                              {" · "}
+                              {t("pages.quote.taxRateLine", { pct: ratePctDisplay })}
+                            </>
+                          )}
+                        </div>
+                      </div>
+                      <div className="font-bold">{item.total.toLocaleString()}</div>
                     </div>
-                    <div className="font-bold">{item.total.toLocaleString()}</div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             </CardContent>
           </Card>
@@ -294,8 +309,63 @@ export default function Quote() {
         <div>
           <Card>
             <CardHeader><CardTitle>{t("pages.quote.summary")}</CardTitle></CardHeader>
-            <CardContent className="space-y-2">
-              <div className="flex justify-between"><span>{t("common.total")}:</span> <strong>{quote.totalAmount.toLocaleString()} {quote.currency}</strong></div>
+            <CardContent className="space-y-2" data-testid="quote-summary-card">
+              {(() => {
+                const taxSummary = (quote as {
+                  taxSummary?: {
+                    net: number;
+                    tax: number;
+                    gross: number;
+                    breakdown: { ratePct: number; net: number; tax: number }[];
+                  };
+                }).taxSummary;
+                if (!taxSummary) {
+                  return (
+                    <div className="flex justify-between">
+                      <span>{t("common.total")}:</span>{" "}
+                      <strong>
+                        {quote.totalAmount.toLocaleString()} {quote.currency}
+                      </strong>
+                    </div>
+                  );
+                }
+                return (
+                  <>
+                    <div className="flex justify-between">
+                      <span>{t("pages.quote.netto")}:</span>{" "}
+                      <strong className="tabular-nums">
+                        {taxSummary.net.toLocaleString()} {quote.currency}
+                      </strong>
+                    </div>
+                    {taxSummary.breakdown.map((b) => (
+                      <div
+                        key={b.ratePct}
+                        className="flex justify-between text-sm text-muted-foreground"
+                        data-testid={`quote-tax-row-${b.ratePct}`}
+                      >
+                        <span>
+                          {b.ratePct === 0
+                            ? t("pages.quote.vatExempt")
+                            : t("pages.quote.vatAt", {
+                                pct: (Math.round(b.ratePct * 100) / 100).toLocaleString(),
+                              })}
+                        </span>
+                        <span className="tabular-nums">
+                          {b.tax.toLocaleString()} {quote.currency}
+                        </span>
+                      </div>
+                    ))}
+                    <div className="flex justify-between border-t pt-2">
+                      <span className="font-semibold">
+                        {t("pages.quote.brutto")}:
+                      </span>{" "}
+                      <strong className="tabular-nums">
+                        {taxSummary.gross.toLocaleString()} {quote.currency}
+                      </strong>
+                    </div>
+                  </>
+                );
+              })()}
               <div className="flex justify-between"><span>{t("common.discount")}:</span> <strong>{quote.discountPct}%</strong></div>
               <div className="flex justify-between"><span>{t("pages.quote.margin")}:</span> <strong>{quote.marginPct}%</strong></div>
               <div className="flex justify-between"><span>{t("common.validUntil")}:</span> <strong>{new Date(quote.validUntil).toLocaleDateString()}</strong></div>

@@ -8,16 +8,14 @@ Multi-tenant, multi-company, multi-brand. Deal-centric.
  * OpenAPI spec version: 0.1.0
  */
 
-export interface Tenant {
-  id: string;
-  name: string;
-  plan: string;
-  region: string;
+export interface TaxBreakdownEntry {
   /**
-   * Tenant-weiter Default-USt-Satz in Prozent. Wird verwendet, wenn weder Brand- noch Positions-Override gesetzt ist.
    * @minimum 0
    * @maximum 100
    */
-  defaultTaxRatePct: number;
-  createdAt: Date;
+  ratePct: number;
+  /** Netto-Anteil zu diesem Satz. */
+  net: number;
+  /** USt-Betrag zu diesem Satz. */
+  tax: number;
 }

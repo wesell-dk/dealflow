@@ -44,6 +44,9 @@ export const tenantsTable = pgTable("tenants", {
     .$type<{ diffThresholdPct?: number; repeatThreshold?: number }>()
     .default({})
     .notNull(),
+  // Tenant-weiter Default-USt-Satz (in Prozent). Wird angewendet, wenn weder
+  // Brand- noch Positions-Override gesetzt ist. Standard 19 (DE).
+  defaultTaxRatePct: numeric("default_tax_rate_pct").notNull().default("19"),
   createdAt: ts("created_at"),
 });
 
@@ -88,6 +91,8 @@ export const brandsTable = pgTable("brands", {
   // wird verwendet. Platzhalter: {{number}}, {{customer}}, {{brand}}, {{validUntil}}.
   quoteEmailSubjectTemplate: text("quote_email_subject_template"),
   quoteEmailBodyTemplate: text("quote_email_body_template"),
+  // Brand-Override für USt-Satz (in Prozent). NULL → Tenant-Default.
+  defaultTaxRatePct: numeric("default_tax_rate_pct"),
 });
 
 export const usersTable = pgTable("users", {
@@ -265,6 +270,10 @@ export const lineItemsTable = pgTable("line_items", {
   listPrice: numeric("list_price").notNull(),
   discountPct: numeric("discount_pct").notNull(),
   total: numeric("total").notNull(),
+  // Positions-USt-Satz in Prozent. NULL → fallback auf Brand- bzw.
+  // Tenant-Default. `total` ist immer netto (ohne USt) — Bruttowerte werden
+  // serverseitig in der Quote-Antwort als taxSummary aggregiert.
+  taxRatePct: numeric("tax_rate_pct"),
 });
 
 // Quote templates (reusable section + line-item bundles per industry)
@@ -288,6 +297,7 @@ export const quoteTemplatesTable = pgTable("quote_templates", {
       unitPrice: number;
       listPrice: number;
       discountPct: number;
+      taxRatePct?: number | null;
     }>>()
     .default([])
     .notNull(),

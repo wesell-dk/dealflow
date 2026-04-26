@@ -23,4 +23,10 @@ export interface BrandUpdate {
   defaultLanguage?: BrandUpdateDefaultLanguage;
   /** Bevorzugter Vertragstyp. Muss tenant-eigen oder ein tn_root-Seed sein und aktiv sein. NULL setzt zurück auf Heuristik. */
   defaultContractTypeId?: string | null;
+  /**
+   * Brand-Override für USt-Satz in Prozent. NULL setzt zurück auf Tenant-Default.
+   * @minimum 0
+   * @maximum 100
+   */
+  defaultTaxRatePct?: number | null;
 }

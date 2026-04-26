@@ -27,6 +27,23 @@ export interface QuotePdfLine {
   listPrice: number;
   discountPct: number;
   total: number;
+  // Effektiver USt-Satz dieser Position in Prozent (Server hat Brand/Tenant
+  // Default bereits aufgelöst). Pflicht im PDF, da die Tax-Spalte gerendert
+  // wird.
+  taxRatePct: number;
+}
+
+export interface QuotePdfTaxBreakdownEntry {
+  ratePct: number;
+  net: number;
+  tax: number;
+}
+
+export interface QuotePdfTaxSummary {
+  net: number;
+  tax: number;
+  gross: number;
+  breakdown: QuotePdfTaxBreakdownEntry[];
 }
 
 export interface QuotePdfSection {
@@ -55,6 +72,10 @@ export interface QuotePdfData {
   marginPct: number;
   notes: string | null;
   lines: QuotePdfLine[];
+  // Vom Server berechnete Aggregate (Netto / USt pro Satz / Brutto). Optional,
+  // damit ältere Aufrufer ohne Tax-Kontext nicht brechen — fehlt es, wird
+  // aus `lines` ein Fallback-Summary berechnet (ohne USt-Zeilen).
+  taxSummary?: QuotePdfTaxSummary;
   brand: QuotePdfBrand | null;
   sections?: QuotePdfSection[];
   attachments?: QuotePdfAttachment[];
@@ -90,6 +111,11 @@ const QUOTE_LABELS = {
     subtotal: 'Zwischensumme',
     total: 'Gesamt',
     notes: 'Hinweise',
+    tax: 'USt.',
+    net: 'Netto',
+    vatAt: (rate: string) => `USt. ${rate} %`,
+    vatExempt: 'USt.-frei',
+    gross: 'Brutto',
   },
   en: {
     docTitle: 'Quote',
@@ -119,11 +145,23 @@ const QUOTE_LABELS = {
     subtotal: 'Subtotal',
     total: 'Total',
     notes: 'Notes',
+    tax: 'VAT',
+    net: 'Net',
+    vatAt: (rate: string) => `VAT ${rate}%`,
+    vatExempt: 'VAT exempt',
+    gross: 'Gross',
   },
 } as const;
 
 const fmt = (n: number, cur: string, locale: 'de' | 'en' = 'de') =>
   new Intl.NumberFormat(locale === 'en' ? 'en-US' : 'de-DE', { style: 'currency', currency: cur }).format(n);
+
+// USt-Sätze sollen als ganze oder halbe Prozentwerte ohne Müll-Nachkommastellen
+// erscheinen (19, 7, 0 oder 5,5). Bei mehr als 2 Nachkommastellen dezent runden.
+const formatTaxRate = (n: number): string => {
+  if (Number.isInteger(n)) return String(n);
+  return n.toFixed(2).replace(/\.?0+$/, '');
+};
 
 const formatBytes = (n: number) => {
   if (n < 1024) return `${n} B`;
@@ -214,10 +252,11 @@ export function QuoteDocument({ data }: { data: QuotePdfData }) {
       borderBottomWidth: 1,
       padding: 6,
     },
-    colName: { width: '40%' },
-    colQty: { width: '10%', textAlign: 'right' },
+    colName: { width: '32%' },
+    colQty: { width: '8%', textAlign: 'right' },
     colPrice: { width: '17%', textAlign: 'right' },
-    colDisc: { width: '13%', textAlign: 'right' },
+    colDisc: { width: '12%', textAlign: 'right' },
+    colTax: { width: '11%', textAlign: 'right' },
     colTotal: { width: '20%', textAlign: 'right' },
     totalsRow: { flexDirection: 'row', justifyContent: 'flex-end', marginTop: 10 },
     totalsBox: { width: 220, padding: 8, backgroundColor: '#f3f4f6' },
@@ -259,6 +298,26 @@ export function QuoteDocument({ data }: { data: QuotePdfData }) {
 
   const subtotal = data.lines.reduce((s, l) => s + l.listPrice * l.quantity, 0);
   const discount = subtotal - data.totalAmount;
+  // Falls der Server kein TaxSummary liefert (defensive Fallback), aus den
+  // Lines selbst aggregieren — totalAmount wird als Netto interpretiert.
+  const taxSummary: QuotePdfTaxSummary = data.taxSummary ?? (() => {
+    const byRate = new Map<number, { net: number; tax: number }>();
+    let net = 0;
+    let tax = 0;
+    for (const l of data.lines) {
+      const t = Math.round(l.total * (l.taxRatePct / 100));
+      net += l.total;
+      tax += t;
+      const cur = byRate.get(l.taxRatePct) ?? { net: 0, tax: 0 };
+      cur.net += l.total;
+      cur.tax += t;
+      byRate.set(l.taxRatePct, cur);
+    }
+    const breakdown = [...byRate.entries()]
+      .sort(([a], [b]) => a - b)
+      .map(([ratePct, v]) => ({ ratePct, net: v.net, tax: v.tax }));
+    return { net, tax, gross: net + tax, breakdown };
+  })();
   const sections = (data.sections ?? []).slice().sort((a, b) => a.order - b.order);
   const cover = sections.find(s => s.kind === 'cover');
   const intro = sections.find(s => s.kind === 'intro');
@@ -436,6 +495,7 @@ export function QuoteDocument({ data }: { data: QuotePdfData }) {
           <Text style={styles.colQty}>{L.qty}</Text>
           <Text style={styles.colPrice}>{L.listPrice}</Text>
           <Text style={styles.colDisc}>{L.discount}</Text>
+          <Text style={styles.colTax}>{L.tax}</Text>
           <Text style={styles.colTotal}>{L.sum}</Text>
         </View>
         {data.lines.map((l, i) => (
@@ -449,6 +509,7 @@ export function QuoteDocument({ data }: { data: QuotePdfData }) {
             <Text style={styles.colQty}>{l.quantity}</Text>
             <Text style={styles.colPrice}>{fmt(l.listPrice, data.currency, lang)}</Text>
             <Text style={styles.colDisc}>{l.discountPct.toFixed(1)}%</Text>
+            <Text style={styles.colTax}>{`${formatTaxRate(l.taxRatePct)} %`}</Text>
             <Text style={styles.colTotal}>{fmt(l.total, data.currency, lang)}</Text>
           </View>
         ))}
@@ -463,9 +524,23 @@ export function QuoteDocument({ data }: { data: QuotePdfData }) {
               <Text>{L.discount} ({data.discountPct.toFixed(1)}%)</Text>
               <Text>-{fmt(Math.max(0, discount), data.currency, lang)}</Text>
             </View>
+            <View style={styles.totalsLine}>
+              <Text>{L.net}</Text>
+              <Text>{fmt(taxSummary.net, data.currency, lang)}</Text>
+            </View>
+            {taxSummary.breakdown.map((b, i) => (
+              <View key={`vat-${i}`} style={styles.totalsLine}>
+                <Text>{b.ratePct === 0 ? L.vatExempt : L.vatAt(formatTaxRate(b.ratePct))}</Text>
+                <Text>{fmt(b.tax, data.currency, lang)}</Text>
+              </View>
+            ))}
+            <View style={styles.totalsLine}>
+              <Text>{L.gross}</Text>
+              <Text>{fmt(taxSummary.gross, data.currency, lang)}</Text>
+            </View>
             <View style={styles.grandTotal}>
               <Text>{L.total}</Text>
-              <Text>{fmt(data.totalAmount, data.currency, lang)}</Text>
+              <Text>{fmt(taxSummary.gross, data.currency, lang)}</Text>
             </View>
           </View>
         </View>
