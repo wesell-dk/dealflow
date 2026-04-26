@@ -7266,12 +7266,37 @@ export interface ContractRegulatoryBundle {
   frameworks: RegulatoryFramework[];
 }
 
+export interface RegulatoryEscalationInfo {
+  approvalId: string;
+  created: boolean;
+  /** @nullable */
+  ownerId?: string | null;
+  /** @nullable */
+  ownerName?: string | null;
+  openMustCount: number;
+}
+
 export interface ContractRegulatoryCheckResult {
   ok: boolean;
   contractId: string;
   applicabilityInvocationId?: string | null;
   frameworksEvaluated: number;
   assessments: ContractRegulatoryAssessment[];
+  /** Wird gesetzt, wenn der Check mindestens eine `non_compliant`- Bewertung erzeugt hat. Idempotent — bei mehrfachen Checks referenziert es die bereits bestehende offene Approval.
+   */
+  escalation?: RegulatoryEscalationInfo | null;
+}
+
+export interface EscalateRegulatoryComplianceResult {
+  contractId: string;
+  approvalId: string;
+  created: boolean;
+  /** @nullable */
+  ownerId?: string | null;
+  /** @nullable */
+  ownerName?: string | null;
+  openMustCount: number;
+  contractTitle: string;
 }
 
 export type RegulatoryComplianceContractItemOverall =
@@ -7517,6 +7542,7 @@ export type RequestContractApproval201 = {
   overrideReason?: string | null;
   missingExpectedCount: number;
   lintErrorCount: number;
+  regulatoryMustCount: number;
   /** @nullable */
   contractTypeName?: string | null;
 };
@@ -7546,6 +7572,17 @@ export type RequestContractApproval409 =
         message: string;
         /** @nullable */
         contractClauseId?: string | null;
+      }[];
+    }
+  | {
+      error: string;
+      code: "regulatory_must_open";
+      openMustCount: number;
+      openMust: {
+        frameworkCode: string;
+        requirementCode: string;
+        requirementTitle: string;
+        status: "missing" | "partial";
       }[];
     };
 

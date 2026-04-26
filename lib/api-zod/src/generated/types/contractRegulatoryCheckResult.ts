@@ -8,6 +8,7 @@ Multi-tenant, multi-company, multi-brand. Deal-centric.
  * OpenAPI spec version: 0.1.0
  */
 import type { ContractRegulatoryAssessment } from "./contractRegulatoryAssessment";
+import type { RegulatoryEscalationInfo } from "./regulatoryEscalationInfo";
 
 export interface ContractRegulatoryCheckResult {
   ok: boolean;
@@ -15,4 +16,7 @@ export interface ContractRegulatoryCheckResult {
   applicabilityInvocationId?: string | null;
   frameworksEvaluated: number;
   assessments: ContractRegulatoryAssessment[];
+  /** Wird gesetzt, wenn der Check mindestens eine `non_compliant`- Bewertung erzeugt hat. Idempotent — bei mehrfachen Checks referenziert es die bereits bestehende offene Approval.
+   */
+  escalation?: RegulatoryEscalationInfo | null;
 }

@@ -34,4 +34,15 @@ export type RequestContractApproval409 =
         /** @nullable */
         contractClauseId?: string | null;
       }[];
+    }
+  | {
+      error: string;
+      code: "regulatory_must_open";
+      openMustCount: number;
+      openMust: {
+        frameworkCode: string;
+        requirementCode: string;
+        requirementTitle: string;
+        status: "missing" | "partial";
+      }[];
     };

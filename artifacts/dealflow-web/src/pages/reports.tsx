@@ -45,12 +45,14 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import {
   Bell, CalendarClock, CheckCircle2, Clock, ExternalLink, UserPlus, ArrowRight,
-  ShieldCheck, AlertTriangle, XCircle, HelpCircle,
+  ShieldCheck, AlertTriangle, XCircle, HelpCircle, Siren,
 } from "lucide-react";
 import { ResponsiveContainer, ComposedChart, AreaChart, Area, BarChart, Bar, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend } from "recharts";
 import { AiAcceptanceTile } from "@/components/reports/ai-acceptance-tile";
 import {
   useGetRegulatoryComplianceReport,
+  useEscalateRegulatoryCompliance,
+  getGetRegulatoryComplianceReportQueryKey,
 } from "@workspace/api-client-react";
 import { TONE_TEXT_CLASSES } from "@/components/patterns/status-badges";
 
@@ -1049,7 +1051,36 @@ function RenewalActionRow({
 // ───────────────────────────────────────────────────────────────────────────
 function RegulatoryComplianceCard(props: { onOpenContract: (id: string) => void }) {
   const { onOpenContract } = props;
+  const { toast } = useToast();
+  const qc = useQueryClient();
   const { data, isLoading } = useGetRegulatoryComplianceReport();
+  const escalate = useEscalateRegulatoryCompliance({
+    mutation: {
+      onSuccess: (res) => {
+        if (res.created) {
+          toast({
+            title: "Eskalation angelegt",
+            description: res.ownerName
+              ? `Compliance-Approval erzeugt — Inbox-Hinweis an ${res.ownerName}.`
+              : "Compliance-Approval erzeugt — Inbox-Hinweis hinterlegt.",
+          });
+        } else {
+          toast({
+            title: "Bereits eskaliert",
+            description: `Es existiert bereits eine offene Compliance-Approval (${res.approvalId}).`,
+          });
+        }
+        qc.invalidateQueries({ queryKey: getGetRegulatoryComplianceReportQueryKey() });
+      },
+      onError: () => {
+        toast({
+          title: "Eskalation fehlgeschlagen",
+          description: "Der Vertrag konnte nicht eskaliert werden.",
+          variant: "destructive",
+        });
+      },
+    },
+  });
 
   const items = data?.items ?? [];
   const summary = data?.frameworkSummary ?? [];
@@ -1191,11 +1222,16 @@ function RegulatoryComplianceCard(props: { onOpenContract: (id: string) => void 
                       <TableHead>Vertrag</TableHead>
                       <TableHead>Regulatoriken</TableHead>
                       <TableHead className="w-[160px]">Status</TableHead>
-                      <TableHead className="text-right w-[60px]"></TableHead>
+                      <TableHead className="text-right w-[200px]">Aktionen</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {sortedItems.map((it) => (
+                    {sortedItems.map((it) => {
+                      const isNonCompliant = it.overall === "non_compliant";
+                      const isEscalating =
+                        escalate.isPending &&
+                        escalate.variables?.contractId === it.contractId;
+                      return (
                       <TableRow key={it.contractId} data-testid={`row-contract-compliance-${it.contractId}`}>
                         <TableCell>
                           <div className="font-medium">{it.contractTitle}</div>
@@ -1229,17 +1265,35 @@ function RegulatoryComplianceCard(props: { onOpenContract: (id: string) => void 
                         </TableCell>
                         <TableCell>{statusBadge(it.overall)}</TableCell>
                         <TableCell className="text-right">
-                          <Button
-                            size="sm"
-                            variant="ghost"
-                            onClick={() => onOpenContract(it.contractId)}
-                            data-testid={`button-open-contract-${it.contractId}`}
-                          >
-                            <ExternalLink className="h-4 w-4" />
-                          </Button>
+                          <div className="flex items-center justify-end gap-1">
+                            {isNonCompliant && (
+                              <Button
+                                size="sm"
+                                variant="destructive"
+                                disabled={isEscalating}
+                                onClick={() =>
+                                  escalate.mutate({ contractId: it.contractId })
+                                }
+                                data-testid={`button-escalate-contract-${it.contractId}`}
+                                title="Compliance-Approval + Inbox-Hinweis an Owner anlegen"
+                              >
+                                <Siren className="h-3.5 w-3.5 mr-1" />
+                                {isEscalating ? "…" : "Eskalieren"}
+                              </Button>
+                            )}
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              onClick={() => onOpenContract(it.contractId)}
+                              data-testid={`button-open-contract-${it.contractId}`}
+                            >
+                              <ExternalLink className="h-4 w-4" />
+                            </Button>
+                          </div>
                         </TableCell>
                       </TableRow>
-                    ))}
+                      );
+                    })}
                   </TableBody>
                 </Table>
               </div>

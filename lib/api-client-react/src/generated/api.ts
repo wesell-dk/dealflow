@@ -158,6 +158,7 @@ import type {
   EffectiveContractState,
   EntityVersion,
   EntityVersionInput,
+  EscalateRegulatoryComplianceResult,
   EscalateSignatureInput,
   ExecuteCopilotInsight200,
   ExportGdprSubjectParams,
@@ -18690,6 +18691,97 @@ export function useGetRegulatoryComplianceReport<
 
   return { ...query, queryKey: queryOptions.queryKey };
 }
+
+/**
+ * Manuelle Eskalation per Report-Card-Button. Legt eine pending `compliance_review`-Approval an (sofern noch keine offene für den Vertrag existiert) und schreibt einen Timeline-Event als Inbox-Hinweis für den Owner. Bei einem bereits eskalierten Vertrag wird die existierende Approval-ID zurückgegeben (`created: false`).
+
+ * @summary Idempotent eine Compliance-Approval + Inbox-Hinweis (Timeline-Event) für den Vertrags-Owner anlegen.
+
+ */
+export const getEscalateRegulatoryComplianceUrl = (contractId: string) => {
+  return `/api/v1/reports/regulatory-compliance/${contractId}/escalate`;
+};
+
+export const escalateRegulatoryCompliance = async (
+  contractId: string,
+  options?: RequestInit,
+): Promise<EscalateRegulatoryComplianceResult> => {
+  return customFetch<EscalateRegulatoryComplianceResult>(
+    getEscalateRegulatoryComplianceUrl(contractId),
+    {
+      ...options,
+      method: "POST",
+    },
+  );
+};
+
+export const getEscalateRegulatoryComplianceMutationOptions = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof escalateRegulatoryCompliance>>,
+    TError,
+    { contractId: string },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof escalateRegulatoryCompliance>>,
+  TError,
+  { contractId: string },
+  TContext
+> => {
+  const mutationKey = ["escalateRegulatoryCompliance"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof escalateRegulatoryCompliance>>,
+    { contractId: string }
+  > = (props) => {
+    const { contractId } = props ?? {};
+
+    return escalateRegulatoryCompliance(contractId, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type EscalateRegulatoryComplianceMutationResult = NonNullable<
+  Awaited<ReturnType<typeof escalateRegulatoryCompliance>>
+>;
+
+export type EscalateRegulatoryComplianceMutationError = ErrorType<void>;
+
+/**
+ * @summary Idempotent eine Compliance-Approval + Inbox-Hinweis (Timeline-Event) für den Vertrags-Owner anlegen.
+
+ */
+export const useEscalateRegulatoryCompliance = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof escalateRegulatoryCompliance>>,
+    TError,
+    { contractId: string },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof escalateRegulatoryCompliance>>,
+  TError,
+  { contractId: string },
+  TContext
+> => {
+  return useMutation(getEscalateRegulatoryComplianceMutationOptions(options));
+};
 
 export const getListAuditEntriesUrl = (params?: ListAuditEntriesParams) => {
   const normalizedParams = new URLSearchParams();

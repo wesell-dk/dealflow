@@ -7629,6 +7629,9 @@ router.patch('/amendments/:id', async (req, res) => {
   let signatureLintOverrideUsed = false;
   let signatureLintErrorCount = 0;
   let signatureLintErrorCodes: string[] = [];
+  let signatureRegulatoryOverrideUsed = false;
+  let signatureRegulatoryMustCount = 0;
+  let signatureRegulatoryCodes: string[] = [];
   if (typeof b.status === 'string') {
     const allowed = AMENDMENT_TRANSITIONS[a.status] ?? [];
     if (!allowed.includes(b.status)) {
@@ -7659,16 +7662,32 @@ router.patch('/amendments/:id', async (req, res) => {
         });
         return;
       }
-      if (wantOverride && errCount > 0) {
+      // Regulatorik-Must-Gate (Task #276): offene Pflicht-Befunde aus
+      // dem Compliance-Check blockieren genauso wie Lint-Fehler — gleiches
+      // Override-Schema (Tenant-Admin + Begründung ≥10 Zeichen).
+      const regulatoryScope = getScope(req);
+      const openMust = await getOpenRegulatoryMustFindings(c.id, regulatoryScope.tenantId);
+      if (openMust.length > 0 && !wantOverride) {
+        res.status(409).json(buildRegulatoryMustGateBody(openMust));
+        return;
+      }
+      if (wantOverride && (errCount > 0 || openMust.length > 0)) {
         if (!requireAdmin(req, res)) return;
         const reasonText = (b.overrideReason ?? '').trim();
         if (reasonText.length < 10) {
           res.status(422).json({ error: 'overrideReason ist Pflicht (≥10 Zeichen) für Override' });
           return;
         }
-        signatureLintOverrideUsed = true;
-        signatureLintErrorCount = errCount;
-        signatureLintErrorCodes = errs.map(e => e.code);
+        if (errCount > 0) {
+          signatureLintOverrideUsed = true;
+          signatureLintErrorCount = errCount;
+          signatureLintErrorCodes = errs.map(e => e.code);
+        }
+        if (openMust.length > 0) {
+          signatureRegulatoryOverrideUsed = true;
+          signatureRegulatoryMustCount = openMust.length;
+          signatureRegulatoryCodes = openMust.map((m) => `${m.frameworkCode}:${m.requirementCode}`);
+        }
       }
     }
     patch.status = b.status;
@@ -7727,17 +7746,23 @@ router.patch('/amendments/:id', async (req, res) => {
           escalationAfterHours: 120,
           deadline: null,
         });
+        const overrideUsedAny = signatureLintOverrideUsed || signatureRegulatoryOverrideUsed;
+        const overrideParts: string[] = [];
+        if (signatureLintOverrideUsed) overrideParts.push(`${signatureLintErrorCount} Lint-Fehler`);
+        if (signatureRegulatoryOverrideUsed) overrideParts.push(`${signatureRegulatoryMustCount} Regulatorik-Pflicht-Befund(e)`);
         await writeAuditFromReq(req, {
           entityType: 'contract_amendment', entityId: a.id, action: 'signature_created',
-          summary: signatureLintOverrideUsed
-            ? `Signatur-Paket angelegt für Nachtrag ${a.number} via OVERRIDE — ${signatureLintErrorCount} Lint-Fehler ignoriert`
+          summary: overrideUsedAny
+            ? `Signatur-Paket angelegt für Nachtrag ${a.number} via OVERRIDE — ${overrideParts.join(', ')} ignoriert`
             : `Signatur-Paket angelegt für Nachtrag ${a.number}`,
           after: {
             packageId: pkgId,
-            override: signatureLintOverrideUsed,
-            overrideReason: signatureLintOverrideUsed ? (b.overrideReason ?? null) : null,
+            override: overrideUsedAny,
+            overrideReason: overrideUsedAny ? (b.overrideReason ?? null) : null,
             lintErrorCount: signatureLintErrorCount,
             lintErrorCodes: signatureLintOverrideUsed ? signatureLintErrorCodes : [],
+            regulatoryMustCount: signatureRegulatoryMustCount,
+            regulatoryMustCodes: signatureRegulatoryOverrideUsed ? signatureRegulatoryCodes : [],
           },
         });
       }
@@ -8921,11 +8946,22 @@ router.post('/contracts/:id/request-approval', async (req, res) => {
     return;
   }
 
+  // Vorprüfung: offene Pflicht-Befunde aus dem Regulatorik-Check (Task #276).
+  // Analog zum CUAD-/Lint-Gate. Override-Pfad teilt sich Logik unten.
+  const regulatoryOpenMust = await getOpenRegulatoryMustFindings(c.id, scope.tenantId);
+  if (regulatoryOpenMust.length > 0 && !wantOverride) {
+    res.status(409).json({
+      ...buildRegulatoryMustGateBody(regulatoryOpenMust),
+      error: 'Offene Pflicht-Befunde aus Regulatorik-Check — Freigabe blockiert',
+    });
+    return;
+  }
+
   // Override-Pfad: nur Tenant-Admins (tenantWide) dürfen den Gate umgehen, und
   // nur mit einer ausreichend langen Begründung (Mindestlänge wird bereits via
   // Z.RequestContractApprovalBody erzwungen — hier nochmal als Defence-in-depth,
   // falls ein zukünftiger Patch das Schema lockert).
-  if (wantOverride && (missingExpectedCount > 0 || lintErrorCount > 0)) {
+  if (wantOverride && (missingExpectedCount > 0 || lintErrorCount > 0 || regulatoryOpenMust.length > 0)) {
     if (!requireAdmin(req, res)) return;
     const reasonText = (body.overrideReason ?? '').trim();
     if (reasonText.length < 10) {
@@ -8980,14 +9016,15 @@ router.post('/contracts/:id/request-approval', async (req, res) => {
     currentStageIdx: chainFields.currentStageIdx,
   });
 
-  const overrideUsed = wantOverride && (missingExpectedCount > 0 || lintErrorCount > 0);
+  const regulatoryMustCount = regulatoryOpenMust.length;
+  const overrideUsed = wantOverride && (missingExpectedCount > 0 || lintErrorCount > 0 || regulatoryMustCount > 0);
 
   await writeAuditFromReq(req, {
     entityType: 'contract',
     entityId: c.id,
     action: 'approval_requested',
     summary: overrideUsed
-      ? `Freigabe angefordert mit OVERRIDE — ${missingExpectedCount} Pflicht-Baustein(e), ${lintErrorCount} Lint-Fehler`
+      ? `Freigabe angefordert mit OVERRIDE — ${missingExpectedCount} Pflicht-Baustein(e), ${lintErrorCount} Lint-Fehler, ${regulatoryMustCount} Regulatorik-Pflicht-Befund(e)`
       : `Freigabe angefordert für Vertrag ${c.title}`,
     after: {
       approvalId,
@@ -8999,6 +9036,10 @@ router.post('/contracts/:id/request-approval', async (req, res) => {
         : [],
       lintErrorCount,
       lintErrorCodes: overrideUsed ? lintErrors.map(e => e.code) : [],
+      regulatoryMustCount,
+      regulatoryMustCodes: overrideUsed
+        ? regulatoryOpenMust.map((m) => `${m.frameworkCode}:${m.requirementCode}`)
+        : [],
       contractTypeId: coverage?.contractTypeId ?? null,
       contractTypeName: coverage?.contractTypeName ?? null,
       chainTemplateId: chainFields.chainTemplateId,
@@ -9013,6 +9054,7 @@ router.post('/contracts/:id/request-approval', async (req, res) => {
     overrideReason: overrideUsed ? body.overrideReason ?? null : null,
     missingExpectedCount,
     lintErrorCount,
+    regulatoryMustCount,
     contractTypeName: coverage?.contractTypeName ?? null,
   });
 });
@@ -22984,12 +23026,40 @@ router.post('/contracts/:contractId/regulations/check', async (req, res) => {
     before: null, after: { applicabilityInvocationId, frameworksEvaluated: assessmentsOut.length },
   });
 
+  // Auto-Eskalation (Task #276): wenn mind. eine anwendbare Bewertung
+  // `non_compliant` ist, legen wir idempotent eine Compliance-Approval +
+  // Inbox-Hinweis (Timeline-Event) für den Vertrags-Owner an.
+  const hasNonCompliant = assessmentsOut.some((a) =>
+    (a.applicability === 'auto_applicable' || a.applicability === 'manual_added') &&
+    a.overallStatus === 'non_compliant',
+  );
+  let escalation: {
+    approvalId: string;
+    created: boolean;
+    ownerId: string | null;
+    ownerName: string | null;
+    openMustCount: number;
+  } | null = null;
+  if (hasNonCompliant) {
+    const r = await ensureNonComplianceApproval(req, contractId, 'KI-Check non_compliant', { auto: true });
+    if (r.ok) {
+      escalation = {
+        approvalId: r.approvalId,
+        created: r.created,
+        ownerId: r.ownerId,
+        ownerName: r.ownerName,
+        openMustCount: r.openMustCount,
+      };
+    }
+  }
+
   res.json({
     ok: true,
     contractId,
     applicabilityInvocationId,
     frameworksEvaluated: assessmentsOut.length,
     assessments: assessmentsOut,
+    escalation,
   });
 });
 
@@ -23171,6 +23241,247 @@ router.get('/reports/regulatory-compliance', async (req, res) => {
   });
 
   res.json({ items, frameworkSummary });
+});
+
+// ── Regulatorik-Eskalation: Hilfsfunktionen (Task #276) ────────────────
+//
+// Wenn ein Vertrag mindestens eine `non_compliant`-Bewertung hat, legen wir
+// idempotent eine offene `compliance_review`-Approval + einen Timeline-Event
+// (Inbox-Hinweis) für den Vertrags-Owner an. Außerdem blockieren offene
+// `must`-Befunde den Signatur-Workflow — analog zum CUAD-Gate, mit
+// Admin-Override (`override:true` + `overrideReason` ≥10 Zeichen).
+
+type OpenMustFinding = {
+  frameworkId: string;
+  frameworkCode: string;
+  requirementId: string;
+  requirementCode: string;
+  requirementTitle: string;
+  status: 'missing' | 'partial';
+  note: string;
+};
+
+async function getOpenRegulatoryMustFindings(
+  contractId: string,
+  tenantId: string,
+): Promise<OpenMustFinding[]> {
+  const assessments = await db
+    .select()
+    .from(contractRegulatoryAssessmentsTable)
+    .where(and(
+      eq(contractRegulatoryAssessmentsTable.tenantId, tenantId),
+      eq(contractRegulatoryAssessmentsTable.contractId, contractId),
+    ));
+  if (assessments.length === 0) return [];
+  const fwIds = [...new Set(assessments.map((a) => a.frameworkId))];
+  const fwRows = fwIds.length
+    ? await db.select().from(regulatoryFrameworksTable)
+      .where(inArray(regulatoryFrameworksTable.id, fwIds))
+    : [];
+  const fwById = new Map(fwRows.map((f) => [f.id, f]));
+  const reqRows = fwIds.length
+    ? await db.select().from(regulatoryRequirementsTable)
+      .where(inArray(regulatoryRequirementsTable.frameworkId, fwIds))
+    : [];
+  const reqById = new Map(reqRows.map((r) => [r.id, r]));
+  const out: OpenMustFinding[] = [];
+  for (const a of assessments) {
+    if (a.applicability !== 'auto_applicable' && a.applicability !== 'manual_added') continue;
+    if (a.overallStatus === 'compliant') continue;
+    const findings = (a.findings as Array<{
+      requirementId: string;
+      status: 'met' | 'partial' | 'missing';
+      note: string;
+    }> | null) ?? [];
+    for (const f of findings) {
+      if (f.status !== 'missing' && f.status !== 'partial') continue;
+      const r = reqById.get(f.requirementId);
+      if (!r || r.severity !== 'must') continue;
+      out.push({
+        frameworkId: a.frameworkId,
+        frameworkCode: fwById.get(a.frameworkId)?.code ?? '?',
+        requirementId: r.id,
+        requirementCode: r.code,
+        requirementTitle: r.title,
+        status: f.status,
+        note: f.note ?? '',
+      });
+    }
+  }
+  return out;
+}
+
+async function loadContractOwnerInfo(
+  contractId: string,
+  tenantId: string,
+): Promise<{
+  contract: typeof contractsTable.$inferSelect | null;
+  deal: typeof dealsTable.$inferSelect | null;
+  owner: typeof usersTable.$inferSelect | null;
+}> {
+  const [c] = await db.select().from(contractsTable).where(eq(contractsTable.id, contractId));
+  if (!c) return { contract: null, deal: null, owner: null };
+  const [d] = c.dealId
+    ? await db.select().from(dealsTable).where(eq(dealsTable.id, c.dealId))
+    : [];
+  let owner: typeof usersTable.$inferSelect | null = null;
+  if (d?.ownerId) {
+    const [u] = await db.select().from(usersTable).where(and(
+      eq(usersTable.id, d.ownerId),
+      eq(usersTable.tenantId, tenantId),
+    ));
+    owner = u ?? null;
+  }
+  return { contract: c, deal: d ?? null, owner };
+}
+
+type EnsureNonComplianceResult =
+  | {
+    ok: true;
+    approvalId: string;
+    created: boolean;
+    ownerId: string | null;
+    ownerName: string | null;
+    openMustCount: number;
+    contractTitle: string;
+  }
+  | { ok: false; reason: 'contract_not_found' | 'no_deal' };
+
+async function ensureNonComplianceApproval(
+  req: Request,
+  contractId: string,
+  reasonHint: string,
+  opts: { auto: boolean },
+): Promise<EnsureNonComplianceResult> {
+  const scope = getScope(req);
+  const info = await loadContractOwnerInfo(contractId, scope.tenantId);
+  if (!info.contract) return { ok: false, reason: 'contract_not_found' };
+  if (!info.deal) return { ok: false, reason: 'no_deal' };
+  const c = info.contract;
+  const ownerName = info.owner?.name ?? null;
+  const ownerId = info.owner?.id ?? info.deal.ownerId ?? null;
+  const openMust = await getOpenRegulatoryMustFindings(contractId, scope.tenantId);
+
+  // Dedupe: bestehende offene compliance_review für genau diesen Vertrag.
+  const existing = await db.select().from(approvalsTable)
+    .where(and(
+      eq(approvalsTable.dealId, c.dealId),
+      eq(approvalsTable.type, 'compliance_review'),
+      eq(approvalsTable.status, 'pending'),
+    ));
+  const dupe = existing.find((a) => a.reason.startsWith(`Vertrag ${c.id}:`));
+  if (dupe) {
+    return {
+      ok: true,
+      approvalId: dupe.id,
+      created: false,
+      ownerId,
+      ownerName,
+      openMustCount: openMust.length,
+      contractTitle: c.title,
+    };
+  }
+
+  const approvalId = `ap_${randomUUID().slice(0, 8)}`;
+  const chainFields = await buildApprovalStageFields(scope.tenantId, 'compliance_review', {
+    contractTypeId: c.contractTypeId ?? undefined,
+    riskLevel: c.riskLevel ?? undefined,
+  });
+  const reason = `Vertrag ${c.id}: ${c.title} — Regulatorik-Eskalation (${reasonHint})`;
+  await db.insert(approvalsTable).values({
+    id: approvalId,
+    dealId: c.dealId,
+    type: 'compliance_review',
+    reason,
+    requestedBy: scope.user.id,
+    status: 'pending',
+    priority: openMust.length > 0 ? 'high' : 'medium',
+    impactValue: '0',
+    currency: 'EUR',
+    chainTemplateId: chainFields.chainTemplateId,
+    stages: chainFields.stages,
+    currentStageIdx: chainFields.currentStageIdx,
+  });
+
+  const inboxFor = ownerName ? ` an ${ownerName}` : '';
+  await db.insert(timelineEventsTable).values({
+    id: `tl_${randomUUID().slice(0, 8)}`,
+    tenantId: scope.tenantId,
+    type: 'approval',
+    title: `Compliance-Eskalation${inboxFor}: ${c.title}`,
+    description: openMust.length > 0
+      ? `${openMust.length} offene Pflicht-Befund${openMust.length === 1 ? '' : 'e'} (must) — Approval ${approvalId}`
+      : `Approval ${approvalId} (Regulatorik nicht konform)`,
+    actor: opts.auto ? 'System' : scope.user.name,
+    dealId: c.dealId,
+  });
+
+  await writeAuditFromReq(req, {
+    entityType: 'contract',
+    entityId: contractId,
+    action: 'approval_created',
+    summary: opts.auto
+      ? `Auto-Eskalation Regulatorik: ${c.title}`
+      : `Manuelle Regulatorik-Eskalation: ${c.title}`,
+    after: {
+      approvalId,
+      type: 'compliance_review',
+      ownerId,
+      ownerName,
+      openMustCount: openMust.length,
+      auto: opts.auto,
+    },
+  });
+
+  return {
+    ok: true,
+    approvalId,
+    created: true,
+    ownerId,
+    ownerName,
+    openMustCount: openMust.length,
+    contractTitle: c.title,
+  };
+}
+
+// ── Signatur-Gate: Hilfsfunktion ───────────────────────────────────────
+//
+// Wird im PATCH /amendments/:id (out_for_signature) und im
+// POST /contracts/:id/request-approval verwendet, analog zum CUAD-/Lint-Gate.
+function buildRegulatoryMustGateBody(openMust: OpenMustFinding[]) {
+  return {
+    error: 'Offene Pflicht-Befunde aus Regulatorik-Check — Signatur blockiert',
+    code: 'regulatory_must_open',
+    openMustCount: openMust.length,
+    openMust: openMust.map((m) => ({
+      frameworkCode: m.frameworkCode,
+      requirementCode: m.requirementCode,
+      requirementTitle: m.requirementTitle,
+      status: m.status,
+    })),
+  };
+}
+
+// ── Reporting: Manuelle Eskalation per Report-Card ─────────────────────
+router.post('/reports/regulatory-compliance/:contractId/escalate', async (req, res) => {
+  const contractId = String(req.params['contractId'] ?? '');
+  const status = await entityScopeStatus(req, 'contract', contractId);
+  if (status === 'missing') { res.status(404).json({ error: 'not_found' }); return; }
+  if (status === 'forbidden') { res.status(403).json({ error: 'forbidden' }); return; }
+  const result = await ensureNonComplianceApproval(req, contractId, 'manuell aus Report', { auto: false });
+  if (!result.ok) {
+    res.status(409).json({ error: result.reason });
+    return;
+  }
+  res.status(result.created ? 201 : 200).json({
+    contractId,
+    approvalId: result.approvalId,
+    created: result.created,
+    ownerId: result.ownerId,
+    ownerName: result.ownerName,
+    openMustCount: result.openMustCount,
+    contractTitle: result.contractTitle,
+  });
 });
 
 // Verhindert TS-Warnungen für nicht erreichbare Konstanten.

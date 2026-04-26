@@ -8,14 +8,14 @@ Multi-tenant, multi-company, multi-brand. Deal-centric.
  * OpenAPI spec version: 0.1.0
  */
 
-export type RequestContractApproval201 = {
+export interface EscalateRegulatoryComplianceResult {
+  contractId: string;
   approvalId: string;
-  override: boolean;
+  created: boolean;
   /** @nullable */
-  overrideReason?: string | null;
-  missingExpectedCount: number;
-  lintErrorCount: number;
-  regulatoryMustCount: number;
+  ownerId?: string | null;
   /** @nullable */
-  contractTypeName?: string | null;
-};
+  ownerName?: string | null;
+  openMustCount: number;
+  contractTitle: string;
+}

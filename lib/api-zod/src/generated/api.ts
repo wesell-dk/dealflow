@@ -8983,6 +8983,21 @@ export const RunContractRegulatoryCheckResponse = zod.object({
       updatedAt: zod.coerce.date(),
     }),
   ),
+  escalation: zod
+    .union([
+      zod.object({
+        approvalId: zod.string(),
+        created: zod.boolean(),
+        ownerId: zod.string().nullish(),
+        ownerName: zod.string().nullish(),
+        openMustCount: zod.number(),
+      }),
+      zod.null(),
+    ])
+    .optional()
+    .describe(
+      "Wird gesetzt, wenn der Check mindestens eine `non_compliant`- Bewertung erzeugt hat. Idempotent — bei mehrfachen Checks referenziert es die bereits bestehende offene Approval.\n",
+    ),
 });
 
 /**
@@ -9062,6 +9077,26 @@ export const GetRegulatoryComplianceReportResponse = zod.object({
       notEvaluated: zod.number(),
     }),
   ),
+});
+
+/**
+ * Manuelle Eskalation per Report-Card-Button. Legt eine pending `compliance_review`-Approval an (sofern noch keine offene für den Vertrag existiert) und schreibt einen Timeline-Event als Inbox-Hinweis für den Owner. Bei einem bereits eskalierten Vertrag wird die existierende Approval-ID zurückgegeben (`created: false`).
+
+ * @summary Idempotent eine Compliance-Approval + Inbox-Hinweis (Timeline-Event) für den Vertrags-Owner anlegen.
+
+ */
+export const EscalateRegulatoryComplianceParams = zod.object({
+  contractId: zod.coerce.string(),
+});
+
+export const EscalateRegulatoryComplianceResponse = zod.object({
+  contractId: zod.string(),
+  approvalId: zod.string(),
+  created: zod.boolean(),
+  ownerId: zod.string().nullish(),
+  ownerName: zod.string().nullish(),
+  openMustCount: zod.number(),
+  contractTitle: zod.string(),
 });
 
 export const ListAuditEntriesQueryParams = zod.object({

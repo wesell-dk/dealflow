@@ -2673,7 +2673,7 @@ paths:
             application/json:
               schema:
                 type: object
-                required: [approvalId, override, missingExpectedCount, lintErrorCount]
+                required: [approvalId, override, missingExpectedCount, lintErrorCount, regulatoryMustCount]
                 properties:
                   approvalId: { type: string }
                   override: { type: boolean }
@@ -2681,16 +2681,18 @@ paths:
                     type: ["string", "null"]
                   missingExpectedCount: { type: integer }
                   lintErrorCount: { type: integer }
+                  regulatoryMustCount: { type: integer }
                   contractTypeName:
                     type: ["string", "null"]
         "409":
           description: >
             Vorprüfung schlägt fehl — entweder fehlen Pflicht-CUAD-Kategorien
-            (`cuad_required_missing`) oder der Vertragslinter meldet
-            Konsistenz-Fehler (`lint_errors_present`). Tenant-Admins können
-            den Block jeweils via `override: true` mit `overrideReason`
-            (≥10 Zeichen) durchbrechen — der Override wird strukturiert
-            ins Audit-Log geschrieben.
+            (`cuad_required_missing`), der Vertragslinter meldet
+            Konsistenz-Fehler (`lint_errors_present`) oder der Regulatorik-
+            Check hat offene Pflicht-Befunde (`regulatory_must_open`).
+            Tenant-Admins können den Block jeweils via `override: true` mit
+            `overrideReason` (≥10 Zeichen) durchbrechen — der Override
+            wird strukturiert ins Audit-Log geschrieben.
           content:
             application/json:
               schema:
@@ -2732,6 +2734,26 @@ paths:
                             code: { type: string }
                             message: { type: string }
                             contractClauseId: { type: ["string", "null"] }
+                  - type: object
+                    required: [error, code, openMustCount, openMust]
+                    properties:
+                      error: { type: string }
+                      code:
+                        type: string
+                        enum: [regulatory_must_open]
+                      openMustCount: { type: integer }
+                      openMust:
+                        type: array
+                        items:
+                          type: object
+                          required: [frameworkCode, requirementCode, requirementTitle, status]
+                          properties:
+                            frameworkCode: { type: string }
+                            requirementCode: { type: string }
+                            requirementTitle: { type: string }
+                            status:
+                              type: string
+                              enum: [missing, partial]
         "403": { description: Override-Versuch ohne Tenant-Admin-Rechte. }
         "404": { description: Vertrag existiert nicht oder Zugriff verweigert. }
         "422": { description: override=true ohne ausreichend langen overrideReason. }
@@ -4390,6 +4412,40 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/RegulatoryComplianceReport" }
+
+  /reports/regulatory-compliance/{contractId}/escalate:
+    post:
+      operationId: escalateRegulatoryCompliance
+      tags: [regulatory, reports]
+      summary: >
+        Idempotent eine Compliance-Approval + Inbox-Hinweis (Timeline-Event)
+        für den Vertrags-Owner anlegen.
+      description: >
+        Manuelle Eskalation per Report-Card-Button. Legt eine pending
+        `compliance_review`-Approval an (sofern noch keine offene für den
+        Vertrag existiert) und schreibt einen Timeline-Event als
+        Inbox-Hinweis für den Owner. Bei einem bereits eskalierten
+        Vertrag wird die existierende Approval-ID zurückgegeben
+        (`created: false`).
+      parameters:
+        - in: path
+          name: contractId
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Approval existiert bereits (idempotent).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/EscalateRegulatoryComplianceResult" }
+        "201":
+          description: Neue Approval angelegt.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/EscalateRegulatoryComplianceResult" }
+        "403": { description: not in scope }
+        "404": { description: not found }
+        "409": { description: Vertrag hat keinen verknüpften Deal. }
 
   # ───────────── AUDIT LOG ─────────────
 
@@ -13098,6 +13154,40 @@ components:
         assessments:
           type: array
           items: { $ref: "#/components/schemas/ContractRegulatoryAssessment" }
+        escalation:
+          oneOf:
+            - { $ref: "#/components/schemas/RegulatoryEscalationInfo" }
+            - { type: "null" }
+          description: >
+            Wird gesetzt, wenn der Check mindestens eine `non_compliant`-
+            Bewertung erzeugt hat. Idempotent — bei mehrfachen Checks
+            referenziert es die bereits bestehende offene Approval.
+
+    RegulatoryEscalationInfo:
+      type: object
+      required: [approvalId, created, openMustCount]
+      properties:
+        approvalId: { type: string }
+        created: { type: boolean }
+        ownerId:
+          type: ["string", "null"]
+        ownerName:
+          type: ["string", "null"]
+        openMustCount: { type: integer }
+
+    EscalateRegulatoryComplianceResult:
+      type: object
+      required: [contractId, approvalId, created, openMustCount, contractTitle]
+      properties:
+        contractId: { type: string }
+        approvalId: { type: string }
+        created: { type: boolean }
+        ownerId:
+          type: ["string", "null"]
+        ownerName:
+          type: ["string", "null"]
+        openMustCount: { type: integer }
+        contractTitle: { type: string }
 
     RegulatoryComplianceContractItem:
       type: object
