@@ -5430,6 +5430,9 @@ export const RunDealSummaryParams = zod.object({
 export const runDealSummaryResponseTwoConfidenceMin = 0;
 export const runDealSummaryResponseTwoConfidenceMax = 1;
 
+export const runDealSummaryResponseThreeSecondOpinionAgreementScoreOneMin = 0;
+export const runDealSummaryResponseThreeSecondOpinionAgreementScoreOneMax = 100;
+
 export const RunDealSummaryResponse = zod
   .object({
     insightId: zod.string(),
@@ -5470,6 +5473,53 @@ export const RunDealSummaryResponse = zod
         confidence: zod.enum(["low", "medium", "high"]),
         confidenceReason: zod.string(),
       }),
+      secondOpinion: zod.object({
+        status: zod.enum([
+          "disabled",
+          "skipped",
+          "unavailable",
+          "failed",
+          "completed",
+        ]),
+        reason: zod.union([zod.string(), zod.null()]).optional(),
+        secondOpinionId: zod.union([zod.string(), zod.null()]).optional(),
+        invocationId: zod.union([zod.string(), zod.null()]).optional(),
+        model: zod.union([zod.string(), zod.null()]).optional(),
+        agreementLevel: zod
+          .union([zod.enum(["low", "medium", "high"]), zod.null()])
+          .optional(),
+        agreementScore: zod
+          .union([
+            zod
+              .number()
+              .min(runDealSummaryResponseThreeSecondOpinionAgreementScoreOneMin)
+              .max(
+                runDealSummaryResponseThreeSecondOpinionAgreementScoreOneMax,
+              ),
+            zod.null(),
+          ])
+          .optional(),
+        diffs: zod
+          .array(
+            zod.object({
+              path: zod.string(),
+              label: zod.string(),
+              primary: zod.unknown(),
+              secondary: zod.unknown(),
+              severity: zod.enum(["info", "minor", "major"]),
+            }),
+          )
+          .optional(),
+        output: zod
+          .union([zod.record(zod.string(), zod.unknown()), zod.null()])
+          .optional(),
+        decision: zod
+          .union([
+            zod.enum(["pending", "keep_primary", "adopt_secondary", "manual"]),
+            zod.null(),
+          ])
+          .optional(),
+      }),
     }),
   );
 
@@ -5484,6 +5534,9 @@ export const RunPricingReviewParams = zod.object({
 
 export const runPricingReviewResponseTwoConfidenceMin = 0;
 export const runPricingReviewResponseTwoConfidenceMax = 1;
+
+export const runPricingReviewResponseThreeSecondOpinionAgreementScoreOneMin = 0;
+export const runPricingReviewResponseThreeSecondOpinionAgreementScoreOneMax = 100;
 
 export const RunPricingReviewResponse = zod
   .object({
@@ -5534,6 +5587,55 @@ export const RunPricingReviewResponse = zod
         confidence: zod.enum(["low", "medium", "high"]),
         confidenceReason: zod.string(),
       }),
+      secondOpinion: zod.object({
+        status: zod.enum([
+          "disabled",
+          "skipped",
+          "unavailable",
+          "failed",
+          "completed",
+        ]),
+        reason: zod.union([zod.string(), zod.null()]).optional(),
+        secondOpinionId: zod.union([zod.string(), zod.null()]).optional(),
+        invocationId: zod.union([zod.string(), zod.null()]).optional(),
+        model: zod.union([zod.string(), zod.null()]).optional(),
+        agreementLevel: zod
+          .union([zod.enum(["low", "medium", "high"]), zod.null()])
+          .optional(),
+        agreementScore: zod
+          .union([
+            zod
+              .number()
+              .min(
+                runPricingReviewResponseThreeSecondOpinionAgreementScoreOneMin,
+              )
+              .max(
+                runPricingReviewResponseThreeSecondOpinionAgreementScoreOneMax,
+              ),
+            zod.null(),
+          ])
+          .optional(),
+        diffs: zod
+          .array(
+            zod.object({
+              path: zod.string(),
+              label: zod.string(),
+              primary: zod.unknown(),
+              secondary: zod.unknown(),
+              severity: zod.enum(["info", "minor", "major"]),
+            }),
+          )
+          .optional(),
+        output: zod
+          .union([zod.record(zod.string(), zod.unknown()), zod.null()])
+          .optional(),
+        decision: zod
+          .union([
+            zod.enum(["pending", "keep_primary", "adopt_secondary", "manual"]),
+            zod.null(),
+          ])
+          .optional(),
+      }),
     }),
   );
 
@@ -5548,6 +5650,9 @@ export const RunApprovalReadinessParams = zod.object({
 
 export const runApprovalReadinessResponseTwoConfidenceMin = 0;
 export const runApprovalReadinessResponseTwoConfidenceMax = 1;
+
+export const runApprovalReadinessResponseThreeSecondOpinionAgreementScoreOneMin = 0;
+export const runApprovalReadinessResponseThreeSecondOpinionAgreementScoreOneMax = 100;
 
 export const RunApprovalReadinessResponse = zod
   .object({
@@ -5638,6 +5743,55 @@ export const RunApprovalReadinessResponse = zod
             'Deterministic CUAD-Vollständigkeits-Check. Wird serverseitig nach\nder KI-Analyse berechnet. Lücken erscheinen als separate Sektion\n\"Typische Bausteine fehlen\" — getrennt von keyDeviations.\n',
           ),
       }),
+      secondOpinion: zod.object({
+        status: zod.enum([
+          "disabled",
+          "skipped",
+          "unavailable",
+          "failed",
+          "completed",
+        ]),
+        reason: zod.union([zod.string(), zod.null()]).optional(),
+        secondOpinionId: zod.union([zod.string(), zod.null()]).optional(),
+        invocationId: zod.union([zod.string(), zod.null()]).optional(),
+        model: zod.union([zod.string(), zod.null()]).optional(),
+        agreementLevel: zod
+          .union([zod.enum(["low", "medium", "high"]), zod.null()])
+          .optional(),
+        agreementScore: zod
+          .union([
+            zod
+              .number()
+              .min(
+                runApprovalReadinessResponseThreeSecondOpinionAgreementScoreOneMin,
+              )
+              .max(
+                runApprovalReadinessResponseThreeSecondOpinionAgreementScoreOneMax,
+              ),
+            zod.null(),
+          ])
+          .optional(),
+        diffs: zod
+          .array(
+            zod.object({
+              path: zod.string(),
+              label: zod.string(),
+              primary: zod.unknown(),
+              secondary: zod.unknown(),
+              severity: zod.enum(["info", "minor", "major"]),
+            }),
+          )
+          .optional(),
+        output: zod
+          .union([zod.record(zod.string(), zod.unknown()), zod.null()])
+          .optional(),
+        decision: zod
+          .union([
+            zod.enum(["pending", "keep_primary", "adopt_secondary", "manual"]),
+            zod.null(),
+          ])
+          .optional(),
+      }),
     }),
   );
 
@@ -5652,6 +5806,9 @@ export const RunContractRiskParams = zod.object({
 
 export const runContractRiskResponseTwoConfidenceMin = 0;
 export const runContractRiskResponseTwoConfidenceMax = 1;
+
+export const runContractRiskResponseThreeSecondOpinionAgreementScoreOneMin = 0;
+export const runContractRiskResponseThreeSecondOpinionAgreementScoreOneMax = 100;
 
 export const RunContractRiskResponse = zod
   .object({
@@ -5698,6 +5855,55 @@ export const RunContractRiskResponse = zod
         ]),
         confidence: zod.enum(["low", "medium", "high"]),
         confidenceReason: zod.string(),
+      }),
+      secondOpinion: zod.object({
+        status: zod.enum([
+          "disabled",
+          "skipped",
+          "unavailable",
+          "failed",
+          "completed",
+        ]),
+        reason: zod.union([zod.string(), zod.null()]).optional(),
+        secondOpinionId: zod.union([zod.string(), zod.null()]).optional(),
+        invocationId: zod.union([zod.string(), zod.null()]).optional(),
+        model: zod.union([zod.string(), zod.null()]).optional(),
+        agreementLevel: zod
+          .union([zod.enum(["low", "medium", "high"]), zod.null()])
+          .optional(),
+        agreementScore: zod
+          .union([
+            zod
+              .number()
+              .min(
+                runContractRiskResponseThreeSecondOpinionAgreementScoreOneMin,
+              )
+              .max(
+                runContractRiskResponseThreeSecondOpinionAgreementScoreOneMax,
+              ),
+            zod.null(),
+          ])
+          .optional(),
+        diffs: zod
+          .array(
+            zod.object({
+              path: zod.string(),
+              label: zod.string(),
+              primary: zod.unknown(),
+              secondary: zod.unknown(),
+              severity: zod.enum(["info", "minor", "major"]),
+            }),
+          )
+          .optional(),
+        output: zod
+          .union([zod.record(zod.string(), zod.unknown()), zod.null()])
+          .optional(),
+        decision: zod
+          .union([
+            zod.enum(["pending", "keep_primary", "adopt_secondary", "manual"]),
+            zod.null(),
+          ])
+          .optional(),
       }),
     }),
   );
@@ -6694,6 +6900,134 @@ export const UpdatePlatformTenantResponse = zod.object({
   companyCount: zod.number(),
   createdAt: zod.coerce.date(),
   adminUserId: zod.string().nullish(),
+});
+
+/**
+ * @summary Read the AI second-opinion configuration for a tenant (platform admin
+only). Returns the per-prompt-key map plus the lists of supported
+prompt keys and allowed Anthropic models the admin can choose from.
+
+ */
+export const GetTenantAiSecondOpinionConfigParams = zod.object({
+  id: zod.coerce.string(),
+});
+
+export const getTenantAiSecondOpinionConfigResponseConfigSystemSuffixOneMax = 2000;
+
+export const GetTenantAiSecondOpinionConfigResponse = zod.object({
+  tenantId: zod.string(),
+  config: zod.record(
+    zod.string(),
+    zod.object({
+      mode: zod.enum(["off", "optional", "always"]),
+      model: zod.union([zod.string(), zod.null()]).optional(),
+      systemSuffix: zod
+        .union([
+          zod
+            .string()
+            .max(
+              getTenantAiSecondOpinionConfigResponseConfigSystemSuffixOneMax,
+            ),
+          zod.null(),
+        ])
+        .optional(),
+    }),
+  ),
+  promptKeys: zod.array(zod.string()),
+  allowedModels: zod.array(zod.string()),
+});
+
+/**
+ * @summary Replace the AI second-opinion configuration for a tenant (platform
+admin only). The body's `config` map fully replaces the stored value.
+
+ */
+export const UpdateTenantAiSecondOpinionConfigParams = zod.object({
+  id: zod.coerce.string(),
+});
+
+export const updateTenantAiSecondOpinionConfigBodyConfigSystemSuffixOneMax = 2000;
+
+export const UpdateTenantAiSecondOpinionConfigBody = zod.object({
+  config: zod.record(
+    zod.string(),
+    zod.object({
+      mode: zod.enum(["off", "optional", "always"]),
+      model: zod.union([zod.string(), zod.null()]).optional(),
+      systemSuffix: zod
+        .union([
+          zod
+            .string()
+            .max(updateTenantAiSecondOpinionConfigBodyConfigSystemSuffixOneMax),
+          zod.null(),
+        ])
+        .optional(),
+    }),
+  ),
+});
+
+export const updateTenantAiSecondOpinionConfigResponseConfigSystemSuffixOneMax = 2000;
+
+export const UpdateTenantAiSecondOpinionConfigResponse = zod.object({
+  tenantId: zod.string(),
+  config: zod.record(
+    zod.string(),
+    zod.object({
+      mode: zod.enum(["off", "optional", "always"]),
+      model: zod.union([zod.string(), zod.null()]).optional(),
+      systemSuffix: zod
+        .union([
+          zod
+            .string()
+            .max(
+              updateTenantAiSecondOpinionConfigResponseConfigSystemSuffixOneMax,
+            ),
+          zod.null(),
+        ])
+        .optional(),
+    }),
+  ),
+  promptKeys: zod.array(zod.string()),
+  allowedModels: zod.array(zod.string()),
+});
+
+/**
+ * @summary Record the reviewer's decision after seeing a second-opinion diff:
+keep the primary answer, adopt the secondary answer, or take a
+manual route. Writes the decision to ai_second_opinions and emits a
+single anonymized ai_feedback row.
+
+ */
+export const RecordAiSecondOpinionDecisionParams = zod.object({
+  id: zod.coerce.string(),
+});
+
+export const recordAiSecondOpinionDecisionBodyFeedbackOneMax = 2000;
+
+export const RecordAiSecondOpinionDecisionBody = zod.object({
+  decision: zod.enum(["keep_primary", "adopt_secondary", "manual"]),
+  feedback: zod
+    .union([
+      zod.string().max(recordAiSecondOpinionDecisionBodyFeedbackOneMax),
+      zod.null(),
+    ])
+    .optional(),
+});
+
+export const recordAiSecondOpinionDecisionResponseAgreementScoreMin = 0;
+export const recordAiSecondOpinionDecisionResponseAgreementScoreMax = 100;
+
+export const RecordAiSecondOpinionDecisionResponse = zod.object({
+  id: zod.string(),
+  promptKey: zod.string(),
+  decision: zod.enum(["pending", "keep_primary", "adopt_secondary", "manual"]),
+  decidedBy: zod.union([zod.string(), zod.null()]).optional(),
+  decidedAt: zod.union([zod.coerce.date(), zod.null()]).optional(),
+  agreementLevel: zod.enum(["low", "medium", "high"]),
+  agreementScore: zod
+    .number()
+    .min(recordAiSecondOpinionDecisionResponseAgreementScoreMin)
+    .max(recordAiSecondOpinionDecisionResponseAgreementScoreMax),
 });
 
 /**

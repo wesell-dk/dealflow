@@ -22,6 +22,11 @@ export interface AIInvocationRecord {
   errorMessage?: string | null;
   entityType?: string | null;
   entityId?: string | null;
+  /**
+   * KI-Zweitmeinung (Task #232): unterscheidet Primaer-Lauf vom parallelen
+   * Cross-Check. Default 'primary' fuer alle Bestands-Aufrufer.
+   */
+  kind?: 'primary' | 'second_opinion';
 }
 
 export async function recordAIInvocation(args: AIInvocationRecord): Promise<string> {
@@ -46,6 +51,7 @@ export async function recordAIInvocation(args: AIInvocationRecord): Promise<stri
     errorMessage: args.errorMessage ?? null,
     entityType: args.entityType ?? null,
     entityId: args.entityId ?? null,
+    kind: args.kind ?? 'primary',
   });
   return id;
 }

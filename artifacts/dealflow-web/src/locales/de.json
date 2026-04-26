@@ -410,7 +410,27 @@
       "reactivateConfirmBody": "Reaktivieren stellt den normalen Zugriff für alle bestehenden Nutzer wieder her.",
       "reactivateConfirm": "Mandant reaktivieren",
       "reactivated": "Mandant reaktiviert",
-      "regionChangeWarning": "Region-Änderung nach Bereitstellung kann Auswirkungen auf die Datenresidenz haben."
+      "regionChangeWarning": "Region-Änderung nach Bereitstellung kann Auswirkungen auf die Datenresidenz haben.",
+      "secondOpinionTitle": "KI-Zweitmeinung",
+      "secondOpinionSubtitle": "Pro kritischem KI-Workflow konfigurieren, ob ein zweites Modell zur Plausibilitäts-Prüfung mitläuft.",
+      "secondOpinionEdit": "Zweitmeinung konfigurieren",
+      "secondOpinionDialogTitle": "KI-Zweitmeinung — {{name}}",
+      "secondOpinionDialogDesc": "Pro Workflow festlegen, ob ein Zweitmodell als kritischer Reviewer mitläuft. Heuristik bei leerem Modell-Feld: opus ↔ sonnet, haiku → sonnet.",
+      "secondOpinionWorkflow": "Workflow",
+      "secondOpinionMode": "Modus",
+      "secondOpinionModel": "Zweitmodell (optional)",
+      "secondOpinionModelAuto": "Automatisch (gegenpoliges Anthropic-Modell)",
+      "secondOpinionModeOff": "Aus",
+      "secondOpinionModeOptional": "Optional (nur Anzeige)",
+      "secondOpinionModeAlways": "Immer",
+      "secondOpinionPromptKey": {
+        "deal.summary": "Deal-Zusammenfassung",
+        "pricing.review": "Pricing-Review",
+        "approval.readiness": "Freigabe-Check",
+        "contract.risk": "Vertrags-Risiko"
+      },
+      "secondOpinionSaved": "Zweitmeinung-Konfiguration gespeichert",
+      "secondOpinionSaveFailed": "Speichern fehlgeschlagen"
     },
     "quote": {
       "tabs": {
@@ -1130,7 +1150,36 @@
         "accepted": "Akzeptiert",
         "rejected": "Abgelehnt",
         "modified": "Angepasst"
-      }
+      },
+      "secondOpinionTitle": "KI-Zweitmeinung",
+      "secondOpinionAgreementLow": "Geringe Übereinstimmung",
+      "secondOpinionAgreementMedium": "Teilweise Übereinstimmung",
+      "secondOpinionAgreementHigh": "Hohe Übereinstimmung",
+      "secondOpinionStatusFailed": "Zweitmeinung fehlgeschlagen",
+      "secondOpinionStatusUnavailable": "Zweitmodell nicht verfügbar",
+      "secondOpinionStatusSkipped": "Zweitmeinung übersprungen",
+      "secondOpinionShowDiff": "Abweichungen ansehen ({{count}})",
+      "secondOpinionHideDiff": "Abweichungen ausblenden",
+      "secondOpinionNoDiffs": "Beide Modelle stimmen vollständig überein.",
+      "secondOpinionPrimaryLabel": "Primär",
+      "secondOpinionSecondaryLabel": "Zweitmodell",
+      "secondOpinionSeverity": {
+        "info": "Info",
+        "minor": "Klein",
+        "major": "Groß"
+      },
+      "secondOpinionDecisionTitle": "Was übernehmen?",
+      "secondOpinionKeepPrimary": "Primär behalten",
+      "secondOpinionAdoptSecondary": "Zweitmeinung übernehmen",
+      "secondOpinionMarkManual": "Manuell entscheiden",
+      "secondOpinionDecisionRecorded": "Entscheidung gespeichert",
+      "secondOpinionDecisionFailed": "Entscheidung konnte nicht gespeichert werden",
+      "secondOpinionDecided": {
+        "keep_primary": "Primär behalten",
+        "adopt_secondary": "Zweitmeinung übernommen",
+        "manual": "Manuell entschieden"
+      },
+      "secondOpinionModelLine": "Zweitmodell: {{model}}"
     },
     "renewals": {
       "title": "Renewals",

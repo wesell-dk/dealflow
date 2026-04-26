@@ -3478,10 +3478,54 @@ export interface DealSummaryResult {
   confidenceReason: string;
 }
 
+export type SecondOpinionDiffSeverity =
+  (typeof SecondOpinionDiffSeverity)[keyof typeof SecondOpinionDiffSeverity];
+
+export const SecondOpinionDiffSeverity = {
+  info: "info",
+  minor: "minor",
+  major: "major",
+} as const;
+
+export interface SecondOpinionDiff {
+  path: string;
+  label: string;
+  primary: unknown;
+  secondary: unknown;
+  severity: SecondOpinionDiffSeverity;
+}
+
+export type SecondOpinionEnvelopeStatus =
+  (typeof SecondOpinionEnvelopeStatus)[keyof typeof SecondOpinionEnvelopeStatus];
+
+export const SecondOpinionEnvelopeStatus = {
+  disabled: "disabled",
+  skipped: "skipped",
+  unavailable: "unavailable",
+  failed: "failed",
+  completed: "completed",
+} as const;
+
+export type SecondOpinionEnvelopeOutput = { [key: string]: unknown } | null;
+
+export interface SecondOpinionEnvelope {
+  status: SecondOpinionEnvelopeStatus;
+  reason?: string | null;
+  secondOpinionId?: string | null;
+  invocationId?: string | null;
+  model?: string | null;
+  agreementLevel?: "low" | "medium" | "high" | null;
+  agreementScore?: number | null;
+  diffs?: SecondOpinionDiff[];
+  output?: SecondOpinionEnvelopeOutput;
+  decision?: "pending" | "keep_primary" | "adopt_secondary" | "manual" | null;
+}
+
 export type DealSummaryEnvelope = CopilotAiInsightRef &
   CopilotAiRecommendationRef & {
     ok: boolean;
     result: DealSummaryResult;
+    secondOpinion: SecondOpinionEnvelope;
   };
 
 export type PricingReviewResultMarginAssessment =
@@ -3564,6 +3608,7 @@ export type PricingReviewEnvelope = CopilotAiInsightRef &
   CopilotAiRecommendationRef & {
     ok: boolean;
     result: PricingReviewResult;
+    secondOpinion: SecondOpinionEnvelope;
   };
 
 export type ApprovalReadinessResultRecommendation =
@@ -3707,6 +3752,7 @@ export type ApprovalReadinessEnvelope = CopilotAiInsightRef &
   CopilotAiRecommendationRef & {
     ok: boolean;
     result: ApprovalReadinessResult;
+    secondOpinion: SecondOpinionEnvelope;
   };
 
 export type ContractRiskResultOverallRisk =
@@ -3772,7 +3818,89 @@ export type ContractRiskEnvelope = CopilotAiInsightRef &
   CopilotAiRecommendationRef & {
     ok: boolean;
     result: ContractRiskResult;
+    secondOpinion: SecondOpinionEnvelope;
   };
+
+export type AiSecondOpinionPromptConfigMode =
+  (typeof AiSecondOpinionPromptConfigMode)[keyof typeof AiSecondOpinionPromptConfigMode];
+
+export const AiSecondOpinionPromptConfigMode = {
+  off: "off",
+  optional: "optional",
+  always: "always",
+} as const;
+
+export interface AiSecondOpinionPromptConfig {
+  mode: AiSecondOpinionPromptConfigMode;
+  model?: string | null;
+  systemSuffix?: string | null;
+}
+
+export type AiSecondOpinionConfigConfig = {
+  [key: string]: AiSecondOpinionPromptConfig;
+};
+
+export interface AiSecondOpinionConfig {
+  tenantId: string;
+  config: AiSecondOpinionConfigConfig;
+  promptKeys: string[];
+  allowedModels: string[];
+}
+
+export type AiSecondOpinionConfigUpdateConfig = {
+  [key: string]: AiSecondOpinionPromptConfig;
+};
+
+export interface AiSecondOpinionConfigUpdate {
+  config: AiSecondOpinionConfigUpdateConfig;
+}
+
+export type AiSecondOpinionDecisionRequestDecision =
+  (typeof AiSecondOpinionDecisionRequestDecision)[keyof typeof AiSecondOpinionDecisionRequestDecision];
+
+export const AiSecondOpinionDecisionRequestDecision = {
+  keep_primary: "keep_primary",
+  adopt_secondary: "adopt_secondary",
+  manual: "manual",
+} as const;
+
+export interface AiSecondOpinionDecisionRequest {
+  decision: AiSecondOpinionDecisionRequestDecision;
+  feedback?: string | null;
+}
+
+export type AiSecondOpinionDecisionResultDecision =
+  (typeof AiSecondOpinionDecisionResultDecision)[keyof typeof AiSecondOpinionDecisionResultDecision];
+
+export const AiSecondOpinionDecisionResultDecision = {
+  pending: "pending",
+  keep_primary: "keep_primary",
+  adopt_secondary: "adopt_secondary",
+  manual: "manual",
+} as const;
+
+export type AiSecondOpinionDecisionResultAgreementLevel =
+  (typeof AiSecondOpinionDecisionResultAgreementLevel)[keyof typeof AiSecondOpinionDecisionResultAgreementLevel];
+
+export const AiSecondOpinionDecisionResultAgreementLevel = {
+  low: "low",
+  medium: "medium",
+  high: "high",
+} as const;
+
+export interface AiSecondOpinionDecisionResult {
+  id: string;
+  promptKey: string;
+  decision: AiSecondOpinionDecisionResultDecision;
+  decidedBy?: string | null;
+  decidedAt?: string | null;
+  agreementLevel: AiSecondOpinionDecisionResultAgreementLevel;
+  /**
+   * @minimum 0
+   * @maximum 100
+   */
+  agreementScore: number;
+}
 
 export type HelpBotInputHistoryItem = {
   role: string;

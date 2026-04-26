@@ -10,9 +10,11 @@ Multi-tenant, multi-company, multi-brand. Deal-centric.
 import type { CopilotAiInsightRef } from "./copilotAiInsightRef";
 import type { CopilotAiRecommendationRef } from "./copilotAiRecommendationRef";
 import type { PricingReviewResult } from "./pricingReviewResult";
+import type { SecondOpinionEnvelope } from "./secondOpinionEnvelope";
 
 export type PricingReviewEnvelope = CopilotAiInsightRef &
   CopilotAiRecommendationRef & {
     ok: boolean;
     result: PricingReviewResult;
+    secondOpinion: SecondOpinionEnvelope;
   };

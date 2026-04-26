@@ -35,6 +35,10 @@ import type {
   AiRecommendation,
   AiRecommendationMetric,
   AiRecommendationPatch,
+  AiSecondOpinionConfig,
+  AiSecondOpinionConfigUpdate,
+  AiSecondOpinionDecisionRequest,
+  AiSecondOpinionDecisionResult,
   ApiError,
   ApprovalCase,
   ApprovalChainTemplate,
@@ -16317,6 +16321,303 @@ export const useUpdatePlatformTenant = <
   TContext
 > => {
   return useMutation(getUpdatePlatformTenantMutationOptions(options));
+};
+
+/**
+ * @summary Read the AI second-opinion configuration for a tenant (platform admin
+only). Returns the per-prompt-key map plus the lists of supported
+prompt keys and allowed Anthropic models the admin can choose from.
+
+ */
+export const getGetTenantAiSecondOpinionConfigUrl = (id: string) => {
+  return `/api/v1/platform/tenants/${id}/ai-second-opinion-config`;
+};
+
+export const getTenantAiSecondOpinionConfig = async (
+  id: string,
+  options?: RequestInit,
+): Promise<AiSecondOpinionConfig> => {
+  return customFetch<AiSecondOpinionConfig>(
+    getGetTenantAiSecondOpinionConfigUrl(id),
+    {
+      ...options,
+      method: "GET",
+    },
+  );
+};
+
+export const getGetTenantAiSecondOpinionConfigQueryKey = (id: string) => {
+  return [`/api/v1/platform/tenants/${id}/ai-second-opinion-config`] as const;
+};
+
+export const getGetTenantAiSecondOpinionConfigQueryOptions = <
+  TData = Awaited<ReturnType<typeof getTenantAiSecondOpinionConfig>>,
+  TError = ErrorType<void>,
+>(
+  id: string,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getTenantAiSecondOpinionConfig>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey =
+    queryOptions?.queryKey ?? getGetTenantAiSecondOpinionConfigQueryKey(id);
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof getTenantAiSecondOpinionConfig>>
+  > = ({ signal }) =>
+    getTenantAiSecondOpinionConfig(id, { signal, ...requestOptions });
+
+  return {
+    queryKey,
+    queryFn,
+    enabled: !!id,
+    ...queryOptions,
+  } as UseQueryOptions<
+    Awaited<ReturnType<typeof getTenantAiSecondOpinionConfig>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetTenantAiSecondOpinionConfigQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getTenantAiSecondOpinionConfig>>
+>;
+export type GetTenantAiSecondOpinionConfigQueryError = ErrorType<void>;
+
+/**
+ * @summary Read the AI second-opinion configuration for a tenant (platform admin
+only). Returns the per-prompt-key map plus the lists of supported
+prompt keys and allowed Anthropic models the admin can choose from.
+
+ */
+
+export function useGetTenantAiSecondOpinionConfig<
+  TData = Awaited<ReturnType<typeof getTenantAiSecondOpinionConfig>>,
+  TError = ErrorType<void>,
+>(
+  id: string,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getTenantAiSecondOpinionConfig>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetTenantAiSecondOpinionConfigQueryOptions(
+    id,
+    options,
+  );
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Replace the AI second-opinion configuration for a tenant (platform
+admin only). The body's `config` map fully replaces the stored value.
+
+ */
+export const getUpdateTenantAiSecondOpinionConfigUrl = (id: string) => {
+  return `/api/v1/platform/tenants/${id}/ai-second-opinion-config`;
+};
+
+export const updateTenantAiSecondOpinionConfig = async (
+  id: string,
+  aiSecondOpinionConfigUpdate: AiSecondOpinionConfigUpdate,
+  options?: RequestInit,
+): Promise<AiSecondOpinionConfig> => {
+  return customFetch<AiSecondOpinionConfig>(
+    getUpdateTenantAiSecondOpinionConfigUrl(id),
+    {
+      ...options,
+      method: "PUT",
+      headers: { "Content-Type": "application/json", ...options?.headers },
+      body: JSON.stringify(aiSecondOpinionConfigUpdate),
+    },
+  );
+};
+
+export const getUpdateTenantAiSecondOpinionConfigMutationOptions = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof updateTenantAiSecondOpinionConfig>>,
+    TError,
+    { id: string; data: BodyType<AiSecondOpinionConfigUpdate> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof updateTenantAiSecondOpinionConfig>>,
+  TError,
+  { id: string; data: BodyType<AiSecondOpinionConfigUpdate> },
+  TContext
+> => {
+  const mutationKey = ["updateTenantAiSecondOpinionConfig"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof updateTenantAiSecondOpinionConfig>>,
+    { id: string; data: BodyType<AiSecondOpinionConfigUpdate> }
+  > = (props) => {
+    const { id, data } = props ?? {};
+
+    return updateTenantAiSecondOpinionConfig(id, data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type UpdateTenantAiSecondOpinionConfigMutationResult = NonNullable<
+  Awaited<ReturnType<typeof updateTenantAiSecondOpinionConfig>>
+>;
+export type UpdateTenantAiSecondOpinionConfigMutationBody =
+  BodyType<AiSecondOpinionConfigUpdate>;
+export type UpdateTenantAiSecondOpinionConfigMutationError = ErrorType<void>;
+
+/**
+ * @summary Replace the AI second-opinion configuration for a tenant (platform
+admin only). The body's `config` map fully replaces the stored value.
+
+ */
+export const useUpdateTenantAiSecondOpinionConfig = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof updateTenantAiSecondOpinionConfig>>,
+    TError,
+    { id: string; data: BodyType<AiSecondOpinionConfigUpdate> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof updateTenantAiSecondOpinionConfig>>,
+  TError,
+  { id: string; data: BodyType<AiSecondOpinionConfigUpdate> },
+  TContext
+> => {
+  return useMutation(
+    getUpdateTenantAiSecondOpinionConfigMutationOptions(options),
+  );
+};
+
+/**
+ * @summary Record the reviewer's decision after seeing a second-opinion diff:
+keep the primary answer, adopt the secondary answer, or take a
+manual route. Writes the decision to ai_second_opinions and emits a
+single anonymized ai_feedback row.
+
+ */
+export const getRecordAiSecondOpinionDecisionUrl = (id: string) => {
+  return `/api/v1/ai-second-opinions/${id}/decision`;
+};
+
+export const recordAiSecondOpinionDecision = async (
+  id: string,
+  aiSecondOpinionDecisionRequest: AiSecondOpinionDecisionRequest,
+  options?: RequestInit,
+): Promise<AiSecondOpinionDecisionResult> => {
+  return customFetch<AiSecondOpinionDecisionResult>(
+    getRecordAiSecondOpinionDecisionUrl(id),
+    {
+      ...options,
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...options?.headers },
+      body: JSON.stringify(aiSecondOpinionDecisionRequest),
+    },
+  );
+};
+
+export const getRecordAiSecondOpinionDecisionMutationOptions = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof recordAiSecondOpinionDecision>>,
+    TError,
+    { id: string; data: BodyType<AiSecondOpinionDecisionRequest> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof recordAiSecondOpinionDecision>>,
+  TError,
+  { id: string; data: BodyType<AiSecondOpinionDecisionRequest> },
+  TContext
+> => {
+  const mutationKey = ["recordAiSecondOpinionDecision"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof recordAiSecondOpinionDecision>>,
+    { id: string; data: BodyType<AiSecondOpinionDecisionRequest> }
+  > = (props) => {
+    const { id, data } = props ?? {};
+
+    return recordAiSecondOpinionDecision(id, data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type RecordAiSecondOpinionDecisionMutationResult = NonNullable<
+  Awaited<ReturnType<typeof recordAiSecondOpinionDecision>>
+>;
+export type RecordAiSecondOpinionDecisionMutationBody =
+  BodyType<AiSecondOpinionDecisionRequest>;
+export type RecordAiSecondOpinionDecisionMutationError = ErrorType<void>;
+
+/**
+ * @summary Record the reviewer's decision after seeing a second-opinion diff:
+keep the primary answer, adopt the secondary answer, or take a
+manual route. Writes the decision to ai_second_opinions and emits a
+single anonymized ai_feedback row.
+
+ */
+export const useRecordAiSecondOpinionDecision = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof recordAiSecondOpinionDecision>>,
+    TError,
+    { id: string; data: BodyType<AiSecondOpinionDecisionRequest> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof recordAiSecondOpinionDecision>>,
+  TError,
+  { id: string; data: BodyType<AiSecondOpinionDecisionRequest> },
+  TContext
+> => {
+  return useMutation(getRecordAiSecondOpinionDecisionMutationOptions(options));
 };
 
 /**

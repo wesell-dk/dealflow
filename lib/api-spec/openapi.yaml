@@ -3731,6 +3731,79 @@ paths:
         "404": { description: tenant not found }
         "422": { description: validation }
 
+  /platform/tenants/{id}/ai-second-opinion-config:
+    get:
+      operationId: getTenantAiSecondOpinionConfig
+      tags: [platform]
+      summary: |
+        Read the AI second-opinion configuration for a tenant (platform admin
+        only). Returns the per-prompt-key map plus the lists of supported
+        prompt keys and allowed Anthropic models the admin can choose from.
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: ok
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AiSecondOpinionConfig" }
+        "404": { description: tenant not found }
+    put:
+      operationId: updateTenantAiSecondOpinionConfig
+      tags: [platform]
+      summary: |
+        Replace the AI second-opinion configuration for a tenant (platform
+        admin only). The body's `config` map fully replaces the stored value.
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/AiSecondOpinionConfigUpdate" }
+      responses:
+        "200":
+          description: ok
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AiSecondOpinionConfig" }
+        "404": { description: tenant not found }
+        "422": { description: validation }
+
+  /ai-second-opinions/{id}/decision:
+    post:
+      operationId: recordAiSecondOpinionDecision
+      tags: [copilot]
+      summary: |
+        Record the reviewer's decision after seeing a second-opinion diff:
+        keep the primary answer, adopt the secondary answer, or take a
+        manual route. Writes the decision to ai_second_opinions and emits a
+        single anonymized ai_feedback row.
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/AiSecondOpinionDecisionRequest" }
+      responses:
+        "200":
+          description: ok
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AiSecondOpinionDecisionResult" }
+        "400": { description: validation }
+        "404": { description: second opinion not found }
+
   /quotes/{id}/duplicate:
     post:
       operationId: duplicateQuote
@@ -8389,6 +8462,70 @@ components:
         confidence: { type: string, enum: [low, medium, high] }
         confidenceReason: { type: string }
 
+    # Task #232: KI-Zweitmeinung — generischer Differ-Eintrag.
+    # `path` ist ein flacher Field-Pfad im Result-Envelope (z. B. "health" oder
+    # "policyFlags"). `severity` markiert die Wichtigkeit der Abweichung —
+    # 'major' Diffs druecken die agreementLevel-Bewertung Richtung 'low'.
+    SecondOpinionDiff:
+      type: object
+      required: [path, label, primary, secondary, severity]
+      properties:
+        path: { type: string }
+        label: { type: string }
+        primary: {}
+        secondary: {}
+        severity: { type: string, enum: [info, minor, major] }
+
+    # Wrapper, der jedem Copilot-Envelope den Cross-Check anhaengt.
+    # status='completed' → secondOpinionId/agreementLevel/diffs sind gesetzt.
+    # 'disabled' / 'skipped' / 'unavailable' → kein Lauf passiert (Konfig oder
+    # Provider). 'failed' → Lauf hat einen Fehler geworfen, Primaer-Lauf gilt.
+    SecondOpinionEnvelope:
+      type: object
+      required: [status]
+      properties:
+        status:
+          type: string
+          enum: [disabled, skipped, unavailable, failed, completed]
+        reason:
+          oneOf:
+            - { type: string }
+            - { type: "null" }
+        secondOpinionId:
+          oneOf:
+            - { type: string }
+            - { type: "null" }
+        invocationId:
+          oneOf:
+            - { type: string }
+            - { type: "null" }
+        model:
+          oneOf:
+            - { type: string }
+            - { type: "null" }
+        agreementLevel:
+          oneOf:
+            - { type: string, enum: [low, medium, high] }
+            - { type: "null" }
+        agreementScore:
+          oneOf:
+            - { type: integer, minimum: 0, maximum: 100 }
+            - { type: "null" }
+        diffs:
+          type: array
+          items: { $ref: "#/components/schemas/SecondOpinionDiff" }
+        # Validierter Output des Zweitmodells im selben Schema wie das
+        # primaere `result`. Bewusst als generisches Objekt gehalten — die
+        # konkrete Form folgt dem jeweiligen Workflow-Result-Schema.
+        output:
+          oneOf:
+            - { type: object, additionalProperties: true }
+            - { type: "null" }
+        decision:
+          oneOf:
+            - { type: string, enum: [pending, keep_primary, adopt_secondary, manual] }
+            - { type: "null" }
+
     DealSummaryEnvelope:
       type: object
       required:
@@ -8403,14 +8540,16 @@ components:
         - confidence
         - confidenceLevel
         - confidenceReason
+        - secondOpinion
       allOf:
         - $ref: "#/components/schemas/CopilotAiInsightRef"
         - $ref: "#/components/schemas/CopilotAiRecommendationRef"
         - type: object
-          required: [ok, result]
+          required: [ok, result, secondOpinion]
           properties:
             ok: { type: boolean, enum: [true] }
             result: { $ref: "#/components/schemas/DealSummaryResult" }
+            secondOpinion: { $ref: "#/components/schemas/SecondOpinionEnvelope" }
 
     PricingReviewResult:
       type: object
@@ -8451,14 +8590,16 @@ components:
         - confidence
         - confidenceLevel
         - confidenceReason
+        - secondOpinion
       allOf:
         - $ref: "#/components/schemas/CopilotAiInsightRef"
         - $ref: "#/components/schemas/CopilotAiRecommendationRef"
         - type: object
-          required: [ok, result]
+          required: [ok, result, secondOpinion]
           properties:
             ok: { type: boolean, enum: [true] }
             result: { $ref: "#/components/schemas/PricingReviewResult" }
+            secondOpinion: { $ref: "#/components/schemas/SecondOpinionEnvelope" }
 
     ApprovalReadinessResult:
       type: object
@@ -8596,14 +8737,16 @@ components:
         - confidence
         - confidenceLevel
         - confidenceReason
+        - secondOpinion
       allOf:
         - $ref: "#/components/schemas/CopilotAiInsightRef"
         - $ref: "#/components/schemas/CopilotAiRecommendationRef"
         - type: object
-          required: [ok, result]
+          required: [ok, result, secondOpinion]
           properties:
             ok: { type: boolean, enum: [true] }
             result: { $ref: "#/components/schemas/ApprovalReadinessResult" }
+            secondOpinion: { $ref: "#/components/schemas/SecondOpinionEnvelope" }
 
     ContractRiskResult:
       type: object
@@ -8643,14 +8786,84 @@ components:
         - confidence
         - confidenceLevel
         - confidenceReason
+        - secondOpinion
       allOf:
         - $ref: "#/components/schemas/CopilotAiInsightRef"
         - $ref: "#/components/schemas/CopilotAiRecommendationRef"
         - type: object
-          required: [ok, result]
+          required: [ok, result, secondOpinion]
           properties:
             ok: { type: boolean, enum: [true] }
             result: { $ref: "#/components/schemas/ContractRiskResult" }
+            secondOpinion: { $ref: "#/components/schemas/SecondOpinionEnvelope" }
+
+    # ── Task #232: Admin-Konfiguration für KI-Zweitmeinung ──
+    AiSecondOpinionPromptConfig:
+      type: object
+      required: [mode]
+      properties:
+        mode:
+          type: string
+          enum: [off, optional, always]
+        model:
+          oneOf:
+            - { type: string }
+            - { type: "null" }
+        systemSuffix:
+          oneOf:
+            - { type: string, maxLength: 2000 }
+            - { type: "null" }
+
+    AiSecondOpinionConfig:
+      type: object
+      required: [tenantId, config, promptKeys, allowedModels]
+      properties:
+        tenantId: { type: string }
+        config:
+          type: object
+          additionalProperties: { $ref: "#/components/schemas/AiSecondOpinionPromptConfig" }
+        promptKeys:
+          type: array
+          items: { type: string }
+        allowedModels:
+          type: array
+          items: { type: string }
+
+    AiSecondOpinionConfigUpdate:
+      type: object
+      required: [config]
+      properties:
+        config:
+          type: object
+          additionalProperties: { $ref: "#/components/schemas/AiSecondOpinionPromptConfig" }
+
+    AiSecondOpinionDecisionRequest:
+      type: object
+      required: [decision]
+      properties:
+        decision:
+          type: string
+          enum: [keep_primary, adopt_secondary, manual]
+        feedback:
+          oneOf:
+            - { type: string, maxLength: 2000 }
+            - { type: "null" }
+
+    AiSecondOpinionDecisionResult:
+      type: object
+      required: [id, promptKey, decision, agreementLevel, agreementScore]
+      properties:
+        id: { type: string }
+        promptKey: { type: string }
+        decision:
+          type: string
+          enum: [pending, keep_primary, adopt_secondary, manual]
+        decidedBy:
+          oneOf: [{ type: string }, { type: "null" }]
+        decidedAt:
+          oneOf: [{ type: string, format: date-time }, { type: "null" }]
+        agreementLevel: { type: string, enum: [low, medium, high] }
+        agreementScore: { type: integer, minimum: 0, maximum: 100 }
 
     HelpBotInput:
       type: object

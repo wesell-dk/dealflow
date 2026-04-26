@@ -62,6 +62,19 @@ export const tenantsTable = pgTable("tenants", {
     .$type<Record<string, string>>()
     .default({})
     .notNull(),
+  // KI-Zweitmeinung (Task #232): pro Prompt-Key konfiguriert ein Plattform-
+  // Admin, ob ein zweites Modell als Cross-Check laufen soll. `mode`:
+  //   off       → kein Second-Opinion-Lauf
+  //   optional  → Caller darf opt-in (Header / Body-Flag)
+  //   always    → bei jedem Lauf parallel ein Zweit-Modell
+  // `model` ist optional; ohne Angabe wählt der Orchestrator automatisch
+  // ein Komplementärmodell aus der Allowlist (anderer Anbieter-Name oder
+  // andere Größe). `systemSuffix` kann die Reviewer-Brille ergänzen
+  // ("kritischer Reviewer, suche nach Risiken die der Erst-Lauf übersieht").
+  aiSecondOpinionConfig: jsonb("ai_second_opinion_config")
+    .$type<Record<string, { mode?: 'off' | 'optional' | 'always'; model?: string | null; systemSuffix?: string | null }>>()
+    .default({})
+    .notNull(),
   // Lifecycle status für Platform-Admin: 'active' (Default) oder 'disabled'.
   // Soft-Delete: deaktivierte Mandanten bleiben in der Liste sichtbar, aber
   // sind ausgegraut und können von Platform-Admins reaktiviert werden.
@@ -1234,6 +1247,11 @@ export const aiInvocationsTable = pgTable("ai_invocations", {
   // Optionale Bindung an eine Fach-Entität (z. B. "deal" / "ctr_..." ).
   entityType: text("entity_type"),
   entityId: text("entity_id"),
+  // KI-Zweitmeinung (Task #232): unterscheidet Primär-Lauf vom parallelen
+  // Second-Opinion-Lauf. 'primary' (Default) | 'second_opinion'. Die zweite
+  // Inferenz verweist via `ai_second_opinions.secondary_invocation_id` auf
+  // dieselbe Fach-Entität wie ihr Primär-Pendant.
+  kind: text("kind").notNull().default("primary"),
   createdAt: ts("created_at"),
 }, (t) => [
   // Audit/Cost-Queries laufen fast immer pro Tenant + Zeitfenster.
@@ -1242,6 +1260,55 @@ export const aiInvocationsTable = pgTable("ai_invocations", {
   index("ai_invocations_prompt_created_idx").on(t.promptKey, t.createdAt),
   // Lookup von "alle Inferenzen für diesen Deal/Vertrag/Quote".
   index("ai_invocations_entity_idx").on(t.entityType, t.entityId),
+]);
+
+// Vergleichs-Ergebnis zwischen Primär- und Second-Opinion-Lauf (Task #232).
+// Eine Zeile pro Cross-Check, an die Primär-Inferenz angeheftet. Die zweite
+// Inferenz bleibt eine eigenständige Zeile in `ai_invocations` (kind=
+// 'second_opinion'); diese Tabelle hält das deterministische Diff-Resultat.
+export const aiSecondOpinionsTable = pgTable("ai_second_opinions", {
+  id: id(),
+  tenantId: text("tenant_id").notNull(),
+  promptKey: text("prompt_key").notNull(),
+  // FK auf ai_invocations.id — beides als Soft-Link (nicht onDelete cascade,
+  // weil Audit-Daten auch nach Aufbewahrungsfrist gelöscht werden dürfen).
+  primaryInvocationId: text("primary_invocation_id").notNull(),
+  secondaryInvocationId: text("secondary_invocation_id").notNull(),
+  primaryModel: text("primary_model").notNull(),
+  secondaryModel: text("secondary_model").notNull(),
+  // Aggregat des deterministischen Field-by-Field-Vergleichs.
+  // 'high'   → alle/fast alle Schlüsselfelder stimmen überein
+  // 'medium' → ein Teil weicht ab
+  // 'low'    → mehrere oder kritische Felder weichen ab
+  agreementLevel: text("agreement_level").notNull(),
+  // 0..100 — Anteil übereinstimmender Vergleichspunkte.
+  agreementScore: integer("agreement_score").notNull(),
+  // Liste der konkreten Differenzen ([{ path, primary, secondary, severity }]).
+  diffs: jsonb("diffs").$type<Array<{
+    path: string; label: string;
+    primary: unknown; secondary: unknown;
+    severity: 'info' | 'minor' | 'major';
+  }>>().notNull().default([]),
+  // Gespiegelte Roh-Antworten — gibt der UI/Auditor die Möglichkeit, beide
+  // Versionen direkt zu vergleichen, ohne den Provider erneut anzufragen.
+  primaryOutput: jsonb("primary_output").$type<unknown>().notNull(),
+  secondaryOutput: jsonb("secondary_output").$type<unknown>().notNull(),
+  // Optionale Entitäts-Referenz (Spiegelt ai_invocations.entity_*).
+  entityType: text("entity_type"),
+  entityId: text("entity_id"),
+  // Nutzer-Entscheidung nach Sichtung der Differenzen (Task #232):
+  //   pending           → noch keine Entscheidung
+  //   keep_primary      → Primär behalten
+  //   adopt_secondary   → Zweitmeinung übernehmen
+  //   manual            → manuelle Überarbeitung
+  decision: text("decision").notNull().default("pending"),
+  decidedBy: text("decided_by"),
+  decidedAt: timestamp("decided_at", { withTimezone: true }),
+  createdAt: ts("created_at"),
+}, (t) => [
+  index("ai_second_opinions_tenant_idx").on(t.tenantId, t.createdAt),
+  index("ai_second_opinions_primary_idx").on(t.primaryInvocationId),
+  uniqueIndex("ai_second_opinions_primary_uq").on(t.primaryInvocationId),
 ]);
 
 // Log of outbound webhook delivery attempts.

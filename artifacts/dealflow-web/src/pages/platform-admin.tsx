@@ -17,8 +17,9 @@ import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { Plus, Building2, Users, Globe, Loader2, Pencil, Power, RotateCcw } from "lucide-react";
+import { Plus, Building2, Users, Globe, Loader2, Pencil, Power, RotateCcw, Sparkles } from "lucide-react";
 import { TenantFormDialog } from "@/components/platform/tenant-form-dialog";
+import { TenantSecondOpinionDialog } from "@/components/platform/tenant-second-opinion-dialog";
 import { useToast } from "@/hooks/use-toast";
 
 export default function PlatformAdmin() {
@@ -30,6 +31,7 @@ export default function PlatformAdmin() {
   const [createOpen, setCreateOpen] = useState(false);
   const [editTenant, setEditTenant] = useState<PlatformTenant | null>(null);
   const [confirmTenant, setConfirmTenant] = useState<PlatformTenant | null>(null);
+  const [secondOpinionTenant, setSecondOpinionTenant] = useState<PlatformTenant | null>(null);
   const updateMut = useUpdatePlatformTenant();
 
   // Gate: only platform admins. Redirect after auth has loaded.
@@ -165,6 +167,16 @@ export default function PlatformAdmin() {
                       <Pencil className="h-3.5 w-3.5 mr-1" />
                       {t("pages.platformAdmin.edit")}
                     </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="flex-1"
+                      onClick={() => setSecondOpinionTenant(tenant)}
+                      data-testid={`tenant-second-opinion-${tenant.id}`}
+                    >
+                      <Sparkles className="h-3.5 w-3.5 mr-1" />
+                      {t("pages.platformAdmin.secondOpinionEdit")}
+                    </Button>
                     {disabled ? (
                       <Button
                         variant="outline"
@@ -207,6 +219,11 @@ export default function PlatformAdmin() {
         onOpenChange={(v) => { if (!v) setEditTenant(null); }}
         mode="edit"
         tenant={editTenant}
+      />
+      <TenantSecondOpinionDialog
+        open={!!secondOpinionTenant}
+        onOpenChange={(v) => { if (!v) setSecondOpinionTenant(null); }}
+        tenant={secondOpinionTenant}
       />
 
       <AlertDialog

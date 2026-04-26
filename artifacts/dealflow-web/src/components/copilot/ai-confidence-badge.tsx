@@ -20,6 +20,13 @@ export interface AIConfidenceBadgeProps {
   reason?: string | null;
   /** Wenn true, wird die Begründung sichtbar unter dem Pill angezeigt. */
   showReason?: boolean;
+  /**
+   * Optionale KI-Zweitmeinung-Übereinstimmung (Task #232). Wenn gesetzt,
+   * rendert ein zweites kleines Pill rechts neben der Konfidenz. Damit
+   * sieht man auch in kompakten Listen (AIRecommendationsCard) auf einen
+   * Blick, ob das Zweitmodell zugestimmt hat.
+   */
+  agreementLevel?: ConfidenceLevel | null;
   /** data-testid Suffix; default: confidence-badge. */
   testId?: string;
 }
@@ -46,6 +53,7 @@ export function AIConfidenceBadge({
   numeric,
   reason,
   showReason = false,
+  agreementLevel,
   testId = "confidence-badge",
 }: AIConfidenceBadgeProps) {
   const { t } = useTranslation();
@@ -64,16 +72,40 @@ export function AIConfidenceBadge({
   const pct = typeof numeric === "number" ? Math.round(numeric * 100) : null;
   const tooltip = reason ?? "";
 
+  const agreementCls = agreementLevel === "high"
+    ? "bg-emerald-100 text-emerald-900 dark:bg-emerald-950 dark:text-emerald-200"
+    : agreementLevel === "medium"
+      ? "bg-amber-100 text-amber-900 dark:bg-amber-950 dark:text-amber-200"
+      : "bg-rose-100 text-rose-900 dark:bg-rose-950 dark:text-rose-200";
+  const agreementLabel = agreementLevel === "high"
+    ? t("pages.copilot.secondOpinionAgreementHigh")
+    : agreementLevel === "medium"
+      ? t("pages.copilot.secondOpinionAgreementMedium")
+      : t("pages.copilot.secondOpinionAgreementLow");
+
   return (
     <span className="inline-flex flex-col gap-0.5">
-      <span
-        data-testid={`${testId}-${effective}`}
-        title={tooltip || undefined}
-        aria-label={tooltip ? `${label} — ${tooltip}` : label}
-        className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-medium ${cls}`}
-      >
-        <span aria-hidden>●</span>
-        {label}{pct !== null ? ` · ${pct}%` : ""}
+      <span className="inline-flex items-center gap-1">
+        <span
+          data-testid={`${testId}-${effective}`}
+          title={tooltip || undefined}
+          aria-label={tooltip ? `${label} — ${tooltip}` : label}
+          className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-medium ${cls}`}
+        >
+          <span aria-hidden>●</span>
+          {label}{pct !== null ? ` · ${pct}%` : ""}
+        </span>
+        {agreementLevel && (
+          <span
+            data-testid={`${testId}-agreement-${agreementLevel}`}
+            title={agreementLabel}
+            aria-label={`${t("pages.copilot.secondOpinionTitle")} — ${agreementLabel}`}
+            className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-medium ${agreementCls}`}
+          >
+            <span aria-hidden>≈</span>
+            {agreementLabel}
+          </span>
+        )}
       </span>
       {showReason && reason && (
         <span

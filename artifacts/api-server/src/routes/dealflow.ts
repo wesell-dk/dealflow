@@ -128,6 +128,7 @@ import {
   aiRecommendationsTable,
   aiFeedbackTable,
   aiInvocationsTable,
+  aiSecondOpinionsTable,
   externalCollaboratorEventsTable,
   contractCommentsTable,
   leadsTable,
@@ -155,7 +156,20 @@ import {
 } from '@workspace/db';
 import { emitEvent, WEBHOOK_EVENTS, assertSafeWebhookUrl, assertSafeResolvedUrl } from '../lib/webhooks';
 import { parseAsOf, resolveSnapshot, isInvalidAsOf } from '../lib/asOf';
-import { runStructured, isAIConfigured, AIOrchestrationError } from '../lib/ai';
+import {
+  runStructured,
+  isAIConfigured,
+  AIOrchestrationError,
+  runStructuredWithSecondOpinion,
+  loadTenantSecondOpinionConfig,
+  saveTenantSecondOpinionConfig,
+  validateSecondOpinionConfig,
+  recordSecondOpinionDecision,
+  ALL_SECOND_OPINION_PROMPT_KEYS,
+  ALLOWED_ANTHROPIC_MODELS,
+  type ComparePoint,
+  type SecondOpinionEnvelope,
+} from '../lib/ai';
 import { recordRecommendation, clampConfidence, confidenceLevelToScore } from '../lib/ai/recommendations.js';
 import type { HelpAssistantInput } from '../lib/ai/prompts/dealflow';
 import type { DocumentLayoutProfile } from '../pdf/profile.js';
@@ -10873,6 +10887,59 @@ function handleScopeError(err: unknown, res: Response): boolean {
   return false;
 }
 
+// ── KI-Zweitmeinung (Task #232) — Vergleichspunkte je Workflow ──
+//
+// Jeder Eintrag definiert die Felder im Envelope, die der deterministische
+// Differ vergleicht. "major" Diffs draengen das Agreement-Level Richtung
+// 'low', sodass der Reviewer im UI eindeutig sieht, dass ein zweiter Blick
+// noetig ist. Aenderungen hier veraendern die Audit-Semantik — bitte mit
+// Sorgfalt nachziehen, wenn neue Felder ins Envelope einziehen.
+const SECOND_OPINION_COMPARE_POINTS: Record<string, ComparePoint[]> = {
+  'deal.summary': [
+    { path: 'health', label: 'Deal-Health', kind: 'severity', severity: 'major' },
+    { path: 'recommendedAction', label: 'Empfohlene Aktion', kind: 'scalar', severity: 'major' },
+    { path: 'confidence', label: 'Konfidenz', kind: 'confidence', severity: 'minor' },
+  ],
+  'pricing.review': [
+    { path: 'marginAssessment', label: 'Margen-Bewertung', kind: 'severity', severity: 'major' },
+    { path: 'recommendedAction', label: 'Empfohlene Aktion', kind: 'scalar', severity: 'major' },
+    { path: 'policyFlags', label: 'Policy-Flags (max. Schwere)', kind: 'severityListMax', severity: 'major' },
+    { path: 'confidence', label: 'Konfidenz', kind: 'confidence', severity: 'minor' },
+  ],
+  'approval.readiness': [
+    { path: 'decisionReady', label: 'Entscheidungsreif', kind: 'boolean', severity: 'major' },
+    { path: 'recommendation', label: 'Empfehlung', kind: 'scalar', severity: 'major' },
+    { path: 'recommendedAction', label: 'Empfohlene Aktion', kind: 'scalar', severity: 'major' },
+    { path: 'keyDeviations', label: 'Abweichungen (max. Schwere)', kind: 'severityListMax', severity: 'major' },
+    { path: 'confidence', label: 'Konfidenz', kind: 'confidence', severity: 'minor' },
+  ],
+  'contract.risk': [
+    { path: 'overallRisk', label: 'Gesamtrisiko', kind: 'severity', severity: 'major' },
+    { path: 'approvalRelevant', label: 'Approval-relevant', kind: 'boolean', severity: 'major' },
+    { path: 'recommendedAction', label: 'Empfohlene Aktion', kind: 'scalar', severity: 'major' },
+    { path: 'riskSignals', label: 'Risiko-Signale (max. Schwere)', kind: 'severityListMax', severity: 'major' },
+    { path: 'confidence', label: 'Konfidenz', kind: 'confidence', severity: 'minor' },
+  ],
+};
+
+/**
+ * Liest den optionalen Opt-In aus dem Request, falls die Tenant-Konfig
+ * `mode='optional'` ist. Body- oder Header-basiert akzeptiert.
+ */
+function readSecondOpinionOptIn(req: Request): boolean {
+  const headerVal = req.header('x-ai-second-opinion');
+  if (typeof headerVal === 'string') {
+    const v = headerVal.toLowerCase();
+    if (v === '1' || v === 'true' || v === 'yes') return true;
+  }
+  const body = req.body as Record<string, unknown> | undefined;
+  if (body && typeof body === 'object') {
+    const v = body['requestSecondOpinion'];
+    if (v === true) return true;
+  }
+  return false;
+}
+
 // ── 1. Deal Summary ──
 router.post('/copilot/deal-summary/:dealId', async (req, res) => {
   const scope = getScope(req);
@@ -10889,7 +10956,7 @@ router.post('/copilot/deal-summary/:dealId', async (req, res) => {
     throw e;
   }
   try {
-    const result = await runStructured<DealContext, {
+    const result = await runStructuredWithSecondOpinion<DealContext, {
       headline: string; status: string; health: string;
       keyFacts: string[]; blockers: string[]; nextSteps: string[];
       recommendedAction: string;
@@ -10900,6 +10967,8 @@ router.post('/copilot/deal-summary/:dealId', async (req, res) => {
       input: ctx,
       scope,
       entityRef: { entityType: 'deal', entityId: dealId },
+      comparePoints: SECOND_OPINION_COMPARE_POINTS['deal.summary']!,
+      requestSecondOpinion: readSecondOpinionOptIn(req),
     });
     const insightId = await persistAiInsight(scope.tenantId, {
       kind: 'ai_deal_summary',
@@ -10936,6 +11005,7 @@ router.post('/copilot/deal-summary/:dealId', async (req, res) => {
       model: result.model,
       latencyMs: result.latencyMs,
       status: 'open',
+      secondOpinion: result.secondOpinion,
     });
   } catch (err) {
     if (err instanceof AIOrchestrationError) {
@@ -10962,7 +11032,7 @@ router.post('/copilot/pricing-review/:quoteId', async (req, res) => {
     throw e;
   }
   try {
-    const result = await runStructured<QuoteContext, {
+    const result = await runStructuredWithSecondOpinion<QuoteContext, {
       summary: string; marginAssessment: string; discountAssessment: string;
       policyFlags: Array<{ topic: string; severity: string; explanation: string }>;
       approvalRelevance: string; recommendedAction: string;
@@ -10973,6 +11043,8 @@ router.post('/copilot/pricing-review/:quoteId', async (req, res) => {
       input: ctx,
       scope,
       entityRef: { entityType: 'quote', entityId: quoteId },
+      comparePoints: SECOND_OPINION_COMPARE_POINTS['pricing.review']!,
+      requestSecondOpinion: readSecondOpinionOptIn(req),
     });
     // Schwerste Severity bestimmt die Insight-Severity (visuelles Routing
     // im Approval-Hub).
@@ -11019,6 +11091,7 @@ router.post('/copilot/pricing-review/:quoteId', async (req, res) => {
       model: result.model,
       latencyMs: result.latencyMs,
       status: 'open',
+      secondOpinion: result.secondOpinion,
     });
   } catch (err) {
     if (err instanceof AIOrchestrationError) {
@@ -11045,7 +11118,7 @@ router.post('/copilot/approval-readiness/:approvalId', async (req, res) => {
     throw e;
   }
   try {
-    const result = await runStructured<ApprovalContext, {
+    const result = await runStructuredWithSecondOpinion<ApprovalContext, {
       decisionReady: boolean; recommendation: string; rationale: string;
       missingInformation: string[];
       keyDeviations: Array<{ topic: string; severity: string; note: string }>;
@@ -11057,6 +11130,8 @@ router.post('/copilot/approval-readiness/:approvalId', async (req, res) => {
       input: ctx,
       scope,
       entityRef: { entityType: 'approval', entityId: approvalId },
+      comparePoints: SECOND_OPINION_COMPARE_POINTS['approval.readiness']!,
+      requestSecondOpinion: readSecondOpinionOptIn(req),
     });
     // Deterministische Ergänzung: Fehlende Klausel-Übersetzungen werden in
     // missingInformation aufgenommen — unabhängig davon, ob das Modell sie
@@ -11113,6 +11188,7 @@ router.post('/copilot/approval-readiness/:approvalId', async (req, res) => {
       model: result.model,
       latencyMs: result.latencyMs,
       status: 'open',
+      secondOpinion: result.secondOpinion,
     });
   } catch (err) {
     if (err instanceof AIOrchestrationError) {
@@ -11139,7 +11215,7 @@ router.post('/copilot/contract-risk/:contractId', async (req, res) => {
     throw e;
   }
   try {
-    const result = await runStructured<ContractContext, {
+    const result = await runStructuredWithSecondOpinion<ContractContext, {
       overallRisk: string; overallScore: number; summary: string;
       riskSignals: Array<{ clause: string; severity: string; finding: string; recommendation: string }>;
       approvalRelevant: boolean; recommendedAction: string;
@@ -11150,6 +11226,8 @@ router.post('/copilot/contract-risk/:contractId', async (req, res) => {
       input: ctx,
       scope,
       entityRef: { entityType: 'contract', entityId: contractId },
+      comparePoints: SECOND_OPINION_COMPARE_POINTS['contract.risk']!,
+      requestSecondOpinion: readSecondOpinionOptIn(req),
     });
     const insightId = await persistAiInsight(scope.tenantId, {
       kind: 'ai_contract_risk',
@@ -11189,6 +11267,7 @@ router.post('/copilot/contract-risk/:contractId', async (req, res) => {
       model: result.model,
       latencyMs: result.latencyMs,
       status: 'open',
+      secondOpinion: result.secondOpinion,
     });
   } catch (err) {
     if (err instanceof AIOrchestrationError) {
@@ -13138,6 +13217,131 @@ router.post('/platform/tenants', async (req, res) => {
     companyCount: 0,
     createdAt: new Date().toISOString(),
     adminUserId,
+  });
+});
+
+// ── PLATFORM ADMIN — KI-Zweitmeinung Konfig (Task #232) ──
+// Plattform-Admin sieht/setzt fuer einen Tenant pro Prompt-Key:
+//   - mode: off | optional | always
+//   - model: optional Override aus der Anthropic-Allowlist
+//   - systemSuffix: optionaler Reviewer-Zusatz
+// Liefert die Konfig + Listen der erlaubten Prompts und Modelle, damit das
+// Frontend ohne weitere Roundtrips den Editor rendern kann.
+router.get('/platform/tenants/:id/ai-second-opinion-config', async (req, res) => {
+  if (!(await requirePlatformAdmin(req, res))) return;
+  const tenantId = req.params.id;
+  const [t] = await db.select({ id: tenantsTable.id }).from(tenantsTable).where(eq(tenantsTable.id, tenantId));
+  if (!t) { res.status(404).json({ error: 'tenant not found' }); return; }
+  const cfg = await loadTenantSecondOpinionConfig(tenantId);
+  res.json({
+    tenantId,
+    config: cfg,
+    promptKeys: ALL_SECOND_OPINION_PROMPT_KEYS,
+    allowedModels: [...ALLOWED_ANTHROPIC_MODELS],
+  });
+});
+
+router.put('/platform/tenants/:id/ai-second-opinion-config', async (req, res) => {
+  if (!(await requirePlatformAdmin(req, res))) return;
+  const tenantId = req.params.id;
+  const [t] = await db.select({ id: tenantsTable.id }).from(tenantsTable).where(eq(tenantsTable.id, tenantId));
+  if (!t) { res.status(404).json({ error: 'tenant not found' }); return; }
+  let cfg;
+  try {
+    const body = (req.body ?? {}) as { config?: unknown };
+    cfg = validateSecondOpinionConfig(body.config ?? {});
+  } catch (e) {
+    res.status(422).json({ error: 'validation', message: (e as Error).message });
+    return;
+  }
+  await saveTenantSecondOpinionConfig(tenantId, cfg);
+  await writeAuditFromReq(req, {
+    entityType: 'tenant', entityId: tenantId,
+    action: 'platform_ai_second_opinion_config_update',
+    summary: `KI-Zweitmeinungs-Konfig aktualisiert (${Object.keys(cfg).length} Prompts)`,
+    after: cfg,
+    actor: getScope(req).user.name,
+  });
+  res.json({
+    tenantId,
+    config: cfg,
+    promptKeys: ALL_SECOND_OPINION_PROMPT_KEYS,
+    allowedModels: [...ALLOWED_ANTHROPIC_MODELS],
+  });
+});
+
+// ── KI-Zweitmeinung — Nutzer-Entscheidung (Task #232) ──
+// Nach Sichtung der Differenz waehlt der User: Primaer behalten,
+// Zweit-Antwort uebernehmen oder manuell loesen. Die Entscheidung wird
+// einmalig auf dem ai_second_opinions-Eintrag persistiert und zusaetzlich
+// als anonymisierter Lerneffekt-Datensatz in ai_feedback abgelegt.
+const SECOND_OPINION_DECISIONS = new Set(['keep_primary', 'adopt_secondary', 'manual']);
+router.post('/ai-second-opinions/:id/decision', async (req, res) => {
+  const scope = getScope(req);
+  const id = req.params.id;
+  const body = (req.body ?? {}) as { decision?: unknown; feedback?: unknown };
+  if (typeof body.decision !== 'string' || !SECOND_OPINION_DECISIONS.has(body.decision)) {
+    res.status(400).json({
+      error: `decision must be one of: ${[...SECOND_OPINION_DECISIONS].join(', ')}`,
+    });
+    return;
+  }
+  const decision = body.decision as 'keep_primary' | 'adopt_secondary' | 'manual';
+  const feedback = typeof body.feedback === 'string' ? body.feedback.trim() : null;
+  if (feedback && feedback.length > 2000) {
+    res.status(400).json({ error: 'feedback must be at most 2000 chars' });
+    return;
+  }
+  const [existing] = await db.select().from(aiSecondOpinionsTable).where(and(
+    eq(aiSecondOpinionsTable.id, id),
+    eq(aiSecondOpinionsTable.tenantId, scope.tenantId),
+  ));
+  if (!existing) { res.status(404).json({ error: 'second opinion not found' }); return; }
+  const updated = await recordSecondOpinionDecision({
+    secondOpinionId: id,
+    tenantId: scope.tenantId,
+    decision,
+    decidedBy: scope.user.id,
+  });
+  // Anonymisierte Telemetrie: outcome 'accepted' wenn der Reviewer der
+  // Zweitmeinung gefolgt ist, 'rejected' wenn er beim Primaerlauf bleibt,
+  // 'modified' wenn er manuell loest. Bewusst nur EINMAL pro Diff.
+  if (existing.decision === 'pending') {
+    const outcome = decision === 'adopt_secondary'
+      ? 'accepted'
+      : decision === 'manual'
+        ? 'modified'
+        : 'rejected';
+    try {
+      await db.insert(aiFeedbackTable).values({
+        id: `aifb_${randomUUID().slice(0, 12)}`,
+        tenantId: scope.tenantId,
+        promptKey: existing.promptKey,
+        modelName: existing.secondaryModel,
+        outcome,
+        confidence: null,
+        hasFeedbackText: Boolean(feedback),
+        recommendationId: null,
+      });
+    } catch (e) {
+      // Feedback-Insert ist Best-Effort — die Decision selbst ist gespeichert.
+      console.error('[second-opinion-decision feedback]', (e as Error).message);
+    }
+  }
+  await writeAuditFromReq(req, {
+    entityType: 'ai_second_opinion', entityId: id,
+    action: `ai_second_opinion_${decision}`,
+    summary: `KI-Zweitmeinung: ${decision} (${existing.promptKey})`,
+    after: { decision, hasFeedback: Boolean(feedback) },
+  });
+  res.json({
+    id: updated!.id,
+    promptKey: updated!.promptKey,
+    decision: updated!.decision,
+    decidedBy: updated!.decidedBy,
+    decidedAt: updated!.decidedAt ? updated!.decidedAt.toISOString() : null,
+    agreementLevel: updated!.agreementLevel,
+    agreementScore: updated!.agreementScore,
   });
 });
 

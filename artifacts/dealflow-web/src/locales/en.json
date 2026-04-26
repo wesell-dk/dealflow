@@ -410,7 +410,27 @@
       "reactivateConfirmBody": "Reactivation restores normal access for all existing users.",
       "reactivateConfirm": "Reactivate tenant",
       "reactivated": "Tenant reactivated",
-      "regionChangeWarning": "Changing the region after provisioning may have data residency implications."
+      "regionChangeWarning": "Changing the region after provisioning may have data residency implications.",
+      "secondOpinionTitle": "AI second opinion",
+      "secondOpinionSubtitle": "Configure per critical AI workflow whether a second model runs in parallel for plausibility cross-check.",
+      "secondOpinionEdit": "Configure second opinion",
+      "secondOpinionDialogTitle": "AI second opinion — {{name}}",
+      "secondOpinionDialogDesc": "Per workflow, decide whether a second model runs as a critical reviewer. With an empty model field the heuristic picks an alternate Anthropic model: opus ↔ sonnet, haiku → sonnet.",
+      "secondOpinionWorkflow": "Workflow",
+      "secondOpinionMode": "Mode",
+      "secondOpinionModel": "Second model (optional)",
+      "secondOpinionModelAuto": "Automatic (alternate Anthropic model)",
+      "secondOpinionModeOff": "Off",
+      "secondOpinionModeOptional": "Optional (display only)",
+      "secondOpinionModeAlways": "Always",
+      "secondOpinionPromptKey": {
+        "deal.summary": "Deal summary",
+        "pricing.review": "Pricing review",
+        "approval.readiness": "Approval check",
+        "contract.risk": "Contract risk"
+      },
+      "secondOpinionSaved": "Second-opinion config saved",
+      "secondOpinionSaveFailed": "Save failed"
     },
     "quote": {
       "tabs": {
@@ -1120,7 +1140,36 @@
         "accepted": "Accepted",
         "rejected": "Rejected",
         "modified": "Modified"
-      }
+      },
+      "secondOpinionTitle": "AI second opinion",
+      "secondOpinionAgreementLow": "Low agreement",
+      "secondOpinionAgreementMedium": "Partial agreement",
+      "secondOpinionAgreementHigh": "High agreement",
+      "secondOpinionStatusFailed": "Second opinion failed",
+      "secondOpinionStatusUnavailable": "Second model unavailable",
+      "secondOpinionStatusSkipped": "Second opinion skipped",
+      "secondOpinionShowDiff": "Show divergences ({{count}})",
+      "secondOpinionHideDiff": "Hide divergences",
+      "secondOpinionNoDiffs": "Both models fully agree.",
+      "secondOpinionPrimaryLabel": "Primary",
+      "secondOpinionSecondaryLabel": "Second model",
+      "secondOpinionSeverity": {
+        "info": "Info",
+        "minor": "Minor",
+        "major": "Major"
+      },
+      "secondOpinionDecisionTitle": "Which output to keep?",
+      "secondOpinionKeepPrimary": "Keep primary",
+      "secondOpinionAdoptSecondary": "Adopt second opinion",
+      "secondOpinionMarkManual": "Decide manually",
+      "secondOpinionDecisionRecorded": "Decision recorded",
+      "secondOpinionDecisionFailed": "Could not save decision",
+      "secondOpinionDecided": {
+        "keep_primary": "Kept primary",
+        "adopt_secondary": "Adopted second opinion",
+        "manual": "Decided manually"
+      },
+      "secondOpinionModelLine": "Second model: {{model}}"
     },
     "renewals": {
       "title": "Renewals",

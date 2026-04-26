@@ -16,6 +16,7 @@ import { Badge } from "@/components/ui/badge";
 import { Loader2, Sparkles } from "lucide-react";
 import { AIConfidenceBadge } from "./ai-confidence-badge";
 import { AIFeedbackButtons } from "./ai-feedback-buttons";
+import { SecondOpinionPanel } from "./second-opinion-panel";
 
 type Mode = "deal.summary" | "pricing.review" | "approval.readiness" | "contract.risk";
 
@@ -127,6 +128,9 @@ export function AiPromptPanel<M extends Mode>(props: BaseProps<M>) {
                 level={envelope.confidenceLevel ?? undefined}
                 numeric={envelope.confidence ?? undefined}
                 reason={envelope.confidenceReason ?? undefined}
+                agreementLevel={envelope.secondOpinion?.status === "completed"
+                  ? envelope.secondOpinion.agreementLevel ?? undefined
+                  : undefined}
                 showReason
                 testId={`${testIdPrefix}-confidence`}
               />
@@ -137,6 +141,12 @@ export function AiPromptPanel<M extends Mode>(props: BaseProps<M>) {
                 />
               )}
             </div>
+            {envelope.secondOpinion && (
+              <SecondOpinionPanel
+                envelope={envelope.secondOpinion}
+                testIdPrefix={`${testIdPrefix}-second-opinion`}
+              />
+            )}
           </>
         )}
       </CardContent>
