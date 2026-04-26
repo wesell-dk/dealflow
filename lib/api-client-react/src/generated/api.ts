@@ -59,6 +59,7 @@ import type {
   ClauseChangeResult,
   ClauseCompatibilityCreate,
   ClauseCompatibilityRule,
+  ClauseCreateInput,
   ClauseDeviation,
   ClauseDiff,
   ClauseFamily,
@@ -219,11 +220,13 @@ import type {
   PermissionCatalogEntry,
   PlatformTenant,
   PlatformTenantCreate,
+  PlatformTenantUpdate,
   PriceBundle,
   PriceBundleCreate,
   PriceBundleItemsReplace,
   PriceBundleUpdate,
   PriceIncreaseCampaign,
+  PriceIncreaseCampaignCreate,
   PriceIncreaseCampaignDetail,
   PriceIncreaseLetter,
   PriceIncreaseResponseInput,
@@ -8425,6 +8428,100 @@ export function useListClauseFamilies<
   return { ...query, queryKey: queryOptions.queryKey };
 }
 
+/**
+ * @summary Create a new clause variant. Either references an existing family
+(familyId) OR creates a new family inline (newFamily). Optional
+translations are upserted alongside the variant. Returns the full
+family with the new variant included.
+
+ */
+export const getCreateClauseUrl = () => {
+  return `/api/v1/clause-families`;
+};
+
+export const createClause = async (
+  clauseCreateInput: ClauseCreateInput,
+  options?: RequestInit,
+): Promise<ClauseFamily> => {
+  return customFetch<ClauseFamily>(getCreateClauseUrl(), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(clauseCreateInput),
+  });
+};
+
+export const getCreateClauseMutationOptions = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof createClause>>,
+    TError,
+    { data: BodyType<ClauseCreateInput> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof createClause>>,
+  TError,
+  { data: BodyType<ClauseCreateInput> },
+  TContext
+> => {
+  const mutationKey = ["createClause"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof createClause>>,
+    { data: BodyType<ClauseCreateInput> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return createClause(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type CreateClauseMutationResult = NonNullable<
+  Awaited<ReturnType<typeof createClause>>
+>;
+export type CreateClauseMutationBody = BodyType<ClauseCreateInput>;
+export type CreateClauseMutationError = ErrorType<void>;
+
+/**
+ * @summary Create a new clause variant. Either references an existing family
+(familyId) OR creates a new family inline (newFamily). Optional
+translations are upserted alongside the variant. Returns the full
+family with the new variant included.
+
+ */
+export const useCreateClause = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof createClause>>,
+    TError,
+    { data: BodyType<ClauseCreateInput> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof createClause>>,
+  TError,
+  { data: BodyType<ClauseCreateInput> },
+  TContext
+> => {
+  return useMutation(getCreateClauseMutationOptions(options));
+};
+
 export const getListClauseVariantTranslationsUrl = (variantId: string) => {
   return `/api/v1/clause-variants/${variantId}/translations`;
 };
@@ -11823,6 +11920,99 @@ export function useListPriceIncreases<
 
   return { ...query, queryKey: queryOptions.queryKey };
 }
+
+/**
+ * @summary Create a new price-increase campaign with letters seeded for the
+selected accounts. Wizard input from the UI: name, effective date,
+currency, default uplift %, and the list of accountIds.
+
+ */
+export const getCreatePriceIncreaseUrl = () => {
+  return `/api/v1/price-increases`;
+};
+
+export const createPriceIncrease = async (
+  priceIncreaseCampaignCreate: PriceIncreaseCampaignCreate,
+  options?: RequestInit,
+): Promise<PriceIncreaseCampaignDetail> => {
+  return customFetch<PriceIncreaseCampaignDetail>(getCreatePriceIncreaseUrl(), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(priceIncreaseCampaignCreate),
+  });
+};
+
+export const getCreatePriceIncreaseMutationOptions = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof createPriceIncrease>>,
+    TError,
+    { data: BodyType<PriceIncreaseCampaignCreate> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof createPriceIncrease>>,
+  TError,
+  { data: BodyType<PriceIncreaseCampaignCreate> },
+  TContext
+> => {
+  const mutationKey = ["createPriceIncrease"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof createPriceIncrease>>,
+    { data: BodyType<PriceIncreaseCampaignCreate> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return createPriceIncrease(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type CreatePriceIncreaseMutationResult = NonNullable<
+  Awaited<ReturnType<typeof createPriceIncrease>>
+>;
+export type CreatePriceIncreaseMutationBody =
+  BodyType<PriceIncreaseCampaignCreate>;
+export type CreatePriceIncreaseMutationError = ErrorType<void>;
+
+/**
+ * @summary Create a new price-increase campaign with letters seeded for the
+selected accounts. Wizard input from the UI: name, effective date,
+currency, default uplift %, and the list of accountIds.
+
+ */
+export const useCreatePriceIncrease = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof createPriceIncrease>>,
+    TError,
+    { data: BodyType<PriceIncreaseCampaignCreate> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof createPriceIncrease>>,
+  TError,
+  { data: BodyType<PriceIncreaseCampaignCreate> },
+  TContext
+> => {
+  return useMutation(getCreatePriceIncreaseMutationOptions(options));
+};
 
 export const getGetPriceIncreaseUrl = (id: string) => {
   return `/api/v1/price-increases/${id}`;
@@ -15747,6 +15937,99 @@ export const useCreatePlatformTenant = <
   TContext
 > => {
   return useMutation(getCreatePlatformTenantMutationOptions(options));
+};
+
+/**
+ * @summary Partially update an existing tenant (platform admin only). Use this
+for renaming, plan/region changes, notes, retention policy, and to
+soft-disable / reactivate via the `status` field.
+
+ */
+export const getUpdatePlatformTenantUrl = (id: string) => {
+  return `/api/v1/platform/tenants/${id}`;
+};
+
+export const updatePlatformTenant = async (
+  id: string,
+  platformTenantUpdate: PlatformTenantUpdate,
+  options?: RequestInit,
+): Promise<PlatformTenant> => {
+  return customFetch<PlatformTenant>(getUpdatePlatformTenantUrl(id), {
+    ...options,
+    method: "PATCH",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(platformTenantUpdate),
+  });
+};
+
+export const getUpdatePlatformTenantMutationOptions = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof updatePlatformTenant>>,
+    TError,
+    { id: string; data: BodyType<PlatformTenantUpdate> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof updatePlatformTenant>>,
+  TError,
+  { id: string; data: BodyType<PlatformTenantUpdate> },
+  TContext
+> => {
+  const mutationKey = ["updatePlatformTenant"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof updatePlatformTenant>>,
+    { id: string; data: BodyType<PlatformTenantUpdate> }
+  > = (props) => {
+    const { id, data } = props ?? {};
+
+    return updatePlatformTenant(id, data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type UpdatePlatformTenantMutationResult = NonNullable<
+  Awaited<ReturnType<typeof updatePlatformTenant>>
+>;
+export type UpdatePlatformTenantMutationBody = BodyType<PlatformTenantUpdate>;
+export type UpdatePlatformTenantMutationError = ErrorType<void>;
+
+/**
+ * @summary Partially update an existing tenant (platform admin only). Use this
+for renaming, plan/region changes, notes, retention policy, and to
+soft-disable / reactivate via the `status` field.
+
+ */
+export const useUpdatePlatformTenant = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof updatePlatformTenant>>,
+    TError,
+    { id: string; data: BodyType<PlatformTenantUpdate> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof updatePlatformTenant>>,
+  TError,
+  { id: string; data: BodyType<PlatformTenantUpdate> },
+  TContext
+> => {
+  return useMutation(getUpdatePlatformTenantMutationOptions(options));
 };
 
 /**

@@ -8,12 +8,22 @@ Multi-tenant, multi-company, multi-brand. Deal-centric.
  * OpenAPI spec version: 0.1.0
  */
 import type { PlatformTenantRetentionPolicy } from "./platformTenantRetentionPolicy";
+import type { PlatformTenantStatus } from "./platformTenantStatus";
 
 export interface PlatformTenant {
   id: string;
   name: string;
   plan: string;
   region: string;
+  /** Lifecycle-Status. 'disabled' = Soft-Delete (greyed out, no provisioning). */
+  status: PlatformTenantStatus;
+  /**
+   * Internal notes (CRM-light) shown to platform admins only.
+   * @nullable
+   */
+  notes?: string | null;
+  /** @nullable */
+  disabledAt?: Date | null;
   /** @nullable */
   retentionPolicy?: PlatformTenantRetentionPolicy;
   userCount: number;

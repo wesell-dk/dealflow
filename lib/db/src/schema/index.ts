@@ -62,6 +62,13 @@ export const tenantsTable = pgTable("tenants", {
     .$type<Record<string, string>>()
     .default({})
     .notNull(),
+  // Lifecycle status für Platform-Admin: 'active' (Default) oder 'disabled'.
+  // Soft-Delete: deaktivierte Mandanten bleiben in der Liste sichtbar, aber
+  // sind ausgegraut und können von Platform-Admins reaktiviert werden.
+  status: text("status").notNull().default("active"),
+  disabledAt: timestamp("disabled_at", { withTimezone: true }),
+  // Frei-Text-Notizen für interne Vertriebs-/Support-Hinweise (CRM-light).
+  notes: text("notes"),
   createdAt: ts("created_at"),
 });
 

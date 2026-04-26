@@ -2658,6 +2658,94 @@ export interface ClauseFamily {
   variants: ClauseVariant[];
 }
 
+/**
+ * Create a new family inline. Mutually exclusive with familyId.
+ */
+export type ClauseCreateInputNewFamily = {
+  /**
+   * @minLength 2
+   * @maxLength 200
+   */
+  name: string;
+  /**
+   * @minLength 1
+   * @maxLength 1000
+   */
+  description: string;
+};
+
+export type ClauseCreateInputVariantSeverity =
+  (typeof ClauseCreateInputVariantSeverity)[keyof typeof ClauseCreateInputVariantSeverity];
+
+export const ClauseCreateInputVariantSeverity = {
+  low: "low",
+  medium: "medium",
+  high: "high",
+} as const;
+
+export type ClauseCreateInputVariant = {
+  /**
+   * @minLength 1
+   * @maxLength 200
+   */
+  name: string;
+  severity: ClauseCreateInputVariantSeverity;
+  /**
+   * @minimum 0
+   * @maximum 100
+   */
+  severityScore: number;
+  /**
+   * @minLength 1
+   * @maxLength 1000
+   */
+  summary: string;
+  /** @maxLength 8000 */
+  body?: string;
+  /** @maxLength 60 */
+  tone?: string;
+};
+
+export type ClauseCreateInputTranslationsItemLocale =
+  (typeof ClauseCreateInputTranslationsItemLocale)[keyof typeof ClauseCreateInputTranslationsItemLocale];
+
+export const ClauseCreateInputTranslationsItemLocale = {
+  de: "de",
+  en: "en",
+} as const;
+
+export type ClauseCreateInputTranslationsItem = {
+  locale: ClauseCreateInputTranslationsItemLocale;
+  /**
+   * @minLength 1
+   * @maxLength 200
+   */
+  name: string;
+  /**
+   * @minLength 1
+   * @maxLength 1000
+   */
+  summary: string;
+  /** @maxLength 8000 */
+  body?: string;
+};
+
+/**
+ * Input for creating a new clause variant. Exactly one of `familyId`
+(existing) or `newFamily` (create inline) must be provided. The base
+variant fields are stored as the source language (typically DE);
+additional locales can be supplied via `translations[]`.
+
+ */
+export interface ClauseCreateInput {
+  /** ID of an existing clause family. Mutually exclusive with newFamily. */
+  familyId?: string;
+  /** Create a new family inline. Mutually exclusive with familyId. */
+  newFamily?: ClauseCreateInputNewFamily;
+  variant: ClauseCreateInputVariant;
+  translations?: ClauseCreateInputTranslationsItem[];
+}
+
 export interface ClauseDiff {
   from: ClauseVariant;
   to: ClauseVariant;
@@ -3004,6 +3092,31 @@ export interface PriceIncreaseLetter {
 export type PriceIncreaseCampaignDetail = PriceIncreaseCampaign & {
   letters: PriceIncreaseLetter[];
 };
+
+export interface PriceIncreaseCampaignCreate {
+  /**
+   * @minLength 2
+   * @maxLength 200
+   */
+  name: string;
+  effectiveDate: string;
+  /**
+   * @minLength 3
+   * @maxLength 3
+   */
+  currency: string;
+  /**
+   * Default uplift in percent applied to every letter.
+   * @minimum 0
+   * @maximum 100
+   */
+  defaultUpliftPct: number;
+  /**
+   * Accounts that receive a letter. Must be visible to the caller.
+   * @minItems 1
+   */
+  accountIds: string[];
+}
 
 export type DashboardSummaryStageBreakdownItem = {
   stage: string;
@@ -3917,6 +4030,17 @@ export interface GdprRetentionResult {
 }
 
 /**
+ * Lifecycle-Status. 'disabled' = Soft-Delete (greyed out, no provisioning).
+ */
+export type PlatformTenantStatus =
+  (typeof PlatformTenantStatus)[keyof typeof PlatformTenantStatus];
+
+export const PlatformTenantStatus = {
+  active: "active",
+  disabled: "disabled",
+} as const;
+
+/**
  * @nullable
  */
 export type PlatformTenantRetentionPolicy = { [key: string]: unknown } | null;
@@ -3926,6 +4050,15 @@ export interface PlatformTenant {
   name: string;
   plan: string;
   region: string;
+  /** Lifecycle-Status. 'disabled' = Soft-Delete (greyed out, no provisioning). */
+  status: PlatformTenantStatus;
+  /**
+   * Internal notes (CRM-light) shown to platform admins only.
+   * @nullable
+   */
+  notes?: string | null;
+  /** @nullable */
+  disabledAt?: string | null;
   /** @nullable */
   retentionPolicy?: PlatformTenantRetentionPolicy;
   userCount: number;
@@ -3933,6 +4066,61 @@ export interface PlatformTenant {
   createdAt: string;
   /** @nullable */
   adminUserId?: string | null;
+}
+
+export type PlatformTenantUpdatePlan =
+  (typeof PlatformTenantUpdatePlan)[keyof typeof PlatformTenantUpdatePlan];
+
+export const PlatformTenantUpdatePlan = {
+  Starter: "Starter",
+  Growth: "Growth",
+  Business: "Business",
+  Enterprise: "Enterprise",
+} as const;
+
+export type PlatformTenantUpdateRegion =
+  (typeof PlatformTenantUpdateRegion)[keyof typeof PlatformTenantUpdateRegion];
+
+export const PlatformTenantUpdateRegion = {
+  EU: "EU",
+  US: "US",
+  UK: "UK",
+  APAC: "APAC",
+} as const;
+
+export type PlatformTenantUpdateStatus =
+  (typeof PlatformTenantUpdateStatus)[keyof typeof PlatformTenantUpdateStatus];
+
+export const PlatformTenantUpdateStatus = {
+  active: "active",
+  disabled: "disabled",
+} as const;
+
+export type PlatformTenantUpdateRetentionPolicy = { [key: string]: unknown };
+
+/**
+ * Partial update for an existing tenant. All fields are optional; only
+provided fields are mutated. `status='disabled'` triggers soft-delete
+(sets disabledAt=now); switching back to 'active' clears disabledAt.
+`region` may be changed but is unusual after provisioning — UI should
+warn before sending.
+
+ */
+export interface PlatformTenantUpdate {
+  /**
+   * @minLength 2
+   * @maxLength 120
+   */
+  name?: string;
+  plan?: PlatformTenantUpdatePlan;
+  region?: PlatformTenantUpdateRegion;
+  status?: PlatformTenantUpdateStatus;
+  /**
+   * @maxLength 4000
+   * @nullable
+   */
+  notes?: string | null;
+  retentionPolicy?: PlatformTenantUpdateRetentionPolicy;
 }
 
 export type PlatformTenantCreatePlan =

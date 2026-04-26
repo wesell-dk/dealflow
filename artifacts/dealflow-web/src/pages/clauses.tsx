@@ -53,6 +53,7 @@ import {
 import { Library, Palette, Save, Pencil, Trash2, Link2, Plus, Languages, FileUp, Inbox, Sparkles } from "lucide-react";
 import { Link } from "wouter";
 import { useToast } from "@/hooks/use-toast";
+import { NewClauseDialog } from "@/components/clauses/new-clause-dialog";
 import {
   ClauseToneBadge,
   ClauseCompatibilityBadge,
@@ -81,6 +82,7 @@ export default function Clauses() {
 
   const [draft, setDraft] = useState<Record<string, Record<string, string>>>({});
   const [saving, setSaving] = useState<string | null>(null);
+  const [newClauseOpen, setNewClauseOpen] = useState(false);
 
   if (isLoading) return <div className="p-8"><Skeleton className="h-64 w-full" /></div>;
 
@@ -117,12 +119,24 @@ export default function Clauses() {
             {totalVariants} {t("pages.clauses.variants")}
           </Badge>
           {isTenantAdmin && (
-            <Link href="/clauses/import">
-              <Button variant="default" size="sm" className="ml-2" data-testid="link-clauses-import">
-                <FileUp className="h-4 w-4 mr-2" />
-                {t("pages.clauses.importNavTitle")}
+            <>
+              <Button
+                variant="default"
+                size="sm"
+                className="ml-2"
+                onClick={() => setNewClauseOpen(true)}
+                data-testid="clauses-new-clause"
+              >
+                <Plus className="h-4 w-4 mr-2" />
+                {t("pages.clauses.newClause")}
               </Button>
-            </Link>
+              <Link href="/clauses/import">
+                <Button variant="outline" size="sm" data-testid="link-clauses-import">
+                  <FileUp className="h-4 w-4 mr-2" />
+                  {t("pages.clauses.importNavTitle")}
+                </Button>
+              </Link>
+            </>
           )}
         </div>
       </div>
@@ -267,6 +281,12 @@ export default function Clauses() {
           })}
         </div>
       )}
+
+      <NewClauseDialog
+        open={newClauseOpen}
+        onOpenChange={setNewClauseOpen}
+        families={families}
+      />
     </div>
   );
 }

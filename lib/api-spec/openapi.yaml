@@ -1895,6 +1895,27 @@ paths:
               schema:
                 type: array
                 items: { $ref: "#/components/schemas/ClauseFamily" }
+    post:
+      operationId: createClause
+      tags: [contracts]
+      summary: |
+        Create a new clause variant. Either references an existing family
+        (familyId) OR creates a new family inline (newFamily). Optional
+        translations are upserted alongside the variant. Returns the full
+        family with the new variant included.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ClauseCreateInput" }
+      responses:
+        "201":
+          description: created
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ClauseFamily" }
+        "422": { description: validation }
+        "404": { description: family not found }
 
   /clause-variants/{variantId}/translations:
     get:
@@ -2738,6 +2759,25 @@ paths:
               schema:
                 type: array
                 items: { $ref: "#/components/schemas/PriceIncreaseCampaign" }
+    post:
+      operationId: createPriceIncrease
+      tags: [priceIncreases]
+      summary: |
+        Create a new price-increase campaign with letters seeded for the
+        selected accounts. Wizard input from the UI: name, effective date,
+        currency, default uplift %, and the list of accountIds.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/PriceIncreaseCampaignCreate" }
+      responses:
+        "201":
+          description: created
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PriceIncreaseCampaignDetail" }
+        "422": { description: validation }
 
   /price-increases/{id}:
     get:
@@ -3584,6 +3624,33 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/PlatformTenant" }
+
+  /platform/tenants/{id}:
+    patch:
+      operationId: updatePlatformTenant
+      tags: [platform]
+      summary: |
+        Partially update an existing tenant (platform admin only). Use this
+        for renaming, plan/region changes, notes, retention policy, and to
+        soft-disable / reactivate via the `status` field.
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/PlatformTenantUpdate" }
+      responses:
+        "200":
+          description: ok
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PlatformTenant" }
+        "404": { description: tenant not found }
+        "422": { description: validation }
 
   /quotes/{id}/duplicate:
     post:
@@ -7371,6 +7438,53 @@ components:
           type: array
           items: { $ref: "#/components/schemas/ClauseVariant" }
 
+    ClauseCreateInput:
+      type: object
+      description: |
+        Input for creating a new clause variant. Exactly one of `familyId`
+        (existing) or `newFamily` (create inline) must be provided. The base
+        variant fields are stored as the source language (typically DE);
+        additional locales can be supplied via `translations[]`.
+      required: [variant]
+      properties:
+        familyId:
+          type: string
+          description: "ID of an existing clause family. Mutually exclusive with newFamily."
+        newFamily:
+          type: object
+          description: "Create a new family inline. Mutually exclusive with familyId."
+          required: [name, description]
+          properties:
+            name: { type: string, minLength: 2, maxLength: 200 }
+            description: { type: string, minLength: 1, maxLength: 1000 }
+        variant:
+          type: object
+          required: [name, severity, severityScore, summary]
+          properties:
+            name: { type: string, minLength: 1, maxLength: 200 }
+            severity:
+              type: string
+              enum: [low, medium, high]
+            severityScore:
+              type: integer
+              minimum: 0
+              maximum: 100
+            summary: { type: string, minLength: 1, maxLength: 1000 }
+            body: { type: string, maxLength: 8000 }
+            tone: { type: string, maxLength: 60 }
+        translations:
+          type: array
+          items:
+            type: object
+            required: [locale, name, summary]
+            properties:
+              locale:
+                type: string
+                enum: [de, en]
+              name: { type: string, minLength: 1, maxLength: 200 }
+              summary: { type: string, minLength: 1, maxLength: 1000 }
+              body: { type: string, maxLength: 8000 }
+
     ContractClause:
       type: object
       required: [id, contractId, family, variant, severity, summary, severityScore, tone, body]
@@ -7819,6 +7933,24 @@ components:
             letters:
               type: array
               items: { $ref: "#/components/schemas/PriceIncreaseLetter" }
+
+    PriceIncreaseCampaignCreate:
+      type: object
+      required: [name, effectiveDate, currency, defaultUpliftPct, accountIds]
+      properties:
+        name: { type: string, minLength: 2, maxLength: 200 }
+        effectiveDate: { type: string, format: date }
+        currency: { type: string, minLength: 3, maxLength: 3 }
+        defaultUpliftPct:
+          type: number
+          minimum: 0
+          maximum: 100
+          description: "Default uplift in percent applied to every letter."
+        accountIds:
+          type: array
+          minItems: 1
+          items: { type: string }
+          description: "Accounts that receive a letter. Must be visible to the caller."
 
     # ── Reports ──
     DashboardSummary:
@@ -8710,12 +8842,22 @@ components:
 
     PlatformTenant:
       type: object
-      required: [id, name, plan, region, userCount, companyCount, createdAt]
+      required: [id, name, plan, region, status, userCount, companyCount, createdAt]
       properties:
         id: { type: string }
         name: { type: string }
         plan: { type: string }
         region: { type: string }
+        status:
+          type: string
+          enum: [active, disabled]
+          description: "Lifecycle-Status. 'disabled' = Soft-Delete (greyed out, no provisioning)."
+        notes:
+          type: ["string", "null"]
+          description: "Internal notes (CRM-light) shown to platform admins only."
+        disabledAt:
+          type: ["string", "null"]
+          format: date-time
         retentionPolicy:
           type: ["object", "null"]
           additionalProperties: true
@@ -8724,6 +8866,32 @@ components:
         createdAt: { type: string, format: date-time }
         adminUserId:
           type: ["string", "null"]
+
+    PlatformTenantUpdate:
+      type: object
+      description: |
+        Partial update for an existing tenant. All fields are optional; only
+        provided fields are mutated. `status='disabled'` triggers soft-delete
+        (sets disabledAt=now); switching back to 'active' clears disabledAt.
+        `region` may be changed but is unusual after provisioning — UI should
+        warn before sending.
+      properties:
+        name: { type: string, minLength: 2, maxLength: 120 }
+        plan:
+          type: string
+          enum: [Starter, Growth, Business, Enterprise]
+        region:
+          type: string
+          enum: [EU, US, UK, APAC]
+        status:
+          type: string
+          enum: [active, disabled]
+        notes:
+          type: ["string", "null"]
+          maxLength: 4000
+        retentionPolicy:
+          type: object
+          additionalProperties: true
 
     PlatformTenantCreate:
       type: object

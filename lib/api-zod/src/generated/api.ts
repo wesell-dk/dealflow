@@ -3427,6 +3427,93 @@ export const ListClauseFamiliesResponse = zod.array(
   ListClauseFamiliesResponseItem,
 );
 
+/**
+ * @summary Create a new clause variant. Either references an existing family
+(familyId) OR creates a new family inline (newFamily). Optional
+translations are upserted alongside the variant. Returns the full
+family with the new variant included.
+
+ */
+export const createClauseBodyNewFamilyNameMin = 2;
+export const createClauseBodyNewFamilyNameMax = 200;
+
+export const createClauseBodyNewFamilyDescriptionMax = 1000;
+
+export const createClauseBodyVariantNameMax = 200;
+
+export const createClauseBodyVariantSeverityScoreMin = 0;
+export const createClauseBodyVariantSeverityScoreMax = 100;
+
+export const createClauseBodyVariantSummaryMax = 1000;
+
+export const createClauseBodyVariantBodyMax = 8000;
+
+export const createClauseBodyVariantToneMax = 60;
+
+export const createClauseBodyTranslationsItemNameMax = 200;
+
+export const createClauseBodyTranslationsItemSummaryMax = 1000;
+
+export const createClauseBodyTranslationsItemBodyMax = 8000;
+
+export const CreateClauseBody = zod
+  .object({
+    familyId: zod
+      .string()
+      .optional()
+      .describe(
+        "ID of an existing clause family. Mutually exclusive with newFamily.",
+      ),
+    newFamily: zod
+      .object({
+        name: zod
+          .string()
+          .min(createClauseBodyNewFamilyNameMin)
+          .max(createClauseBodyNewFamilyNameMax),
+        description: zod
+          .string()
+          .min(1)
+          .max(createClauseBodyNewFamilyDescriptionMax),
+      })
+      .optional()
+      .describe(
+        "Create a new family inline. Mutually exclusive with familyId.",
+      ),
+    variant: zod.object({
+      name: zod.string().min(1).max(createClauseBodyVariantNameMax),
+      severity: zod.enum(["low", "medium", "high"]),
+      severityScore: zod
+        .number()
+        .min(createClauseBodyVariantSeverityScoreMin)
+        .max(createClauseBodyVariantSeverityScoreMax),
+      summary: zod.string().min(1).max(createClauseBodyVariantSummaryMax),
+      body: zod.string().max(createClauseBodyVariantBodyMax).optional(),
+      tone: zod.string().max(createClauseBodyVariantToneMax).optional(),
+    }),
+    translations: zod
+      .array(
+        zod.object({
+          locale: zod.enum(["de", "en"]),
+          name: zod
+            .string()
+            .min(1)
+            .max(createClauseBodyTranslationsItemNameMax),
+          summary: zod
+            .string()
+            .min(1)
+            .max(createClauseBodyTranslationsItemSummaryMax),
+          body: zod
+            .string()
+            .max(createClauseBodyTranslationsItemBodyMax)
+            .optional(),
+        }),
+      )
+      .optional(),
+  })
+  .describe(
+    "Input for creating a new clause variant. Exactly one of `familyId`\n(existing) or `newFamily` (create inline) must be provided. The base\nvariant fields are stored as the source language (typically DE);\nadditional locales can be supplied via `translations[]`.\n",
+  );
+
 export const ListClauseVariantTranslationsParams = zod.object({
   variantId: zod.coerce.string(),
 });
@@ -4909,6 +4996,42 @@ export const ListPriceIncreasesResponse = zod.array(
   ListPriceIncreasesResponseItem,
 );
 
+/**
+ * @summary Create a new price-increase campaign with letters seeded for the
+selected accounts. Wizard input from the UI: name, effective date,
+currency, default uplift %, and the list of accountIds.
+
+ */
+export const createPriceIncreaseBodyNameMin = 2;
+export const createPriceIncreaseBodyNameMax = 200;
+
+export const createPriceIncreaseBodyCurrencyMin = 3;
+export const createPriceIncreaseBodyCurrencyMax = 3;
+
+export const createPriceIncreaseBodyDefaultUpliftPctMin = 0;
+export const createPriceIncreaseBodyDefaultUpliftPctMax = 100;
+
+export const CreatePriceIncreaseBody = zod.object({
+  name: zod
+    .string()
+    .min(createPriceIncreaseBodyNameMin)
+    .max(createPriceIncreaseBodyNameMax),
+  effectiveDate: zod.coerce.date(),
+  currency: zod
+    .string()
+    .min(createPriceIncreaseBodyCurrencyMin)
+    .max(createPriceIncreaseBodyCurrencyMax),
+  defaultUpliftPct: zod
+    .number()
+    .min(createPriceIncreaseBodyDefaultUpliftPctMin)
+    .max(createPriceIncreaseBodyDefaultUpliftPctMax)
+    .describe("Default uplift in percent applied to every letter."),
+  accountIds: zod
+    .array(zod.string())
+    .min(1)
+    .describe("Accounts that receive a letter. Must be visible to the caller."),
+});
+
 export const GetPriceIncreaseParams = zod.object({
   id: zod.coerce.string(),
 });
@@ -6344,6 +6467,16 @@ export const ListPlatformTenantsResponseItem = zod.object({
   name: zod.string(),
   plan: zod.string(),
   region: zod.string(),
+  status: zod
+    .enum(["active", "disabled"])
+    .describe(
+      "Lifecycle-Status. 'disabled' = Soft-Delete (greyed out, no provisioning).",
+    ),
+  notes: zod
+    .string()
+    .nullish()
+    .describe("Internal notes (CRM-light) shown to platform admins only."),
+  disabledAt: zod.coerce.date().nullish(),
   retentionPolicy: zod.record(zod.string(), zod.unknown()).nullish(),
   userCount: zod.number(),
   companyCount: zod.number(),
@@ -6369,6 +6502,60 @@ export const CreatePlatformTenantBody = zod.object({
     email: zod.string().email(),
     password: zod.string().min(createPlatformTenantBodyAdminPasswordMin),
   }),
+});
+
+/**
+ * @summary Partially update an existing tenant (platform admin only). Use this
+for renaming, plan/region changes, notes, retention policy, and to
+soft-disable / reactivate via the `status` field.
+
+ */
+export const UpdatePlatformTenantParams = zod.object({
+  id: zod.coerce.string(),
+});
+
+export const updatePlatformTenantBodyNameMin = 2;
+export const updatePlatformTenantBodyNameMax = 120;
+
+export const updatePlatformTenantBodyNotesMax = 4000;
+
+export const UpdatePlatformTenantBody = zod
+  .object({
+    name: zod
+      .string()
+      .min(updatePlatformTenantBodyNameMin)
+      .max(updatePlatformTenantBodyNameMax)
+      .optional(),
+    plan: zod.enum(["Starter", "Growth", "Business", "Enterprise"]).optional(),
+    region: zod.enum(["EU", "US", "UK", "APAC"]).optional(),
+    status: zod.enum(["active", "disabled"]).optional(),
+    notes: zod.string().max(updatePlatformTenantBodyNotesMax).nullish(),
+    retentionPolicy: zod.record(zod.string(), zod.unknown()).optional(),
+  })
+  .describe(
+    "Partial update for an existing tenant. All fields are optional; only\nprovided fields are mutated. `status='disabled'` triggers soft-delete\n(sets disabledAt=now); switching back to 'active' clears disabledAt.\n`region` may be changed but is unusual after provisioning — UI should\nwarn before sending.\n",
+  );
+
+export const UpdatePlatformTenantResponse = zod.object({
+  id: zod.string(),
+  name: zod.string(),
+  plan: zod.string(),
+  region: zod.string(),
+  status: zod
+    .enum(["active", "disabled"])
+    .describe(
+      "Lifecycle-Status. 'disabled' = Soft-Delete (greyed out, no provisioning).",
+    ),
+  notes: zod
+    .string()
+    .nullish()
+    .describe("Internal notes (CRM-light) shown to platform admins only."),
+  disabledAt: zod.coerce.date().nullish(),
+  retentionPolicy: zod.record(zod.string(), zod.unknown()).nullish(),
+  userCount: zod.number(),
+  companyCount: zod.number(),
+  createdAt: zod.coerce.date(),
+  adminUserId: zod.string().nullish(),
 });
 
 /**

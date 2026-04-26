@@ -1,19 +1,35 @@
+import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Link } from "wouter";
 import { useListPriceIncreases } from "@workspace/api-client-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { CardGridSkeleton } from "@/components/patterns/skeletons";
-import { TrendingUp } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { TrendingUp, Plus } from "lucide-react";
 import { PageHeader } from "@/components/patterns/page-header";
 import { EmptyStateCard } from "@/components/patterns/empty-state-card";
 import {
   PriceIncreaseStatusBadge,
   PriceIncreaseCounterBadge,
 } from "@/components/patterns/status-badges";
+import { NewCampaignWizard } from "@/components/price-increases/new-campaign-wizard";
+import { useAuth } from "@/contexts/auth-context";
 
 export default function PriceIncreases() {
   const { t } = useTranslation();
+  const { user } = useAuth();
+  const [wizardOpen, setWizardOpen] = useState(false);
   const { data: campaigns, isLoading } = useListPriceIncreases?.() ?? { data: [], isLoading: false };
+  const canCreate =
+    !!user &&
+    (user.isPlatformAdmin === true ||
+      user.role === "admin" ||
+      user.role === "user" ||
+      user.role === "Tenant Admin" ||
+      user.role === "Deal Desk" ||
+      user.role === "Senior AE" ||
+      user.role === "Account Executive" ||
+      user.role === "Regional Director");
 
   return (
     <div className="flex flex-col">
@@ -21,6 +37,14 @@ export default function PriceIncreases() {
         icon={TrendingUp}
         title={t("pages.priceIncreasesList.title")}
         subtitle={t("pages.priceIncreasesList.subtitle")}
+        actions={
+          canCreate ? (
+            <Button onClick={() => setWizardOpen(true)} data-testid="price-increase-new">
+              <Plus className="h-4 w-4 mr-1" />
+              {t("pages.priceIncreasesList.newCampaign")}
+            </Button>
+          ) : null
+        }
       />
 
       {isLoading ? (
@@ -35,7 +59,7 @@ export default function PriceIncreases() {
       ) : (
         <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
           {campaigns.map((campaign) => (
-            <Card key={campaign.id}>
+            <Card key={campaign.id} data-testid={`price-increase-card-${campaign.id}`}>
               <CardHeader className="pb-3 flex flex-row items-start justify-between gap-2">
                 <CardTitle className="text-lg">
                   <Link href={`/price-increases/${campaign.id}`} className="hover:underline">
@@ -83,6 +107,8 @@ export default function PriceIncreases() {
           ))}
         </div>
       )}
+
+      <NewCampaignWizard open={wizardOpen} onOpenChange={setWizardOpen} />
     </div>
   );
 }

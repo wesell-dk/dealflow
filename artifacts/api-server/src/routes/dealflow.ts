@@ -7192,6 +7192,114 @@ router.put('/clause-families/:id/cuad-categories', async (req, res) => {
 // ── Quotes/current — aktuell akzeptiertes Angebot je Account ────────────
 // (Moved to before /quotes/:id to avoid path-param shadowing.)
 
+const ClauseCreateBody = z.object({
+  familyId: z.string().trim().min(1).optional(),
+  newFamily: z.object({
+    name: z.string().trim().min(2).max(200),
+    description: z.string().trim().min(1).max(1000),
+  }).optional(),
+  variant: z.object({
+    name: z.string().trim().min(1).max(200),
+    severity: z.enum(['low', 'medium', 'high']),
+    severityScore: z.number().int().min(0).max(100),
+    summary: z.string().trim().min(1).max(1000),
+    body: z.string().max(8000).optional().default(''),
+    tone: z.string().trim().max(60).optional().default('standard'),
+  }),
+  translations: z.array(z.object({
+    locale: z.enum(['de', 'en']),
+    name: z.string().trim().min(1).max(200),
+    summary: z.string().trim().min(1).max(1000),
+    body: z.string().max(8000).optional().default(''),
+  })).optional(),
+}).refine(
+  (v) => (!!v.familyId) !== (!!v.newFamily),
+  { message: 'exactly one of familyId or newFamily must be provided' },
+);
+
+router.post('/clause-families', async (req, res) => {
+  if (!requireAdmin(req, res)) return;
+  const parsed = ClauseCreateBody.safeParse(req.body);
+  if (!parsed.success) { res.status(422).json({ error: 'validation', issues: parsed.error.issues }); return; }
+  const b = parsed.data;
+  let familyId: string;
+  if (b.familyId) {
+    const [fam] = await db.select().from(clauseFamiliesTable).where(eq(clauseFamiliesTable.id, b.familyId));
+    if (!fam) { res.status(404).json({ error: 'family not found' }); return; }
+    familyId = fam.id;
+  } else {
+    familyId = `cf_${randomUUID().slice(0, 8)}`;
+    await db.insert(clauseFamiliesTable).values({
+      id: familyId,
+      name: b.newFamily!.name.trim(),
+      description: b.newFamily!.description.trim(),
+    });
+  }
+  const variantId = `cv_${randomUUID().slice(0, 8)}`;
+  await db.insert(clauseVariantsTable).values({
+    id: variantId,
+    familyId,
+    name: b.variant.name.trim(),
+    severity: b.variant.severity,
+    severityScore: b.variant.severityScore,
+    summary: b.variant.summary.trim(),
+    body: b.variant.body ?? '',
+    tone: (b.variant.tone ?? 'standard').trim() || 'standard',
+  });
+  // Optional translations: at most one row per (variantId, locale).
+  if (b.translations && b.translations.length > 0) {
+    const dedup = new Map<string, typeof b.translations[number]>();
+    b.translations.forEach(t => dedup.set(t.locale, t));
+    const rows = Array.from(dedup.values()).map(t => ({
+      id: `cvt_${randomUUID().slice(0, 8)}`,
+      variantId,
+      locale: t.locale,
+      name: t.name.trim(),
+      summary: t.summary.trim(),
+      body: t.body ?? '',
+      source: null,
+      license: null,
+      sourceUrl: null,
+    }));
+    await db.insert(clauseVariantTranslationsTable).values(rows);
+  }
+  await writeAuditFromReq(req, {
+    entityType: 'clause_variant', entityId: variantId, action: 'created',
+    summary: b.newFamily
+      ? `Neue Klausel-Familie ${b.newFamily.name} mit Variante ${b.variant.name} angelegt`
+      : `Neue Klausel-Variante ${b.variant.name} angelegt`,
+    after: { familyId, variantId, name: b.variant.name, severity: b.variant.severity },
+  });
+  // Return the full family payload (with all variants + translations)
+  // so the UI can drop it straight into the existing list.
+  const [fam] = await db.select().from(clauseFamiliesTable).where(eq(clauseFamiliesTable.id, familyId));
+  const variants = await db.select().from(clauseVariantsTable).where(eq(clauseVariantsTable.familyId, familyId));
+  const trMap = await loadVariantTranslations(variants.map(v => v.id));
+  res.status(201).json({
+    id: fam!.id,
+    name: fam!.name,
+    description: fam!.description,
+    variants: variants
+      .sort((a, b2) => a.severityScore - b2.severityScore)
+      .map(v => {
+        const trs = trMap.get(v.id);
+        return {
+          id: v.id, name: v.name, severity: v.severity,
+          severityScore: v.severityScore, summary: v.summary, body: v.body, tone: v.tone,
+          translations: trs
+            ? Array.from(trs.values()).map(t => ({
+                id: t.id, variantId: t.variantId, locale: t.locale,
+                name: t.name, summary: t.summary, body: t.body,
+                source: t.source ?? null, license: t.license ?? null,
+                sourceUrl: t.sourceUrl ?? null,
+                createdAt: iso(t.createdAt)!, updatedAt: iso(t.updatedAt)!,
+              }))
+            : [],
+        };
+      }),
+  });
+});
+
 router.get('/clause-families', async (_req, res) => {
   const families = await db.select().from(clauseFamiliesTable);
   const variants = await db.select().from(clauseVariantsTable);
@@ -9011,6 +9119,78 @@ router.get('/price-increases', async (req, res) => {
   // Hide campaigns where the user has zero visible letters to prevent metadata leak.
   const visible = rows.filter(c => letters.some(l => l.campaignId === c.id && visibleLetter(l)));
   res.json(visible.map(c => mapCampaign(c, letters.filter(l => l.campaignId === c.id && visibleLetter(l)))));
+});
+
+const PriceIncreaseCreateBody = z.object({
+  name: z.string().trim().min(2).max(200),
+  effectiveDate: z.string().trim().regex(/^\d{4}-\d{2}-\d{2}$/, 'effectiveDate must be ISO date (YYYY-MM-DD)'),
+  currency: z.string().trim().length(3),
+  defaultUpliftPct: z.number().min(0).max(100),
+  accountIds: z.array(z.string().trim().min(1)).min(1),
+});
+
+router.post('/price-increases', async (req, res) => {
+  if (!requireAdmin(req, res)) return;
+  const parsed = PriceIncreaseCreateBody.safeParse(req.body);
+  if (!parsed.success) { res.status(422).json({ error: 'validation', issues: parsed.error.issues }); return; }
+  const b = parsed.data;
+  // Restrict the seeded letters to accounts the caller is actually allowed
+  // to see. Silently dropping invisible accounts would make the wizard
+  // mysterious; instead we 422 if the input contains anything out-of-scope.
+  const accIds = await allowedAccountIds(req);
+  const requested = Array.from(new Set(b.accountIds));
+  const invalid = requested.filter(id => !isAccountAllowed(accIds, id));
+  if (invalid.length > 0) {
+    res.status(422).json({ error: 'one or more accountIds are not visible to you', invalid });
+    return;
+  }
+  // Sanity-check: accounts must exist (deleted/archived ones don't).
+  const accountRows = await db.select().from(accountsTable).where(inArray(accountsTable.id, requested));
+  const accountById = new Map(accountRows.map(a => [a.id, a]));
+  const missing = requested.filter(id => !accountById.has(id));
+  if (missing.length > 0) {
+    res.status(422).json({ error: 'one or more accountIds do not exist', missing });
+    return;
+  }
+  const campaignId = `pic_${randomUUID().slice(0, 8)}`;
+  await db.transaction(async (tx) => {
+    await tx.insert(priceIncreaseCampaignsTable).values({
+      id: campaignId,
+      name: b.name.trim(),
+      status: 'draft',
+      effectiveDate: b.effectiveDate,
+      currency: b.currency.toUpperCase(),
+      averageUpliftPct: String(b.defaultUpliftPct),
+    });
+    if (requested.length > 0) {
+      await tx.insert(priceIncreaseLettersTable).values(requested.map(accountId => ({
+        id: `pil_${randomUUID().slice(0, 8)}`,
+        campaignId,
+        accountId,
+        status: 'pending',
+        upliftPct: String(b.defaultUpliftPct),
+        sentAt: null,
+        respondedAt: null,
+      })));
+    }
+  });
+  await writeAuditFromReq(req, {
+    entityType: 'price_increase', entityId: campaignId, action: 'campaign_created',
+    summary: `Preiserhöhungs-Kampagne angelegt: ${b.name} (${requested.length} Accounts, +${b.defaultUpliftPct}%)`,
+    after: { name: b.name, effectiveDate: b.effectiveDate, defaultUpliftPct: b.defaultUpliftPct, accountCount: requested.length },
+  });
+  const [campaign] = await db.select().from(priceIncreaseCampaignsTable).where(eq(priceIncreaseCampaignsTable.id, campaignId));
+  const letters = await db.select().from(priceIncreaseLettersTable).where(eq(priceIncreaseLettersTable.campaignId, campaignId));
+  const accs = await getAccountMap();
+  res.status(201).json({
+    ...mapCampaign(campaign!, letters),
+    letters: letters.map(l => ({
+      id: l.id, campaignId: l.campaignId, accountId: l.accountId,
+      accountName: accs.get(l.accountId)?.name ?? 'Unknown',
+      status: l.status, upliftPct: num(l.upliftPct),
+      sentAt: iso(l.sentAt), respondedAt: iso(l.respondedAt),
+    })),
+  });
 });
 
 router.get('/price-increases/:id', async (req, res) => {
@@ -12513,11 +12693,96 @@ router.get('/platform/tenants', async (req, res) => {
     name: t.name,
     plan: t.plan,
     region: t.region,
+    status: t.status ?? 'active',
+    notes: t.notes ?? null,
+    disabledAt: iso(t.disabledAt) ?? null,
     retentionPolicy: t.retentionPolicy,
     userCount: userMap.get(t.id) ?? 0,
     companyCount: compMap.get(t.id) ?? 0,
     createdAt: iso(t.createdAt)!,
   })));
+});
+
+const PlatformTenantUpdateBody = z.object({
+  name: z.string().trim().min(2).max(120).optional(),
+  plan: z.enum(['Starter', 'Growth', 'Business', 'Enterprise']).optional(),
+  region: z.enum(['EU', 'US', 'UK', 'APAC']).optional(),
+  status: z.enum(['active', 'disabled']).optional(),
+  // null clears notes; undefined leaves them untouched
+  notes: z.string().max(4000).nullable().optional(),
+  retentionPolicy: z.object({
+    contactInactiveDays: z.number().int().positive().optional(),
+    letterRespondedDays: z.number().int().positive().optional(),
+    auditLogDays: z.number().int().positive().optional(),
+    accessLogDays: z.number().int().positive().optional(),
+  }).optional(),
+}).refine(
+  (v) => Object.keys(v).length > 0,
+  { message: 'at least one field must be provided' },
+);
+
+router.patch('/platform/tenants/:id', async (req, res) => {
+  if (!(await requirePlatformAdmin(req, res))) return;
+  const tenantId = req.params.id;
+  const parsed = PlatformTenantUpdateBody.safeParse(req.body);
+  if (!parsed.success) { res.status(422).json({ error: 'validation', issues: parsed.error.issues }); return; }
+  const [before] = await db.select().from(tenantsTable).where(eq(tenantsTable.id, tenantId));
+  if (!before) { res.status(404).json({ error: 'tenant not found' }); return; }
+  const patch: Record<string, unknown> = {};
+  if (parsed.data.name !== undefined) patch.name = parsed.data.name.trim();
+  if (parsed.data.plan !== undefined) patch.plan = parsed.data.plan;
+  if (parsed.data.region !== undefined) patch.region = parsed.data.region;
+  if (parsed.data.notes !== undefined) patch.notes = parsed.data.notes;
+  if (parsed.data.retentionPolicy !== undefined) patch.retentionPolicy = parsed.data.retentionPolicy;
+  let statusChanged: 'disabled' | 'reactivated' | null = null;
+  if (parsed.data.status !== undefined && parsed.data.status !== (before.status ?? 'active')) {
+    patch.status = parsed.data.status;
+    if (parsed.data.status === 'disabled') {
+      patch.disabledAt = new Date();
+      statusChanged = 'disabled';
+    } else {
+      patch.disabledAt = null;
+      statusChanged = 'reactivated';
+    }
+  }
+  if (Object.keys(patch).length > 0) {
+    await db.update(tenantsTable).set(patch).where(eq(tenantsTable.id, tenantId));
+  }
+  const [after] = await db.select().from(tenantsTable).where(eq(tenantsTable.id, tenantId));
+  // Aggregate counts for the response (mirror GET /platform/tenants shape).
+  const [u] = await db.select({ c: sql<number>`count(*)::int` })
+    .from(usersTable).where(eq(usersTable.tenantId, tenantId));
+  const [c] = await db.select({ c: sql<number>`count(*)::int` })
+    .from(companiesTable).where(eq(companiesTable.tenantId, tenantId));
+  await writeAuditFromReq(req, {
+    entityType: 'tenant', entityId: tenantId,
+    action: statusChanged === 'disabled'
+      ? 'platform_disable'
+      : statusChanged === 'reactivated'
+        ? 'platform_reactivate'
+        : 'platform_update',
+    summary: statusChanged === 'disabled'
+      ? `Mandant deaktiviert: ${after!.name}`
+      : statusChanged === 'reactivated'
+        ? `Mandant reaktiviert: ${after!.name}`
+        : `Mandant aktualisiert: ${after!.name}`,
+    before: { name: before.name, plan: before.plan, region: before.region, status: before.status, notes: before.notes },
+    after: { name: after!.name, plan: after!.plan, region: after!.region, status: after!.status, notes: after!.notes },
+    actor: getScope(req).user.name,
+  });
+  res.json({
+    id: after!.id,
+    name: after!.name,
+    plan: after!.plan,
+    region: after!.region,
+    status: after!.status ?? 'active',
+    notes: after!.notes ?? null,
+    disabledAt: iso(after!.disabledAt) ?? null,
+    retentionPolicy: after!.retentionPolicy,
+    userCount: u?.c ?? 0,
+    companyCount: c?.c ?? 0,
+    createdAt: iso(after!.createdAt)!,
+  });
 });
 
 router.post('/platform/tenants', async (req, res) => {
@@ -12583,6 +12848,9 @@ router.post('/platform/tenants', async (req, res) => {
     name: b.name.trim(),
     plan: b.plan,
     region: b.region,
+    status: 'active',
+    notes: null,
+    disabledAt: null,
     retentionPolicy: b.retentionPolicy ?? {},
     userCount: 1,
     companyCount: 0,
