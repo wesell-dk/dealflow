@@ -24,7 +24,8 @@
     "test:clause-import-extract": "node --import tsx --test --test-reporter=spec tests/clause-import-extract.test.ts",
     "test:clause-import-notes": "node --import tsx --test --test-reporter=spec tests/clause-import-notes-sanitizer.test.ts",
     "test:storage-request-url": "node --import tsx --test --test-reporter=spec tests/storage-request-url.test.ts",
-    "test": "pnpm run test:risk-score && pnpm run test:isolation && pnpm run test:renewals && pnpm run test:approvals && pnpm run test:external && pnpm run test:clauses && pnpm run test:external-collab && pnpm run test:magic-link-url && pnpm run test:email-log && pnpm run test:airec && pnpm run test:cuad && pnpm run test:contract-lang && pnpm run test:bindings && pnpm run test:clause-import-extract && pnpm run test:clause-import-notes && pnpm run test:storage-request-url"
+    "test:quote-duplicate": "node --import tsx --test --test-reporter=spec tests/quote-duplicate-scope.test.ts",
+    "test": "pnpm run test:risk-score && pnpm run test:isolation && pnpm run test:renewals && pnpm run test:approvals && pnpm run test:external && pnpm run test:clauses && pnpm run test:external-collab && pnpm run test:magic-link-url && pnpm run test:email-log && pnpm run test:airec && pnpm run test:cuad && pnpm run test:contract-lang && pnpm run test:bindings && pnpm run test:clause-import-extract && pnpm run test:clause-import-notes && pnpm run test:storage-request-url && pnpm run test:quote-duplicate"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.90.0",
