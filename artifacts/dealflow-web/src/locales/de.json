@@ -36,6 +36,7 @@
   },
   "common": {
     "search": "Deals, Kunden, Angebote suchen…",
+    "searchOrCommand": "Suchen oder Befehl ausführen…",
     "settings": "Einstellungen",
     "support": "Support",
     "logout": "Abmelden",
@@ -141,6 +142,11 @@
     "home": {
       "title": "Heute",
       "subtitle": "Überblick über deine Pipeline und aktuellen Aufgaben.",
+      "greetings": {
+        "morning": "Guten Morgen",
+        "afternoon": "Guten Tag",
+        "evening": "Guten Abend"
+      },
       "openDeals": "Offene Deals",
       "openDealsValue": "Wert",
       "winRate": "Gewinnrate",

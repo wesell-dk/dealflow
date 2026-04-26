@@ -36,6 +36,7 @@
   },
   "common": {
     "search": "Search deals, accounts, quotes…",
+    "searchOrCommand": "Search or run a command…",
     "settings": "Settings",
     "support": "Support",
     "logout": "Log out",
@@ -141,6 +142,11 @@
     "home": {
       "title": "Today",
       "subtitle": "Overview of your pipeline and active tasks.",
+      "greetings": {
+        "morning": "Good morning",
+        "afternoon": "Good afternoon",
+        "evening": "Good evening"
+      },
       "openDeals": "Open Deals",
       "openDealsValue": "Value",
       "winRate": "Win Rate",

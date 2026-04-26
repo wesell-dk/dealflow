@@ -34,9 +34,10 @@ import {
   Lightbulb,
   ChevronRight,
   ChevronDown,
+  Sparkles,
   type LucideIcon,
 } from "lucide-react";
-import { useGetTenant } from "@workspace/api-client-react";
+import { useGetTenant, useGetDashboardSummary } from "@workspace/api-client-react";
 import { useAuth } from "@/contexts/auth-context";
 import { LogOut } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -66,6 +67,7 @@ interface NavItem {
   href: string;
   icon: LucideIcon;
   gate?: boolean;
+  badgeKey?: "approvals" | "signatures";
 }
 
 interface NavGroup {
@@ -115,7 +117,7 @@ function useNavigationGroups(): NavGroup[] {
         { key: "deals", label: t("nav.deals"), href: "/deals", icon: Briefcase },
         { key: "quotes", label: t("nav.quotes"), href: "/quotes", icon: FileText },
         { key: "negotiations", label: t("nav.negotiations"), href: "/negotiations", icon: Handshake },
-        { key: "approvals", label: t("nav.approvals"), href: "/approvals", icon: CheckSquare },
+        { key: "approvals", label: t("nav.approvals"), href: "/approvals", icon: CheckSquare, badgeKey: "approvals" },
       ],
     },
     {
@@ -124,7 +126,7 @@ function useNavigationGroups(): NavGroup[] {
       items: [
         { key: "orderConfirmations", label: t("nav.orderConfirmations"), href: "/order-confirmations", icon: ClipboardCheck },
         { key: "contracts", label: t("nav.contracts"), href: "/contracts", icon: FileSignature },
-        { key: "signatures", label: t("nav.signatures"), href: "/signatures", icon: PenTool },
+        { key: "signatures", label: t("nav.signatures"), href: "/signatures", icon: PenTool, badgeKey: "signatures" },
       ],
     },
     {
@@ -164,6 +166,11 @@ function hrefMatches(currentPath: string, href: string): boolean {
 
 function Sidebar({ currentPath }: { currentPath: string }) {
   const groups = useNavigationGroups();
+  const { data: summary } = useGetDashboardSummary();
+  const badgeCounts: Record<NonNullable<NavItem["badgeKey"]>, number | undefined> = {
+    approvals: summary?.openApprovals,
+    signatures: summary?.signaturesPending,
+  };
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>(() => {
     const initial: Record<string, boolean> = {};
     for (const g of groups) {
@@ -217,20 +224,22 @@ function Sidebar({ currentPath }: { currentPath: string }) {
 
   return (
     <div className="flex h-full flex-col gap-2">
-      <div className="flex h-14 items-center border-b px-4 lg:h-[60px] lg:px-6">
-        <Link href="/" className="flex items-center gap-2 font-semibold">
-          <Briefcase className="h-6 w-6 text-primary" />
-          <span className="text-lg">DealFlow One</span>
+      <div className="flex h-14 items-center px-4 lg:h-[64px] lg:px-5">
+        <Link href="/" className="flex items-center gap-2.5 font-semibold">
+          <span className="flex h-8 w-8 items-center justify-center rounded-xl bg-gradient-to-br from-primary to-brand-2 text-primary-foreground shadow-sm">
+            <Briefcase className="h-4 w-4" />
+          </span>
+          <span className="text-base tracking-tight">DealFlow One</span>
         </Link>
       </div>
       <div className="flex-1 overflow-auto py-2">
-        <nav className="grid items-start px-2 text-sm font-medium lg:px-4">
+        <nav className="grid items-start px-2 text-sm font-medium lg:px-3">
           {groups.map((group, gIdx) => {
             const isCollapsed = !!group.collapsible && !!collapsed[group.key];
             const headingClass =
-              "px-3 pt-3 pb-1 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground/70";
+              "px-3 pt-4 pb-1.5 text-[10.5px] font-semibold uppercase tracking-[0.08em] text-muted-foreground/80";
             return (
-              <div key={group.key} className={gIdx === 0 ? "" : "mt-1"}>
+              <div key={group.key} className={gIdx === 0 ? "" : "mt-0.5"}>
                 {group.collapsible ? (
                   <button
                     type="button"
@@ -252,20 +261,42 @@ function Sidebar({ currentPath }: { currentPath: string }) {
                   </div>
                 )}
                 {!isCollapsed && (
-                  <div className="space-y-1 mt-1">
+                  <div className="space-y-0.5 mt-1">
                     {group.items.map((item) => {
                       const isActive = isItemActive(item.href);
+                      const count = item.badgeKey ? badgeCounts[item.badgeKey] : undefined;
+                      const showBadge = typeof count === "number" && count > 0;
                       return (
                         <Link
                           key={item.href}
                           href={item.href}
-                          className={`flex items-center gap-3 rounded-lg px-3 py-2 transition-all hover:text-primary ${
-                            isActive ? "bg-muted text-primary" : "text-muted-foreground"
+                          className={`group flex items-center gap-3 rounded-xl px-3 py-2 transition-colors ${
+                            isActive
+                              ? "bg-sidebar-primary text-sidebar-primary-foreground font-semibold"
+                              : "text-sidebar-foreground/80 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
                           }`}
                           data-testid={`sidebar-nav-${item.key}`}
                         >
-                          <item.icon className="h-4 w-4" />
-                          {item.label}
+                          <item.icon
+                            className={`h-4 w-4 shrink-0 ${
+                              isActive
+                                ? "text-sidebar-primary-foreground"
+                                : "text-muted-foreground/80 group-hover:text-foreground"
+                            }`}
+                          />
+                          <span className="flex-1 truncate">{item.label}</span>
+                          {showBadge && (
+                            <span
+                              className={`inline-flex h-5 min-w-[1.25rem] items-center justify-center rounded-full px-1.5 text-[10px] font-semibold tabular-nums ${
+                                isActive
+                                  ? "bg-white/70 text-sidebar-primary-foreground dark:bg-white/15"
+                                  : "bg-brand-2/15 text-[hsl(var(--brand-2))] dark:bg-brand-2/25 dark:text-brand-2-foreground"
+                              }`}
+                              data-testid={`sidebar-badge-${item.key}`}
+                            >
+                              {count}
+                            </span>
+                          )}
                         </Link>
                       );
                     })}
@@ -301,12 +332,12 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   }, []);
 
   return (
-    <div className="grid min-h-screen w-full md:grid-cols-[220px_1fr] lg:grid-cols-[280px_1fr]">
-      <div className="hidden border-r bg-muted/40 md:block">
+    <div className="grid min-h-screen w-full md:grid-cols-[230px_1fr] lg:grid-cols-[260px_1fr]">
+      <div className="hidden border-r border-sidebar-border bg-sidebar text-sidebar-foreground md:block">
         <Sidebar currentPath={location} />
       </div>
       <div className="flex flex-col">
-        <header className="flex h-14 items-center gap-4 border-b bg-muted/40 px-4 lg:h-[60px] lg:px-6">
+        <header className="sticky top-0 z-30 flex h-14 items-center gap-3 border-b border-border/60 bg-background/80 px-4 backdrop-blur-md lg:h-[60px] lg:px-6">
           <Sheet>
             <SheetTrigger asChild>
               <Button variant="outline" size="icon" className="shrink-0 md:hidden">
@@ -314,59 +345,74 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                 <span className="sr-only">Menu</span>
               </Button>
             </SheetTrigger>
-            <SheetContent side="left" className="flex flex-col">
+            <SheetContent side="left" className="flex flex-col bg-sidebar text-sidebar-foreground p-0">
               <Sidebar currentPath={location} />
             </SheetContent>
           </Sheet>
-          <div className="w-full flex-1">
+          <div className="flex flex-1 items-center justify-center">
             <button
               type="button"
               onClick={() => setPaletteOpen(true)}
-              className="group flex w-full items-center gap-2 rounded-md border bg-background px-3 h-9 text-sm text-muted-foreground hover:border-foreground/30 transition-colors md:w-2/3 lg:w-1/3 text-left"
+              className="group flex w-full max-w-xl items-center gap-2 rounded-full border border-border/70 bg-card/70 px-4 h-10 text-sm text-muted-foreground shadow-xs hover:border-foreground/30 hover:bg-card transition-colors text-left"
               data-testid="header-cmdk-trigger"
               aria-label="Open search (Cmd+K)"
             >
               <Search className="h-4 w-4" />
-              <span className="flex-1 truncate">Search or run a command…</span>
-              <kbd className="hidden md:inline-flex items-center gap-0.5 rounded border bg-muted/60 px-1.5 py-0.5 text-[10px] font-mono">
+              <span className="flex-1 truncate">{t("common.searchOrCommand", { defaultValue: "Suchen…" })}</span>
+              <kbd className="hidden md:inline-flex items-center gap-0.5 rounded-md border border-border/70 bg-muted/60 px-1.5 py-0.5 text-[10px] font-mono">
                 ⌘ K
               </kbd>
             </button>
           </div>
-          <div className="flex items-center gap-3">
-            <div className="hidden md:flex items-center gap-2 text-sm text-muted-foreground">
+          <div className="flex items-center gap-1.5 sm:gap-2">
+            <div className="hidden xl:flex items-center gap-2 text-sm text-muted-foreground mr-1">
               {tenant?.name && <span className="font-medium text-foreground">{tenant.name}</span>}
               {tenant?.region && <span className="text-xs bg-muted px-2 py-0.5 rounded-full">{tenant.region}</span>}
             </div>
             <ScopeSwitcher />
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-9 w-9 rounded-full text-muted-foreground hover:text-foreground hover:bg-accent"
+              onClick={() => setPaletteOpen(true)}
+              data-testid="header-assistant-button"
+              title="Copilot / Assistant"
+            >
+              <Sparkles className="h-4 w-4" />
+              <span className="sr-only">Assistant</span>
+            </Button>
             <RecentsDropdown />
             <Button
-              variant="outline"
-              size="sm"
-              className="h-8 gap-1.5"
+              variant="ghost"
+              size="icon"
+              className="h-9 w-9 rounded-full text-muted-foreground hover:text-foreground hover:bg-accent"
               onClick={openWelcome}
               data-testid="header-tour-button"
               title="Open workflow overview"
             >
               <Compass className="h-4 w-4" />
-              <span className="hidden lg:inline text-xs">Tour</span>
+              <span className="sr-only">Tour</span>
             </Button>
             <Button
-              variant="outline"
-              size="sm"
-              className="h-8 gap-1.5"
+              variant="ghost"
+              size="icon"
+              className="h-9 w-9 rounded-full text-muted-foreground hover:text-foreground hover:bg-accent"
               onClick={openHelp}
               data-testid="header-help-button"
               title="Help for the current page (What can I do here?)"
             >
               <HelpCircle className="h-4 w-4" />
-              <span className="hidden lg:inline text-xs">Help</span>
+              <span className="sr-only">Help</span>
             </Button>
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button variant="outline" size="sm" className="h-8 gap-1.5">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-9 gap-1 rounded-full px-2.5 text-muted-foreground hover:text-foreground hover:bg-accent"
+                >
                   <Languages className="h-4 w-4" />
-                  <span className="text-xs font-semibold uppercase">{i18n.resolvedLanguage ?? "de"}</span>
+                  <span className="text-[11px] font-semibold uppercase">{i18n.resolvedLanguage ?? "de"}</span>
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end">
@@ -376,15 +422,19 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                 <DropdownMenuItem onClick={() => setLanguage("en")}>English</DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
-            <Button variant="outline" size="icon" className="h-8 w-8 rounded-full">
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-9 w-9 rounded-full text-muted-foreground hover:text-foreground hover:bg-accent"
+            >
               <Bell className="h-4 w-4" />
               <span className="sr-only">Notifications</span>
             </Button>
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button variant="secondary" size="icon" className="rounded-full">
+                <Button variant="ghost" size="icon" className="h-9 w-9 rounded-full p-0">
                   <Avatar className="h-8 w-8">
-                    <AvatarFallback className="bg-primary/10 text-primary">
+                    <AvatarFallback className="bg-gradient-to-br from-primary/15 to-brand-2/25 text-foreground text-xs font-semibold">
                       {user?.initials || <UserIcon className="h-4 w-4" />}
                     </AvatarFallback>
                   </Avatar>
@@ -414,7 +464,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             </DropdownMenu>
           </div>
         </header>
-        <main className="flex flex-1 flex-col gap-4 p-4 lg:gap-6 lg:p-6 overflow-auto">
+        <main className="flex flex-1 flex-col gap-4 p-4 lg:gap-6 lg:p-8 overflow-auto">
           {children}
         </main>
       </div>

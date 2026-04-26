@@ -1,6 +1,6 @@
 import { FormEvent, useState } from "react";
 import { useLocation } from "wouter";
-import { LogIn, Loader2 } from "lucide-react";
+import { LogIn, Loader2, Briefcase } from "lucide-react";
 import { useAuth } from "@/contexts/auth-context";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -40,15 +40,23 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-muted/30 p-6">
+    <div
+      className="min-h-screen flex items-center justify-center p-6 bg-background"
+      style={{
+        backgroundImage:
+          "radial-gradient(60rem 40rem at 80% -10%, hsl(var(--brand-2) / 0.18), transparent 60%), radial-gradient(50rem 36rem at 0% 110%, hsl(var(--primary) / 0.12), transparent 55%)",
+      }}
+    >
       <div className="grid gap-6 md:grid-cols-2 max-w-4xl w-full">
-        <Card>
-          <CardHeader>
-            <div className="flex items-center gap-2 mb-1">
-              <div className="size-8 rounded bg-primary text-primary-foreground flex items-center justify-center font-bold">D</div>
-              <span className="font-semibold">DealFlow One</span>
+        <Card className="shadow-lg">
+          <CardHeader className="space-y-2">
+            <div className="flex items-center gap-2.5 mb-1">
+              <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-primary to-brand-2 text-primary-foreground shadow-sm">
+                <Briefcase className="h-4 w-4" />
+              </span>
+              <span className="font-semibold tracking-tight">DealFlow One</span>
             </div>
-            <CardTitle>Sign in</CardTitle>
+            <CardTitle className="text-2xl">Sign in</CardTitle>
             <CardDescription>B2B Commercial Execution Platform</CardDescription>
           </CardHeader>
           <CardContent>
@@ -72,7 +80,7 @@ export default function LoginPage() {
           </CardContent>
         </Card>
 
-        <Card>
+        <Card className="shadow-lg">
           <CardHeader>
             <CardTitle className="text-base">Demo users</CardTitle>
             <CardDescription>Password for all demo accounts: <code className="font-mono">dealflow</code></CardDescription>
@@ -83,7 +91,7 @@ export default function LoginPage() {
                 key={u.email}
                 type="button"
                 onClick={() => { setEmail(u.email); setPassword("dealflow"); }}
-                className="w-full text-left p-3 rounded-lg border hover-elevate active-elevate-2"
+                className="w-full text-left p-3 rounded-xl border border-border/70 hover-elevate active-elevate-2"
                 data-testid={`button-demo-${u.email.split("@")[0]}`}
               >
                 <div className="font-medium text-sm">{u.label}</div>

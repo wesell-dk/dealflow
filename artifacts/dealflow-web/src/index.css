@@ -23,6 +23,9 @@
   --color-primary-foreground: hsl(var(--primary-foreground));
   --color-primary-border: var(--primary-border);
 
+  --color-brand-2: hsl(var(--brand-2));
+  --color-brand-2-foreground: hsl(var(--brand-2-foreground));
+
   --color-secondary: hsl(var(--secondary));
   --color-secondary-foreground: hsl(var(--secondary-foreground));
   --color-secondary-border: var(--secondary-border);
@@ -64,72 +67,84 @@
   --radius-md: calc(var(--radius) - 2px);
   --radius-lg: var(--radius);
   --radius-xl: calc(var(--radius) + 4px);
+  --radius-2xl: calc(var(--radius) + 8px);
 }
 
 :root {
-  --button-outline: rgba(0,0,0, .10);
+  --button-outline: rgba(0,0,0, .08);
   --badge-outline: rgba(0,0,0, .05);
   --opaque-button-border-intensity: -8;
-  --elevate-1: rgba(0,0,0, .03);
-  --elevate-2: rgba(0,0,0, .08);
+  --elevate-1: rgba(0,0,0, .025);
+  --elevate-2: rgba(0,0,0, .06);
 
-  --background: 210 40% 98%;
-  --foreground: 222 47% 11%;
-  --border: 214 32% 91%;
+  /* Soft, slightly cool off-white as page surface */
+  --background: 240 30% 98%;
+  --foreground: 224 38% 14%;
+  --border: 230 24% 92%;
   --card: 0 0% 100%;
-  --card-foreground: 222 47% 11%;
-  --card-border: 214 32% 91%;
-  
-  --sidebar: 222 47% 11%;
-  --sidebar-foreground: 210 40% 98%;
-  --sidebar-border: 217 33% 17%;
-  --sidebar-primary: 210 40% 98%;
-  --sidebar-primary-foreground: 222 47% 11%;
-  --sidebar-accent: 217 33% 17%;
-  --sidebar-accent-foreground: 210 40% 98%;
-  --sidebar-ring: 217 33% 17%;
-  
+  --card-foreground: 224 38% 14%;
+  --card-border: 230 24% 92%;
+
+  /* Light, premium sidebar — almost white with the faintest cool tint.
+     Active item is a soft lavender pill (sidebar-primary), hover uses an even
+     lighter lavender tint (sidebar-accent). */
+  --sidebar: 240 30% 99%;
+  --sidebar-foreground: 224 30% 24%;
+  --sidebar-border: 230 24% 92%;
+  --sidebar-primary: 262 70% 96%;
+  --sidebar-primary-foreground: 262 55% 35%;
+  --sidebar-accent: 240 30% 96%;
+  --sidebar-accent-foreground: 224 38% 14%;
+  --sidebar-ring: 262 60% 70%;
+
   --popover: 0 0% 100%;
-  --popover-foreground: 222 47% 11%;
-  --popover-border: 214 32% 91%;
-  
+  --popover-foreground: 224 38% 14%;
+  --popover-border: 230 24% 92%;
+
+  /* Brand blue stays the lead colour */
   --primary: 221 83% 53%;
   --primary-foreground: 210 40% 98%;
-  
-  --secondary: 210 40% 96%;
-  --secondary-foreground: 222 47% 11%;
-  
-  --muted: 210 40% 96%;
-  --muted-foreground: 215 16% 47%;
-  
-  --accent: 210 40% 96%;
-  --accent-foreground: 222 47% 11%;
-  
+
+  /* Lavender as the new secondary brand tone for accents and highlights */
+  --brand-2: 262 60% 60%;
+  --brand-2-foreground: 0 0% 100%;
+
+  --secondary: 230 30% 96%;
+  --secondary-foreground: 224 38% 14%;
+
+  --muted: 230 30% 96%;
+  --muted-foreground: 224 14% 46%;
+
+  /* Accent is now a soft lavender, used for hover/active highlights */
+  --accent: 262 70% 96%;
+  --accent-foreground: 262 55% 35%;
+
   --destructive: 0 84% 60%;
   --destructive-foreground: 210 40% 98%;
-  
-  --input: 214 32% 91%;
+
+  --input: 230 24% 92%;
   --ring: 221 83% 53%;
-  
+
   --chart-1: 221 83% 53%;
-  --chart-2: 199 89% 48%;
-  --chart-3: 175 100% 38%;
-  --chart-4: 154 60% 45%;
-  --chart-5: 140 70% 50%;
+  --chart-2: 262 60% 60%;
+  --chart-3: 199 89% 48%;
+  --chart-4: 175 100% 38%;
+  --chart-5: 154 60% 45%;
 
   --app-font-sans: "Inter", sans-serif;
   --app-font-serif: Georgia, serif;
   --app-font-mono: Menlo, monospace;
-  --radius: 0.5rem;
-  
-  --shadow-2xs: 0px 1px 2px rgba(0,0,0,0.05);
-  --shadow-xs: 0px 2px 4px rgba(0,0,0,0.05);
-  --shadow-sm: 0px 4px 8px rgba(0,0,0,0.05);
-  --shadow: 0px 8px 16px rgba(0,0,0,0.05);
-  --shadow-md: 0px 12px 24px rgba(0,0,0,0.05);
-  --shadow-lg: 0px 16px 32px rgba(0,0,0,0.05);
-  --shadow-xl: 0px 24px 48px rgba(0,0,0,0.05);
-  --shadow-2xl: 0px 32px 64px rgba(0,0,0,0.05);
+  --radius: 0.75rem;
+
+  /* Softer, slightly deeper shadows for a premium, calmer look */
+  --shadow-2xs: 0px 1px 2px rgba(15, 23, 42, 0.04);
+  --shadow-xs: 0px 2px 6px rgba(15, 23, 42, 0.05);
+  --shadow-sm: 0px 4px 12px rgba(15, 23, 42, 0.06);
+  --shadow: 0px 8px 24px rgba(15, 23, 42, 0.06);
+  --shadow-md: 0px 14px 32px rgba(15, 23, 42, 0.07);
+  --shadow-lg: 0px 20px 40px rgba(15, 23, 42, 0.08);
+  --shadow-xl: 0px 28px 56px rgba(15, 23, 42, 0.09);
+  --shadow-2xl: 0px 36px 72px rgba(15, 23, 42, 0.10);
   --tracking-normal: 0em;
   --spacing: 0.25rem;
 
@@ -149,40 +164,52 @@
   --elevate-1: rgba(255,255,255, .04);
   --elevate-2: rgba(255,255,255, .09);
 
-  --background: 222 47% 11%;
-  --foreground: 210 40% 98%;
-  --border: 217 33% 17%;
-  --card: 222 47% 11%;
-  --card-foreground: 210 40% 98%;
-  --card-border: 217 33% 17%;
-  --sidebar: 222 47% 11%;
-  --sidebar-foreground: 210 40% 98%;
-  --sidebar-border: 217 33% 17%;
-  --sidebar-primary: 210 40% 98%;
-  --sidebar-primary-foreground: 222 47% 11%;
-  --sidebar-accent: 217 33% 17%;
-  --sidebar-accent-foreground: 210 40% 98%;
-  --sidebar-ring: 217 33% 17%;
-  --popover: 222 47% 11%;
-  --popover-foreground: 210 40% 98%;
-  --popover-border: 217 33% 17%;
-  --primary: 221 83% 53%;
+  --background: 224 38% 9%;
+  --foreground: 220 25% 96%;
+  --border: 220 20% 18%;
+  --card: 224 32% 12%;
+  --card-foreground: 220 25% 96%;
+  --card-border: 220 20% 18%;
+
+  --sidebar: 224 36% 11%;
+  --sidebar-foreground: 220 22% 88%;
+  --sidebar-border: 220 20% 18%;
+  --sidebar-primary: 262 45% 28%;
+  --sidebar-primary-foreground: 262 80% 92%;
+  --sidebar-accent: 224 30% 16%;
+  --sidebar-accent-foreground: 220 25% 96%;
+  --sidebar-ring: 262 60% 60%;
+
+  --popover: 224 32% 12%;
+  --popover-foreground: 220 25% 96%;
+  --popover-border: 220 20% 18%;
+
+  --primary: 221 83% 60%;
   --primary-foreground: 210 40% 98%;
-  --secondary: 217 33% 17%;
-  --secondary-foreground: 210 40% 98%;
-  --muted: 217 33% 17%;
-  --muted-foreground: 215 20.2% 65.1%;
-  --accent: 217 33% 17%;
-  --accent-foreground: 210 40% 98%;
-  --destructive: 0 62.8% 30.6%;
+
+  --brand-2: 262 65% 70%;
+  --brand-2-foreground: 224 38% 9%;
+
+  --secondary: 224 30% 16%;
+  --secondary-foreground: 220 25% 96%;
+
+  --muted: 224 30% 16%;
+  --muted-foreground: 220 14% 65%;
+
+  --accent: 262 35% 22%;
+  --accent-foreground: 262 80% 92%;
+
+  --destructive: 0 62.8% 40%;
   --destructive-foreground: 210 40% 98%;
-  --input: 217 33% 17%;
-  --ring: 221 83% 53%;
-  --chart-1: 221 83% 53%;
-  --chart-2: 199 89% 48%;
-  --chart-3: 175 100% 38%;
-  --chart-4: 154 60% 45%;
-  --chart-5: 140 70% 50%;
+
+  --input: 220 20% 18%;
+  --ring: 221 83% 60%;
+
+  --chart-1: 221 83% 60%;
+  --chart-2: 262 65% 70%;
+  --chart-3: 199 89% 55%;
+  --chart-4: 175 80% 45%;
+  --chart-5: 154 60% 50%;
 }
 
 @layer base {
@@ -191,5 +218,12 @@
   }
   body {
     @apply font-sans antialiased bg-background text-foreground;
+    /* Very subtle vertical wash — adds depth without distracting */
+    background-image: linear-gradient(
+      180deg,
+      hsl(var(--background)) 0%,
+      hsl(var(--accent) / 0.35) 100%
+    );
+    background-attachment: fixed;
   }
 }

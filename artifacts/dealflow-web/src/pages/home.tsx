@@ -6,10 +6,26 @@ import { Briefcase, Activity, Target, AlertTriangle } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { TourBanner } from "@/components/patterns/tour-banner";
 import { useOnboarding } from "@/contexts/onboarding-context";
+import { useAuth } from "@/contexts/auth-context";
+
+function firstName(fullName: string | undefined): string {
+  if (!fullName) return "";
+  const trimmed = fullName.trim();
+  if (!trimmed) return "";
+  return trimmed.split(/\s+/)[0];
+}
+
+function greetingKey(date: Date): "morning" | "afternoon" | "evening" {
+  const h = date.getHours();
+  if (h < 11) return "morning";
+  if (h < 18) return "afternoon";
+  return "evening";
+}
 
 export default function Home() {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const { openWelcome } = useOnboarding();
+  const { user } = useAuth();
   const { data: summary, isLoading: isLoadingSummary } = useGetDashboardSummary();
   const { data: insightsResp, isLoading: isLoadingInsights } = useListCopilotInsights();
   const insights = insightsResp?.items;
@@ -20,95 +36,133 @@ export default function Home() {
 
   if (!summary) return null;
 
-  return (
-    <div className="flex flex-col gap-6">
-      <TourBanner onStartTour={openWelcome} />
-      <div>
-        <h1 className="text-3xl font-bold tracking-tight">{t("pages.home.title")}</h1>
-        <p className="text-muted-foreground mt-1">{t("pages.home.subtitle")}</p>
-      </div>
+  const now = new Date();
+  const locale = i18n.resolvedLanguage === "en" ? "en-US" : "de-DE";
+  const dateLabel = now.toLocaleDateString(locale, {
+    weekday: "long",
+    day: "numeric",
+    month: "long",
+  });
+  const greeting = t(`pages.home.greetings.${greetingKey(now)}`);
+  const fname = firstName(user?.name);
 
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium">{t("pages.home.openDeals")}</CardTitle>
-            <Briefcase className="h-4 w-4 text-muted-foreground" />
+  return (
+    <div className="flex flex-col gap-8">
+      <TourBanner onStartTour={openWelcome} />
+
+      <header className="flex flex-col items-center text-center pt-2">
+        <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground/80">
+          {dateLabel}
+        </p>
+        <h1 className="mt-2 text-3xl sm:text-4xl font-semibold tracking-tight text-foreground">
+          {fname ? `${greeting}, ${fname}` : greeting}
+        </h1>
+        <p className="text-muted-foreground mt-2 max-w-xl">
+          {t("pages.home.subtitle")}
+        </p>
+      </header>
+
+      <div className="grid gap-5 md:grid-cols-2 lg:grid-cols-4">
+        <Card className="shadow-sm">
+          <CardHeader className="flex flex-row items-start justify-between gap-3 pb-2">
+            <CardTitle className="text-sm font-medium text-muted-foreground">
+              {t("pages.home.openDeals")}
+            </CardTitle>
+            <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-primary/10 text-primary">
+              <Briefcase className="h-4 w-4" />
+            </span>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{summary.openDealsCount}</div>
-            <p className="text-xs text-muted-foreground mt-1">
+            <div className="text-3xl font-semibold tracking-tight">{summary.openDealsCount}</div>
+            <p className="text-xs text-muted-foreground mt-1.5">
               {t("pages.home.openDealsValue")}: {summary.openDealsValue.toLocaleString()} {summary.currency}
             </p>
           </CardContent>
         </Card>
-        
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium">{t("pages.home.winRate")}</CardTitle>
-            <Target className="h-4 w-4 text-muted-foreground" />
+
+        <Card className="shadow-sm">
+          <CardHeader className="flex flex-row items-start justify-between gap-3 pb-2">
+            <CardTitle className="text-sm font-medium text-muted-foreground">
+              {t("pages.home.winRate")}
+            </CardTitle>
+            <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-[hsl(var(--brand-2)/0.12)] text-[hsl(var(--brand-2))]">
+              <Target className="h-4 w-4" />
+            </span>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{summary.winRatePct}%</div>
-            <p className="text-xs text-muted-foreground mt-1">{t("pages.home.rolling90")}</p>
+            <div className="text-3xl font-semibold tracking-tight">{summary.winRatePct}%</div>
+            <p className="text-xs text-muted-foreground mt-1.5">{t("pages.home.rolling90")}</p>
           </CardContent>
         </Card>
 
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium">{t("pages.home.avgCycle")}</CardTitle>
-            <Activity className="h-4 w-4 text-muted-foreground" />
+        <Card className="shadow-sm">
+          <CardHeader className="flex flex-row items-start justify-between gap-3 pb-2">
+            <CardTitle className="text-sm font-medium text-muted-foreground">
+              {t("pages.home.avgCycle")}
+            </CardTitle>
+            <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-muted text-muted-foreground">
+              <Activity className="h-4 w-4" />
+            </span>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{summary.avgCycleDays} {t("pages.home.days")}</div>
-            <p className="text-xs text-muted-foreground mt-1">{t("pages.home.timeToClose")}</p>
+            <div className="text-3xl font-semibold tracking-tight">
+              {summary.avgCycleDays} <span className="text-base font-medium text-muted-foreground">{t("pages.home.days")}</span>
+            </div>
+            <p className="text-xs text-muted-foreground mt-1.5">{t("pages.home.timeToClose")}</p>
           </CardContent>
         </Card>
 
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium">{t("pages.home.atRisk")}</CardTitle>
-            <AlertTriangle className="h-4 w-4 text-destructive" />
+        <Card className="shadow-sm">
+          <CardHeader className="flex flex-row items-start justify-between gap-3 pb-2">
+            <CardTitle className="text-sm font-medium text-muted-foreground">
+              {t("pages.home.atRisk")}
+            </CardTitle>
+            <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-destructive/10 text-destructive">
+              <AlertTriangle className="h-4 w-4" />
+            </span>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-destructive">{summary.atRiskDeals}</div>
-            <p className="text-xs text-muted-foreground mt-1">{t("pages.home.requiresAttention")}</p>
+            <div className="text-3xl font-semibold tracking-tight text-destructive">{summary.atRiskDeals}</div>
+            <p className="text-xs text-muted-foreground mt-1.5">{t("pages.home.requiresAttention")}</p>
           </CardContent>
         </Card>
       </div>
 
       <div className="grid gap-6 md:grid-cols-2">
-        <Card>
-          <CardHeader>
-            <CardTitle>{t("pages.home.queue")}</CardTitle>
+        <Card className="shadow-sm">
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base">{t("pages.home.queue")}</CardTitle>
           </CardHeader>
-          <CardContent>
-            <div className="space-y-4">
-              <div className="flex justify-between items-center">
-                <span>{t("pages.home.approvalsDue")}</span>
-                <Badge variant="secondary">{summary.openApprovals}</Badge>
+          <CardContent className="pb-6">
+            <div className="space-y-1">
+              <div className="flex items-center justify-between rounded-xl px-3 py-3 hover:bg-accent/40 transition-colors">
+                <span className="text-sm">{t("pages.home.approvalsDue")}</span>
+                <Badge variant="secondary" className="rounded-full px-2.5 tabular-nums">{summary.openApprovals}</Badge>
               </div>
-              <div className="flex justify-between items-center">
-                <span>{t("pages.home.signaturesPending")}</span>
-                <Badge variant="secondary">{summary.signaturesPending}</Badge>
+              <div className="flex items-center justify-between rounded-xl px-3 py-3 hover:bg-accent/40 transition-colors">
+                <span className="text-sm">{t("pages.home.signaturesPending")}</span>
+                <Badge variant="secondary" className="rounded-full px-2.5 tabular-nums">{summary.signaturesPending}</Badge>
               </div>
-              <div className="flex justify-between items-center">
-                <span>{t("pages.home.quotesAwaiting")}</span>
-                <Badge variant="secondary">{summary.quotesAwaitingResponse}</Badge>
+              <div className="flex items-center justify-between rounded-xl px-3 py-3 hover:bg-accent/40 transition-colors">
+                <span className="text-sm">{t("pages.home.quotesAwaiting")}</span>
+                <Badge variant="secondary" className="rounded-full px-2.5 tabular-nums">{summary.quotesAwaitingResponse}</Badge>
               </div>
             </div>
           </CardContent>
         </Card>
 
-        <Card>
-          <CardHeader>
-            <CardTitle>{t("pages.home.copilotHighlights")}</CardTitle>
+        <Card className="shadow-sm">
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base">{t("pages.home.copilotHighlights")}</CardTitle>
           </CardHeader>
-          <CardContent>
-            <div className="space-y-4">
+          <CardContent className="pb-6">
+            <div className="space-y-3">
               {insights?.slice(0, 3).map(insight => (
-                <div key={insight.id} className="p-3 border rounded-md">
+                <div key={insight.id} className="p-4 border border-border/70 rounded-xl bg-card">
                   <div className="flex items-center gap-2 mb-1">
-                    <Badge variant={insight.severity === 'high' ? 'destructive' : 'secondary'}>{t(`common.severity${insight.severity.charAt(0).toUpperCase()}${insight.severity.slice(1)}`)}</Badge>
+                    <Badge variant={insight.severity === 'high' ? 'destructive' : 'secondary'} className="rounded-full">
+                      {t(`common.severity${insight.severity.charAt(0).toUpperCase()}${insight.severity.slice(1)}`)}
+                    </Badge>
                     <span className="font-medium text-sm">{insight.title}</span>
                   </div>
                   <p className="text-sm text-muted-foreground">{insight.summary}</p>
