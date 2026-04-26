@@ -979,6 +979,343 @@ export const UpdateBrandWidgetResponse = zod.object({
 });
 
 /**
+ * @summary Slack/Teams Notification-Channels einer Brand auflisten (Admin)
+ */
+export const ListBrandNotificationChannelsParams = zod.object({
+  id: zod.coerce.string(),
+});
+
+export const listBrandNotificationChannelsResponseConfigWorkspaceLabelMax = 200;
+
+export const listBrandNotificationChannelsResponseConfigChannelMax = 200;
+
+export const listBrandNotificationChannelsResponseConfigMentionMax = 200;
+
+export const listBrandNotificationChannelsResponseConfigChannelLabelMax = 200;
+
+export const ListBrandNotificationChannelsResponseItem = zod.object({
+  id: zod.string(),
+  brandId: zod.string(),
+  kind: zod
+    .enum(["slack", "teams"])
+    .describe(
+      "slack = Slack Incoming Webhook URL.\nteams = Microsoft Teams Incoming Webhook bzw. Workflow-URL.\n",
+    ),
+  name: zod.string(),
+  isActive: zod.boolean(),
+  config: zod
+    .object({
+      workspaceLabel: zod
+        .string()
+        .max(listBrandNotificationChannelsResponseConfigWorkspaceLabelMax)
+        .optional()
+        .describe("slack: Workspace-Anzeigename (rein dekorativ)."),
+      channel: zod
+        .string()
+        .max(listBrandNotificationChannelsResponseConfigChannelMax)
+        .optional()
+        .describe(
+          "slack: Channel-Anzeigename (#leads). Rein dekorativ — der echte Channel ist im Webhook fix.",
+        ),
+      mention: zod
+        .string()
+        .max(listBrandNotificationChannelsResponseConfigMentionMax)
+        .optional()
+        .describe(
+          "slack: optionaler Mention-Token, der jeder Nachricht vorangestellt wird (z. B. <!channel> oder <@U123>).",
+        ),
+      channelLabel: zod
+        .string()
+        .max(listBrandNotificationChannelsResponseConfigChannelLabelMax)
+        .optional()
+        .describe("teams: Anzeigename des Ziel-Channels."),
+    })
+    .describe(
+      "Anzeige- bzw. Routing-Konfiguration. NIE geheim. Felder hängen von\n`kind` ab und sind alle optional.\n",
+    ),
+  eventsEnabled: zod.array(
+    zod.enum(["lead.created", "lead.appointment_booked"]),
+  ),
+  webhookUrlPreview: zod
+    .string()
+    .describe(
+      "Maskierte Vorschau (kein echter URL). Echtes Geheimnis verlässt das Backend nie.",
+    ),
+  lastTestStatus: zod.string().nullish(),
+  lastTestAt: zod.coerce.date().nullish(),
+  lastErrorMessage: zod.string().nullish(),
+  lastErrorAt: zod.coerce.date().nullish(),
+  createdAt: zod.coerce.date().optional(),
+  updatedAt: zod.coerce.date().optional(),
+});
+export const ListBrandNotificationChannelsResponse = zod.array(
+  ListBrandNotificationChannelsResponseItem,
+);
+
+/**
+ * Legt einen neuen Notification-Channel für eine Brand an. Der Webhook-URL
+wird verschlüsselt im Backend abgelegt und nie wieder im Klartext
+ausgeliefert; folgende GET-Aufrufe enthalten nur eine Maske
+(`webhookUrlPreview`).
+
+ * @summary Slack/Teams Notification-Channel anlegen
+ */
+export const CreateBrandNotificationChannelParams = zod.object({
+  id: zod.coerce.string(),
+});
+
+export const createBrandNotificationChannelBodyNameMax = 200;
+
+export const createBrandNotificationChannelBodyWebhookUrlMin = 12;
+export const createBrandNotificationChannelBodyWebhookUrlMax = 2000;
+
+export const createBrandNotificationChannelBodyConfigWorkspaceLabelMax = 200;
+
+export const createBrandNotificationChannelBodyConfigChannelMax = 200;
+
+export const createBrandNotificationChannelBodyConfigMentionMax = 200;
+
+export const createBrandNotificationChannelBodyConfigChannelLabelMax = 200;
+
+export const CreateBrandNotificationChannelBody = zod.object({
+  kind: zod
+    .enum(["slack", "teams"])
+    .describe(
+      "slack = Slack Incoming Webhook URL.\nteams = Microsoft Teams Incoming Webhook bzw. Workflow-URL.\n",
+    ),
+  name: zod.string().min(1).max(createBrandNotificationChannelBodyNameMax),
+  webhookUrl: zod
+    .string()
+    .min(createBrandNotificationChannelBodyWebhookUrlMin)
+    .max(createBrandNotificationChannelBodyWebhookUrlMax)
+    .describe(
+      "Slack\/Teams Incoming Webhook URL. Wird verschlüsselt abgelegt.",
+    ),
+  isActive: zod.boolean().optional(),
+  config: zod
+    .object({
+      workspaceLabel: zod
+        .string()
+        .max(createBrandNotificationChannelBodyConfigWorkspaceLabelMax)
+        .optional()
+        .describe("slack: Workspace-Anzeigename (rein dekorativ)."),
+      channel: zod
+        .string()
+        .max(createBrandNotificationChannelBodyConfigChannelMax)
+        .optional()
+        .describe(
+          "slack: Channel-Anzeigename (#leads). Rein dekorativ — der echte Channel ist im Webhook fix.",
+        ),
+      mention: zod
+        .string()
+        .max(createBrandNotificationChannelBodyConfigMentionMax)
+        .optional()
+        .describe(
+          "slack: optionaler Mention-Token, der jeder Nachricht vorangestellt wird (z. B. <!channel> oder <@U123>).",
+        ),
+      channelLabel: zod
+        .string()
+        .max(createBrandNotificationChannelBodyConfigChannelLabelMax)
+        .optional()
+        .describe("teams: Anzeigename des Ziel-Channels."),
+    })
+    .optional()
+    .describe(
+      "Anzeige- bzw. Routing-Konfiguration. NIE geheim. Felder hängen von\n`kind` ab und sind alle optional.\n",
+    ),
+  eventsEnabled: zod
+    .array(zod.enum(["lead.created", "lead.appointment_booked"]))
+    .optional(),
+});
+
+/**
+ * Patch-Semantik: Nur übergebene Felder werden geändert. `webhookUrl`
+kann optional ersetzt werden (wird neu verschlüsselt). Andere Felder
+wie `eventsEnabled` ersetzen die jeweilige Liste.
+
+ * @summary Notification-Channel aktualisieren
+ */
+export const UpdateBrandNotificationChannelParams = zod.object({
+  id: zod.coerce.string(),
+  channelId: zod.coerce.string(),
+});
+
+export const updateBrandNotificationChannelBodyNameMax = 200;
+
+export const updateBrandNotificationChannelBodyWebhookUrlMin = 12;
+export const updateBrandNotificationChannelBodyWebhookUrlMax = 2000;
+
+export const updateBrandNotificationChannelBodyConfigWorkspaceLabelMax = 200;
+
+export const updateBrandNotificationChannelBodyConfigChannelMax = 200;
+
+export const updateBrandNotificationChannelBodyConfigMentionMax = 200;
+
+export const updateBrandNotificationChannelBodyConfigChannelLabelMax = 200;
+
+export const UpdateBrandNotificationChannelBody = zod.object({
+  name: zod
+    .string()
+    .min(1)
+    .max(updateBrandNotificationChannelBodyNameMax)
+    .optional(),
+  webhookUrl: zod
+    .string()
+    .min(updateBrandNotificationChannelBodyWebhookUrlMin)
+    .max(updateBrandNotificationChannelBodyWebhookUrlMax)
+    .optional()
+    .describe("Optional. Wenn gesetzt: ersetzt das verschlüsselte Geheimnis."),
+  isActive: zod.boolean().optional(),
+  config: zod
+    .object({
+      workspaceLabel: zod
+        .string()
+        .max(updateBrandNotificationChannelBodyConfigWorkspaceLabelMax)
+        .optional()
+        .describe("slack: Workspace-Anzeigename (rein dekorativ)."),
+      channel: zod
+        .string()
+        .max(updateBrandNotificationChannelBodyConfigChannelMax)
+        .optional()
+        .describe(
+          "slack: Channel-Anzeigename (#leads). Rein dekorativ — der echte Channel ist im Webhook fix.",
+        ),
+      mention: zod
+        .string()
+        .max(updateBrandNotificationChannelBodyConfigMentionMax)
+        .optional()
+        .describe(
+          "slack: optionaler Mention-Token, der jeder Nachricht vorangestellt wird (z. B. <!channel> oder <@U123>).",
+        ),
+      channelLabel: zod
+        .string()
+        .max(updateBrandNotificationChannelBodyConfigChannelLabelMax)
+        .optional()
+        .describe("teams: Anzeigename des Ziel-Channels."),
+    })
+    .optional()
+    .describe(
+      "Anzeige- bzw. Routing-Konfiguration. NIE geheim. Felder hängen von\n`kind` ab und sind alle optional.\n",
+    ),
+  eventsEnabled: zod
+    .array(zod.enum(["lead.created", "lead.appointment_booked"]))
+    .optional(),
+});
+
+export const updateBrandNotificationChannelResponseConfigWorkspaceLabelMax = 200;
+
+export const updateBrandNotificationChannelResponseConfigChannelMax = 200;
+
+export const updateBrandNotificationChannelResponseConfigMentionMax = 200;
+
+export const updateBrandNotificationChannelResponseConfigChannelLabelMax = 200;
+
+export const UpdateBrandNotificationChannelResponse = zod.object({
+  id: zod.string(),
+  brandId: zod.string(),
+  kind: zod
+    .enum(["slack", "teams"])
+    .describe(
+      "slack = Slack Incoming Webhook URL.\nteams = Microsoft Teams Incoming Webhook bzw. Workflow-URL.\n",
+    ),
+  name: zod.string(),
+  isActive: zod.boolean(),
+  config: zod
+    .object({
+      workspaceLabel: zod
+        .string()
+        .max(updateBrandNotificationChannelResponseConfigWorkspaceLabelMax)
+        .optional()
+        .describe("slack: Workspace-Anzeigename (rein dekorativ)."),
+      channel: zod
+        .string()
+        .max(updateBrandNotificationChannelResponseConfigChannelMax)
+        .optional()
+        .describe(
+          "slack: Channel-Anzeigename (#leads). Rein dekorativ — der echte Channel ist im Webhook fix.",
+        ),
+      mention: zod
+        .string()
+        .max(updateBrandNotificationChannelResponseConfigMentionMax)
+        .optional()
+        .describe(
+          "slack: optionaler Mention-Token, der jeder Nachricht vorangestellt wird (z. B. <!channel> oder <@U123>).",
+        ),
+      channelLabel: zod
+        .string()
+        .max(updateBrandNotificationChannelResponseConfigChannelLabelMax)
+        .optional()
+        .describe("teams: Anzeigename des Ziel-Channels."),
+    })
+    .describe(
+      "Anzeige- bzw. Routing-Konfiguration. NIE geheim. Felder hängen von\n`kind` ab und sind alle optional.\n",
+    ),
+  eventsEnabled: zod.array(
+    zod.enum(["lead.created", "lead.appointment_booked"]),
+  ),
+  webhookUrlPreview: zod
+    .string()
+    .describe(
+      "Maskierte Vorschau (kein echter URL). Echtes Geheimnis verlässt das Backend nie.",
+    ),
+  lastTestStatus: zod.string().nullish(),
+  lastTestAt: zod.coerce.date().nullish(),
+  lastErrorMessage: zod.string().nullish(),
+  lastErrorAt: zod.coerce.date().nullish(),
+  createdAt: zod.coerce.date().optional(),
+  updatedAt: zod.coerce.date().optional(),
+});
+
+/**
+ * @summary Notification-Channel löschen
+ */
+export const DeleteBrandNotificationChannelParams = zod.object({
+  id: zod.coerce.string(),
+  channelId: zod.coerce.string(),
+});
+
+/**
+ * Sendet eine synthetische Test-Nachricht an den Channel. Erfolg/Fehler
+wird in `lastTestStatus` / `lastTestAt` festgehalten und sofort
+zurückgegeben.
+
+ * @summary Test-Nachricht an Channel senden
+ */
+export const TestBrandNotificationChannelParams = zod.object({
+  id: zod.coerce.string(),
+  channelId: zod.coerce.string(),
+});
+
+export const TestBrandNotificationChannelResponse = zod.object({
+  ok: zod.boolean(),
+  status: zod.number().optional(),
+  error: zod.string().optional(),
+});
+
+/**
+ * Wird aus dem Audit-/Timeline-Eintrag heraus aufgerufen, wenn ein
+früherer Dispatch fehlgeschlagen ist. Stellt die Nachricht für genau
+diesen Channel + Lead + Event neu zu.
+
+ * @summary Lead-Event-Versand für einen Channel erneut versuchen
+ */
+export const RetryBrandNotificationChannelParams = zod.object({
+  id: zod.coerce.string(),
+  channelId: zod.coerce.string(),
+});
+
+export const RetryBrandNotificationChannelBody = zod.object({
+  leadId: zod.string(),
+  event: zod.enum(["lead.created", "lead.appointment_booked"]),
+});
+
+export const RetryBrandNotificationChannelResponse = zod.object({
+  ok: zod.boolean(),
+  status: zod.number().optional(),
+  error: zod.string().optional(),
+});
+
+/**
  * Rotiert sowohl den öffentlichen Widget-Key (in jedem ausgelieferten
 Snippet) als auch das Cal.com-HMAC-Secret. Bestehende Snippets müssen
 danach neu eingebettet werden.

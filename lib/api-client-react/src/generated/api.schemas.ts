@@ -860,6 +860,123 @@ export interface BrandWidgetUpdate {
   routingRules?: WidgetRoutingRule[];
 }
 
+/**
+ * slack = Slack Incoming Webhook URL.
+teams = Microsoft Teams Incoming Webhook bzw. Workflow-URL.
+
+ */
+export type NotificationChannelKind =
+  (typeof NotificationChannelKind)[keyof typeof NotificationChannelKind];
+
+export const NotificationChannelKind = {
+  slack: "slack",
+  teams: "teams",
+} as const;
+
+export type NotificationLeadEvent =
+  (typeof NotificationLeadEvent)[keyof typeof NotificationLeadEvent];
+
+export const NotificationLeadEvent = {
+  leadcreated: "lead.created",
+  leadappointment_booked: "lead.appointment_booked",
+} as const;
+
+/**
+ * Anzeige- bzw. Routing-Konfiguration. NIE geheim. Felder hängen von
+`kind` ab und sind alle optional.
+
+ */
+export interface NotificationChannelConfig {
+  /**
+   * slack: Workspace-Anzeigename (rein dekorativ).
+   * @maxLength 200
+   */
+  workspaceLabel?: string;
+  /**
+   * slack: Channel-Anzeigename (#leads). Rein dekorativ — der echte Channel ist im Webhook fix.
+   * @maxLength 200
+   */
+  channel?: string;
+  /**
+   * slack: optionaler Mention-Token, der jeder Nachricht vorangestellt wird (z. B. <!channel> oder <@U123>).
+   * @maxLength 200
+   */
+  mention?: string;
+  /**
+   * teams: Anzeigename des Ziel-Channels.
+   * @maxLength 200
+   */
+  channelLabel?: string;
+}
+
+export interface NotificationChannel {
+  id: string;
+  brandId: string;
+  kind: NotificationChannelKind;
+  name: string;
+  isActive: boolean;
+  config: NotificationChannelConfig;
+  eventsEnabled: NotificationLeadEvent[];
+  /** Maskierte Vorschau (kein echter URL). Echtes Geheimnis verlässt das Backend nie. */
+  webhookUrlPreview: string;
+  /** @nullable */
+  lastTestStatus?: string | null;
+  /** @nullable */
+  lastTestAt?: string | null;
+  /** @nullable */
+  lastErrorMessage?: string | null;
+  /** @nullable */
+  lastErrorAt?: string | null;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface NotificationChannelCreate {
+  kind: NotificationChannelKind;
+  /**
+   * @minLength 1
+   * @maxLength 200
+   */
+  name: string;
+  /**
+   * Slack/Teams Incoming Webhook URL. Wird verschlüsselt abgelegt.
+   * @minLength 12
+   * @maxLength 2000
+   */
+  webhookUrl: string;
+  isActive?: boolean;
+  config?: NotificationChannelConfig;
+  eventsEnabled?: NotificationLeadEvent[];
+}
+
+export interface NotificationChannelUpdate {
+  /**
+   * @minLength 1
+   * @maxLength 200
+   */
+  name?: string;
+  /**
+   * Optional. Wenn gesetzt: ersetzt das verschlüsselte Geheimnis.
+   * @minLength 12
+   * @maxLength 2000
+   */
+  webhookUrl?: string;
+  isActive?: boolean;
+  config?: NotificationChannelConfig;
+  eventsEnabled?: NotificationLeadEvent[];
+}
+
+export interface NotificationTestResult {
+  ok: boolean;
+  status?: number;
+  error?: string;
+}
+
+export interface NotificationRetryRequest {
+  leadId: string;
+  event: NotificationLeadEvent;
+}
+
 export interface CompanyCreate {
   /**
    * @minLength 1

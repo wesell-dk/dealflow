@@ -58,6 +58,7 @@ import { useToast } from "@/hooks/use-toast";
 import { fetchUploadUrlWithRetry } from "@/lib/upload-retry";
 import { CompanyFormDialog } from "@/components/admin/company-form-dialog";
 import { BrandFormDialog, parseAddressLine, composeAddressLine } from "@/components/admin/brand-form-dialog";
+import { BrandNotificationChannelsSettings } from "@/components/admin/brand-notification-channels-settings";
 import { ApprovalChainsCard } from "@/components/admin/approval-chains-card";
 import { AiRecommendationsMetricsCard } from "@/components/admin/ai-recommendations-metrics-card";
 import { LegalKnowledgeCard } from "@/components/admin/legal-knowledge-card";
@@ -1075,6 +1076,15 @@ function BrandRow({ brand }: { brand: Brand }) {
               </div>
               <div className="col-span-2 flex justify-end gap-2">
                 <Button size="sm" onClick={save} disabled={update.isPending || primaryInvalid || secondaryInvalid} data-testid={`button-brand-save-${brand.id}`}>Save</Button>
+              </div>
+              <div className="col-span-2 pt-3 border-t" data-testid="brand-notifications-section">
+                <p className="text-sm font-medium">Slack & Teams Benachrichtigungen</p>
+                <p className="text-xs text-muted-foreground mb-2">
+                  Verbinde Slack- oder Teams-Channels per Incoming-Webhook. Pro Channel kann ausgewählt
+                  werden, welche Lead-Events (neuer Lead, Termin gebucht) eine Nachricht auslösen.
+                  Fehler erscheinen im Audit-Log dieser Brand und im Lead-Verlauf.
+                </p>
+                <BrandNotificationChannelsSettings brandId={brand.id} />
               </div>
             </div>
           </TableCell>

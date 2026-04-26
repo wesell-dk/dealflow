@@ -174,8 +174,18 @@ import {
   accessLogTable,
   webhooksTable,
   webhookDeliveriesTable,
+  notificationChannelsTable,
 } from '@workspace/db';
 import { emitEvent, WEBHOOK_EVENTS, assertSafeWebhookUrl, assertSafeResolvedUrl } from '../lib/webhooks';
+import {
+  SUPPORTED_EVENTS as NOTIFICATION_EVENTS,
+  maskWebhookUrl,
+  prepareWebhookUrlForStorage,
+  retryLeadEvent as retryLeadNotification,
+  sendTest as sendNotificationTest,
+  type LeadEvent as NotificationLeadEvent,
+  type NotificationKind,
+} from '../lib/notifications';
 import { parseAsOf, resolveSnapshot, isInvalidAsOf } from '../lib/asOf';
 import {
   runStructured,
@@ -7350,6 +7360,281 @@ router.post('/brands/:id/widget/rotate-key', async (req, res) => {
     summary: `Widget-Public-Key + Cal-Secret rotiert`,
   });
   res.json({ brandId: existing.id, publicKey: newKey, calSecret: newSecret });
+});
+
+// ─────────── Brand Notification Channels (Slack / Teams) — Task #263 ───────────
+//
+// Per-brand admin endpoints. All routes:
+//   1. require admin (`requireAdmin`)
+//   2. require the brand to be visible in the active scope (`brandVisible`)
+//   3. NEVER serialize the raw webhook URL — only `webhookUrlPreview`
+//   4. on mutating routes: write an audit log row scoped to the brand
+//
+// The webhook URL is sensitive (Slack/Teams incoming webhooks contain a
+// bearer token in their path). Storage uses `prepareWebhookUrlForStorage`
+// which (a) re-runs the SSRF guard and (b) encrypts via secretCrypto.
+
+function mapNotificationChannel(c: typeof notificationChannelsTable.$inferSelect) {
+  // Defensive: legacy rows or rows produced by other code paths might lack
+  // a cipher. Mask must never throw.
+  let preview = "****";
+  try { preview = maskWebhookUrl(decryptSecretSafe(c.webhookUrlCipher) ?? ""); } catch { /* keep mask */ }
+  return {
+    id: c.id,
+    brandId: c.brandId,
+    kind: c.kind as NotificationKind,
+    name: c.name,
+    isActive: c.isActive,
+    config: (c.config ?? {}) as Record<string, unknown>,
+    eventsEnabled: Array.isArray(c.eventsEnabled) ? c.eventsEnabled : [],
+    webhookUrlPreview: preview,
+    lastTestStatus: c.lastTestStatus ?? null,
+    lastTestAt: c.lastTestAt ? c.lastTestAt.toISOString() : null,
+    lastErrorMessage: c.lastErrorMessage ?? null,
+    lastErrorAt: c.lastErrorAt ? c.lastErrorAt.toISOString() : null,
+    createdAt: c.createdAt.toISOString(),
+    updatedAt: c.updatedAt.toISOString(),
+  };
+}
+
+// Local helper — decryptSecret throws on malformed input, but for read paths
+// we only need the masked preview, so swallow errors and return null.
+function decryptSecretSafe(blob: string): string | null {
+  try {
+    // Lazy import via require would be unusual here — use synchronous path.
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const { decryptSecret } = require('../lib/secretCrypto') as typeof import('../lib/secretCrypto');
+    const v = decryptSecret<string>(blob);
+    return typeof v === 'string' ? v : null;
+  } catch { return null; }
+}
+
+function isNotificationKind(v: unknown): v is NotificationKind {
+  return v === 'slack' || v === 'teams';
+}
+
+function sanitizeChannelConfig(input: unknown): Record<string, unknown> {
+  if (!input || typeof input !== 'object') return {};
+  const allowed = ['workspaceLabel', 'channel', 'mention', 'channelLabel'] as const;
+  const out: Record<string, unknown> = {};
+  for (const k of allowed) {
+    const v = (input as Record<string, unknown>)[k];
+    if (typeof v === 'string') out[k] = v.slice(0, 200);
+  }
+  return out;
+}
+
+function sanitizeEventsEnabled(input: unknown): NotificationLeadEvent[] {
+  if (!Array.isArray(input)) return [];
+  const seen = new Set<string>();
+  const out: NotificationLeadEvent[] = [];
+  for (const v of input) {
+    if (typeof v !== 'string') continue;
+    if (!(NOTIFICATION_EVENTS as string[]).includes(v)) continue;
+    if (seen.has(v)) continue;
+    seen.add(v);
+    out.push(v as NotificationLeadEvent);
+  }
+  return out;
+}
+
+router.get('/brands/:id/notification-channels', async (req, res) => {
+  if (!requireAdmin(req, res)) return;
+  const [b] = await db.select().from(brandsTable).where(eq(brandsTable.id, req.params.id));
+  if (!b) { res.status(404).json({ error: 'brand not found' }); return; }
+  if (!(await brandVisible(req, b))) { res.status(403).json({ error: 'forbidden' }); return; }
+  const scope = getScope(req);
+  const rows = await db.select().from(notificationChannelsTable)
+    .where(and(eq(notificationChannelsTable.tenantId, scope.tenantId), eq(notificationChannelsTable.brandId, b.id)));
+  res.json(rows.map(mapNotificationChannel));
+});
+
+router.post('/brands/:id/notification-channels', async (req, res) => {
+  if (!requireAdmin(req, res)) return;
+  const [b] = await db.select().from(brandsTable).where(eq(brandsTable.id, req.params.id));
+  if (!b) { res.status(404).json({ error: 'brand not found' }); return; }
+  if (!(await brandVisible(req, b))) { res.status(403).json({ error: 'forbidden' }); return; }
+  const body = (req.body ?? {}) as Record<string, unknown>;
+  const kind = body.kind;
+  const name = typeof body.name === 'string' ? body.name.trim() : '';
+  const webhookUrl = typeof body.webhookUrl === 'string' ? body.webhookUrl.trim() : '';
+  if (!isNotificationKind(kind)) { res.status(422).json({ error: 'kind must be slack or teams' }); return; }
+  if (!name || name.length > 200) { res.status(422).json({ error: 'name required (1–200 chars)' }); return; }
+  if (!webhookUrl) { res.status(422).json({ error: 'webhookUrl required' }); return; }
+  let cipher: string;
+  try {
+    cipher = await prepareWebhookUrlForStorage(webhookUrl);
+  } catch (err) {
+    res.status(422).json({ error: 'invalid webhook URL', detail: (err as Error).message });
+    return;
+  }
+  const events = sanitizeEventsEnabled(body.eventsEnabled);
+  const eventsToStore = events.length > 0 ? events : (NOTIFICATION_EVENTS as NotificationLeadEvent[]);
+  const scope = getScope(req);
+  const id = `nch_${randomUUID().slice(0, 10)}`;
+  const now = new Date();
+  await db.insert(notificationChannelsTable).values({
+    id,
+    tenantId: scope.tenantId,
+    brandId: b.id,
+    kind,
+    name,
+    isActive: typeof body.isActive === 'boolean' ? body.isActive : true,
+    config: sanitizeChannelConfig(body.config),
+    webhookUrlCipher: cipher,
+    eventsEnabled: eventsToStore,
+    createdBy: scope.user.id,
+    createdAt: now,
+    updatedAt: now,
+  });
+  await writeAuditFromReq(req, {
+    entityType: 'brand',
+    entityId: b.id,
+    action: 'notification_channel_created',
+    summary: `Notification-Channel "${name}" (${kind}) angelegt`,
+    after: { id, kind, name, eventsEnabled: eventsToStore },
+  });
+  const [created] = await db.select().from(notificationChannelsTable).where(eq(notificationChannelsTable.id, id));
+  res.status(201).json(mapNotificationChannel(created!));
+});
+
+router.patch('/brands/:id/notification-channels/:channelId', async (req, res) => {
+  if (!requireAdmin(req, res)) return;
+  const [b] = await db.select().from(brandsTable).where(eq(brandsTable.id, req.params.id));
+  if (!b) { res.status(404).json({ error: 'brand not found' }); return; }
+  if (!(await brandVisible(req, b))) { res.status(403).json({ error: 'forbidden' }); return; }
+  const scope = getScope(req);
+  const [existing] = await db.select().from(notificationChannelsTable)
+    .where(and(
+      eq(notificationChannelsTable.id, req.params.channelId),
+      eq(notificationChannelsTable.tenantId, scope.tenantId),
+      eq(notificationChannelsTable.brandId, b.id),
+    ));
+  if (!existing) { res.status(404).json({ error: 'channel not found' }); return; }
+  const body = (req.body ?? {}) as Record<string, unknown>;
+  const patch: Partial<typeof notificationChannelsTable.$inferInsert> = { updatedAt: new Date() };
+  if (typeof body.name === 'string') {
+    const n = body.name.trim();
+    if (!n || n.length > 200) { res.status(422).json({ error: 'name must be 1–200 chars' }); return; }
+    patch.name = n;
+  }
+  if (typeof body.isActive === 'boolean') patch.isActive = body.isActive;
+  if (body.config !== undefined) patch.config = sanitizeChannelConfig(body.config);
+  if (body.eventsEnabled !== undefined) patch.eventsEnabled = sanitizeEventsEnabled(body.eventsEnabled);
+  if (typeof body.webhookUrl === 'string' && body.webhookUrl.trim()) {
+    try {
+      patch.webhookUrlCipher = await prepareWebhookUrlForStorage(body.webhookUrl.trim());
+    } catch (err) {
+      res.status(422).json({ error: 'invalid webhook URL', detail: (err as Error).message });
+      return;
+    }
+  }
+  await db.update(notificationChannelsTable).set(patch).where(eq(notificationChannelsTable.id, existing.id));
+  await writeAuditFromReq(req, {
+    entityType: 'brand',
+    entityId: b.id,
+    action: 'notification_channel_updated',
+    summary: `Notification-Channel "${existing.name}" aktualisiert`,
+    before: { name: existing.name, isActive: existing.isActive, eventsEnabled: existing.eventsEnabled },
+    after: { ...patch, webhookUrlCipher: patch.webhookUrlCipher ? '[redacted]' : undefined },
+  });
+  const [updated] = await db.select().from(notificationChannelsTable).where(eq(notificationChannelsTable.id, existing.id));
+  res.json(mapNotificationChannel(updated!));
+});
+
+router.delete('/brands/:id/notification-channels/:channelId', async (req, res) => {
+  if (!requireAdmin(req, res)) return;
+  const [b] = await db.select().from(brandsTable).where(eq(brandsTable.id, req.params.id));
+  if (!b) { res.status(404).json({ error: 'brand not found' }); return; }
+  if (!(await brandVisible(req, b))) { res.status(403).json({ error: 'forbidden' }); return; }
+  const scope = getScope(req);
+  const [existing] = await db.select().from(notificationChannelsTable)
+    .where(and(
+      eq(notificationChannelsTable.id, req.params.channelId),
+      eq(notificationChannelsTable.tenantId, scope.tenantId),
+      eq(notificationChannelsTable.brandId, b.id),
+    ));
+  if (!existing) { res.status(404).json({ error: 'channel not found' }); return; }
+  await db.delete(notificationChannelsTable).where(eq(notificationChannelsTable.id, existing.id));
+  await writeAuditFromReq(req, {
+    entityType: 'brand',
+    entityId: b.id,
+    action: 'notification_channel_deleted',
+    summary: `Notification-Channel "${existing.name}" gelöscht`,
+    before: { name: existing.name, kind: existing.kind },
+  });
+  res.status(204).end();
+});
+
+router.post('/brands/:id/notification-channels/:channelId/test', async (req, res) => {
+  if (!requireAdmin(req, res)) return;
+  const [b] = await db.select().from(brandsTable).where(eq(brandsTable.id, req.params.id));
+  if (!b) { res.status(404).json({ error: 'brand not found' }); return; }
+  if (!(await brandVisible(req, b))) { res.status(403).json({ error: 'forbidden' }); return; }
+  const scope = getScope(req);
+  const [existing] = await db.select().from(notificationChannelsTable)
+    .where(and(
+      eq(notificationChannelsTable.id, req.params.channelId),
+      eq(notificationChannelsTable.tenantId, scope.tenantId),
+      eq(notificationChannelsTable.brandId, b.id),
+    ));
+  if (!existing) { res.status(404).json({ error: 'channel not found' }); return; }
+  try {
+    const r = await sendNotificationTest({ channelId: existing.id, tenantId: scope.tenantId });
+    await writeAuditFromReq(req, {
+      entityType: 'brand',
+      entityId: b.id,
+      action: 'notification_channel_tested',
+      summary: `Test-Nachricht an "${existing.name}" erfolgreich (HTTP ${r.status})`,
+    });
+    res.json({ ok: true, status: r.status });
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    res.status(422).json({ ok: false, error: msg });
+  }
+});
+
+router.post('/brands/:id/notification-channels/:channelId/retry', async (req, res) => {
+  if (!requireAdmin(req, res)) return;
+  const [b] = await db.select().from(brandsTable).where(eq(brandsTable.id, req.params.id));
+  if (!b) { res.status(404).json({ error: 'brand not found' }); return; }
+  if (!(await brandVisible(req, b))) { res.status(403).json({ error: 'forbidden' }); return; }
+  const scope = getScope(req);
+  const [existing] = await db.select().from(notificationChannelsTable)
+    .where(and(
+      eq(notificationChannelsTable.id, req.params.channelId),
+      eq(notificationChannelsTable.tenantId, scope.tenantId),
+      eq(notificationChannelsTable.brandId, b.id),
+    ));
+  if (!existing) { res.status(404).json({ error: 'channel not found' }); return; }
+  const body = (req.body ?? {}) as Record<string, unknown>;
+  const leadId = typeof body.leadId === 'string' ? body.leadId : '';
+  const event = body.event;
+  if (!leadId) { res.status(422).json({ error: 'leadId required' }); return; }
+  if (typeof event !== 'string' || !(NOTIFICATION_EVENTS as string[]).includes(event)) {
+    res.status(422).json({ error: 'invalid event' }); return;
+  }
+  try {
+    const r = await retryLeadNotification({
+      tenantId: scope.tenantId,
+      channelId: existing.id,
+      leadId,
+      event: event as NotificationLeadEvent,
+    });
+    if (r.ok) {
+      await writeAuditFromReq(req, {
+        entityType: 'lead',
+        entityId: leadId,
+        action: 'notification_dispatch_retried',
+        summary: `Notification an "${existing.name}" für ${event} erneut gesendet (HTTP ${r.status ?? 'ok'})`,
+      });
+      res.json({ ok: true, status: r.status ?? 200 });
+    } else {
+      res.status(422).json({ ok: false, error: r.error ?? 'dispatch failed' });
+    }
+  } catch (err) {
+    res.status(422).json({ ok: false, error: err instanceof Error ? err.message : String(err) });
+  }
 });
 
 router.patch('/brands/:id/default-clauses', async (req, res) => {

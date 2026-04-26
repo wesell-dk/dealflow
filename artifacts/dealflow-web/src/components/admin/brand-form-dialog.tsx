@@ -27,6 +27,7 @@ import { extractLogoColors, foregroundFor, isTooLightForPaper } from "@/lib/extr
 import { toAssetSrc } from "@/lib/asset-url";
 import { BrandDocumentTemplates } from "./brand-document-templates";
 import { BrandWidgetSettings } from "./brand-widget-settings";
+import { BrandNotificationChannelsSettings } from "./brand-notification-channels-settings";
 
 interface Props {
   open: boolean;
@@ -648,6 +649,20 @@ export function BrandFormDialog({ open, onOpenChange, companies, defaultCompanyI
                 </p>
               </div>
               <BrandWidgetSettings brandId={brand.id} />
+            </div>
+          )}
+
+          {isEdit && brand && (
+            <div className="space-y-2 pt-2 border-t" data-testid="brand-notifications-section">
+              <div>
+                <p className="text-sm font-medium">Slack & Teams Benachrichtigungen</p>
+                <p className="text-xs text-muted-foreground">
+                  Verbinde Slack- oder Teams-Channels per Incoming-Webhook. Pro Channel kann ausgewählt
+                  werden, welche Lead-Events (neuer Lead, Termin gebucht) eine Nachricht auslösen.
+                  Fehler erscheinen im Audit-Log dieser Brand und im Lead-Verlauf.
+                </p>
+              </div>
+              <BrandNotificationChannelsSettings brandId={brand.id} />
             </div>
           )}
         </div>

@@ -249,6 +249,11 @@ import type {
   NegotiationAcceptanceStat,
   NegotiationDetail,
   NegotiationImpactResponse,
+  NotificationChannel,
+  NotificationChannelCreate,
+  NotificationChannelUpdate,
+  NotificationRetryRequest,
+  NotificationTestResult,
   Obligation,
   ObligationCreate,
   ObligationDerivationResult,
@@ -1886,6 +1891,591 @@ export const useUpdateBrandWidget = <
   TContext
 > => {
   return useMutation(getUpdateBrandWidgetMutationOptions(options));
+};
+
+/**
+ * @summary Slack/Teams Notification-Channels einer Brand auflisten (Admin)
+ */
+export const getListBrandNotificationChannelsUrl = (id: string) => {
+  return `/api/v1/brands/${id}/notification-channels`;
+};
+
+export const listBrandNotificationChannels = async (
+  id: string,
+  options?: RequestInit,
+): Promise<NotificationChannel[]> => {
+  return customFetch<NotificationChannel[]>(
+    getListBrandNotificationChannelsUrl(id),
+    {
+      ...options,
+      method: "GET",
+    },
+  );
+};
+
+export const getListBrandNotificationChannelsQueryKey = (id: string) => {
+  return [`/api/v1/brands/${id}/notification-channels`] as const;
+};
+
+export const getListBrandNotificationChannelsQueryOptions = <
+  TData = Awaited<ReturnType<typeof listBrandNotificationChannels>>,
+  TError = ErrorType<void>,
+>(
+  id: string,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof listBrandNotificationChannels>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey =
+    queryOptions?.queryKey ?? getListBrandNotificationChannelsQueryKey(id);
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof listBrandNotificationChannels>>
+  > = ({ signal }) =>
+    listBrandNotificationChannels(id, { signal, ...requestOptions });
+
+  return {
+    queryKey,
+    queryFn,
+    enabled: !!id,
+    ...queryOptions,
+  } as UseQueryOptions<
+    Awaited<ReturnType<typeof listBrandNotificationChannels>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type ListBrandNotificationChannelsQueryResult = NonNullable<
+  Awaited<ReturnType<typeof listBrandNotificationChannels>>
+>;
+export type ListBrandNotificationChannelsQueryError = ErrorType<void>;
+
+/**
+ * @summary Slack/Teams Notification-Channels einer Brand auflisten (Admin)
+ */
+
+export function useListBrandNotificationChannels<
+  TData = Awaited<ReturnType<typeof listBrandNotificationChannels>>,
+  TError = ErrorType<void>,
+>(
+  id: string,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof listBrandNotificationChannels>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getListBrandNotificationChannelsQueryOptions(
+    id,
+    options,
+  );
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * Legt einen neuen Notification-Channel für eine Brand an. Der Webhook-URL
+wird verschlüsselt im Backend abgelegt und nie wieder im Klartext
+ausgeliefert; folgende GET-Aufrufe enthalten nur eine Maske
+(`webhookUrlPreview`).
+
+ * @summary Slack/Teams Notification-Channel anlegen
+ */
+export const getCreateBrandNotificationChannelUrl = (id: string) => {
+  return `/api/v1/brands/${id}/notification-channels`;
+};
+
+export const createBrandNotificationChannel = async (
+  id: string,
+  notificationChannelCreate: NotificationChannelCreate,
+  options?: RequestInit,
+): Promise<NotificationChannel> => {
+  return customFetch<NotificationChannel>(
+    getCreateBrandNotificationChannelUrl(id),
+    {
+      ...options,
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...options?.headers },
+      body: JSON.stringify(notificationChannelCreate),
+    },
+  );
+};
+
+export const getCreateBrandNotificationChannelMutationOptions = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof createBrandNotificationChannel>>,
+    TError,
+    { id: string; data: BodyType<NotificationChannelCreate> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof createBrandNotificationChannel>>,
+  TError,
+  { id: string; data: BodyType<NotificationChannelCreate> },
+  TContext
+> => {
+  const mutationKey = ["createBrandNotificationChannel"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof createBrandNotificationChannel>>,
+    { id: string; data: BodyType<NotificationChannelCreate> }
+  > = (props) => {
+    const { id, data } = props ?? {};
+
+    return createBrandNotificationChannel(id, data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type CreateBrandNotificationChannelMutationResult = NonNullable<
+  Awaited<ReturnType<typeof createBrandNotificationChannel>>
+>;
+export type CreateBrandNotificationChannelMutationBody =
+  BodyType<NotificationChannelCreate>;
+export type CreateBrandNotificationChannelMutationError = ErrorType<void>;
+
+/**
+ * @summary Slack/Teams Notification-Channel anlegen
+ */
+export const useCreateBrandNotificationChannel = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof createBrandNotificationChannel>>,
+    TError,
+    { id: string; data: BodyType<NotificationChannelCreate> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof createBrandNotificationChannel>>,
+  TError,
+  { id: string; data: BodyType<NotificationChannelCreate> },
+  TContext
+> => {
+  return useMutation(getCreateBrandNotificationChannelMutationOptions(options));
+};
+
+/**
+ * Patch-Semantik: Nur übergebene Felder werden geändert. `webhookUrl`
+kann optional ersetzt werden (wird neu verschlüsselt). Andere Felder
+wie `eventsEnabled` ersetzen die jeweilige Liste.
+
+ * @summary Notification-Channel aktualisieren
+ */
+export const getUpdateBrandNotificationChannelUrl = (
+  id: string,
+  channelId: string,
+) => {
+  return `/api/v1/brands/${id}/notification-channels/${channelId}`;
+};
+
+export const updateBrandNotificationChannel = async (
+  id: string,
+  channelId: string,
+  notificationChannelUpdate: NotificationChannelUpdate,
+  options?: RequestInit,
+): Promise<NotificationChannel> => {
+  return customFetch<NotificationChannel>(
+    getUpdateBrandNotificationChannelUrl(id, channelId),
+    {
+      ...options,
+      method: "PATCH",
+      headers: { "Content-Type": "application/json", ...options?.headers },
+      body: JSON.stringify(notificationChannelUpdate),
+    },
+  );
+};
+
+export const getUpdateBrandNotificationChannelMutationOptions = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof updateBrandNotificationChannel>>,
+    TError,
+    {
+      id: string;
+      channelId: string;
+      data: BodyType<NotificationChannelUpdate>;
+    },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof updateBrandNotificationChannel>>,
+  TError,
+  { id: string; channelId: string; data: BodyType<NotificationChannelUpdate> },
+  TContext
+> => {
+  const mutationKey = ["updateBrandNotificationChannel"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof updateBrandNotificationChannel>>,
+    { id: string; channelId: string; data: BodyType<NotificationChannelUpdate> }
+  > = (props) => {
+    const { id, channelId, data } = props ?? {};
+
+    return updateBrandNotificationChannel(id, channelId, data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type UpdateBrandNotificationChannelMutationResult = NonNullable<
+  Awaited<ReturnType<typeof updateBrandNotificationChannel>>
+>;
+export type UpdateBrandNotificationChannelMutationBody =
+  BodyType<NotificationChannelUpdate>;
+export type UpdateBrandNotificationChannelMutationError = ErrorType<void>;
+
+/**
+ * @summary Notification-Channel aktualisieren
+ */
+export const useUpdateBrandNotificationChannel = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof updateBrandNotificationChannel>>,
+    TError,
+    {
+      id: string;
+      channelId: string;
+      data: BodyType<NotificationChannelUpdate>;
+    },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof updateBrandNotificationChannel>>,
+  TError,
+  { id: string; channelId: string; data: BodyType<NotificationChannelUpdate> },
+  TContext
+> => {
+  return useMutation(getUpdateBrandNotificationChannelMutationOptions(options));
+};
+
+/**
+ * @summary Notification-Channel löschen
+ */
+export const getDeleteBrandNotificationChannelUrl = (
+  id: string,
+  channelId: string,
+) => {
+  return `/api/v1/brands/${id}/notification-channels/${channelId}`;
+};
+
+export const deleteBrandNotificationChannel = async (
+  id: string,
+  channelId: string,
+  options?: RequestInit,
+): Promise<void> => {
+  return customFetch<void>(
+    getDeleteBrandNotificationChannelUrl(id, channelId),
+    {
+      ...options,
+      method: "DELETE",
+    },
+  );
+};
+
+export const getDeleteBrandNotificationChannelMutationOptions = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof deleteBrandNotificationChannel>>,
+    TError,
+    { id: string; channelId: string },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof deleteBrandNotificationChannel>>,
+  TError,
+  { id: string; channelId: string },
+  TContext
+> => {
+  const mutationKey = ["deleteBrandNotificationChannel"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof deleteBrandNotificationChannel>>,
+    { id: string; channelId: string }
+  > = (props) => {
+    const { id, channelId } = props ?? {};
+
+    return deleteBrandNotificationChannel(id, channelId, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type DeleteBrandNotificationChannelMutationResult = NonNullable<
+  Awaited<ReturnType<typeof deleteBrandNotificationChannel>>
+>;
+
+export type DeleteBrandNotificationChannelMutationError = ErrorType<void>;
+
+/**
+ * @summary Notification-Channel löschen
+ */
+export const useDeleteBrandNotificationChannel = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof deleteBrandNotificationChannel>>,
+    TError,
+    { id: string; channelId: string },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof deleteBrandNotificationChannel>>,
+  TError,
+  { id: string; channelId: string },
+  TContext
+> => {
+  return useMutation(getDeleteBrandNotificationChannelMutationOptions(options));
+};
+
+/**
+ * Sendet eine synthetische Test-Nachricht an den Channel. Erfolg/Fehler
+wird in `lastTestStatus` / `lastTestAt` festgehalten und sofort
+zurückgegeben.
+
+ * @summary Test-Nachricht an Channel senden
+ */
+export const getTestBrandNotificationChannelUrl = (
+  id: string,
+  channelId: string,
+) => {
+  return `/api/v1/brands/${id}/notification-channels/${channelId}/test`;
+};
+
+export const testBrandNotificationChannel = async (
+  id: string,
+  channelId: string,
+  options?: RequestInit,
+): Promise<NotificationTestResult> => {
+  return customFetch<NotificationTestResult>(
+    getTestBrandNotificationChannelUrl(id, channelId),
+    {
+      ...options,
+      method: "POST",
+    },
+  );
+};
+
+export const getTestBrandNotificationChannelMutationOptions = <
+  TError = ErrorType<void | NotificationTestResult>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof testBrandNotificationChannel>>,
+    TError,
+    { id: string; channelId: string },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof testBrandNotificationChannel>>,
+  TError,
+  { id: string; channelId: string },
+  TContext
+> => {
+  const mutationKey = ["testBrandNotificationChannel"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof testBrandNotificationChannel>>,
+    { id: string; channelId: string }
+  > = (props) => {
+    const { id, channelId } = props ?? {};
+
+    return testBrandNotificationChannel(id, channelId, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type TestBrandNotificationChannelMutationResult = NonNullable<
+  Awaited<ReturnType<typeof testBrandNotificationChannel>>
+>;
+
+export type TestBrandNotificationChannelMutationError =
+  ErrorType<void | NotificationTestResult>;
+
+/**
+ * @summary Test-Nachricht an Channel senden
+ */
+export const useTestBrandNotificationChannel = <
+  TError = ErrorType<void | NotificationTestResult>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof testBrandNotificationChannel>>,
+    TError,
+    { id: string; channelId: string },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof testBrandNotificationChannel>>,
+  TError,
+  { id: string; channelId: string },
+  TContext
+> => {
+  return useMutation(getTestBrandNotificationChannelMutationOptions(options));
+};
+
+/**
+ * Wird aus dem Audit-/Timeline-Eintrag heraus aufgerufen, wenn ein
+früherer Dispatch fehlgeschlagen ist. Stellt die Nachricht für genau
+diesen Channel + Lead + Event neu zu.
+
+ * @summary Lead-Event-Versand für einen Channel erneut versuchen
+ */
+export const getRetryBrandNotificationChannelUrl = (
+  id: string,
+  channelId: string,
+) => {
+  return `/api/v1/brands/${id}/notification-channels/${channelId}/retry`;
+};
+
+export const retryBrandNotificationChannel = async (
+  id: string,
+  channelId: string,
+  notificationRetryRequest: NotificationRetryRequest,
+  options?: RequestInit,
+): Promise<NotificationTestResult> => {
+  return customFetch<NotificationTestResult>(
+    getRetryBrandNotificationChannelUrl(id, channelId),
+    {
+      ...options,
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...options?.headers },
+      body: JSON.stringify(notificationRetryRequest),
+    },
+  );
+};
+
+export const getRetryBrandNotificationChannelMutationOptions = <
+  TError = ErrorType<void | NotificationTestResult>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof retryBrandNotificationChannel>>,
+    TError,
+    { id: string; channelId: string; data: BodyType<NotificationRetryRequest> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof retryBrandNotificationChannel>>,
+  TError,
+  { id: string; channelId: string; data: BodyType<NotificationRetryRequest> },
+  TContext
+> => {
+  const mutationKey = ["retryBrandNotificationChannel"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof retryBrandNotificationChannel>>,
+    { id: string; channelId: string; data: BodyType<NotificationRetryRequest> }
+  > = (props) => {
+    const { id, channelId, data } = props ?? {};
+
+    return retryBrandNotificationChannel(id, channelId, data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type RetryBrandNotificationChannelMutationResult = NonNullable<
+  Awaited<ReturnType<typeof retryBrandNotificationChannel>>
+>;
+export type RetryBrandNotificationChannelMutationBody =
+  BodyType<NotificationRetryRequest>;
+export type RetryBrandNotificationChannelMutationError =
+  ErrorType<void | NotificationTestResult>;
+
+/**
+ * @summary Lead-Event-Versand für einen Channel erneut versuchen
+ */
+export const useRetryBrandNotificationChannel = <
+  TError = ErrorType<void | NotificationTestResult>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof retryBrandNotificationChannel>>,
+    TError,
+    { id: string; channelId: string; data: BodyType<NotificationRetryRequest> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof retryBrandNotificationChannel>>,
+  TError,
+  { id: string; channelId: string; data: BodyType<NotificationRetryRequest> },
+  TContext
+> => {
+  return useMutation(getRetryBrandNotificationChannelMutationOptions(options));
 };
 
 /**

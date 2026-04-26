@@ -422,6 +422,174 @@ paths:
         "404": { description: not found }
         "422": { description: validation error }
 
+  /brands/{id}/notification-channels:
+    get:
+      operationId: listBrandNotificationChannels
+      tags: [notifications]
+      summary: Slack/Teams Notification-Channels einer Brand auflisten (Admin)
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: ok
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/NotificationChannel" }
+        "403": { description: forbidden }
+        "404": { description: not found }
+    post:
+      operationId: createBrandNotificationChannel
+      tags: [notifications]
+      summary: Slack/Teams Notification-Channel anlegen
+      description: |
+        Legt einen neuen Notification-Channel für eine Brand an. Der Webhook-URL
+        wird verschlüsselt im Backend abgelegt und nie wieder im Klartext
+        ausgeliefert; folgende GET-Aufrufe enthalten nur eine Maske
+        (`webhookUrlPreview`).
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/NotificationChannelCreate" }
+      responses:
+        "201":
+          description: created
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/NotificationChannel" }
+        "403": { description: forbidden }
+        "404": { description: not found }
+        "422": { description: validation error }
+
+  /brands/{id}/notification-channels/{channelId}:
+    patch:
+      operationId: updateBrandNotificationChannel
+      tags: [notifications]
+      summary: Notification-Channel aktualisieren
+      description: |
+        Patch-Semantik: Nur übergebene Felder werden geändert. `webhookUrl`
+        kann optional ersetzt werden (wird neu verschlüsselt). Andere Felder
+        wie `eventsEnabled` ersetzen die jeweilige Liste.
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+        - in: path
+          name: channelId
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/NotificationChannelUpdate" }
+      responses:
+        "200":
+          description: ok
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/NotificationChannel" }
+        "403": { description: forbidden }
+        "404": { description: not found }
+        "422": { description: validation error }
+    delete:
+      operationId: deleteBrandNotificationChannel
+      tags: [notifications]
+      summary: Notification-Channel löschen
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+        - in: path
+          name: channelId
+          required: true
+          schema: { type: string }
+      responses:
+        "204": { description: deleted }
+        "403": { description: forbidden }
+        "404": { description: not found }
+
+  /brands/{id}/notification-channels/{channelId}/test:
+    post:
+      operationId: testBrandNotificationChannel
+      tags: [notifications]
+      summary: Test-Nachricht an Channel senden
+      description: |
+        Sendet eine synthetische Test-Nachricht an den Channel. Erfolg/Fehler
+        wird in `lastTestStatus` / `lastTestAt` festgehalten und sofort
+        zurückgegeben.
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+        - in: path
+          name: channelId
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: ok
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/NotificationTestResult" }
+        "403": { description: forbidden }
+        "404": { description: not found }
+        "422":
+          description: dispatch failed (siehe `error`)
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/NotificationTestResult" }
+
+  /brands/{id}/notification-channels/{channelId}/retry:
+    post:
+      operationId: retryBrandNotificationChannel
+      tags: [notifications]
+      summary: Lead-Event-Versand für einen Channel erneut versuchen
+      description: |
+        Wird aus dem Audit-/Timeline-Eintrag heraus aufgerufen, wenn ein
+        früherer Dispatch fehlgeschlagen ist. Stellt die Nachricht für genau
+        diesen Channel + Lead + Event neu zu.
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+        - in: path
+          name: channelId
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/NotificationRetryRequest" }
+      responses:
+        "200":
+          description: ok
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/NotificationTestResult" }
+        "403": { description: forbidden }
+        "404": { description: not found }
+        "422":
+          description: dispatch failed
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/NotificationTestResult" }
+
   /brands/{id}/widget/rotate-key:
     post:
       operationId: rotateBrandWidgetKey
@@ -7192,6 +7360,120 @@ components:
         routingRules:
           type: array
           items: { $ref: "#/components/schemas/WidgetRoutingRule" }
+
+    NotificationChannelKind:
+      type: string
+      enum: [slack, teams]
+      description: |
+        slack = Slack Incoming Webhook URL.
+        teams = Microsoft Teams Incoming Webhook bzw. Workflow-URL.
+
+    NotificationLeadEvent:
+      type: string
+      enum: [lead.created, lead.appointment_booked]
+
+    NotificationChannelConfig:
+      type: object
+      description: |
+        Anzeige- bzw. Routing-Konfiguration. NIE geheim. Felder hängen von
+        `kind` ab und sind alle optional.
+      properties:
+        workspaceLabel:
+          type: string
+          maxLength: 200
+          description: "slack: Workspace-Anzeigename (rein dekorativ)."
+        channel:
+          type: string
+          maxLength: 200
+          description: "slack: Channel-Anzeigename (#leads). Rein dekorativ — der echte Channel ist im Webhook fix."
+        mention:
+          type: string
+          maxLength: 200
+          description: "slack: optionaler Mention-Token, der jeder Nachricht vorangestellt wird (z. B. <!channel> oder <@U123>)."
+        channelLabel:
+          type: string
+          maxLength: 200
+          description: "teams: Anzeigename des Ziel-Channels."
+
+    NotificationChannel:
+      type: object
+      required: [id, brandId, kind, name, isActive, config, eventsEnabled, webhookUrlPreview]
+      properties:
+        id: { type: string }
+        brandId: { type: string }
+        kind: { $ref: "#/components/schemas/NotificationChannelKind" }
+        name: { type: string }
+        isActive: { type: boolean }
+        config: { $ref: "#/components/schemas/NotificationChannelConfig" }
+        eventsEnabled:
+          type: array
+          items: { $ref: "#/components/schemas/NotificationLeadEvent" }
+        webhookUrlPreview:
+          type: string
+          description: "Maskierte Vorschau (kein echter URL). Echtes Geheimnis verlässt das Backend nie."
+        lastTestStatus:
+          type: ["string", "null"]
+        lastTestAt:
+          type: ["string", "null"]
+          format: date-time
+        lastErrorMessage:
+          type: ["string", "null"]
+        lastErrorAt:
+          type: ["string", "null"]
+          format: date-time
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    NotificationChannelCreate:
+      type: object
+      required: [kind, name, webhookUrl]
+      properties:
+        kind: { $ref: "#/components/schemas/NotificationChannelKind" }
+        name: { type: string, minLength: 1, maxLength: 200 }
+        webhookUrl:
+          type: string
+          minLength: 12
+          maxLength: 2000
+          description: "Slack/Teams Incoming Webhook URL. Wird verschlüsselt abgelegt."
+        isActive: { type: boolean }
+        config: { $ref: "#/components/schemas/NotificationChannelConfig" }
+        eventsEnabled:
+          type: array
+          items: { $ref: "#/components/schemas/NotificationLeadEvent" }
+
+    NotificationChannelUpdate:
+      type: object
+      properties:
+        name: { type: string, minLength: 1, maxLength: 200 }
+        webhookUrl:
+          type: string
+          minLength: 12
+          maxLength: 2000
+          description: "Optional. Wenn gesetzt: ersetzt das verschlüsselte Geheimnis."
+        isActive: { type: boolean }
+        config: { $ref: "#/components/schemas/NotificationChannelConfig" }
+        eventsEnabled:
+          type: array
+          items: { $ref: "#/components/schemas/NotificationLeadEvent" }
+
+    NotificationTestResult:
+      type: object
+      required: [ok]
+      properties:
+        ok: { type: boolean }
+        status: { type: integer }
+        error: { type: string }
+
+    NotificationRetryRequest:
+      type: object
+      required: [leadId, event]
+      properties:
+        leadId: { type: string }
+        event: { $ref: "#/components/schemas/NotificationLeadEvent" }
 
     CompanyCreate:
       type: object

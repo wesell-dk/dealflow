@@ -2329,3 +2329,54 @@ export const contractRegulatoryAssessmentsTable = pgTable("contract_regulatory_a
   index("contract_reg_assessments_tenant_idx").on(t.tenantId, t.contractId),
   index("contract_reg_assessments_framework_idx").on(t.tenantId, t.frameworkId),
 ]);
+
+// Slack/Teams Notification-Channels (Task #263).
+// Pro Brand (brandId Pflicht) eine Slack- oder Teams-Verbindung. Der
+// Webhook-URL ist sensitiv — sie wird verschlüsselt unter `webhookUrlCipher`
+// abgelegt und nie roh ausgeliefert (Antwort enthält nur eine Maske wie
+// "https://hooks.slack.com/…**/abc"). `eventsEnabled` steuert pro Channel,
+// welche Lead-Events benachrichtigt werden.
+//
+// `kind`:
+//   "slack" → Incoming Webhook (Workspace + Channel werden vom Webhook
+//             impliziert; `config.workspaceLabel` und `config.channel` sind
+//             rein dokumentarische Anzeige-Felder, optional setzbar).
+//   "teams" → Microsoft Teams Incoming Webhook bzw. Workflow-Channel-URL.
+//
+// `eventsEnabled` enthält Strings aus { "lead.created", "lead.appointment_booked" }.
+// Fehler beim Versand landen in `lastErrorMessage`/`lastErrorAt` und werden
+// zusätzlich als Audit-Eintrag (entityType "brand", action
+// "notification_dispatch_failed") geschrieben — damit sind sie in der
+// Brand-Timeline sichtbar und nicht nur im Server-Log.
+export const notificationChannelsTable = pgTable("notification_channels", {
+  id: id(),
+  tenantId: text("tenant_id").notNull(),
+  brandId: text("brand_id").notNull(),
+  kind: text("kind").notNull(),
+  name: text("name").notNull(),
+  isActive: boolean("is_active").notNull().default(true),
+  // Anzeige-/Routing-Konfiguration (NICHT geheim).
+  // slack:  { workspaceLabel?: string; channel?: string; mention?: string }
+  //   - mention: optionaler Slack-Mention-Token, der in jede Nachricht
+  //     vor den Owner-Block geschrieben wird (z. B. "<!channel>" oder
+  //     "<@U12345>").
+  // teams:  { channelLabel?: string }
+  config: jsonb("config").$type<Record<string, unknown>>().notNull().default({}),
+  // Geheimer Webhook-URL als AES-256-GCM Ciphertext (base64). NIE roh
+  // serialisieren. POST/PATCH erlaubt das Schreiben, GET liefert
+  // ausschließlich `webhookUrlPreview`.
+  webhookUrlCipher: text("webhook_url_cipher").notNull(),
+  // Liste aktivierter Events. Standard: alle Lead-Events.
+  eventsEnabled: jsonb("events_enabled").$type<string[]>().notNull().default([]),
+  // Letzter Test-/Versand-Status.
+  lastTestStatus: text("last_test_status"),
+  lastTestAt: timestamp("last_test_at", { withTimezone: true }),
+  lastErrorMessage: text("last_error_message"),
+  lastErrorAt: timestamp("last_error_at", { withTimezone: true }),
+  createdBy: text("created_by"),
+  createdAt: ts("created_at"),
+  updatedAt: ts("updated_at"),
+}, (t) => [
+  index("notification_channels_tenant_idx").on(t.tenantId),
+  index("notification_channels_brand_idx").on(t.tenantId, t.brandId),
+]);

@@ -40,6 +40,7 @@ import {
   type RoutingRule,
 } from "../lib/widget";
 import { sendEmail } from "../lib/email";
+import { dispatchLeadEvent } from "../lib/notifications";
 import { isAIConfigured, runStructured, AIOrchestrationError } from "../lib/ai";
 import type { LeadWidgetSummaryInput } from "../lib/ai/prompts/dealflow";
 import type { Scope } from "../lib/scope";
@@ -546,6 +547,19 @@ router.post("/external/widget/:publicKey/leads", async (req: Request, res: Respo
         }
       }
 
+      // Slack/Teams Notification dispatchen (Task #263). Failures werden
+      // intern in audit_log + lastErrorMessage des Channels festgehalten —
+      // dispatchLeadEvent wirft NIE, der Lead-Insert ist eh schon committet.
+      if (isNew) {
+        await dispatchLeadEvent({
+          tenantId: resolved.tenantId,
+          brandId: resolved.brand.id,
+          event: "lead.created",
+          leadId,
+          source: "website_widget",
+        });
+      }
+
       // E-Mail an Owner (oder, wenn kein Owner zugewiesen, an alle
       // tenantWide-User). Im "Log-Mode" landet das im Server-Log.
       let recipientEmails: string[] = [];
@@ -675,6 +689,26 @@ router.post("/external/widget/:publicKey/cal-webhook", async (req: Request, res:
   });
 
   res.json({ ok: true, matched: true, leadId });
+
+  // Slack/Teams Notification dispatchen — async, nach der Response. Nur
+  // bei BOOKING_CREATED (nicht bei RESCHEDULE/CANCEL — die bleiben für
+  // einen Folge-Task).
+  if ((triggerEvent ?? "BOOKING_CREATED") === "BOOKING_CREATED") {
+    void dispatchLeadEvent({
+      tenantId: resolved.tenantId,
+      brandId: resolved.brand.id,
+      event: "lead.appointment_booked",
+      leadId,
+      source: "cal.com",
+      calBooking: {
+        startTime: calBooking.startTime ?? null,
+        endTime: calBooking.endTime ?? null,
+        meetingUrl: calBooking.meetingUrl ?? null,
+        eventType: calBooking.eventTypeId ?? null,
+        bookingId: calBooking.bookingId ?? null,
+      },
+    });
+  }
 });
 
 export default router;
