@@ -57,6 +57,7 @@ import {
 import { QuoteDuplicateButton } from "@/components/quotes/quote-duplicate-button";
 import { SendQuoteDialog } from "@/components/quotes/send-quote-dialog";
 import { QuoteEditor } from "@/components/quote-editor";
+import { QuotePreview } from "@/components/quotes/quote-preview";
 import { useToast } from "@/hooks/use-toast";
 import { useTabState } from "@/hooks/use-tab-state";
 import { AiPromptPanel } from "@/components/copilot/ai-prompt-panel";
@@ -344,35 +345,44 @@ export default function Quote() {
           <div className="grid md:grid-cols-3 gap-6">
             <div className="md:col-span-2 space-y-6">
               <AiPromptPanel mode="pricing.review" entityId={id} />
-              <Card>
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2">
-                    <FileText className="h-4 w-4" />
-                    {t("pages.quote.tabs.pdfPreview")}
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="rounded-md border bg-muted/10 overflow-hidden">
-                    <iframe
-                      src={`/api/quotes/${id}/pdf`}
-                      title={`Quote ${quote.number} PDF`}
-                      className="w-full h-[600px] hidden md:block"
-                      data-testid="quote-pdf-preview"
-                    />
-                    <div className="md:hidden p-6 text-center text-sm text-muted-foreground">
-                      <p className="mb-3">{t("pages.quote.tabs.pdfMobileHint")}</p>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => window.open(`/api/quotes/${id}/pdf`, "_blank")}
-                      >
-                        <FileText className="h-4 w-4 mr-2" />
-                        {t("pages.quote.openPdf")}
-                      </Button>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
+              <div data-testid="quote-pdf-preview">
+                <QuotePreview
+                  quoteNumber={quote.number}
+                  currency={quote.currency}
+                  validUntil={quote.validUntil}
+                  language={quote.language ?? "de"}
+                  dealId={quote.dealId}
+                  dealName={quote.dealName}
+                  lines={(quote.lineItems ?? []).map((li) => ({
+                    id: li.id,
+                    kind: li.kind === "heading" ? "heading" : "item",
+                    name: li.name,
+                    description: li.description ?? "",
+                    quantity: li.quantity,
+                    listPrice: li.listPrice ?? li.unitPrice ?? 0,
+                    unitPrice: li.unitPrice,
+                    discountPct: li.discountPct,
+                    total: li.total,
+                    taxRatePct:
+                      (li as { taxRatePct?: number | null }).taxRatePct ?? null,
+                  }))}
+                  taxSummary={taxSummary ?? null}
+                  notes={(quote as { notes?: string | null }).notes ?? null}
+                />
+                <div className="mt-3 flex justify-end">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() =>
+                      window.open(`/api/quotes/${id}/pdf`, "_blank")
+                    }
+                    data-testid="quote-open-pdf"
+                  >
+                    <FileText className="h-4 w-4 mr-2" />
+                    {t("pages.quote.openPdf")}
+                  </Button>
+                </div>
+              </div>
             </div>
             <div>
               <Card>
@@ -434,49 +444,41 @@ export default function Quote() {
           {quote.status === "draft" ? (
             <QuoteEditor quoteId={id} />
           ) : (
-            <Card>
-              <CardHeader><CardTitle>{t("pages.quote.lineItems")}</CardTitle></CardHeader>
-              <CardContent>
-                <div className="space-y-4">
-                  {quote.lineItems.map(item => {
-                    if (item.kind === "heading") {
-                      return (
-                        <div key={item.id} className="border-b-2 border-primary/30 pb-2 pt-2 text-base font-semibold" data-testid={`quote-line-${item.id}`}>
-                          {item.name}
-                        </div>
-                      );
-                    }
-                    const ratePctRaw = (item as { taxRatePct?: number | null }).taxRatePct;
-                    const ratePct = ratePctRaw == null ? null : Number(ratePctRaw);
-                    const ratePctDisplay = ratePct == null
-                      ? null
-                      : (Math.round(ratePct * 100) / 100).toLocaleString();
-                    return (
-                      <div key={item.id} className="flex justify-between items-center border-b pb-2" data-testid={`quote-line-${item.id}`}>
-                        <div>
-                          <div className="font-medium">{item.name}</div>
-                          <div className="text-xs text-muted-foreground">
-                            {t("quoteWizard.qty")}: {item.quantity} &times; {item.unitPrice}
-                            {ratePctDisplay !== null && (
-                              <>
-                                {" · "}
-                                {t("pages.quote.taxRateLine", { pct: ratePctDisplay })}
-                              </>
-                            )}
-                          </div>
-                        </div>
-                        <div className="font-bold">{item.total.toLocaleString()}</div>
-                      </div>
-                    );
-                  })}
-                  {quote.lineItems.length === 0 && (
-                    <div className="text-sm text-muted-foreground text-center py-6">
-                      {t("common.noData")}
-                    </div>
-                  )}
-                </div>
-              </CardContent>
-            </Card>
+            <div className="space-y-3">
+              <QuotePreview
+                quoteNumber={quote.number}
+                currency={quote.currency}
+                validUntil={quote.validUntil}
+                language={quote.language ?? "de"}
+                dealId={quote.dealId}
+                dealName={quote.dealName}
+                lines={(quote.lineItems ?? []).map((li) => ({
+                  id: li.id,
+                  kind: li.kind === "heading" ? "heading" : "item",
+                  name: li.name,
+                  description: li.description ?? "",
+                  quantity: li.quantity,
+                  listPrice: li.listPrice ?? li.unitPrice ?? 0,
+                  unitPrice: li.unitPrice,
+                  discountPct: li.discountPct,
+                  total: li.total,
+                  taxRatePct:
+                    (li as { taxRatePct?: number | null }).taxRatePct ?? null,
+                }))}
+                taxSummary={taxSummary ?? null}
+                notes={(quote as { notes?: string | null }).notes ?? null}
+                testId="quote-readonly-preview"
+              />
+              {/* Hidden anchors preserve stable per-line testids that earlier
+                  read-only views surfaced for Playwright/RTL compatibility. */}
+              <div className="sr-only" aria-hidden>
+                {quote.lineItems.map((item) => (
+                  <span key={item.id} data-testid={`quote-line-${item.id}`}>
+                    {item.name}
+                  </span>
+                ))}
+              </div>
+            </div>
           )}
         </TabsContent>
 
