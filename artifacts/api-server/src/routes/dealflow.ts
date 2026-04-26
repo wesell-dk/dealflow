@@ -12929,6 +12929,152 @@ router.post('/order-confirmations/:id/send', async (req, res) => {
   await respondOcDetail(req, res, o.id);
 });
 
+// Task #274: Backfill OC↔Vertrag-Links für Auftragsbestätigungen, die bereits
+// vor Einführung des reversierten Flows (Task #237) an den Kunden versandt
+// wurden. Walks alle OCs des Tenants, deren `contractId` noch NULL ist und die
+// in einem Post-Versand-Status (sent_to_customer, in_onboarding, completed)
+// stehen. Für jede:
+//   1. Wenn ein Bestandsvertrag am gleichen Deal existiert, der noch nicht
+//      verlinkt ist (kein sourceOrderConfirmationId, kein anderes OC zeigt auf
+//      ihn), wird er adoptiert (beide Seiten gesetzt).
+//   2. Sonst wird über `createDraftContractFromOc` ein Draft erzeugt — derselbe
+//      Helper, den /send nutzt, inkl. UniqueIndex-Idempotenz und Audit.
+// Idempotent: nach erfolgreichem Lauf finden Folgeläufe keine Kandidaten mehr,
+// weil contractId nicht mehr NULL ist.
+router.post('/admin/order-confirmations/backfill-contracts', async (req, res) => {
+  if (!requireAdmin(req, res)) return;
+  const scope = getScope(req);
+  const dealIds = await scopedDealIds(req);
+  if (dealIds.length === 0) {
+    res.json({ ok: true, scanned: 0, linked: 0, created: 0, errors: [] });
+    return;
+  }
+  const candidates = await db.select().from(orderConfirmationsTable)
+    .where(and(
+      inArray(orderConfirmationsTable.dealId, dealIds),
+      isNull(orderConfirmationsTable.contractId),
+      inArray(orderConfirmationsTable.status, [
+        'sent_to_customer',
+        'in_onboarding',
+        'completed',
+      ]),
+    ))
+    .orderBy(asc(orderConfirmationsTable.createdAt));
+
+  let linked = 0;
+  let created = 0;
+  const errors: Array<{ orderConfirmationId: string; reason: string }> = [];
+  // Innerhalb dieses Laufs einmal vergebene Verträge nicht wiederverwenden:
+  // verhindert, dass zwei OCs am selben Deal denselben Bestandsvertrag adoptieren.
+  const consumedContractIds = new Set<string>();
+
+  for (const oc of candidates) {
+    try {
+      // 1. Adoption: Bestandsvertrag am gleichen Deal, der weder schon verlinkt
+      //    noch in diesem Lauf bereits beansprucht ist. Earliest-created zuerst,
+      //    damit der "Original"-Vertrag bevorzugt wird.
+      const sameDealContracts = await db.select().from(contractsTable)
+        .where(and(
+          eq(contractsTable.dealId, oc.dealId),
+          isNull(contractsTable.sourceOrderConfirmationId),
+        ))
+        .orderBy(asc(contractsTable.createdAt));
+      let adopted: typeof contractsTable.$inferSelect | null = null;
+      for (const ctr of sameDealContracts) {
+        if (consumedContractIds.has(ctr.id)) continue;
+        const otherLink = await db.select({ id: orderConfirmationsTable.id })
+          .from(orderConfirmationsTable)
+          .where(eq(orderConfirmationsTable.contractId, ctr.id))
+          .limit(1);
+        if (otherLink.length > 0) continue;
+        adopted = ctr;
+        break;
+      }
+
+      if (adopted) {
+        await db.update(contractsTable)
+          .set({ sourceOrderConfirmationId: oc.id })
+          .where(eq(contractsTable.id, adopted.id));
+        await db.update(orderConfirmationsTable)
+          .set({ contractId: adopted.id })
+          .where(eq(orderConfirmationsTable.id, oc.id));
+        consumedContractIds.add(adopted.id);
+        await writeAuditFromReq(req, {
+          entityType: 'order_confirmation',
+          entityId: oc.id,
+          action: 'backfill_contract_link',
+          summary: `Backfill: OC ${oc.number} an Bestandsvertrag "${adopted.title}" verknüpft`,
+          before: { contractId: null, sourceOrderConfirmationId: null },
+          after: { contractId: adopted.id, sourceOrderConfirmationId: oc.id, mode: 'linked_existing' },
+        });
+        await db.insert(timelineEventsTable).values({
+          id: `tl_${randomUUID().slice(0, 8)}`,
+          tenantId: scope.tenantId,
+          type: 'contract',
+          title: 'OC↔Vertrag-Link nachgezogen',
+          description: `OC ${oc.number} wurde an den bereits vorhandenen Vertrag "${adopted.title}" verknüpft (Backfill).`,
+          actor: scope.user?.name ?? 'System',
+          dealId: oc.dealId,
+        });
+        linked += 1;
+        continue;
+      }
+
+      // 2. Kein passender Bestandsvertrag → Draft anlegen. Helper kümmert sich
+      //    um beide Seiten der Verlinkung, Audit und Timeline.
+      const result = await createDraftContractFromOc(req, oc);
+      consumedContractIds.add(result.contract.id);
+      if (result.created) {
+        await writeAuditFromReq(req, {
+          entityType: 'order_confirmation',
+          entityId: oc.id,
+          action: 'backfill_contract_link',
+          summary: `Backfill: OC ${oc.number} → neuer Draft "${result.contract.title}"`,
+          before: { contractId: null, sourceOrderConfirmationId: null },
+          after: { contractId: result.contract.id, sourceOrderConfirmationId: oc.id, mode: 'created_draft' },
+        });
+        created += 1;
+      } else {
+        // Helper hat einen bereits über sourceOrderConfirmationId verknüpften
+        // Vertrag zurückgegeben — OC.contractId stand also nur einseitig auf
+        // NULL. Den OC-seitigen Link nachziehen, damit die Navigation passt.
+        await db.update(orderConfirmationsTable)
+          .set({ contractId: result.contract.id })
+          .where(eq(orderConfirmationsTable.id, oc.id));
+        await writeAuditFromReq(req, {
+          entityType: 'order_confirmation',
+          entityId: oc.id,
+          action: 'backfill_contract_link',
+          summary: `Backfill: OC ${oc.number} → existierenden Draft "${result.contract.title}" zurückverlinkt`,
+          before: { contractId: null },
+          after: { contractId: result.contract.id, mode: 'reattached_existing_draft' },
+        });
+        linked += 1;
+      }
+    } catch (err) {
+      const reason = err instanceof Error ? err.message : String(err);
+      errors.push({ orderConfirmationId: oc.id, reason });
+    }
+  }
+
+  // Sammel-Audit für die Übersicht im Admin-Audit-Log.
+  await writeAuditFromReq(req, {
+    entityType: 'order_confirmation',
+    entityId: scope.tenantId,
+    action: 'backfill_contracts_run',
+    summary: `OC↔Vertrag-Backfill: ${candidates.length} geprüft, ${linked} verlinkt, ${created} neu angelegt, ${errors.length} Fehler.`,
+    after: { scanned: candidates.length, linked, created, errors },
+  });
+
+  res.json({
+    ok: true,
+    scanned: candidates.length,
+    linked,
+    created,
+    errors,
+  });
+});
+
 router.post('/order-confirmations/:id/handover', async (req, res) => {
   if (!validateInline(req, res, { params: Z.HandoverOrderConfirmationParams, body: Z.HandoverOrderConfirmationBody })) return;
   const [o] = await db.select().from(orderConfirmationsTable).where(eq(orderConfirmationsTable.id, req.params.id));
