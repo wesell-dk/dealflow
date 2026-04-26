@@ -2,7 +2,7 @@ import { Router, type IRouter, type Request, type Response } from 'express';
 import { and, asc, desc, eq, inArray, isNull, or, sql, type SQL } from 'drizzle-orm';
 import { randomUUID, randomBytes } from 'node:crypto';
 import { BlockList } from 'node:net';
-import { ObjectStorageService } from '../lib/objectStorage';
+import { ObjectStorageService, SidecarUnavailableError } from '../lib/objectStorage';
 import { extractTextFromUpload } from '../lib/extractContractText';
 import { validateInline } from '../middlewares/validate';
 import {
@@ -11167,6 +11167,15 @@ router.post('/external-contracts/upload-url', async (req, res) => {
     }).onConflictDoNothing();
     res.json({ uploadURL, objectPath });
   } catch (err) {
+    if (err instanceof SidecarUnavailableError) {
+      req.log.warn({ err }, 'external-contract upload-url: sidecar unavailable');
+      res.status(503).json({
+        error: 'storage_unavailable',
+        message:
+          'Object-Storage ist gerade nicht erreichbar. Bitte in wenigen Sekunden erneut versuchen.',
+      });
+      return;
+    }
     req.log.error({ err }, 'external-contract upload-url failed');
     res.status(500).json({ error: 'failed to generate upload url' });
   }
@@ -11846,6 +11855,15 @@ router.post('/clause-imports/upload-url', async (req, res) => {
     }).onConflictDoNothing();
     res.json({ uploadURL, objectPath });
   } catch (err) {
+    if (err instanceof SidecarUnavailableError) {
+      req.log.warn({ err }, 'clause-import upload-url: sidecar unavailable');
+      res.status(503).json({
+        error: 'storage_unavailable',
+        message:
+          'Object-Storage ist gerade nicht erreichbar. Bitte in wenigen Sekunden erneut versuchen.',
+      });
+      return;
+    }
     req.log.error({ err }, 'clause-import upload-url failed');
     res.status(500).json({ error: 'failed to generate upload url' });
   }

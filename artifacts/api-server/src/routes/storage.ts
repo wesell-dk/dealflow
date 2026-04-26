@@ -4,7 +4,11 @@ import {
   RequestUploadUrlBody,
   RequestUploadUrlResponse,
 } from "@workspace/api-zod";
-import { ObjectStorageService, ObjectNotFoundError } from "../lib/objectStorage";
+import {
+  ObjectStorageService,
+  ObjectNotFoundError,
+  SidecarUnavailableError,
+} from "../lib/objectStorage";
 import type { AuthedRequest } from "../middlewares/auth";
 import {
   db,
@@ -133,6 +137,19 @@ router.post("/storage/uploads/request-url", async (req: Request, res: Response) 
       }),
     );
   } catch (error) {
+    if (error instanceof SidecarUnavailableError) {
+      // Object-storage sidecar momentarily unreachable — answer fast with a
+      // structured 503 so the client can retry transparently. Without this,
+      // a slow/unreachable sidecar would let the request hang long enough for
+      // the Replit edge proxy to return an opaque 502 to the browser.
+      req.log.warn({ err: error }, "object-storage sidecar unavailable");
+      res.status(503).json({
+        error: "storage_unavailable",
+        message:
+          "Object-Storage ist gerade nicht erreichbar. Bitte in wenigen Sekunden erneut versuchen.",
+      });
+      return;
+    }
     req.log.error({ err: error }, "Error generating upload URL");
     res.status(500).json({ error: "Failed to generate upload URL" });
   }

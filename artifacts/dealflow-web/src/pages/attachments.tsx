@@ -32,6 +32,7 @@ import { FieldHint } from "@/components/ui/field-hint";
 import { ATTACHMENT_CATEGORIES } from "@/lib/glossary";
 import { Paperclip, Upload, Trash2, Search, Loader2, Plus, Download } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { withUploadUrlRetry, describeUploadError } from "@/lib/upload-retry";
 import { PageHeader } from "@/components/patterns/page-header";
 import { EmptyStateCard } from "@/components/patterns/empty-state-card";
 
@@ -90,9 +91,14 @@ export default function Attachments() {
     }
     setUploading(true);
     try {
-      const upload = await requestUrlMut.mutateAsync({
-        data: { kind: "document", name: file.name, contentType: file.type, size: file.size },
-      });
+      // Wrap the request-url call in a retry so a transient 502/503/504 (the
+      // edge proxy or our object-storage sidecar being momentarily unavail.)
+      // gets hidden behind a quick retry instead of bubbling up to the user.
+      const upload = await withUploadUrlRetry(() =>
+        requestUrlMut.mutateAsync({
+          data: { kind: "document", name: file.name, contentType: file.type, size: file.size },
+        }),
+      );
       const putRes = await fetch(upload.uploadURL, {
         method: "PUT",
         headers: { "Content-Type": file.type },
@@ -115,11 +121,10 @@ export default function Attachments() {
       resetForm();
       refetch();
     } catch (e: unknown) {
-      const msg = e instanceof Error ? e.message : String(e);
       toast({
         variant: "destructive",
         title: t("pages.attachments.uploadFailed"),
-        description: msg,
+        description: describeUploadError(e),
       });
     } finally {
       setUploading(false);

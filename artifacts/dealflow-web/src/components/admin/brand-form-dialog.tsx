@@ -20,6 +20,7 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
+import { fetchUploadUrlWithRetry } from "@/lib/upload-retry";
 import { Loader2, Upload, Image as ImageIcon, X, Sparkles } from "lucide-react";
 import { extractLogoColors, foregroundFor, isTooLightForPaper } from "@/lib/extract-logo-colors";
 import { toAssetSrc } from "@/lib/asset-url";
@@ -171,17 +172,25 @@ export function BrandFormDialog({ open, onOpenChange, companies, defaultCompanyI
       if (!secondaryTouchedRef.current && colors.secondary) setSecondaryColor(colors.secondary);
     };
     try {
-      const res = await fetch(`${import.meta.env.BASE_URL}api/storage/uploads/request-url`, {
-        method: "POST", credentials: "include",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name: file.name, size: file.size, contentType: file.type, kind: "logo" }),
-      });
+      const res = await fetchUploadUrlWithRetry(
+        `${import.meta.env.BASE_URL}api/storage/uploads/request-url`,
+        {
+          method: "POST", credentials: "include",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ name: file.name, size: file.size, contentType: file.type, kind: "logo" }),
+        },
+      );
       if (!res.ok) {
         const body = await res.json().catch(() => ({}));
-        const msg = (body as { error?: string })?.error
+        const serverMsg =
+          (body as { message?: string; error?: string })?.message
+          ?? (body as { error?: string })?.error;
+        const msg = serverMsg
           ?? (res.status === 401 ? "Sitzung abgelaufen — bitte neu anmelden."
               : res.status === 403 ? "Nur Tenant-Admins dürfen Logos hochladen."
-              : `Upload-URL fehlgeschlagen (${res.status})`);
+              : (res.status === 502 || res.status === 503 || res.status === 504)
+                ? "Server kurz nicht erreichbar. Bitte in wenigen Sekunden erneut versuchen."
+                : `Upload-URL fehlgeschlagen (${res.status})`);
         throw new Error(msg);
       }
       const { uploadURL, objectPath } = await res.json();

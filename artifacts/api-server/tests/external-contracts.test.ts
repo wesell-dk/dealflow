@@ -112,9 +112,13 @@ describe("external contracts — upload, AI extract, CRUD, scope, audit", () => 
       contentType: SAMPLE_PDF_MIME,
     });
     if (ok.status !== 200) {
-      // Object storage unavailable in this environment is acceptable; we
-      // verify the validation paths above either way.
-      assert.equal(ok.status, 500);
+      // Object-storage sidecar unavailable in this environment is acceptable;
+      // we verify the validation paths above either way. We accept 503 (our
+      // structured "sidecar unavailable" response) and 500 (legacy fallback).
+      assert.ok(
+        ok.status === 503 || ok.status === 500,
+        `expected 200/503/500, got ${ok.status}`,
+      );
       return;
     }
     const body = ok.body as { uploadURL: string; objectPath: string };

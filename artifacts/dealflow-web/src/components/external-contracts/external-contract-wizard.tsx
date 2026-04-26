@@ -37,6 +37,7 @@ import {
 } from "@/components/ui/select";
 import { Loader2, Upload, Sparkles, Check, AlertTriangle, Trash2, Plus } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { withUploadUrlRetry, describeUploadError } from "@/lib/upload-retry";
 
 const ALLOWED_MIME = [
   "application/pdf",
@@ -164,9 +165,11 @@ export function ExternalContractWizard({ open, onOpenChange, accountId, defaultB
     }
     setBusy(true);
     try {
-      const upload = await requestUrlMut.mutateAsync({
-        data: { fileName: file.name, size: file.size, contentType: file.type },
-      });
+      const upload = await withUploadUrlRetry(() =>
+        requestUrlMut.mutateAsync({
+          data: { fileName: file.name, size: file.size, contentType: file.type },
+        }),
+      );
       const putRes = await fetch(upload.uploadURL, {
         method: "PUT",
         headers: { "Content-Type": file.type },
@@ -207,7 +210,7 @@ export function ExternalContractWizard({ open, onOpenChange, accountId, defaultB
     } catch (e) {
       toast({
         title: "Fehler",
-        description: e instanceof Error ? e.message : "",
+        description: describeUploadError(e),
         variant: "destructive",
       });
     } finally {

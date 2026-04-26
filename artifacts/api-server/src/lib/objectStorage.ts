@@ -35,6 +35,23 @@ export class ObjectNotFoundError extends Error {
   }
 }
 
+/**
+ * Thrown when the Replit object-storage sidecar is unreachable, times out, or
+ * answers with a non-2xx status. Routes that surface this to clients should
+ * map it to HTTP 503 (transient) instead of an opaque 500 — that lets the
+ * frontend retry quickly and show a clear "Speicher kurz nicht erreichbar"
+ * message instead of a generic edge-proxy 502.
+ */
+export class SidecarUnavailableError extends Error {
+  readonly cause?: unknown;
+  constructor(message: string, cause?: unknown) {
+    super(message);
+    this.name = "SidecarUnavailableError";
+    if (cause !== undefined) this.cause = cause;
+    Object.setPrototypeOf(this, SidecarUnavailableError.prototype);
+  }
+}
+
 export class ObjectStorageService {
   constructor() {}
 
@@ -242,6 +259,11 @@ function parseObjectPath(path: string): {
   };
 }
 
+// Sidecar timeout: keep well below the Replit edge-proxy timeout so a slow
+// sidecar surfaces as a clean 5xx JSON response instead of an opaque 502 from
+// the proxy. The /signed-object-url call should normally finish in <500 ms.
+const SIDECAR_SIGN_TIMEOUT_MS = 8_000;
+
 async function signObjectURL({
   bucketName,
   objectName,
@@ -259,21 +281,36 @@ async function signObjectURL({
     method,
     expires_at: new Date(Date.now() + ttlSec * 1000).toISOString(),
   };
-  const response = await fetch(
-    `${REPLIT_SIDECAR_ENDPOINT}/object-storage/signed-object-url`,
-    {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify(request),
-      signal: AbortSignal.timeout(30_000),
-    }
-  );
+  let response: Response;
+  try {
+    response = await fetch(
+      `${REPLIT_SIDECAR_ENDPOINT}/object-storage/signed-object-url`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(request),
+        signal: AbortSignal.timeout(SIDECAR_SIGN_TIMEOUT_MS),
+      }
+    );
+  } catch (cause) {
+    // Network error, DNS failure, AbortError on timeout — translate to a
+    // typed error so the route can answer with 503 instead of hanging long
+    // enough for the edge proxy to 502.
+    const isTimeout =
+      typeof cause === "object" &&
+      cause !== null &&
+      ((cause as { name?: string }).name === "AbortError" ||
+        (cause as { name?: string }).name === "TimeoutError");
+    const reason = isTimeout
+      ? `sidecar timed out after ${SIDECAR_SIGN_TIMEOUT_MS}ms`
+      : `sidecar request failed: ${(cause as Error)?.message ?? String(cause)}`;
+    throw new SidecarUnavailableError(reason, cause);
+  }
   if (!response.ok) {
-    throw new Error(
-      `Failed to sign object URL, errorcode: ${response.status}, ` +
-        `make sure you're running on Replit`
+    throw new SidecarUnavailableError(
+      `sidecar /signed-object-url returned ${response.status}`,
     );
   }
 

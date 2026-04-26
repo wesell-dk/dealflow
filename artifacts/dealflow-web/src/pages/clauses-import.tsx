@@ -20,6 +20,7 @@ import {
 } from "@workspace/api-client-react";
 import { useAuth } from "@/contexts/auth-context";
 import { useToast } from "@/hooks/use-toast";
+import { withUploadUrlRetry, describeUploadError } from "@/lib/upload-retry";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -155,9 +156,14 @@ function ListView({ onOpenJob }: { onOpenJob: (id: string) => void }) {
     }
     setBusy(true);
     try {
-      const upload = await requestUpload.mutateAsync({
-        data: { fileName: file.name, size: file.size, contentType: file.type },
-      });
+      // Retry the upload-url call on transient 502/503/504 / network errors —
+      // the underlying object-storage sidecar is occasionally slow to answer
+      // and we don't want a one-off proxy timeout to block a clause import.
+      const upload = await withUploadUrlRetry(() =>
+        requestUpload.mutateAsync({
+          data: { fileName: file.name, size: file.size, contentType: file.type },
+        }),
+      );
       const putRes = await fetch(upload.uploadURL, {
         method: "PUT",
         headers: { "Content-Type": file.type },
@@ -187,7 +193,7 @@ function ListView({ onOpenJob }: { onOpenJob: (id: string) => void }) {
         /pdf|docx/i.test(msg);
       const isTooLarge = /file_too_large/i.test(msg);
       let title = t("pages.clauseImport.uploadFailed");
-      let description: string | undefined = msg;
+      let description: string | undefined = describeUploadError(e);
       if (isTooLarge) {
         title = t("pages.clauseImport.fileTooLarge");
         description = undefined;
