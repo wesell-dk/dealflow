@@ -15,7 +15,7 @@ import {
 import { useAuth } from "@/contexts/auth-context";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Skeleton } from "@/components/ui/skeleton";
+import { TableSkeleton } from "@/components/patterns/skeletons";
 import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
@@ -209,18 +209,18 @@ export default function Deals() {
     }
   }
 
-  if (isLoadingDeals || isLoadingPipeline) return <div className="p-8"><Skeleton className="h-64 w-full" /></div>;
+  if (isLoadingDeals || isLoadingPipeline) return <div className="p-8"><TableSkeleton rows={10} cols={7} /></div>;
 
   const hasFilters = Object.keys(view.filters ?? {}).length > 0;
 
   return (
     <div className="flex flex-col gap-5">
-      <div className="flex items-center justify-between gap-4">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
         <div>
           <h1 className="text-3xl font-bold tracking-tight">Deals</h1>
           <p className="text-muted-foreground mt-1">Pipeline, Bewertungen und Forecast aller laufenden Deals.</p>
         </div>
-        <Button onClick={() => setCreateOpen(true)} data-testid="deals-new-button">
+        <Button onClick={() => setCreateOpen(true)} data-testid="deals-new-button" className="w-full sm:w-auto">
           <Plus className="h-4 w-4 mr-1" /> Deal anlegen
         </Button>
       </div>
@@ -264,12 +264,12 @@ export default function Deals() {
         onSelect={selectView}
       />
 
-      <div className="flex items-center justify-between gap-2">
+      <div className="flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
         <FilterChipsRow
           hasActive={hasFilters}
           onClearAll={() => setView((s) => ({ ...s, filters: {} }))}
           extra={
-            <div className="relative w-60">
+            <div className="relative w-full md:w-60">
               <Search className="absolute left-2.5 top-2.5 h-3.5 w-3.5 text-muted-foreground" />
               <Input
                 value={search}
@@ -317,7 +317,7 @@ export default function Deals() {
             testId="chip-minvalue"
           />
         </FilterChipsRow>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <CSVExportButton
             filename={`deals-${new Date().toISOString().slice(0, 10)}.csv`}
             rows={filtered}
@@ -369,15 +369,18 @@ export default function Deals() {
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead className="w-10">
+                <TableHead className="w-10 sticky left-0 bg-background z-20 md:static md:bg-transparent">
                   <Checkbox
                     checked={isAllSelected()}
                     onCheckedChange={togglePageAll}
                     aria-label="Alle auf dieser Seite auswählen"
                   />
                 </TableHead>
-                {COLUMNS.filter((c) => colVis.visible.has(c.key)).map((c) => (
-                  <TableHead key={c.key}>
+                {COLUMNS.filter((c) => colVis.visible.has(c.key)).map((c, idx) => (
+                  <TableHead
+                    key={c.key}
+                    className={idx === 0 ? "sticky left-10 bg-background z-20 md:static md:bg-transparent" : undefined}
+                  >
                     <button
                       type="button"
                       onClick={() => toggleSort(c.key)}
@@ -461,11 +464,11 @@ function DealRow({
   const stageLabel = stages.find((s) => s.value === deal.stage)?.label ?? deal.stage;
   return (
     <TableRow data-state={selected ? "selected" : undefined} className={selected ? "bg-muted/40" : undefined}>
-      <TableCell>
+      <TableCell className="sticky left-0 bg-background z-10 md:static md:bg-transparent">
         <Checkbox checked={selected} onCheckedChange={onToggle} aria-label={`${deal.name} auswählen`} />
       </TableCell>
       {visible.has("name") && (
-        <TableCell className="font-medium">
+        <TableCell className="font-medium sticky left-10 bg-background z-10 md:static md:bg-transparent">
           <Link href={`/deals/${deal.id}`} className="hover:underline" data-testid={`deal-link-${deal.id}`}>
             {deal.name}
           </Link>

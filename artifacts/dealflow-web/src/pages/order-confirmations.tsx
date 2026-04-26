@@ -2,7 +2,7 @@ import { useMemo, useState } from "react";
 import { Link } from "wouter";
 import { useTranslation } from "react-i18next";
 import { useListOrderConfirmations } from "@workspace/api-client-react";
-import { Skeleton } from "@/components/ui/skeleton";
+import { TableSkeleton } from "@/components/patterns/skeletons";
 import { Input } from "@/components/ui/input";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
@@ -47,8 +47,8 @@ export default function OrderConfirmations() {
       />
 
       {!isLoading && data && data.length > 0 && (
-        <div className="flex flex-wrap items-center gap-2 mb-4">
-          <div className="relative flex-1 min-w-[240px] max-w-md">
+        <div className="flex flex-col md:flex-row md:flex-wrap md:items-center gap-2 mb-4">
+          <div className="relative w-full md:w-60">
             <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
             <Input
               placeholder={t("pages.orderConfirmations.searchPlaceholder")}
@@ -59,7 +59,7 @@ export default function OrderConfirmations() {
             />
           </div>
           <Select value={statusFilter} onValueChange={setStatusFilter}>
-            <SelectTrigger className="w-44" data-testid="oc-status-filter">
+            <SelectTrigger className="w-full md:w-44" data-testid="oc-status-filter">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
@@ -73,7 +73,7 @@ export default function OrderConfirmations() {
       )}
 
       {isLoading ? (
-        <Skeleton className="h-64 w-full" />
+        <TableSkeleton rows={8} cols={6} />
       ) : !data || data.length === 0 ? (
         <EmptyStateCard
           icon={ClipboardCheck}
@@ -92,7 +92,7 @@ export default function OrderConfirmations() {
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>#</TableHead>
+                <TableHead className="sticky left-0 bg-background z-20 md:static md:bg-transparent">#</TableHead>
                 <TableHead>{t("common.deal")}</TableHead>
                 <TableHead>{t("common.status")}</TableHead>
                 <TableHead>{t("pages.orderConfirmations.readiness")}</TableHead>
@@ -103,7 +103,7 @@ export default function OrderConfirmations() {
             <TableBody>
               {filtered.map((c) => (
                 <TableRow key={c.id} className="cursor-pointer hover:bg-muted/50">
-                  <TableCell>
+                  <TableCell className="sticky left-0 bg-background z-10 md:static md:bg-transparent">
                     <Link href={`/order-confirmations/${c.id}`} className="font-mono text-xs text-primary hover:underline">
                       {c.number}
                     </Link>

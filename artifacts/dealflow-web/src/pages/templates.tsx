@@ -8,7 +8,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Skeleton } from "@/components/ui/skeleton";
+import { CardGridSkeleton } from "@/components/patterns/skeletons";
 import {
   Select,
   SelectContent,
@@ -105,7 +105,7 @@ export default function Templates() {
         </Select>
       </div>
 
-      {isLoading && <Skeleton className="h-64 w-full" />}
+      {isLoading && <CardGridSkeleton items={6} />}
 
       {!isLoading && filtered.length === 0 && (
         <EmptyStateCard

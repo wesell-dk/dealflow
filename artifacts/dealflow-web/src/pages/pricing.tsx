@@ -20,6 +20,7 @@ import {
   type PriceBundle,
 } from "@workspace/api-client-react";
 import { Skeleton } from "@/components/ui/skeleton";
+import { TableSkeleton } from "@/components/patterns/skeletons";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -274,7 +275,7 @@ function PositionsPanel({ positions }: { positions: PricePosition[] | undefined 
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead>SKU</TableHead>
+              <TableHead className="sticky left-0 bg-background z-20 md:static md:bg-transparent">SKU</TableHead>
               <TableHead>Name</TableHead>
               <TableHead>Category</TableHead>
               <TableHead>Brand / Company</TableHead>
@@ -287,7 +288,7 @@ function PositionsPanel({ positions }: { positions: PricePosition[] | undefined 
           <TableBody>
             {positions?.map((pos) => (
               <TableRow key={pos.id} data-testid={`row-position-${pos.id}`}>
-                <TableCell className="font-medium text-xs font-mono">{pos.sku}</TableCell>
+                <TableCell className="font-medium text-xs font-mono sticky left-0 bg-background z-10 md:static md:bg-transparent">{pos.sku}</TableCell>
                 <TableCell>
                   <div className="flex items-center gap-2">
                     {pos.name}
@@ -499,7 +500,7 @@ export default function Pricing() {
   const { data: rules, isLoading: isLoadingRules } = useListPriceRules();
 
   if (isLoadingSummary || isLoadingPositions || isLoadingRules) {
-    return <div className="p-8 space-y-6"><Skeleton className="h-32 w-full" /><Skeleton className="h-64 w-full" /></div>;
+    return <div className="p-8 space-y-6"><Skeleton className="h-32 w-full" /><TableSkeleton rows={8} cols={7} /></div>;
   }
 
   return (

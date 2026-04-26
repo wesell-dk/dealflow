@@ -65,7 +65,7 @@ export function PageHeader({
           })}
         </nav>
       )}
-      <div className="flex flex-wrap items-start justify-between gap-4">
+      <div className="flex flex-col sm:flex-row sm:flex-wrap sm:items-start sm:justify-between gap-3 sm:gap-4">
         <div className="flex items-start gap-3 min-w-0">
           {Icon && (
             <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-muted">
@@ -88,7 +88,7 @@ export function PageHeader({
           </div>
         </div>
         {actions && (
-          <div className="flex flex-wrap items-center gap-2 shrink-0">
+          <div className="flex flex-col items-stretch gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:shrink-0 [&>button]:w-full sm:[&>button]:w-auto">
             {actions}
           </div>
         )}

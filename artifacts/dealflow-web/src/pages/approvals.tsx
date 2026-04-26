@@ -20,6 +20,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardFooter, CardDescription }
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
+import { CardGridSkeleton } from "@/components/patterns/skeletons";
 import { Checkbox } from "@/components/ui/checkbox";
 import { AiPromptPanel } from "@/components/copilot/ai-prompt-panel";
 import { Textarea } from "@/components/ui/textarea";
@@ -321,7 +322,12 @@ export default function Approvals() {
   }
 
   if (isLoading) {
-    return <div className="p-8 space-y-4"><Skeleton className="h-12 w-1/3" /><Skeleton className="h-64 w-full" /></div>;
+    return (
+      <div className="p-8 space-y-4">
+        <Skeleton className="h-12 w-1/3" />
+        <CardGridSkeleton items={4} columnsClass="grid-cols-1" />
+      </div>
+    );
   }
 
   return (

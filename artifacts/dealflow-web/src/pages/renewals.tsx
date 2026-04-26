@@ -20,6 +20,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
+import { TableSkeleton } from "@/components/patterns/skeletons";
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
@@ -373,7 +374,7 @@ export default function RenewalsPage() {
         onClearAll={() => { setView((s) => ({ ...s, filters: {} })); if (ymFilter) clearYmFilter(); }}
         extra={
           <div className="flex items-center gap-2">
-            <div className="relative w-60">
+            <div className="relative w-full md:w-60">
               <Search className="absolute left-2.5 top-2.5 h-3.5 w-3.5 text-muted-foreground" />
               <Input
                 value={textSearch}
@@ -441,7 +442,7 @@ export default function RenewalsPage() {
       </FilterChipsRow>
 
       {isLoadingRows ? (
-        <Skeleton className="h-40 w-full" />
+        <TableSkeleton rows={8} cols={7} />
       ) : total === 0 ? (
         (rows?.length ?? 0) === 0 && !textSearch && !hasFilters && !ymFilter ? (
           <EmptyStateCard
@@ -467,7 +468,7 @@ export default function RenewalsPage() {
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>{sortableHeader("account", t("pages.renewals.col.account"))}</TableHead>
+                <TableHead className="sticky left-0 bg-background z-20 md:static md:bg-transparent">{sortableHeader("account", t("pages.renewals.col.account"))}</TableHead>
                 <TableHead>{t("pages.renewals.col.contract")}</TableHead>
                 <TableHead>{t("pages.renewals.col.notice")}</TableHead>
                 <TableHead>{sortableHeader("dueDate", t("pages.renewals.col.due"))}</TableHead>
@@ -484,7 +485,7 @@ export default function RenewalsPage() {
                   className="cursor-pointer"
                   data-testid={`row-renewal-${r.id}`}
                 >
-                  <TableCell>{r.accountName ?? r.accountId}</TableCell>
+                  <TableCell className="sticky left-0 bg-background z-10 md:static md:bg-transparent">{r.accountName ?? r.accountId}</TableCell>
                   <TableCell>
                     <span className="flex items-center gap-2">
                       {r.kind === "external"

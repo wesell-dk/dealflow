@@ -2,7 +2,7 @@ import { useTranslation } from "react-i18next";
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "wouter";
 import { useListSignaturePackages, useSendSignatureReminder } from "@workspace/api-client-react";
-import { Skeleton } from "@/components/ui/skeleton";
+import { TableSkeleton } from "@/components/patterns/skeletons";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -187,7 +187,7 @@ export default function Signatures() {
         hasActive={hasFilters}
         onClearAll={() => setView((s) => ({ ...s, filters: {} }))}
         extra={
-          <div className="relative w-60">
+          <div className="relative w-full md:w-60">
             <Search className="absolute left-2.5 top-2.5 h-3.5 w-3.5 text-muted-foreground" />
             <Input
               value={search}
@@ -213,7 +213,7 @@ export default function Signatures() {
       </FilterChipsRow>
 
       {isLoading ? (
-        <Skeleton className="h-64 w-full" />
+        <TableSkeleton rows={10} cols={7} />
       ) : total === 0 ? (
         packages && packages.length === 0 && !search && !hasFilters ? (
           <EmptyStateCard
@@ -239,7 +239,7 @@ export default function Signatures() {
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead className="w-10">
+                <TableHead className="w-10 sticky left-0 bg-background z-20 md:static md:bg-transparent">
                   <Checkbox
                     checked={isAllSelected()}
                     onCheckedChange={togglePageAll}
@@ -247,7 +247,7 @@ export default function Signatures() {
                     data-testid="signatures-select-all"
                   />
                 </TableHead>
-                <TableHead>{sortableHeader("title", t("common.title"))}</TableHead>
+                <TableHead className="sticky left-10 bg-background z-20 md:static md:bg-transparent">{sortableHeader("title", t("common.title"))}</TableHead>
                 <TableHead>{t("common.deal")}</TableHead>
                 <TableHead>{sortableHeader("status", t("common.status"))}</TableHead>
                 <TableHead className="w-[200px]">{sortableHeader("progress", t("common.progress"))}</TableHead>
@@ -260,7 +260,7 @@ export default function Signatures() {
                 const remindable = isRemindable(pkg.status);
                 return (
                   <TableRow key={pkg.id} data-testid={`signature-row-${pkg.id}`}>
-                    <TableCell>
+                    <TableCell className="sticky left-0 bg-background z-10 md:static md:bg-transparent">
                       <Checkbox
                         checked={selected.has(pkg.id)}
                         onCheckedChange={() => toggleOne(pkg.id)}
@@ -269,7 +269,7 @@ export default function Signatures() {
                         data-testid={`signature-select-${pkg.id}`}
                       />
                     </TableCell>
-                    <TableCell className="font-medium">
+                    <TableCell className="font-medium sticky left-10 bg-background z-10 md:static md:bg-transparent">
                       <Link href={`/signatures/${pkg.id}`} className="hover:underline">
                         {pkg.title}
                       </Link>

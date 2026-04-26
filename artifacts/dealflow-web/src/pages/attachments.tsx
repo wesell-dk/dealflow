@@ -11,7 +11,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Skeleton } from "@/components/ui/skeleton";
+import { CardGridSkeleton } from "@/components/patterns/skeletons";
 import {
   Select,
   SelectContent,
@@ -361,7 +361,7 @@ export default function Attachments() {
         </Select>
       </div>
 
-      {isLoading && <Skeleton className="h-64 w-full" />}
+      {isLoading && <CardGridSkeleton items={6} columnsClass="md:grid-cols-2" />}
 
       {!isLoading && filtered.length === 0 && (
         <EmptyStateCard

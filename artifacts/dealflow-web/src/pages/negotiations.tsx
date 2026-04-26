@@ -4,7 +4,7 @@ import { Link } from "wouter";
 import { useListNegotiations } from "@workspace/api-client-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Skeleton } from "@/components/ui/skeleton";
+import { CardGridSkeleton } from "@/components/patterns/skeletons";
 import { Input } from "@/components/ui/input";
 import { MessageSquare, AlertTriangle, RefreshCw, Check, Clock, Handshake, Search } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
@@ -111,7 +111,7 @@ export default function Negotiations() {
         hasActive={hasFilters}
         onClearAll={() => setView((s) => ({ ...s, filters: {} }))}
         extra={
-          <div className="relative w-60">
+          <div className="relative w-full md:w-60">
             <Search className="absolute left-2.5 top-2.5 h-3.5 w-3.5 text-muted-foreground" />
             <Input
               value={search}
@@ -170,7 +170,7 @@ export default function Negotiations() {
       </FilterChipsRow>
 
       {isLoading ? (
-        <Skeleton className="h-64 w-full" />
+        <CardGridSkeleton items={6} />
       ) : total === 0 ? (
         negotiations && negotiations.length === 0 && !search && !hasFilters ? (
           <EmptyStateCard

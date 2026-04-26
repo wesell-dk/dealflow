@@ -15,6 +15,7 @@ import {
 } from "@workspace/api-client-react";
 import { useAuth } from "@/contexts/auth-context";
 import { Skeleton } from "@/components/ui/skeleton";
+import { TableSkeleton } from "@/components/patterns/skeletons";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -296,17 +297,17 @@ export default function Accounts() {
   const hasFilters = Object.keys(view.filters ?? {}).length > 0;
 
   if (isLoading) {
-    return <div className="p-8"><Skeleton className="h-64 w-full" /></div>;
+    return <div className="p-8"><TableSkeleton rows={10} cols={7} /></div>;
   }
 
   return (
     <div className="flex flex-col gap-5">
-      <div className="flex items-center justify-between gap-4">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
         <div>
           <h1 className="text-3xl font-bold tracking-tight">Accounts</h1>
           <p className="text-muted-foreground mt-1">Kunden, Verteilung und Pipeline-Anteil pro Account.</p>
         </div>
-        <Button onClick={() => setCreateOpen(true)} data-testid="accounts-new-button">
+        <Button onClick={() => setCreateOpen(true)} data-testid="accounts-new-button" className="w-full sm:w-auto">
           <Plus className="h-4 w-4 mr-1" /> Kunde anlegen
         </Button>
       </div>
@@ -348,7 +349,7 @@ export default function Accounts() {
         </button>
       </div>
 
-      <div className="flex items-center justify-between gap-2">
+      <div className="flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
         <FilterChipsRow
           hasActive={hasFilters}
           onClearAll={() => setView((s) => ({ ...s, filters: {} }))}
@@ -385,7 +386,7 @@ export default function Accounts() {
             testId="chip-hasdeals"
           />
         </FilterChipsRow>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <CSVExportButton
             filename={`accounts-${new Date().toISOString().slice(0, 10)}.csv`}
             rows={filtered}
@@ -465,15 +466,18 @@ export default function Accounts() {
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead className="w-10">
+                <TableHead className="w-10 sticky left-0 bg-background z-20 md:static md:bg-transparent">
                   <Checkbox
                     checked={isAllSelected()}
                     onCheckedChange={togglePageAll}
                     aria-label="Alle auf dieser Seite auswählen"
                   />
                 </TableHead>
-                {COLUMNS.filter((c) => colVis.visible.has(c.key)).map((c) => (
-                  <TableHead key={c.key}>
+                {COLUMNS.filter((c) => colVis.visible.has(c.key)).map((c, idx) => (
+                  <TableHead
+                    key={c.key}
+                    className={idx === 0 ? "sticky left-10 bg-background z-20 md:static md:bg-transparent" : undefined}
+                  >
                     <button
                       type="button"
                       onClick={() => toggleSort(c.key)}
@@ -688,11 +692,11 @@ function AccountRow({
   const ownerName = users.find((u) => u.id === account.ownerId)?.name;
   return (
     <TableRow data-state={selected ? "selected" : undefined} className={selected ? "bg-muted/40" : undefined}>
-      <TableCell>
+      <TableCell className="sticky left-0 bg-background z-10 md:static md:bg-transparent">
         <Checkbox checked={selected} onCheckedChange={onToggle} aria-label={`${account.name} auswählen`} />
       </TableCell>
       {visible.has("name") && (
-        <TableCell className="font-medium">
+        <TableCell className="font-medium sticky left-10 bg-background z-10 md:static md:bg-transparent">
           <Link href={`/accounts/${account.id}`} className="hover:underline" data-testid={`account-link-${account.id}`}>
             {account.name}
           </Link>

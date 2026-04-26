@@ -109,14 +109,20 @@ export function FilterChipsRow({
   extra?: ReactNode;
 }) {
   return (
-    <div className="flex flex-wrap items-center gap-2">
-      <Filter className="h-4 w-4 text-muted-foreground" aria-hidden />
-      {children}
-      {extra}
-      {hasActive && onClearAll && (
-        <Button variant="ghost" size="sm" className="h-8 gap-1 text-xs" onClick={onClearAll}>
-          Alle Filter löschen
-        </Button>
+    <div className="flex flex-col gap-2 md:flex-row md:flex-wrap md:items-center">
+      <div className="flex flex-wrap items-center gap-2">
+        <Filter className="h-4 w-4 text-muted-foreground" aria-hidden />
+        {children}
+        {hasActive && onClearAll && (
+          <Button variant="ghost" size="sm" className="h-8 gap-1 text-xs" onClick={onClearAll}>
+            Alle Filter löschen
+          </Button>
+        )}
+      </div>
+      {extra && (
+        <div className="w-full md:w-auto md:ml-auto">
+          {extra}
+        </div>
       )}
     </div>
   );

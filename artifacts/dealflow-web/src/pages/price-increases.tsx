@@ -2,7 +2,7 @@ import { useTranslation } from "react-i18next";
 import { Link } from "wouter";
 import { useListPriceIncreases } from "@workspace/api-client-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Skeleton } from "@/components/ui/skeleton";
+import { CardGridSkeleton } from "@/components/patterns/skeletons";
 import { TrendingUp } from "lucide-react";
 import { PageHeader } from "@/components/patterns/page-header";
 import { EmptyStateCard } from "@/components/patterns/empty-state-card";
@@ -24,7 +24,7 @@ export default function PriceIncreases() {
       />
 
       {isLoading ? (
-        <Skeleton className="h-64 w-full" />
+        <CardGridSkeleton items={6} />
       ) : !campaigns?.length ? (
         <EmptyStateCard
           icon={TrendingUp}

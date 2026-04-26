@@ -11,7 +11,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Skeleton } from "@/components/ui/skeleton";
+import { TableSkeleton } from "@/components/patterns/skeletons";
 import { FileText, Plus, RefreshCw, Search, ArrowDown, ArrowUp } from "lucide-react";
 import { ContractFormDialog } from "@/components/contracts/contract-form-dialog";
 import { PageHeader } from "@/components/patterns/page-header";
@@ -197,7 +197,7 @@ export default function Contracts() {
         hasActive={hasFilters}
         onClearAll={() => setView((s) => ({ ...s, filters: {} }))}
         extra={
-          <div className="relative w-60">
+          <div className="relative w-full md:w-60">
             <Search className="absolute left-2.5 top-2.5 h-3.5 w-3.5 text-muted-foreground" />
             <Input
               value={search}
@@ -247,7 +247,7 @@ export default function Contracts() {
       </FilterChipsRow>
 
       {isLoading ? (
-        <Skeleton className="h-64 w-full" />
+        <TableSkeleton rows={10} cols={7} />
       ) : total === 0 ? (
         ((contracts?.length ?? 0) + (externals?.length ?? 0)) === 0 && !search && !hasFilters ? (
           <EmptyStateCard
@@ -277,7 +277,7 @@ export default function Contracts() {
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>{sortableHeader("title", t("common.title"))}</TableHead>
+                <TableHead className="sticky left-0 bg-background z-20 md:static md:bg-transparent">{sortableHeader("title", t("common.title"))}</TableHead>
                 <TableHead>{t("pages.contracts.source")}</TableHead>
                 <TableHead>{t("common.deal")}</TableHead>
                 <TableHead>{t("common.template")}</TableHead>
@@ -291,7 +291,7 @@ export default function Contracts() {
               {pageRows.map((row) =>
                 row.kind === "internal" ? (
                   <TableRow key={`int-${row.id}`} data-testid={`contract-row-${row.id}`}>
-                    <TableCell className="font-medium">
+                    <TableCell className="font-medium sticky left-0 bg-background z-10 md:static md:bg-transparent">
                       <Link href={`/contracts/${row.id}`} className="flex items-center gap-2 hover:underline">
                         <FileText className="h-4 w-4 text-muted-foreground" />
                         {row.title}
@@ -309,7 +309,7 @@ export default function Contracts() {
                   </TableRow>
                 ) : (
                   <TableRow key={`ext-${row.id}`} data-testid={`contract-row-${row.id}`}>
-                    <TableCell className="font-medium">
+                    <TableCell className="font-medium sticky left-0 bg-background z-10 md:static md:bg-transparent">
                       <Link href={`/accounts/${row.accountId}`} className="flex items-center gap-2 hover:underline">
                         <FileText className="h-4 w-4 text-muted-foreground" />
                         {row.title}

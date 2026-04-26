@@ -11,7 +11,7 @@ import {
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Skeleton } from "@/components/ui/skeleton";
+import { TableSkeleton } from "@/components/patterns/skeletons";
 import { Input } from "@/components/ui/input";
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
@@ -225,7 +225,7 @@ export default function Obligations() {
         hasActive={hasFilters}
         onClearAll={() => setView((s) => ({ ...s, filters: {} }))}
         extra={
-          <div className="relative w-72">
+          <div className="relative w-full md:w-72">
             <Search className="absolute left-2.5 top-2.5 h-3.5 w-3.5 text-muted-foreground" />
             <Input
               value={search}
@@ -278,7 +278,7 @@ export default function Obligations() {
       </FilterChipsRow>
 
       {isLoading ? (
-        <Skeleton className="h-64 w-full" />
+        <TableSkeleton rows={10} cols={8} />
       ) : total === 0 ? (
         (data?.length ?? 0) === 0 && !search && !hasFilters ? (
           <EmptyStateCard
@@ -304,7 +304,7 @@ export default function Obligations() {
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>{t("pages.obligations.colObligation")}</TableHead>
+                <TableHead className="sticky left-0 bg-background z-20 md:static md:bg-transparent">{t("pages.obligations.colObligation")}</TableHead>
                 <TableHead>{t("pages.obligations.colContract")}</TableHead>
                 <TableHead>{t("pages.obligations.type")}</TableHead>
                 <TableHead>{sortableHeader("owner", t("pages.obligations.colOwner"))}</TableHead>
@@ -317,7 +317,7 @@ export default function Obligations() {
             <TableBody>
               {pageRows.map(o => (
                 <TableRow key={o.id} data-testid={`row-obligation-${o.id}`}>
-                  <TableCell className="max-w-md">
+                  <TableCell className="max-w-md sticky left-0 bg-background z-10 md:static md:bg-transparent">
                     <div className="font-medium text-sm">{o.description}</div>
                     {o.accountName && (
                       <div className="text-xs text-muted-foreground">{o.accountName}</div>

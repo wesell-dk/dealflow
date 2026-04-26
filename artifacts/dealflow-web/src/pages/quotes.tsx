@@ -6,7 +6,7 @@ import {
 } from "@workspace/api-client-react";
 import { Link } from "wouter";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Skeleton } from "@/components/ui/skeleton";
+import { TableSkeleton } from "@/components/patterns/skeletons";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -314,7 +314,7 @@ export default function Quotes() {
         hasActive={hasFilters}
         onClearAll={() => setView((s) => ({ ...s, filters: {} }))}
         extra={
-          <div className="relative w-60">
+          <div className="relative w-full md:w-60">
             <Search className="absolute left-2.5 top-2.5 h-3.5 w-3.5 text-muted-foreground" />
             <Input
               value={search}
@@ -354,7 +354,7 @@ export default function Quotes() {
       </FilterChipsRow>
 
       {isLoading ? (
-        <Skeleton className="h-64 w-full" />
+        <TableSkeleton rows={10} cols={7} />
       ) : total === 0 ? (
         quotes && quotes.length === 0 && !search && !hasFilters ? (
           <EmptyStateCard
@@ -384,7 +384,7 @@ export default function Quotes() {
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead className="w-10">
+                <TableHead className="w-10 sticky left-0 bg-background z-20 md:static md:bg-transparent">
                   <Checkbox
                     checked={isAllSelected()}
                     onCheckedChange={togglePageAll}
@@ -392,7 +392,7 @@ export default function Quotes() {
                     data-testid="quotes-select-all"
                   />
                 </TableHead>
-                <TableHead>{sortableHeader("number", t("common.number"))}</TableHead>
+                <TableHead className="sticky left-10 bg-background z-20 md:static md:bg-transparent">{sortableHeader("number", t("common.number"))}</TableHead>
                 <TableHead>{t("common.deal")}</TableHead>
                 <TableHead>{sortableHeader("totalAmount", t("common.total"))}</TableHead>
                 <TableHead>{sortableHeader("discountPct", t("common.discount"))}</TableHead>
@@ -404,7 +404,7 @@ export default function Quotes() {
             <TableBody>
               {pageRows.map((quote) => (
                 <TableRow key={quote.id} data-testid={`quote-row-${quote.id}`}>
-                  <TableCell>
+                  <TableCell className="sticky left-0 bg-background z-10 md:static md:bg-transparent">
                     <Checkbox
                       checked={selected.has(quote.id)}
                       onCheckedChange={() => toggleOne(quote.id)}
@@ -412,7 +412,7 @@ export default function Quotes() {
                       data-testid={`quote-select-${quote.id}`}
                     />
                   </TableCell>
-                  <TableCell className="font-medium">
+                  <TableCell className="font-medium sticky left-10 bg-background z-10 md:static md:bg-transparent">
                     <Link href={`/quotes/${quote.id}`} className="hover:underline">{quote.number}</Link>
                   </TableCell>
                   <TableCell>{quote.dealName}</TableCell>
