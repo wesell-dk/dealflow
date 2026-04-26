@@ -61,6 +61,8 @@ import type {
   BrandCreate,
   BrandDefaultsInput,
   BrandUpdate,
+  BrandWidget,
+  BrandWidgetUpdate,
   BulkActionResult,
   BulkDeleteInput,
   BulkOwnerInput,
@@ -312,6 +314,7 @@ import type {
   Role,
   RoleCreate,
   RoleUpdate,
+  RotateBrandWidgetKey200,
   SavedView,
   SavedViewInput,
   SavedViewPatch,
@@ -1681,6 +1684,276 @@ export const useUpdateBrandDefaultClauses = <
   TContext
 > => {
   return useMutation(getUpdateBrandDefaultClausesMutationOptions(options));
+};
+
+/**
+ * Liefert die vollständige Widget-Konfiguration einer Brand inkl.
+Public-Key + Cal.com-Webhook-Secret. Nur sichtbar für Admins, die
+diese Brand im Scope haben.
+
+ * @summary Brand-Lead-Widget Konfiguration lesen (Admin)
+ */
+export const getGetBrandWidgetUrl = (id: string) => {
+  return `/api/v1/brands/${id}/widget`;
+};
+
+export const getBrandWidget = async (
+  id: string,
+  options?: RequestInit,
+): Promise<BrandWidget> => {
+  return customFetch<BrandWidget>(getGetBrandWidgetUrl(id), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getGetBrandWidgetQueryKey = (id: string) => {
+  return [`/api/v1/brands/${id}/widget`] as const;
+};
+
+export const getGetBrandWidgetQueryOptions = <
+  TData = Awaited<ReturnType<typeof getBrandWidget>>,
+  TError = ErrorType<void>,
+>(
+  id: string,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getBrandWidget>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getGetBrandWidgetQueryKey(id);
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof getBrandWidget>>> = ({
+    signal,
+  }) => getBrandWidget(id, { signal, ...requestOptions });
+
+  return {
+    queryKey,
+    queryFn,
+    enabled: !!id,
+    ...queryOptions,
+  } as UseQueryOptions<
+    Awaited<ReturnType<typeof getBrandWidget>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetBrandWidgetQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getBrandWidget>>
+>;
+export type GetBrandWidgetQueryError = ErrorType<void>;
+
+/**
+ * @summary Brand-Lead-Widget Konfiguration lesen (Admin)
+ */
+
+export function useGetBrandWidget<
+  TData = Awaited<ReturnType<typeof getBrandWidget>>,
+  TError = ErrorType<void>,
+>(
+  id: string,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getBrandWidget>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetBrandWidgetQueryOptions(id, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * Aktiviert oder deaktiviert das Widget; setzt Texte, Qualifier-Felder,
+Cal.com-Settings, Routing-Regeln. Beim ersten Aktivieren werden
+Public-Key und Cal-Secret automatisch erzeugt.
+
+ * @summary Brand-Lead-Widget aktivieren / konfigurieren
+ */
+export const getUpdateBrandWidgetUrl = (id: string) => {
+  return `/api/v1/brands/${id}/widget`;
+};
+
+export const updateBrandWidget = async (
+  id: string,
+  brandWidgetUpdate: BrandWidgetUpdate,
+  options?: RequestInit,
+): Promise<BrandWidget> => {
+  return customFetch<BrandWidget>(getUpdateBrandWidgetUrl(id), {
+    ...options,
+    method: "PUT",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(brandWidgetUpdate),
+  });
+};
+
+export const getUpdateBrandWidgetMutationOptions = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof updateBrandWidget>>,
+    TError,
+    { id: string; data: BodyType<BrandWidgetUpdate> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof updateBrandWidget>>,
+  TError,
+  { id: string; data: BodyType<BrandWidgetUpdate> },
+  TContext
+> => {
+  const mutationKey = ["updateBrandWidget"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof updateBrandWidget>>,
+    { id: string; data: BodyType<BrandWidgetUpdate> }
+  > = (props) => {
+    const { id, data } = props ?? {};
+
+    return updateBrandWidget(id, data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type UpdateBrandWidgetMutationResult = NonNullable<
+  Awaited<ReturnType<typeof updateBrandWidget>>
+>;
+export type UpdateBrandWidgetMutationBody = BodyType<BrandWidgetUpdate>;
+export type UpdateBrandWidgetMutationError = ErrorType<void>;
+
+/**
+ * @summary Brand-Lead-Widget aktivieren / konfigurieren
+ */
+export const useUpdateBrandWidget = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof updateBrandWidget>>,
+    TError,
+    { id: string; data: BodyType<BrandWidgetUpdate> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof updateBrandWidget>>,
+  TError,
+  { id: string; data: BodyType<BrandWidgetUpdate> },
+  TContext
+> => {
+  return useMutation(getUpdateBrandWidgetMutationOptions(options));
+};
+
+/**
+ * Rotiert sowohl den öffentlichen Widget-Key (in jedem ausgelieferten
+Snippet) als auch das Cal.com-HMAC-Secret. Bestehende Snippets müssen
+danach neu eingebettet werden.
+
+ * @summary Public-Key + Cal.com-Secret neu erzeugen
+ */
+export const getRotateBrandWidgetKeyUrl = (id: string) => {
+  return `/api/v1/brands/${id}/widget/rotate-key`;
+};
+
+export const rotateBrandWidgetKey = async (
+  id: string,
+  options?: RequestInit,
+): Promise<RotateBrandWidgetKey200> => {
+  return customFetch<RotateBrandWidgetKey200>(getRotateBrandWidgetKeyUrl(id), {
+    ...options,
+    method: "POST",
+  });
+};
+
+export const getRotateBrandWidgetKeyMutationOptions = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof rotateBrandWidgetKey>>,
+    TError,
+    { id: string },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof rotateBrandWidgetKey>>,
+  TError,
+  { id: string },
+  TContext
+> => {
+  const mutationKey = ["rotateBrandWidgetKey"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof rotateBrandWidgetKey>>,
+    { id: string }
+  > = (props) => {
+    const { id } = props ?? {};
+
+    return rotateBrandWidgetKey(id, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type RotateBrandWidgetKeyMutationResult = NonNullable<
+  Awaited<ReturnType<typeof rotateBrandWidgetKey>>
+>;
+
+export type RotateBrandWidgetKeyMutationError = ErrorType<void>;
+
+/**
+ * @summary Public-Key + Cal.com-Secret neu erzeugen
+ */
+export const useRotateBrandWidgetKey = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof rotateBrandWidgetKey>>,
+    TError,
+    { id: string },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof rotateBrandWidgetKey>>,
+  TError,
+  { id: string },
+  TContext
+> => {
+  return useMutation(getRotateBrandWidgetKeyMutationOptions(options));
 };
 
 export const getListUsersUrl = () => {

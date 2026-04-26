@@ -337,6 +337,8 @@ export default function LeadDetail() {
             </CardContent>
           </Card>
 
+          <WidgetIntakeCard lead={lead} />
+
           {/* Activities — composer + recent list */}
           <Card>
             <CardHeader>
@@ -495,6 +497,156 @@ function ActivityComposer({ leadId }: { leadId: string }) {
         </Button>
       </div>
     </div>
+  );
+}
+
+/**
+ * Brand-Lead-Widget (Task #262): zeigt für Widget-Leads die zusätzlichen
+ * Datenpunkte, die das öffentliche Formular einliefert — KI-Zusammenfassung,
+ * Domain-Anreicherung, Cal.com-Termin und die Qualifier-Antworten. Nicht-
+ * Widget-Leads (manuell angelegt, importiert, etc.) rendern nichts.
+ */
+function WidgetIntakeCard({ lead }: { lead: Lead }) {
+  const enrichment = (lead.enrichment ?? null) as
+    | { domain?: string; title?: string; description?: string; faviconUrl?: string; fetchedAt?: string }
+    | null;
+  const widgetMeta = (lead.widgetMeta ?? null) as
+    | {
+        qualifier?: Record<string, string>;
+        referrer?: string | null;
+        userAgent?: string | null;
+        ip?: string | null;
+        calBooking?: {
+          eventTypeId?: string | number;
+          startTime?: string;
+          endTime?: string;
+          attendeeEmail?: string;
+          attendeeName?: string;
+          status?: string;
+          rescheduleUid?: string;
+          uid?: string;
+          updatedAt?: string;
+        } | null;
+      }
+    | null;
+  const hasEnrichment = !!enrichment && !!enrichment.domain;
+  const hasQualifier = !!widgetMeta?.qualifier && Object.keys(widgetMeta.qualifier).length > 0;
+  const hasBooking = !!widgetMeta?.calBooking?.startTime;
+  const hasSummary = !!lead.aiSummary;
+  if (!hasEnrichment && !hasQualifier && !hasBooking && !hasSummary && !widgetMeta?.referrer) return null;
+
+  const booking = widgetMeta?.calBooking ?? null;
+
+  return (
+    <Card data-testid="widget-intake-card">
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2">
+          <Sparkles className="h-4 w-4 text-primary" />
+          Widget intake
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        {hasSummary && (
+          <div
+            className="rounded-md border border-primary/30 bg-primary/5 p-3"
+            data-testid="widget-ai-summary"
+          >
+            <div className="text-xs font-medium text-primary mb-1">AI summary</div>
+            <div className="text-sm whitespace-pre-line">{lead.aiSummary}</div>
+          </div>
+        )}
+
+        {hasEnrichment && enrichment && (
+          <div className="rounded-md border bg-card p-3 space-y-2" data-testid="widget-enrichment">
+            <div className="flex items-start gap-3">
+              {enrichment.faviconUrl ? (
+                <img
+                  src={enrichment.faviconUrl}
+                  alt=""
+                  className="h-8 w-8 rounded border bg-white object-contain p-1 shrink-0"
+                  onError={(e) => {
+                    (e.currentTarget as HTMLImageElement).style.display = "none";
+                  }}
+                />
+              ) : (
+                <div className="h-8 w-8 rounded border bg-muted shrink-0" />
+              )}
+              <div className="min-w-0 flex-1 space-y-0.5">
+                <a
+                  href={`https://${enrichment.domain}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-sm font-medium text-primary hover:underline"
+                >
+                  {enrichment.domain}
+                </a>
+                {enrichment.title && (
+                  <div className="text-sm font-medium truncate">{enrichment.title}</div>
+                )}
+                {enrichment.description && (
+                  <div className="text-xs text-muted-foreground line-clamp-3">
+                    {enrichment.description}
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {hasBooking && booking && (
+          <div
+            className="rounded-md border border-emerald-200 bg-emerald-50 dark:border-emerald-900 dark:bg-emerald-950/30 p-3"
+            data-testid="widget-cal-booking"
+          >
+            <div className="flex items-center gap-2 text-emerald-900 dark:text-emerald-100 text-sm font-medium">
+              <CalendarClock className="h-4 w-4" />
+              Cal.com booking
+            </div>
+            <div className="mt-1 text-sm text-emerald-900/90 dark:text-emerald-100/90 space-y-0.5">
+              <div className="tabular-nums">
+                {fmtDateTime(booking.startTime)}
+                {booking.endTime ? <> – {fmtDateTime(booking.endTime)}</> : null}
+              </div>
+              {booking.status && (
+                <div className="text-xs uppercase tracking-wide">{booking.status}</div>
+              )}
+              {booking.attendeeName && (
+                <div className="text-xs">{booking.attendeeName} ({booking.attendeeEmail})</div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {hasQualifier && widgetMeta?.qualifier && (
+          <div className="space-y-1.5" data-testid="widget-qualifier">
+            <div className="text-xs font-medium text-muted-foreground">Qualifier</div>
+            <dl className="grid sm:grid-cols-2 gap-x-6 gap-y-2 text-sm">
+              {Object.entries(widgetMeta.qualifier).map(([k, v]) => (
+                <div key={k} className="min-w-0">
+                  <dt className="text-xs text-muted-foreground">{k}</dt>
+                  <dd className="text-sm font-medium break-words whitespace-pre-line">{v}</dd>
+                </div>
+              ))}
+            </dl>
+          </div>
+        )}
+
+        {(widgetMeta?.referrer || widgetMeta?.userAgent) && (
+          <div className="text-xs text-muted-foreground space-y-0.5 pt-2 border-t">
+            {widgetMeta.referrer && (
+              <div className="truncate">
+                Referrer: <span className="font-mono">{widgetMeta.referrer}</span>
+              </div>
+            )}
+            {widgetMeta.userAgent && (
+              <div className="truncate">
+                UA: <span className="font-mono">{widgetMeta.userAgent}</span>
+              </div>
+            )}
+          </div>
+        )}
+      </CardContent>
+    </Card>
   );
 }
 

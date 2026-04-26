@@ -1015,6 +1015,56 @@ export const contractConsistency: PromptDefinition<
   toolName: "report_contract_consistency",
 };
 
+// ───────────────────────── Lead Widget Summary (Task #262) ─────────────────────────
+
+export interface LeadWidgetSummaryInput {
+  brandName: string;
+  leadName: string;
+  email: string | null;
+  phone: string | null;
+  companyName: string | null;
+  message: string | null;
+  qualifierAnswers: Record<string, string>;
+  enrichment: {
+    domain?: string | null;
+    title?: string | null;
+    description?: string | null;
+    websiteUrl?: string | null;
+  } | null;
+  hasBookedMeeting: boolean;
+}
+
+const LeadWidgetSummaryOutput = z.object({
+  headline: z.string().min(4).max(120),
+  summary: z.string().min(20).max(600),
+  intent: z.enum(["high", "medium", "low", "unclear"]),
+  suggestedNextAction: z.string().min(2).max(200),
+});
+
+export const leadWidgetSummary: PromptDefinition<
+  LeadWidgetSummaryInput,
+  z.infer<typeof LeadWidgetSummaryOutput>
+> = {
+  key: "lead.widgetSummary",
+  model: "claude-haiku-4-5",
+  system:
+    "Du bist DealFlow.One Sales-Triage. Du bekommst einen frisch eingegangenen " +
+    "Lead aus dem Brand-Lead-Widget. Erstelle in 1-2 Sätzen eine knappe " +
+    "Zusammenfassung für die Vertriebs-Inbox: Wer fragt an, was will er, wie " +
+    "heiß ist die Anfrage. Kein Marketing-Sprech, kein Wiederholen der " +
+    "Rohdaten — nur die Essenz für eine schnelle Reaktion. " +
+    SAFE_GERMAN_HINT,
+  buildUser: (ctx) =>
+    `Lead aus dem Brand-Widget (JSON):\n${JSON.stringify(ctx)}\n\n` +
+    `Erstelle eine kurze Headline, eine 2-3-Satz-Zusammenfassung, eine ` +
+    `Intent-Einschätzung und einen empfohlenen nächsten Schritt.`,
+  outputSchema: LeadWidgetSummaryOutput,
+  toolDescription:
+    "Returns headline, summary (2-3 sentences), intent rating, and a " +
+    "suggested next action for the sales rep.",
+  toolName: "report_lead_widget_summary",
+};
+
 // ───────────────────────── Bundle ─────────────────────────
 
 export const DEALFLOW_PROMPTS = {
@@ -1032,4 +1082,5 @@ export const DEALFLOW_PROMPTS = {
   [externalContractExtract.key]: externalContractExtract,
   [clauseImportSegment.key]: clauseImportSegment,
   [contractConsistency.key]: contractConsistency,
+  [leadWidgetSummary.key]: leadWidgetSummary,
 } as const;

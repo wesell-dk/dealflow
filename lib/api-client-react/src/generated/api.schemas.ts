@@ -584,6 +584,16 @@ export const LeadStatus = {
   converted: "converted",
 } as const;
 
+/**
+ * Domain-Enrichment aus dem Widget — `{ domain, title?, description?, faviconUrl?, fetchedAt }`. NULL wenn keine Anreicherung möglich war.
+ */
+export type LeadEnrichment = { [key: string]: unknown } | null;
+
+/**
+ * Roh-Daten aus dem Widget-Submit: `{ qualifier, referrer, userAgent, ip, calBooking? }`. calBooking wird vom Cal.com-Webhook nachgereicht.
+ */
+export type LeadWidgetMeta = { [key: string]: unknown } | null;
+
 export interface Lead {
   id: string;
   name: string;
@@ -616,6 +626,20 @@ export interface Lead {
   convertedDealName?: string | null;
   /** @nullable */
   convertedAt?: string | null;
+  /**
+   * Quell-Brand des Widget-Leads. NULL für nicht-Widget-Leads.
+   * @nullable
+   */
+  brandId?: string | null;
+  /** Domain-Enrichment aus dem Widget — `{ domain, title?, description?, faviconUrl?, fetchedAt }`. NULL wenn keine Anreicherung möglich war. */
+  enrichment?: LeadEnrichment;
+  /** Roh-Daten aus dem Widget-Submit: `{ qualifier, referrer, userAgent, ip, calBooking? }`. calBooking wird vom Cal.com-Webhook nachgereicht. */
+  widgetMeta?: LeadWidgetMeta;
+  /**
+   * Knappe deutschsprachige KI-Zusammenfassung des Widget-Leads (Owner-orientiert).
+   * @nullable
+   */
+  aiSummary?: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -718,6 +742,122 @@ export interface BrandUpdate {
    * @maximum 100
    */
   defaultTaxRatePct?: number | null;
+}
+
+export type WidgetFieldType =
+  (typeof WidgetFieldType)[keyof typeof WidgetFieldType];
+
+export const WidgetFieldType = {
+  text: "text",
+  textarea: "textarea",
+  select: "select",
+} as const;
+
+export interface WidgetField {
+  /**
+   * Stabiler Schlüssel — landet in lead.widgetMeta.qualifier.
+   * @minLength 1
+   * @maxLength 64
+   */
+  key: string;
+  /**
+   * @minLength 1
+   * @maxLength 200
+   */
+  label: string;
+  type: WidgetFieldType;
+  required?: boolean;
+  /** Pflicht für type=select. */
+  options?: string[];
+}
+
+/**
+ * domain = matcht E-Mail-Domain bzw. Enrichment-Domain gegen Wert.
+ */
+export type WidgetRoutingRuleMatchOp =
+  (typeof WidgetRoutingRuleMatchOp)[keyof typeof WidgetRoutingRuleMatchOp];
+
+export const WidgetRoutingRuleMatchOp = {
+  equals: "equals",
+  contains: "contains",
+  domain: "domain",
+} as const;
+
+export type WidgetRoutingRuleMatch = {
+  /** z. B. 'email', 'companyName', 'qualifier.industry', 'domain'. */
+  field: string;
+  /** domain = matcht E-Mail-Domain bzw. Enrichment-Domain gegen Wert. */
+  op: WidgetRoutingRuleMatchOp;
+  value: string;
+};
+
+/**
+ * Erste passende Regel gewinnt. Match-Felder beziehen sich auf den
+eingehenden Lead — `email`, `companyName`, `qualifier.<key>` oder
+`domain` (aus dem Enrichment).
+
+ */
+export interface WidgetRoutingRule {
+  /** Server-generiert wenn leer. */
+  id?: string;
+  match: WidgetRoutingRuleMatch;
+  /** User-ID innerhalb des Tenants. */
+  ownerId: string;
+}
+
+/**
+ * Inhalt + Look des öffentlichen Widget-Formulars. Alle Strings sind
+optional — der Server liefert sinnvolle Defaults.
+
+ */
+export interface WidgetConfig {
+  /** @nullable */
+  greeting?: string | null;
+  /** @nullable */
+  thankYou?: string | null;
+  /** @nullable */
+  submitLabel?: string | null;
+  fields?: WidgetField[];
+  /**
+   * z. B. https://cal.com/team/intro/30min
+   * @nullable
+   */
+  calComUrl?: string | null;
+  calComEnabled?: boolean;
+  /**
+   * Hex-Override fürs Widget; ohne wird Brand-primaryColor genutzt.
+   * @nullable
+   */
+  primaryColor?: string | null;
+}
+
+export interface BrandWidget {
+  brandId: string;
+  enabled: boolean;
+  /**
+   * Im Snippet als data-public-key. NULL solange Widget nie aktiviert wurde.
+   * @nullable
+   */
+  publicKey?: string | null;
+  /**
+   * HMAC-SHA256-Secret für /external/widget/:publicKey/cal-webhook.
+   * @nullable
+   */
+  calSecret?: string | null;
+  config: WidgetConfig;
+  routingRules: WidgetRoutingRule[];
+}
+
+/**
+ * Patch-Semantik: `enabled` schaltet das Widget ein/aus, `config` ersetzt
+die komplette Widget-Konfig (Server merged sanft mit Defaults),
+`routingRules` ersetzt die Regelliste.
+
+ */
+export interface BrandWidgetUpdate {
+  enabled?: boolean;
+  config?: WidgetConfig;
+  routingRules?: WidgetRoutingRule[];
 }
 
 export interface CompanyCreate {
@@ -6403,6 +6543,12 @@ Used by the scope picker so users can switch back from a restricted view.
 
  */
   permitted?: boolean;
+};
+
+export type RotateBrandWidgetKey200 = {
+  brandId: string;
+  publicKey: string;
+  calSecret: string;
 };
 
 export type ListLeadsParams = {

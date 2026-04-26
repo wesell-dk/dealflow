@@ -255,6 +255,28 @@ export const InboundEmailWebhookResponse = zod.object({
     convertedDealId: zod.string().nullish(),
     convertedDealName: zod.string().nullish(),
     convertedAt: zod.coerce.date().nullish(),
+    brandId: zod
+      .string()
+      .nullish()
+      .describe("Quell-Brand des Widget-Leads. NULL für nicht-Widget-Leads."),
+    enrichment: zod
+      .record(zod.string(), zod.unknown())
+      .nullish()
+      .describe(
+        "Domain-Enrichment aus dem Widget — `{ domain, title?, description?, faviconUrl?, fetchedAt }`. NULL wenn keine Anreicherung möglich war.",
+      ),
+    widgetMeta: zod
+      .record(zod.string(), zod.unknown())
+      .nullish()
+      .describe(
+        "Roh-Daten aus dem Widget-Submit: `{ qualifier, referrer, userAgent, ip, calBooking? }`. calBooking wird vom Cal.com-Webhook nachgereicht.",
+      ),
+    aiSummary: zod
+      .string()
+      .nullish()
+      .describe(
+        "Knappe deutschsprachige KI-Zusammenfassung des Widget-Leads (Owner-orientiert).",
+      ),
     createdAt: zod.coerce.date(),
     updatedAt: zod.coerce.date(),
   }),
@@ -679,6 +701,300 @@ export const UpdateBrandDefaultClausesResponse = zod.object({
     .describe("Brand-Override für USt-Satz in Prozent. NULL → Tenant-Default."),
 });
 
+/**
+ * Liefert die vollständige Widget-Konfiguration einer Brand inkl.
+Public-Key + Cal.com-Webhook-Secret. Nur sichtbar für Admins, die
+diese Brand im Scope haben.
+
+ * @summary Brand-Lead-Widget Konfiguration lesen (Admin)
+ */
+export const GetBrandWidgetParams = zod.object({
+  id: zod.coerce.string(),
+});
+
+export const getBrandWidgetResponseConfigFieldsItemKeyMax = 64;
+
+export const getBrandWidgetResponseConfigFieldsItemLabelMax = 200;
+
+export const GetBrandWidgetResponse = zod.object({
+  brandId: zod.string(),
+  enabled: zod.boolean(),
+  publicKey: zod
+    .string()
+    .nullish()
+    .describe(
+      "Im Snippet als data-public-key. NULL solange Widget nie aktiviert wurde.",
+    ),
+  calSecret: zod
+    .string()
+    .nullish()
+    .describe(
+      "HMAC-SHA256-Secret für \/external\/widget\/:publicKey\/cal-webhook.",
+    ),
+  config: zod
+    .object({
+      greeting: zod.string().nullish(),
+      thankYou: zod.string().nullish(),
+      submitLabel: zod.string().nullish(),
+      fields: zod
+        .array(
+          zod.object({
+            key: zod
+              .string()
+              .min(1)
+              .max(getBrandWidgetResponseConfigFieldsItemKeyMax)
+              .describe(
+                "Stabiler Schlüssel — landet in lead.widgetMeta.qualifier.",
+              ),
+            label: zod
+              .string()
+              .min(1)
+              .max(getBrandWidgetResponseConfigFieldsItemLabelMax),
+            type: zod.enum(["text", "textarea", "select"]),
+            required: zod.boolean().optional(),
+            options: zod
+              .array(zod.string())
+              .optional()
+              .describe("Pflicht für type=select."),
+          }),
+        )
+        .optional(),
+      calComUrl: zod
+        .string()
+        .nullish()
+        .describe("z. B. https:\/\/cal.com\/team\/intro\/30min"),
+      calComEnabled: zod.boolean().optional(),
+      primaryColor: zod
+        .string()
+        .nullish()
+        .describe(
+          "Hex-Override fürs Widget; ohne wird Brand-primaryColor genutzt.",
+        ),
+    })
+    .describe(
+      "Inhalt + Look des öffentlichen Widget-Formulars. Alle Strings sind\noptional — der Server liefert sinnvolle Defaults.\n",
+    ),
+  routingRules: zod.array(
+    zod
+      .object({
+        id: zod.string().optional().describe("Server-generiert wenn leer."),
+        match: zod.object({
+          field: zod
+            .string()
+            .describe(
+              "z. B. 'email', 'companyName', 'qualifier.industry', 'domain'.",
+            ),
+          op: zod
+            .enum(["equals", "contains", "domain"])
+            .describe(
+              "domain = matcht E-Mail-Domain bzw. Enrichment-Domain gegen Wert.",
+            ),
+          value: zod.string(),
+        }),
+        ownerId: zod.string().describe("User-ID innerhalb des Tenants."),
+      })
+      .describe(
+        "Erste passende Regel gewinnt. Match-Felder beziehen sich auf den\neingehenden Lead — `email`, `companyName`, `qualifier.<key>` oder\n`domain` (aus dem Enrichment).\n",
+      ),
+  ),
+});
+
+/**
+ * Aktiviert oder deaktiviert das Widget; setzt Texte, Qualifier-Felder,
+Cal.com-Settings, Routing-Regeln. Beim ersten Aktivieren werden
+Public-Key und Cal-Secret automatisch erzeugt.
+
+ * @summary Brand-Lead-Widget aktivieren / konfigurieren
+ */
+export const UpdateBrandWidgetParams = zod.object({
+  id: zod.coerce.string(),
+});
+
+export const updateBrandWidgetBodyConfigFieldsItemKeyMax = 64;
+
+export const updateBrandWidgetBodyConfigFieldsItemLabelMax = 200;
+
+export const UpdateBrandWidgetBody = zod
+  .object({
+    enabled: zod.boolean().optional(),
+    config: zod
+      .object({
+        greeting: zod.string().nullish(),
+        thankYou: zod.string().nullish(),
+        submitLabel: zod.string().nullish(),
+        fields: zod
+          .array(
+            zod.object({
+              key: zod
+                .string()
+                .min(1)
+                .max(updateBrandWidgetBodyConfigFieldsItemKeyMax)
+                .describe(
+                  "Stabiler Schlüssel — landet in lead.widgetMeta.qualifier.",
+                ),
+              label: zod
+                .string()
+                .min(1)
+                .max(updateBrandWidgetBodyConfigFieldsItemLabelMax),
+              type: zod.enum(["text", "textarea", "select"]),
+              required: zod.boolean().optional(),
+              options: zod
+                .array(zod.string())
+                .optional()
+                .describe("Pflicht für type=select."),
+            }),
+          )
+          .optional(),
+        calComUrl: zod
+          .string()
+          .nullish()
+          .describe("z. B. https:\/\/cal.com\/team\/intro\/30min"),
+        calComEnabled: zod.boolean().optional(),
+        primaryColor: zod
+          .string()
+          .nullish()
+          .describe(
+            "Hex-Override fürs Widget; ohne wird Brand-primaryColor genutzt.",
+          ),
+      })
+      .optional()
+      .describe(
+        "Inhalt + Look des öffentlichen Widget-Formulars. Alle Strings sind\noptional — der Server liefert sinnvolle Defaults.\n",
+      ),
+    routingRules: zod
+      .array(
+        zod
+          .object({
+            id: zod.string().optional().describe("Server-generiert wenn leer."),
+            match: zod.object({
+              field: zod
+                .string()
+                .describe(
+                  "z. B. 'email', 'companyName', 'qualifier.industry', 'domain'.",
+                ),
+              op: zod
+                .enum(["equals", "contains", "domain"])
+                .describe(
+                  "domain = matcht E-Mail-Domain bzw. Enrichment-Domain gegen Wert.",
+                ),
+              value: zod.string(),
+            }),
+            ownerId: zod.string().describe("User-ID innerhalb des Tenants."),
+          })
+          .describe(
+            "Erste passende Regel gewinnt. Match-Felder beziehen sich auf den\neingehenden Lead — `email`, `companyName`, `qualifier.<key>` oder\n`domain` (aus dem Enrichment).\n",
+          ),
+      )
+      .optional(),
+  })
+  .describe(
+    "Patch-Semantik: `enabled` schaltet das Widget ein\/aus, `config` ersetzt\ndie komplette Widget-Konfig (Server merged sanft mit Defaults),\n`routingRules` ersetzt die Regelliste.\n",
+  );
+
+export const updateBrandWidgetResponseConfigFieldsItemKeyMax = 64;
+
+export const updateBrandWidgetResponseConfigFieldsItemLabelMax = 200;
+
+export const UpdateBrandWidgetResponse = zod.object({
+  brandId: zod.string(),
+  enabled: zod.boolean(),
+  publicKey: zod
+    .string()
+    .nullish()
+    .describe(
+      "Im Snippet als data-public-key. NULL solange Widget nie aktiviert wurde.",
+    ),
+  calSecret: zod
+    .string()
+    .nullish()
+    .describe(
+      "HMAC-SHA256-Secret für \/external\/widget\/:publicKey\/cal-webhook.",
+    ),
+  config: zod
+    .object({
+      greeting: zod.string().nullish(),
+      thankYou: zod.string().nullish(),
+      submitLabel: zod.string().nullish(),
+      fields: zod
+        .array(
+          zod.object({
+            key: zod
+              .string()
+              .min(1)
+              .max(updateBrandWidgetResponseConfigFieldsItemKeyMax)
+              .describe(
+                "Stabiler Schlüssel — landet in lead.widgetMeta.qualifier.",
+              ),
+            label: zod
+              .string()
+              .min(1)
+              .max(updateBrandWidgetResponseConfigFieldsItemLabelMax),
+            type: zod.enum(["text", "textarea", "select"]),
+            required: zod.boolean().optional(),
+            options: zod
+              .array(zod.string())
+              .optional()
+              .describe("Pflicht für type=select."),
+          }),
+        )
+        .optional(),
+      calComUrl: zod
+        .string()
+        .nullish()
+        .describe("z. B. https:\/\/cal.com\/team\/intro\/30min"),
+      calComEnabled: zod.boolean().optional(),
+      primaryColor: zod
+        .string()
+        .nullish()
+        .describe(
+          "Hex-Override fürs Widget; ohne wird Brand-primaryColor genutzt.",
+        ),
+    })
+    .describe(
+      "Inhalt + Look des öffentlichen Widget-Formulars. Alle Strings sind\noptional — der Server liefert sinnvolle Defaults.\n",
+    ),
+  routingRules: zod.array(
+    zod
+      .object({
+        id: zod.string().optional().describe("Server-generiert wenn leer."),
+        match: zod.object({
+          field: zod
+            .string()
+            .describe(
+              "z. B. 'email', 'companyName', 'qualifier.industry', 'domain'.",
+            ),
+          op: zod
+            .enum(["equals", "contains", "domain"])
+            .describe(
+              "domain = matcht E-Mail-Domain bzw. Enrichment-Domain gegen Wert.",
+            ),
+          value: zod.string(),
+        }),
+        ownerId: zod.string().describe("User-ID innerhalb des Tenants."),
+      })
+      .describe(
+        "Erste passende Regel gewinnt. Match-Felder beziehen sich auf den\neingehenden Lead — `email`, `companyName`, `qualifier.<key>` oder\n`domain` (aus dem Enrichment).\n",
+      ),
+  ),
+});
+
+/**
+ * Rotiert sowohl den öffentlichen Widget-Key (in jedem ausgelieferten
+Snippet) als auch das Cal.com-HMAC-Secret. Bestehende Snippets müssen
+danach neu eingebettet werden.
+
+ * @summary Public-Key + Cal.com-Secret neu erzeugen
+ */
+export const RotateBrandWidgetKeyParams = zod.object({
+  id: zod.coerce.string(),
+});
+
+export const RotateBrandWidgetKeyResponse = zod.object({
+  brandId: zod.string(),
+  publicKey: zod.string(),
+  calSecret: zod.string(),
+});
+
 export const ListUsersResponseItem = zod.object({
   id: zod.string(),
   name: zod.string(),
@@ -933,6 +1249,28 @@ export const ListLeadsResponse = zod.object({
       convertedDealId: zod.string().nullish(),
       convertedDealName: zod.string().nullish(),
       convertedAt: zod.coerce.date().nullish(),
+      brandId: zod
+        .string()
+        .nullish()
+        .describe("Quell-Brand des Widget-Leads. NULL für nicht-Widget-Leads."),
+      enrichment: zod
+        .record(zod.string(), zod.unknown())
+        .nullish()
+        .describe(
+          "Domain-Enrichment aus dem Widget — `{ domain, title?, description?, faviconUrl?, fetchedAt }`. NULL wenn keine Anreicherung möglich war.",
+        ),
+      widgetMeta: zod
+        .record(zod.string(), zod.unknown())
+        .nullish()
+        .describe(
+          "Roh-Daten aus dem Widget-Submit: `{ qualifier, referrer, userAgent, ip, calBooking? }`. calBooking wird vom Cal.com-Webhook nachgereicht.",
+        ),
+      aiSummary: zod
+        .string()
+        .nullish()
+        .describe(
+          "Knappe deutschsprachige KI-Zusammenfassung des Widget-Leads (Owner-orientiert).",
+        ),
       createdAt: zod.coerce.date(),
       updatedAt: zod.coerce.date(),
     }),
@@ -995,6 +1333,28 @@ export const GetLeadResponse = zod.object({
   convertedDealId: zod.string().nullish(),
   convertedDealName: zod.string().nullish(),
   convertedAt: zod.coerce.date().nullish(),
+  brandId: zod
+    .string()
+    .nullish()
+    .describe("Quell-Brand des Widget-Leads. NULL für nicht-Widget-Leads."),
+  enrichment: zod
+    .record(zod.string(), zod.unknown())
+    .nullish()
+    .describe(
+      "Domain-Enrichment aus dem Widget — `{ domain, title?, description?, faviconUrl?, fetchedAt }`. NULL wenn keine Anreicherung möglich war.",
+    ),
+  widgetMeta: zod
+    .record(zod.string(), zod.unknown())
+    .nullish()
+    .describe(
+      "Roh-Daten aus dem Widget-Submit: `{ qualifier, referrer, userAgent, ip, calBooking? }`. calBooking wird vom Cal.com-Webhook nachgereicht.",
+    ),
+  aiSummary: zod
+    .string()
+    .nullish()
+    .describe(
+      "Knappe deutschsprachige KI-Zusammenfassung des Widget-Leads (Owner-orientiert).",
+    ),
   createdAt: zod.coerce.date(),
   updatedAt: zod.coerce.date(),
 });
@@ -1038,6 +1398,28 @@ export const UpdateLeadResponse = zod.object({
   convertedDealId: zod.string().nullish(),
   convertedDealName: zod.string().nullish(),
   convertedAt: zod.coerce.date().nullish(),
+  brandId: zod
+    .string()
+    .nullish()
+    .describe("Quell-Brand des Widget-Leads. NULL für nicht-Widget-Leads."),
+  enrichment: zod
+    .record(zod.string(), zod.unknown())
+    .nullish()
+    .describe(
+      "Domain-Enrichment aus dem Widget — `{ domain, title?, description?, faviconUrl?, fetchedAt }`. NULL wenn keine Anreicherung möglich war.",
+    ),
+  widgetMeta: zod
+    .record(zod.string(), zod.unknown())
+    .nullish()
+    .describe(
+      "Roh-Daten aus dem Widget-Submit: `{ qualifier, referrer, userAgent, ip, calBooking? }`. calBooking wird vom Cal.com-Webhook nachgereicht.",
+    ),
+  aiSummary: zod
+    .string()
+    .nullish()
+    .describe(
+      "Knappe deutschsprachige KI-Zusammenfassung des Widget-Leads (Owner-orientiert).",
+    ),
   createdAt: zod.coerce.date(),
   updatedAt: zod.coerce.date(),
 });
@@ -1229,6 +1611,28 @@ export const ConvertLeadResponse = zod.object({
     convertedDealId: zod.string().nullish(),
     convertedDealName: zod.string().nullish(),
     convertedAt: zod.coerce.date().nullish(),
+    brandId: zod
+      .string()
+      .nullish()
+      .describe("Quell-Brand des Widget-Leads. NULL für nicht-Widget-Leads."),
+    enrichment: zod
+      .record(zod.string(), zod.unknown())
+      .nullish()
+      .describe(
+        "Domain-Enrichment aus dem Widget — `{ domain, title?, description?, faviconUrl?, fetchedAt }`. NULL wenn keine Anreicherung möglich war.",
+      ),
+    widgetMeta: zod
+      .record(zod.string(), zod.unknown())
+      .nullish()
+      .describe(
+        "Roh-Daten aus dem Widget-Submit: `{ qualifier, referrer, userAgent, ip, calBooking? }`. calBooking wird vom Cal.com-Webhook nachgereicht.",
+      ),
+    aiSummary: zod
+      .string()
+      .nullish()
+      .describe(
+        "Knappe deutschsprachige KI-Zusammenfassung des Widget-Leads (Owner-orientiert).",
+      ),
     createdAt: zod.coerce.date(),
     updatedAt: zod.coerce.date(),
   }),

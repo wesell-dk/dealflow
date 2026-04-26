@@ -132,6 +132,28 @@ export const brandsTable = pgTable("brands", {
   quoteEmailBodyTemplate: text("quote_email_body_template"),
   // Brand-Override für USt-Satz (in Prozent). NULL → Tenant-Default.
   defaultTaxRatePct: numeric("default_tax_rate_pct"),
+  // Lead-Widget pro Brand. Wenn aktiviert, akzeptieren wir Submits über
+  // /external/widget/:publicKey/leads. Der Public-Key ist URL-safe und wird
+  // beim ersten Aktivieren generiert; widgetCalSecret signiert Cal.com-
+  // Webhooks (HMAC-SHA256). widgetConfig enthält Texte/Felder/Cal-URL,
+  // widgetRoutingRules eine Liste von Match→Owner-Regeln (siehe widget.ts).
+  widgetEnabled: boolean("widget_enabled").default(false).notNull(),
+  widgetPublicKey: text("widget_public_key").unique(),
+  widgetCalSecret: text("widget_cal_secret"),
+  widgetConfig: jsonb("widget_config").$type<{
+    greeting?: string;
+    thankYou?: string;
+    submitLabel?: string;
+    fields?: Array<{ key: string; label: string; type: "text" | "textarea" | "select"; required?: boolean; options?: string[] }>;
+    calComUrl?: string | null;
+    calComEnabled?: boolean;
+    primaryColor?: string | null;
+  }>(),
+  widgetRoutingRules: jsonb("widget_routing_rules").$type<Array<{
+    id: string;
+    match: { field: string; op: "equals" | "contains" | "domain"; value: string };
+    ownerId: string;
+  }>>(),
 });
 
 export const usersTable = pgTable("users", {
@@ -202,8 +224,47 @@ export const leadsTable = pgTable("leads", {
   email: text("email"),
   phone: text("phone"),
   // Quelle der Anfrage (frei wählbarer Schlüssel; UI mappt Standardwerte:
-  // website | referral | inbound_email | event | outbound | partner | other).
+  // website | referral | inbound_email | event | outbound | partner | other |
+  // website_widget — letzteres setzt das Brand-Lead-Widget).
   source: text("source").notNull(),
+  // Brand, über deren Widget der Lead reinkam (FK weich, kein cascade,
+  // damit das Löschen einer Brand die Lead-Historie nicht killt).
+  brandId: text("brand_id"),
+  // Auto-Enrichment auf Basis der E-Mail-Domain: Firmenname (heuristisch),
+  // Logo/Favicon-URL, Website-Title/Description (einmaliger SSRF-gehärteter
+  // Crawl). Wird beim Konvertieren als Vorschlag für den Account gezeigt.
+  enrichment: jsonb("enrichment").$type<{
+    domain?: string;
+    companyName?: string | null;
+    faviconUrl?: string | null;
+    websiteUrl?: string | null;
+    title?: string | null;
+    description?: string | null;
+    fetchedAt?: string;
+    error?: string | null;
+  }>(),
+  // Rohdaten aus dem Widget (Qualifier-Antworten, IP-Hash, User-Agent,
+  // Referrer, Cal.com-Buchung). Streng informativ — keine PII darüber hinaus.
+  widgetMeta: jsonb("widget_meta").$type<{
+    ipHash?: string;
+    userAgent?: string;
+    referrer?: string;
+    qualifier?: Record<string, string>;
+    calBooking?: {
+      bookingId?: string;
+      eventTypeId?: string;
+      startTime?: string;
+      endTime?: string;
+      attendeeEmail?: string;
+      meetingUrl?: string | null;
+      status?: string;
+      receivedAt?: string;
+    };
+    routedByRuleId?: string | null;
+    duplicateOfLeadId?: string | null;
+  }>(),
+  // KI-Zusammenfassung des Leads (1-3 Sätze) für Inbox / E-Mail-Alerts.
+  aiSummary: text("ai_summary"),
   // Lead-Status. Default = "new" (gerade reingekommen, Inbox).
   status: text("status").notNull().default("new"),
   // Zugewiesener Owner. Wenn null = "Unzugewiesen" (für Round-Robin /

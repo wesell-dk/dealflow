@@ -11,6 +11,7 @@ import {
   sendOwnerCounterSignNotificationEmail,
 } from '../lib/collaboratorEmail';
 import { sendEmail } from '../lib/email';
+import { generateWidgetPublicKey, generateCalSecret, mergeWidgetConfig } from '../lib/widget';
 import {
   WZ_CODES,
   WZ_OTHER_CODE,
@@ -1530,6 +1531,13 @@ function buildLead(l: LeadRow, opts: { ownerName?: string | null; accountName?: 
     convertedDealId: l.convertedDealId,
     convertedDealName: opts.dealName ?? null,
     convertedAt: iso(l.convertedAt),
+    // Brand-Lead-Widget (Task #262): Brand-Anker + Widget-Roh-/Anreicherungs-
+    // Daten + KI-Zusammenfassung. Alles optional/nullbar — Bestandsleads, die
+    // nicht aus dem Widget stammen, melden hier null.
+    brandId: l.brandId ?? null,
+    enrichment: (l.enrichment ?? null) as Record<string, unknown> | null,
+    widgetMeta: (l.widgetMeta ?? null) as Record<string, unknown> | null,
+    aiSummary: l.aiSummary ?? null,
     createdAt: iso(l.createdAt)!,
     updatedAt: iso(l.updatedAt)!,
   };
@@ -6845,6 +6853,185 @@ router.patch('/brands/:id', async (req, res) => {
     after: updated,
   });
   res.json(mapBrand(updated!));
+});
+
+// ── Brand-Lead-Widget (Task #262): Admin-Konfiguration ──
+//
+// GET /brands/:id/widget       → vollständige Widget-Konfig inkl. Public-Key
+//                                 + Cal.com-Secret (nur Admins, brandVisible)
+// PUT /brands/:id/widget       → Widget aktivieren/deaktivieren, Felder/Texte/
+//                                 Cal.com-URL/Routing-Regeln setzen
+// POST /brands/:id/widget/rotate-key → Public-Key + Cal-Secret neu erzeugen
+//
+// Snippet-URL ergibt sich für den Frontend-Code als
+//   `<host>/api/external/widget/embed.js` mit data-public-key=<key>.
+router.get('/brands/:id/widget', async (req, res) => {
+  if (!requireAdmin(req, res)) return;
+  const [b] = await db.select().from(brandsTable).where(eq(brandsTable.id, req.params.id));
+  if (!b) { res.status(404).json({ error: 'not found' }); return; }
+  if (!(await brandVisible(req, b))) { res.status(403).json({ error: 'forbidden' }); return; }
+  const merged = mergeWidgetConfig(b.widgetConfig ?? null);
+  res.json({
+    brandId: b.id,
+    enabled: b.widgetEnabled,
+    publicKey: b.widgetPublicKey,
+    calSecret: b.widgetCalSecret,
+    config: merged,
+    routingRules: (b.widgetRoutingRules ?? []) as Array<{
+      id: string;
+      match: { field: string; op: 'equals' | 'contains' | 'domain'; value: string };
+      ownerId: string;
+    }>,
+  });
+});
+
+router.put('/brands/:id/widget', async (req, res) => {
+  if (!requireAdmin(req, res)) return;
+  const [existing] = await db.select().from(brandsTable).where(eq(brandsTable.id, req.params.id));
+  if (!existing) { res.status(404).json({ error: 'not found' }); return; }
+  if (!(await brandVisible(req, existing))) { res.status(403).json({ error: 'forbidden' }); return; }
+  const body = (req.body ?? {}) as {
+    enabled?: boolean;
+    config?: {
+      greeting?: string;
+      thankYou?: string;
+      submitLabel?: string;
+      fields?: Array<{ key: string; label: string; type: 'text' | 'textarea' | 'select'; required?: boolean; options?: string[] }>;
+      calComUrl?: string | null;
+      calComEnabled?: boolean;
+      primaryColor?: string | null;
+    };
+    routingRules?: Array<{
+      id?: string;
+      match: { field: string; op: 'equals' | 'contains' | 'domain'; value: string };
+      ownerId: string;
+    }>;
+  };
+  const patch: Partial<typeof brandsTable.$inferInsert> = {};
+  if (typeof body.enabled === 'boolean') {
+    patch.widgetEnabled = body.enabled;
+    if (body.enabled && !existing.widgetPublicKey) {
+      patch.widgetPublicKey = generateWidgetPublicKey();
+    }
+    if (body.enabled && !existing.widgetCalSecret) {
+      patch.widgetCalSecret = generateCalSecret();
+    }
+  }
+  if (body.config && typeof body.config === 'object') {
+    const c = body.config;
+    if (c.calComUrl) {
+      try {
+        const u = new URL(c.calComUrl);
+        if (u.protocol !== 'https:' && u.protocol !== 'http:') throw new Error('bad protocol');
+      } catch {
+        res.status(422).json({ error: 'calComUrl must be a valid http(s) URL' }); return;
+      }
+    }
+    // Felder + Texte sanft validieren — keine SQL-Injektion möglich (jsonb),
+    // aber wir wollen kein leeres / kaputtes UI.
+    if (c.fields && !Array.isArray(c.fields)) {
+      res.status(422).json({ error: 'config.fields must be an array' }); return;
+    }
+    if (c.fields) {
+      for (const f of c.fields) {
+        if (!f || typeof f.key !== 'string' || !f.key.trim()) {
+          res.status(422).json({ error: 'each field needs a non-empty key' }); return;
+        }
+        if (!['text', 'textarea', 'select'].includes(f.type)) {
+          res.status(422).json({ error: `field ${f.key}: invalid type` }); return;
+        }
+        if (f.type === 'select' && (!Array.isArray(f.options) || f.options.length === 0)) {
+          res.status(422).json({ error: `field ${f.key}: select needs options` }); return;
+        }
+      }
+    }
+    patch.widgetConfig = {
+      greeting: c.greeting?.trim() || undefined,
+      thankYou: c.thankYou?.trim() || undefined,
+      submitLabel: c.submitLabel?.trim() || undefined,
+      fields: c.fields,
+      calComUrl: c.calComUrl ?? null,
+      calComEnabled: !!c.calComEnabled && !!c.calComUrl,
+      primaryColor: c.primaryColor ?? null,
+    };
+  }
+  if (body.routingRules) {
+    if (!Array.isArray(body.routingRules)) {
+      res.status(422).json({ error: 'routingRules must be an array' }); return;
+    }
+    const rules: Array<{ id: string; match: { field: string; op: 'equals' | 'contains' | 'domain'; value: string }; ownerId: string }> = [];
+    const tenantUserIds = new Set(
+      (await db.select({ id: usersTable.id })
+        .from(usersTable)
+        .where(eq(usersTable.tenantId, getScope(req).tenantId))).map((u) => u.id),
+    );
+    for (const r of body.routingRules) {
+      if (!r || typeof r !== 'object') { res.status(422).json({ error: 'invalid rule' }); return; }
+      if (!r.match || typeof r.match.field !== 'string' || typeof r.match.value !== 'string') {
+        res.status(422).json({ error: 'rule.match.{field,value} required' }); return;
+      }
+      if (!['equals', 'contains', 'domain'].includes(r.match.op)) {
+        res.status(422).json({ error: `rule op invalid: ${r.match.op}` }); return;
+      }
+      if (typeof r.ownerId !== 'string' || !tenantUserIds.has(r.ownerId)) {
+        res.status(422).json({ error: `rule ownerId not in tenant: ${r.ownerId}` }); return;
+      }
+      rules.push({
+        id: r.id ?? `wr_${randomUUID().slice(0, 8)}`,
+        match: { field: r.match.field, op: r.match.op, value: r.match.value },
+        ownerId: r.ownerId,
+      });
+    }
+    patch.widgetRoutingRules = rules;
+  }
+  if (Object.keys(patch).length === 0) {
+    res.status(400).json({ error: 'no widget changes provided' }); return;
+  }
+  await db.update(brandsTable).set(patch).where(eq(brandsTable.id, existing.id));
+  const [updated] = await db.select().from(brandsTable).where(eq(brandsTable.id, existing.id));
+  await writeAuditFromReq(req, {
+    entityType: 'brand',
+    entityId: existing.id,
+    action: 'widget_update',
+    summary: `Widget-Konfiguration geändert (enabled=${updated.widgetEnabled})`,
+    before: {
+      enabled: existing.widgetEnabled,
+      config: existing.widgetConfig,
+      rules: existing.widgetRoutingRules,
+    },
+    after: {
+      enabled: updated.widgetEnabled,
+      config: updated.widgetConfig,
+      rules: updated.widgetRoutingRules,
+    },
+  });
+  res.json({
+    brandId: updated.id,
+    enabled: updated.widgetEnabled,
+    publicKey: updated.widgetPublicKey,
+    calSecret: updated.widgetCalSecret,
+    config: mergeWidgetConfig(updated.widgetConfig ?? null),
+    routingRules: (updated.widgetRoutingRules ?? []),
+  });
+});
+
+router.post('/brands/:id/widget/rotate-key', async (req, res) => {
+  if (!requireAdmin(req, res)) return;
+  const [existing] = await db.select().from(brandsTable).where(eq(brandsTable.id, req.params.id));
+  if (!existing) { res.status(404).json({ error: 'not found' }); return; }
+  if (!(await brandVisible(req, existing))) { res.status(403).json({ error: 'forbidden' }); return; }
+  const newKey = generateWidgetPublicKey();
+  const newSecret = generateCalSecret();
+  await db.update(brandsTable)
+    .set({ widgetPublicKey: newKey, widgetCalSecret: newSecret })
+    .where(eq(brandsTable.id, existing.id));
+  await writeAuditFromReq(req, {
+    entityType: 'brand',
+    entityId: existing.id,
+    action: 'widget_rotate_key',
+    summary: `Widget-Public-Key + Cal-Secret rotiert`,
+  });
+  res.json({ brandId: existing.id, publicKey: newKey, calSecret: newSecret });
 });
 
 router.patch('/brands/:id/default-clauses', async (req, res) => {

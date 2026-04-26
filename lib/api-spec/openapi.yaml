@@ -371,6 +371,85 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/Brand" }
 
+  /brands/{id}/widget:
+    get:
+      operationId: getBrandWidget
+      tags: [widget]
+      summary: Brand-Lead-Widget Konfiguration lesen (Admin)
+      description: |
+        Liefert die vollständige Widget-Konfiguration einer Brand inkl.
+        Public-Key + Cal.com-Webhook-Secret. Nur sichtbar für Admins, die
+        diese Brand im Scope haben.
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: ok
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/BrandWidget" }
+        "403": { description: forbidden }
+        "404": { description: not found }
+    put:
+      operationId: updateBrandWidget
+      tags: [widget]
+      summary: Brand-Lead-Widget aktivieren / konfigurieren
+      description: |
+        Aktiviert oder deaktiviert das Widget; setzt Texte, Qualifier-Felder,
+        Cal.com-Settings, Routing-Regeln. Beim ersten Aktivieren werden
+        Public-Key und Cal-Secret automatisch erzeugt.
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/BrandWidgetUpdate" }
+      responses:
+        "200":
+          description: ok
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/BrandWidget" }
+        "403": { description: forbidden }
+        "404": { description: not found }
+        "422": { description: validation error }
+
+  /brands/{id}/widget/rotate-key:
+    post:
+      operationId: rotateBrandWidgetKey
+      tags: [widget]
+      summary: Public-Key + Cal.com-Secret neu erzeugen
+      description: |
+        Rotiert sowohl den öffentlichen Widget-Key (in jedem ausgelieferten
+        Snippet) als auch das Cal.com-HMAC-Secret. Bestehende Snippets müssen
+        danach neu eingebettet werden.
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: ok
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [brandId, publicKey, calSecret]
+                properties:
+                  brandId: { type: string }
+                  publicKey: { type: string }
+                  calSecret: { type: string }
+        "403": { description: forbidden }
+        "404": { description: not found }
+
   /orgs/users:
     get:
       operationId: listUsers
@@ -6504,6 +6583,89 @@ components:
             Brand-Override für USt-Satz in Prozent. NULL setzt zurück auf
             Tenant-Default.
 
+    # ── Brand-Lead-Widget (Task #262) ──
+    WidgetField:
+      type: object
+      required: [key, label, type]
+      properties:
+        key: { type: string, minLength: 1, maxLength: 64, description: "Stabiler Schlüssel — landet in lead.widgetMeta.qualifier." }
+        label: { type: string, minLength: 1, maxLength: 200 }
+        type:
+          type: string
+          enum: [text, textarea, select]
+        required: { type: boolean }
+        options:
+          type: array
+          items: { type: string }
+          description: "Pflicht für type=select."
+
+    WidgetRoutingRule:
+      type: object
+      required: [match, ownerId]
+      description: |
+        Erste passende Regel gewinnt. Match-Felder beziehen sich auf den
+        eingehenden Lead — `email`, `companyName`, `qualifier.<key>` oder
+        `domain` (aus dem Enrichment).
+      properties:
+        id: { type: string, description: "Server-generiert wenn leer." }
+        match:
+          type: object
+          required: [field, op, value]
+          properties:
+            field: { type: string, description: "z. B. 'email', 'companyName', 'qualifier.industry', 'domain'." }
+            op:
+              type: string
+              enum: [equals, contains, domain]
+              description: "domain = matcht E-Mail-Domain bzw. Enrichment-Domain gegen Wert."
+            value: { type: string }
+        ownerId: { type: string, description: "User-ID innerhalb des Tenants." }
+
+    WidgetConfig:
+      type: object
+      description: |
+        Inhalt + Look des öffentlichen Widget-Formulars. Alle Strings sind
+        optional — der Server liefert sinnvolle Defaults.
+      properties:
+        greeting: { type: ["string", "null"] }
+        thankYou: { type: ["string", "null"] }
+        submitLabel: { type: ["string", "null"] }
+        fields:
+          type: array
+          items: { $ref: "#/components/schemas/WidgetField" }
+        calComUrl: { type: ["string", "null"], description: "z. B. https://cal.com/team/intro/30min" }
+        calComEnabled: { type: boolean }
+        primaryColor: { type: ["string", "null"], description: "Hex-Override fürs Widget; ohne wird Brand-primaryColor genutzt." }
+
+    BrandWidget:
+      type: object
+      required: [brandId, enabled, config, routingRules]
+      properties:
+        brandId: { type: string }
+        enabled: { type: boolean }
+        publicKey:
+          type: ["string", "null"]
+          description: "Im Snippet als data-public-key. NULL solange Widget nie aktiviert wurde."
+        calSecret:
+          type: ["string", "null"]
+          description: "HMAC-SHA256-Secret für /external/widget/:publicKey/cal-webhook."
+        config: { $ref: "#/components/schemas/WidgetConfig" }
+        routingRules:
+          type: array
+          items: { $ref: "#/components/schemas/WidgetRoutingRule" }
+
+    BrandWidgetUpdate:
+      type: object
+      description: |
+        Patch-Semantik: `enabled` schaltet das Widget ein/aus, `config` ersetzt
+        die komplette Widget-Konfig (Server merged sanft mit Defaults),
+        `routingRules` ersetzt die Regelliste.
+      properties:
+        enabled: { type: boolean }
+        config: { $ref: "#/components/schemas/WidgetConfig" }
+        routingRules:
+          type: array
+          items: { $ref: "#/components/schemas/WidgetRoutingRule" }
+
     CompanyCreate:
       type: object
       required: [name, legalName, country, currency]
@@ -6819,6 +6981,31 @@ components:
         convertedAt:
           type: ["string", "null"]
           format: date-time
+        # Brand-Lead-Widget (Task #262) — diese Felder sind nur gefüllt, wenn
+        # der Lead über das öffentliche /external/widget eingeliefert wurde.
+        brandId:
+          type: ["string", "null"]
+          description: >-
+            Quell-Brand des Widget-Leads. NULL für nicht-Widget-Leads.
+        enrichment:
+          type: object
+          nullable: true
+          additionalProperties: true
+          description: >-
+            Domain-Enrichment aus dem Widget — `{ domain, title?, description?,
+            faviconUrl?, fetchedAt }`. NULL wenn keine Anreicherung möglich war.
+        widgetMeta:
+          type: object
+          nullable: true
+          additionalProperties: true
+          description: >-
+            Roh-Daten aus dem Widget-Submit: `{ qualifier, referrer, userAgent,
+            ip, calBooking? }`. calBooking wird vom Cal.com-Webhook nachgereicht.
+        aiSummary:
+          type: ["string", "null"]
+          description: >-
+            Knappe deutschsprachige KI-Zusammenfassung des Widget-Leads
+            (Owner-orientiert).
         createdAt: { type: string, format: date-time }
         updatedAt: { type: string, format: date-time }
 

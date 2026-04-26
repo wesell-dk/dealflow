@@ -26,6 +26,7 @@ import { Loader2, Upload, Image as ImageIcon, X, Sparkles } from "lucide-react";
 import { extractLogoColors, foregroundFor, isTooLightForPaper } from "@/lib/extract-logo-colors";
 import { toAssetSrc } from "@/lib/asset-url";
 import { BrandDocumentTemplates } from "./brand-document-templates";
+import { BrandWidgetSettings } from "./brand-widget-settings";
 
 interface Props {
   open: boolean;
@@ -634,6 +635,19 @@ export function BrandFormDialog({ open, onOpenChange, companies, defaultCompanyI
                 </p>
               </div>
               <BrandDocumentTemplates brandId={brand.id} />
+            </div>
+          )}
+
+          {isEdit && brand && (
+            <div className="space-y-2 pt-2 border-t" data-testid="brand-widget-section">
+              <div>
+                <p className="text-sm font-medium">Lead widget</p>
+                <p className="text-xs text-muted-foreground">
+                  Embed a brand-themed contact form on this brand's website. Submissions become leads
+                  in this brand's pipeline; optional Cal.com booking + AI summary + owner routing.
+                </p>
+              </div>
+              <BrandWidgetSettings brandId={brand.id} />
             </div>
           )}
         </div>

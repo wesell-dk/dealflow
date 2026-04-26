@@ -7,7 +7,9 @@ Multi-tenant, multi-company, multi-brand. Deal-centric.
 
  * OpenAPI spec version: 0.1.0
  */
+import type { LeadEnrichment } from "./leadEnrichment";
 import type { LeadStatus } from "./leadStatus";
+import type { LeadWidgetMeta } from "./leadWidgetMeta";
 
 export interface Lead {
   id: string;
@@ -41,6 +43,20 @@ export interface Lead {
   convertedDealName?: string | null;
   /** @nullable */
   convertedAt?: Date | null;
+  /**
+   * Quell-Brand des Widget-Leads. NULL für nicht-Widget-Leads.
+   * @nullable
+   */
+  brandId?: string | null;
+  /** Domain-Enrichment aus dem Widget — `{ domain, title?, description?, faviconUrl?, fetchedAt }`. NULL wenn keine Anreicherung möglich war. */
+  enrichment?: LeadEnrichment;
+  /** Roh-Daten aus dem Widget-Submit: `{ qualifier, referrer, userAgent, ip, calBooking? }`. calBooking wird vom Cal.com-Webhook nachgereicht. */
+  widgetMeta?: LeadWidgetMeta;
+  /**
+   * Knappe deutschsprachige KI-Zusammenfassung des Widget-Leads (Owner-orientiert).
+   * @nullable
+   */
+  aiSummary?: string | null;
   createdAt: Date;
   updatedAt: Date;
 }
