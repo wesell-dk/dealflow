@@ -2119,3 +2119,102 @@ export const emailSendLogTable = pgTable("email_send_log", {
   index("email_send_log_tenant_at_idx").on(t.tenantId, t.sentAt),
   index("email_send_log_channel_idx").on(t.channelId, t.sentAt),
 ]);
+
+// ───────────────────────── Regulatorik (Task #231) ─────────────────────────
+// Bibliothek von Regulierungen (DSGVO/AVV, EU AI Act, DSA, NIS2, LkSG …) mit
+// Pflicht-Anforderungen, Anwendbarkeits-Triggern und einer m:n-Verknüpfung
+// Vertrag ↔ Regulierung. System-Frameworks haben tenantId=NULL und sind für
+// alle Tenants sichtbar; Tenants können eigene Regulierungen ergänzen.
+
+export const regulatoryFrameworksTable = pgTable("regulatory_frameworks", {
+  id: id(),
+  // NULL = System-Regulierung (Seed). Tenant-spezifische Regulierungen sind
+  // tenantId != NULL.
+  tenantId: text("tenant_id"),
+  // Stabiler Code (GDPR_AVV, EU_AI_ACT, DSA, NIS2, LkSG …) — wird in
+  // deterministischer Heuristik referenziert.
+  code: text("code").notNull(),
+  title: text("title").notNull(),
+  shortLabel: text("short_label").notNull(),
+  jurisdiction: text("jurisdiction").notNull().default("EU"),
+  summary: text("summary").notNull(),
+  // Externe Quelle (eur-lex etc.)
+  url: text("url"),
+  // Versionierung — manuelle Pflege bei Gesetzesnovellen.
+  version: text("version").notNull().default("1.0"),
+  // Anwendbarkeits-Trigger als JSON. Wird sowohl als Hinweis an die KI
+  // (Anwendbarkeits-Prompt) gegeben als auch deterministisch ausgewertet.
+  // Beispiel: [{"kind":"data_processing"},{"kind":"industry","values":["finance"]}]
+  applicabilityRules: jsonb("applicability_rules").$type<Array<{
+    kind: string;
+    values?: string[];
+    note?: string;
+  }>>().notNull().default([]),
+  active: boolean("active").notNull().default(true),
+  sortOrder: integer("sort_order").notNull().default(0),
+  createdAt: ts("created_at"),
+  updatedAt: ts("updated_at"),
+}, (t) => [
+  uniqueIndex("regulatory_frameworks_tenant_code_uq").on(t.tenantId, t.code),
+  index("regulatory_frameworks_active_idx").on(t.tenantId, t.active),
+]);
+
+export const regulatoryRequirementsTable = pgTable("regulatory_requirements", {
+  id: id(),
+  frameworkId: text("framework_id").notNull(),
+  // Stabiler Kurzcode innerhalb eines Frameworks (z. B. AVV-3.1.A für DSGVO
+  // Art. 28 Abs. 3 lit. a).
+  code: text("code").notNull(),
+  title: text("title").notNull(),
+  description: text("description").notNull(),
+  // Norm-Referenz (z. B. "DSGVO Art. 28 Abs. 3 lit. a"). Wird im Risk-Panel
+  // als Quelle angezeigt.
+  normRef: text("norm_ref").notNull(),
+  // Optional: Klausel-Familien-Hinweis, der typischerweise diese Anforderung
+  // abdeckt (für KI-Prompt + UI-Hinweis "→ siehe Klausel-Bibliothek").
+  recommendedClauseFamily: text("recommended_clause_family"),
+  // Vorformulierter Empfehlungstext, den der Nutzer per Klick übernehmen kann.
+  recommendedClauseText: text("recommended_clause_text"),
+  severity: text("severity").notNull().default("must"),
+  sortOrder: integer("sort_order").notNull().default(0),
+  createdAt: ts("created_at"),
+  updatedAt: ts("updated_at"),
+}, (t) => [
+  uniqueIndex("regulatory_requirements_framework_code_uq").on(t.frameworkId, t.code),
+  index("regulatory_requirements_framework_idx").on(t.frameworkId),
+]);
+
+export const contractRegulatoryAssessmentsTable = pgTable("contract_regulatory_assessments", {
+  id: id(),
+  tenantId: text("tenant_id").notNull(),
+  contractId: text("contract_id").notNull(),
+  frameworkId: text("framework_id").notNull(),
+  // Anwendbar / nicht-anwendbar / manuell hinzugefügt / manuell entfernt.
+  // "manual_added" und "manual_removed" sind harte User-Overrides; sie werden
+  // beim Re-Run respektiert.
+  applicability: text("applicability").notNull().default("auto_applicable"),
+  // Begründung der KI / des Users für die Anwendbarkeits-Entscheidung.
+  applicabilityReason: text("applicability_reason"),
+  // Compliance-Status pro Anforderung — Liste, weil im UI eingebettet
+  // dargestellt: [{requirementId, status: 'met'|'partial'|'missing', note,
+  // suggestion, contractClauseId?}]
+  findings: jsonb("findings").$type<Array<{
+    requirementId: string;
+    status: "met" | "partial" | "missing";
+    note: string;
+    suggestion: string | null;
+    contractClauseId: string | null;
+    snippet: string | null;
+  }>>().notNull().default([]),
+  // Aggregierter Status: compliant | partial | non_compliant | not_evaluated.
+  overallStatus: text("overall_status").notNull().default("not_evaluated"),
+  // Letzte AI-Invocation, falls aus KI-Check entstanden — für Audit/Replay.
+  aiInvocationId: text("ai_invocation_id"),
+  lastEvaluatedAt: timestamp("last_evaluated_at", { withTimezone: true }),
+  createdAt: ts("created_at"),
+  updatedAt: ts("updated_at"),
+}, (t) => [
+  uniqueIndex("contract_reg_assessments_uq").on(t.contractId, t.frameworkId),
+  index("contract_reg_assessments_tenant_idx").on(t.tenantId, t.contractId),
+  index("contract_reg_assessments_framework_idx").on(t.tenantId, t.frameworkId),
+]);

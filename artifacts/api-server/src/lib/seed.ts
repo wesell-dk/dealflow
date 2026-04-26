@@ -300,6 +300,67 @@ export async function ensureSchemaColumns(): Promise<void> {
   await db.execute(
     sql`ALTER TABLE "negotiations" ADD COLUMN IF NOT EXISTS "concluded_at" timestamp with time zone`,
   );
+
+  // Regulatorik-Bibliothek (Task #231).
+  await db.execute(sql`
+    CREATE TABLE IF NOT EXISTS "regulatory_frameworks" (
+      "id" text PRIMARY KEY,
+      "tenant_id" text,
+      "code" text NOT NULL,
+      "title" text NOT NULL,
+      "short_label" text NOT NULL,
+      "jurisdiction" text NOT NULL DEFAULT 'EU',
+      "summary" text NOT NULL,
+      "url" text,
+      "version" text NOT NULL DEFAULT '1.0',
+      "applicability_rules" jsonb NOT NULL DEFAULT '[]'::jsonb,
+      "active" boolean NOT NULL DEFAULT true,
+      "sort_order" integer NOT NULL DEFAULT 0,
+      "created_at" timestamp with time zone NOT NULL DEFAULT now(),
+      "updated_at" timestamp with time zone NOT NULL DEFAULT now()
+    )
+  `);
+  await db.execute(sql`CREATE UNIQUE INDEX IF NOT EXISTS "regulatory_frameworks_tenant_code_uq" ON "regulatory_frameworks" ("tenant_id","code")`);
+  await db.execute(sql`CREATE INDEX IF NOT EXISTS "regulatory_frameworks_active_idx" ON "regulatory_frameworks" ("tenant_id","active")`);
+
+  await db.execute(sql`
+    CREATE TABLE IF NOT EXISTS "regulatory_requirements" (
+      "id" text PRIMARY KEY,
+      "framework_id" text NOT NULL,
+      "code" text NOT NULL,
+      "title" text NOT NULL,
+      "description" text NOT NULL,
+      "norm_ref" text NOT NULL,
+      "recommended_clause_family" text,
+      "recommended_clause_text" text,
+      "severity" text NOT NULL DEFAULT 'must',
+      "sort_order" integer NOT NULL DEFAULT 0,
+      "created_at" timestamp with time zone NOT NULL DEFAULT now(),
+      "updated_at" timestamp with time zone NOT NULL DEFAULT now()
+    )
+  `);
+  await db.execute(sql`CREATE UNIQUE INDEX IF NOT EXISTS "regulatory_requirements_framework_code_uq" ON "regulatory_requirements" ("framework_id","code")`);
+  await db.execute(sql`CREATE INDEX IF NOT EXISTS "regulatory_requirements_framework_idx" ON "regulatory_requirements" ("framework_id")`);
+
+  await db.execute(sql`
+    CREATE TABLE IF NOT EXISTS "contract_regulatory_assessments" (
+      "id" text PRIMARY KEY,
+      "tenant_id" text NOT NULL,
+      "contract_id" text NOT NULL,
+      "framework_id" text NOT NULL,
+      "applicability" text NOT NULL DEFAULT 'auto_applicable',
+      "applicability_reason" text,
+      "findings" jsonb NOT NULL DEFAULT '[]'::jsonb,
+      "overall_status" text NOT NULL DEFAULT 'not_evaluated',
+      "ai_invocation_id" text,
+      "last_evaluated_at" timestamp with time zone,
+      "created_at" timestamp with time zone NOT NULL DEFAULT now(),
+      "updated_at" timestamp with time zone NOT NULL DEFAULT now()
+    )
+  `);
+  await db.execute(sql`CREATE UNIQUE INDEX IF NOT EXISTS "contract_reg_assessments_uq" ON "contract_regulatory_assessments" ("contract_id","framework_id")`);
+  await db.execute(sql`CREATE INDEX IF NOT EXISTS "contract_reg_assessments_tenant_idx" ON "contract_regulatory_assessments" ("tenant_id","contract_id")`);
+  await db.execute(sql`CREATE INDEX IF NOT EXISTS "contract_reg_assessments_framework_idx" ON "contract_regulatory_assessments" ("tenant_id","framework_id")`);
 }
 
 export async function seedIfEmpty(): Promise<void> {

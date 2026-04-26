@@ -6625,6 +6625,298 @@ export interface LegalKnowledgeSearchResult {
   precedents: LegalKnowledgePrecedentHit[];
 }
 
+export type RegulatoryApplicabilityRuleKind =
+  (typeof RegulatoryApplicabilityRuleKind)[keyof typeof RegulatoryApplicabilityRuleKind];
+
+export const RegulatoryApplicabilityRuleKind = {
+  data_processing: "data_processing",
+  ai_usage: "ai_usage",
+  service_type: "service_type",
+  jurisdiction: "jurisdiction",
+  industry: "industry",
+  size_bracket: "size_bracket",
+  contract_type: "contract_type",
+  always: "always",
+} as const;
+
+export interface RegulatoryApplicabilityRule {
+  kind: RegulatoryApplicabilityRuleKind;
+  values?: string[];
+  note?: string;
+}
+
+export type RegulatoryRequirementSeverity =
+  (typeof RegulatoryRequirementSeverity)[keyof typeof RegulatoryRequirementSeverity];
+
+export const RegulatoryRequirementSeverity = {
+  must: "must",
+  should: "should",
+  info: "info",
+} as const;
+
+export interface RegulatoryRequirement {
+  id: string;
+  frameworkId: string;
+  code: string;
+  title: string;
+  description: string;
+  normRef: string;
+  recommendedClauseFamily?: string | null;
+  recommendedClauseText?: string | null;
+  severity: RegulatoryRequirementSeverity;
+  sortOrder: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export type RegulatoryRequirementInputSeverity =
+  (typeof RegulatoryRequirementInputSeverity)[keyof typeof RegulatoryRequirementInputSeverity];
+
+export const RegulatoryRequirementInputSeverity = {
+  must: "must",
+  should: "should",
+  info: "info",
+} as const;
+
+export interface RegulatoryRequirementInput {
+  /**
+   * @minLength 1
+   * @maxLength 60
+   */
+  code: string;
+  /**
+   * @minLength 2
+   * @maxLength 200
+   */
+  title: string;
+  description: string;
+  /**
+   * @minLength 2
+   * @maxLength 200
+   */
+  normRef: string;
+  recommendedClauseFamily?: string | null;
+  recommendedClauseText?: string | null;
+  severity?: RegulatoryRequirementInputSeverity;
+  sortOrder?: number;
+}
+
+export type RegulatoryRequirementPatchSeverity =
+  (typeof RegulatoryRequirementPatchSeverity)[keyof typeof RegulatoryRequirementPatchSeverity];
+
+export const RegulatoryRequirementPatchSeverity = {
+  must: "must",
+  should: "should",
+  info: "info",
+} as const;
+
+export interface RegulatoryRequirementPatch {
+  code?: string;
+  title?: string;
+  description?: string;
+  normRef?: string;
+  recommendedClauseFamily?: string | null;
+  recommendedClauseText?: string | null;
+  severity?: RegulatoryRequirementPatchSeverity;
+  sortOrder?: number;
+}
+
+export interface RegulatoryFramework {
+  id: string;
+  tenantId: string | null;
+  isSystem: boolean;
+  code: string;
+  title: string;
+  shortLabel: string;
+  jurisdiction: string;
+  summary: string;
+  url?: string | null;
+  version: string;
+  applicabilityRules: RegulatoryApplicabilityRule[];
+  active: boolean;
+  sortOrder: number;
+  requirements: RegulatoryRequirement[];
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface RegulatoryFrameworkInput {
+  /**
+   * @minLength 2
+   * @maxLength 60
+   */
+  code: string;
+  /**
+   * @minLength 2
+   * @maxLength 200
+   */
+  title: string;
+  /**
+   * @minLength 1
+   * @maxLength 30
+   */
+  shortLabel: string;
+  /** @maxLength 4 */
+  jurisdiction?: string;
+  summary: string;
+  url?: string | null;
+  version?: string;
+  applicabilityRules?: RegulatoryApplicabilityRule[];
+  active?: boolean;
+  sortOrder?: number;
+}
+
+export interface RegulatoryFrameworkPatch {
+  code?: string;
+  title?: string;
+  shortLabel?: string;
+  jurisdiction?: string;
+  summary?: string;
+  url?: string | null;
+  version?: string;
+  applicabilityRules?: RegulatoryApplicabilityRule[];
+  active?: boolean;
+  sortOrder?: number;
+}
+
+export type RegulatoryFindingStatus =
+  (typeof RegulatoryFindingStatus)[keyof typeof RegulatoryFindingStatus];
+
+export const RegulatoryFindingStatus = {
+  met: "met",
+  partial: "partial",
+  missing: "missing",
+} as const;
+
+export interface RegulatoryFinding {
+  requirementId: string;
+  status: RegulatoryFindingStatus;
+  note: string;
+  suggestion?: string | null;
+  contractClauseId?: string | null;
+  snippet?: string | null;
+}
+
+export type ContractRegulatoryAssessmentApplicability =
+  (typeof ContractRegulatoryAssessmentApplicability)[keyof typeof ContractRegulatoryAssessmentApplicability];
+
+export const ContractRegulatoryAssessmentApplicability = {
+  auto_applicable: "auto_applicable",
+  auto_not_applicable: "auto_not_applicable",
+  manual_added: "manual_added",
+  manual_removed: "manual_removed",
+} as const;
+
+export type ContractRegulatoryAssessmentOverallStatus =
+  (typeof ContractRegulatoryAssessmentOverallStatus)[keyof typeof ContractRegulatoryAssessmentOverallStatus];
+
+export const ContractRegulatoryAssessmentOverallStatus = {
+  compliant: "compliant",
+  partial: "partial",
+  non_compliant: "non_compliant",
+  not_evaluated: "not_evaluated",
+} as const;
+
+export interface ContractRegulatoryAssessment {
+  id: string;
+  tenantId: string;
+  contractId: string;
+  frameworkId: string;
+  applicability: ContractRegulatoryAssessmentApplicability;
+  applicabilityReason?: string | null;
+  findings: RegulatoryFinding[];
+  overallStatus: ContractRegulatoryAssessmentOverallStatus;
+  aiInvocationId?: string | null;
+  lastEvaluatedAt?: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ContractRegulatoryBundle {
+  contractId: string;
+  assessments: ContractRegulatoryAssessment[];
+  frameworks: RegulatoryFramework[];
+}
+
+export interface ContractRegulatoryCheckResult {
+  ok: boolean;
+  contractId: string;
+  applicabilityInvocationId?: string | null;
+  frameworksEvaluated: number;
+  assessments: ContractRegulatoryAssessment[];
+}
+
+export type RegulatoryComplianceContractItemOverall =
+  (typeof RegulatoryComplianceContractItemOverall)[keyof typeof RegulatoryComplianceContractItemOverall];
+
+export const RegulatoryComplianceContractItemOverall = {
+  compliant: "compliant",
+  partial: "partial",
+  non_compliant: "non_compliant",
+  not_evaluated: "not_evaluated",
+} as const;
+
+export type RegulatoryComplianceContractItemFrameworksItemOverallStatus =
+  (typeof RegulatoryComplianceContractItemFrameworksItemOverallStatus)[keyof typeof RegulatoryComplianceContractItemFrameworksItemOverallStatus];
+
+export const RegulatoryComplianceContractItemFrameworksItemOverallStatus = {
+  compliant: "compliant",
+  partial: "partial",
+  non_compliant: "non_compliant",
+  not_evaluated: "not_evaluated",
+} as const;
+
+export type RegulatoryComplianceContractItemFrameworksItemApplicability =
+  (typeof RegulatoryComplianceContractItemFrameworksItemApplicability)[keyof typeof RegulatoryComplianceContractItemFrameworksItemApplicability];
+
+export const RegulatoryComplianceContractItemFrameworksItemApplicability = {
+  auto_applicable: "auto_applicable",
+  auto_not_applicable: "auto_not_applicable",
+  manual_added: "manual_added",
+  manual_removed: "manual_removed",
+} as const;
+
+export type RegulatoryComplianceContractItemFrameworksItem = {
+  frameworkId: string;
+  code: string;
+  shortLabel: string;
+  overallStatus: RegulatoryComplianceContractItemFrameworksItemOverallStatus;
+  applicability: RegulatoryComplianceContractItemFrameworksItemApplicability;
+};
+
+export interface RegulatoryComplianceContractItem {
+  contractId: string;
+  contractTitle: string;
+  contractStatus: string;
+  dealId?: string | null;
+  accountId?: string | null;
+  brandId?: string | null;
+  applicableCount: number;
+  compliant: number;
+  partial: number;
+  nonCompliant: number;
+  notEvaluated: number;
+  overall: RegulatoryComplianceContractItemOverall;
+  frameworks: RegulatoryComplianceContractItemFrameworksItem[];
+}
+
+export interface RegulatoryComplianceFrameworkSummary {
+  frameworkId: string;
+  code: string;
+  shortLabel: string;
+  title: string;
+  applicableContracts: number;
+  compliant: number;
+  partial: number;
+  nonCompliant: number;
+  notEvaluated: number;
+}
+
+export interface RegulatoryComplianceReport {
+  items: RegulatoryComplianceContractItem[];
+  frameworkSummary: RegulatoryComplianceFrameworkSummary[];
+}
+
 export type ListCompaniesParams = {
   /**
  * If true, returns the FULL permitted set (ignoring active scope filter).
@@ -6968,6 +7260,10 @@ export type SearchLegalKnowledgeForUserParams = {
    * Convenience filter — augments the query with the counterparty name.
    */
   counterparty?: string;
+};
+
+export type AddContractRegulatoryFrameworkBody = {
+  reason?: string;
 };
 
 export type ListAuditEntriesParams = {

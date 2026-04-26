@@ -32,6 +32,7 @@ tags:
   - name: activity
   - name: Storage
   - name: legalKnowledge
+  - name: regulatory
 
 paths:
 
@@ -4048,6 +4049,272 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/LegalPrecedent" }
         "404": { description: not found }
+
+  # ───────────── REGULATORY COMPLIANCE (Task #231) ─────────────
+
+  /admin/regulatory-frameworks:
+    get:
+      operationId: listRegulatoryFrameworks
+      tags: [regulatory]
+      summary: List regulatory frameworks (system + tenant), incl. inactive, for admin.
+      responses:
+        "200":
+          description: ok
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/RegulatoryFramework" }
+    post:
+      operationId: createRegulatoryFramework
+      tags: [regulatory]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/RegulatoryFrameworkInput" }
+      responses:
+        "201":
+          description: created
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/RegulatoryFramework" }
+        "409": { description: code already exists for this tenant }
+
+  /admin/regulatory-frameworks/{id}:
+    get:
+      operationId: getRegulatoryFramework
+      tags: [regulatory]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: ok
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/RegulatoryFramework" }
+        "404": { description: not found }
+    patch:
+      operationId: updateRegulatoryFramework
+      tags: [regulatory]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/RegulatoryFrameworkPatch" }
+      responses:
+        "200":
+          description: updated
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/RegulatoryFramework" }
+        "403": { description: system framework — read-only }
+        "404": { description: not found }
+    delete:
+      operationId: deleteRegulatoryFramework
+      tags: [regulatory]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        "204": { description: deleted }
+        "403": { description: system framework cannot be deleted }
+        "404": { description: not found }
+
+  /admin/regulatory-frameworks/{id}/requirements:
+    post:
+      operationId: createRegulatoryRequirement
+      tags: [regulatory]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/RegulatoryRequirementInput" }
+      responses:
+        "201":
+          description: created
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/RegulatoryRequirement" }
+        "403": { description: system framework — read-only }
+        "404": { description: framework not found }
+
+  /admin/regulatory-frameworks/{id}/requirements/{reqId}:
+    patch:
+      operationId: updateRegulatoryRequirement
+      tags: [regulatory]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+        - in: path
+          name: reqId
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/RegulatoryRequirementPatch" }
+      responses:
+        "200":
+          description: ok
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/RegulatoryRequirement" }
+        "403": { description: system framework — read-only }
+        "404": { description: not found }
+    delete:
+      operationId: deleteRegulatoryRequirement
+      tags: [regulatory]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+        - in: path
+          name: reqId
+          required: true
+          schema: { type: string }
+      responses:
+        "204": { description: deleted }
+        "403": { description: system framework — read-only }
+        "404": { description: not found }
+
+  /regulatory-frameworks:
+    get:
+      operationId: listActiveRegulatoryFrameworks
+      tags: [regulatory]
+      summary: |
+        Read-only list of active regulatory frameworks visible to the user
+        (system + tenant), including their requirements. Used by the contract
+        Regulatorik panel to populate the manual-add menu.
+      responses:
+        "200":
+          description: ok
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/RegulatoryFramework" }
+
+  /contracts/{contractId}/regulations:
+    get:
+      operationId: listContractRegulatoryAssessments
+      tags: [regulatory]
+      summary: List regulatory assessments + framework details for a contract.
+      parameters:
+        - in: path
+          name: contractId
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: ok
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ContractRegulatoryBundle" }
+        "403": { description: not in scope }
+        "404": { description: not found }
+
+  /contracts/{contractId}/regulations/check:
+    post:
+      operationId: runContractRegulatoryCheck
+      tags: [regulatory]
+      summary: |
+        Run AI applicability check + per-applicable-framework compliance check
+        against the contract's clauses. Persists assessments and returns the
+        full set.
+      parameters:
+        - in: path
+          name: contractId
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: ok
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ContractRegulatoryCheckResult" }
+        "403": { description: not in scope }
+        "404": { description: not found }
+        "503": { description: AI provider not configured }
+
+  /contracts/{contractId}/regulations/{frameworkId}:
+    post:
+      operationId: addContractRegulatoryFramework
+      tags: [regulatory]
+      summary: Manually add a framework to a contract (overrides auto-detection).
+      parameters:
+        - in: path
+          name: contractId
+          required: true
+          schema: { type: string }
+        - in: path
+          name: frameworkId
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                reason: { type: string }
+      responses:
+        "201":
+          description: added
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ContractRegulatoryAssessment" }
+        "403": { description: not in scope }
+        "404": { description: not found }
+    delete:
+      operationId: removeContractRegulatoryFramework
+      tags: [regulatory]
+      summary: Manually remove a framework from a contract (overrides auto-detection).
+      parameters:
+        - in: path
+          name: contractId
+          required: true
+          schema: { type: string }
+        - in: path
+          name: frameworkId
+          required: true
+          schema: { type: string }
+      responses:
+        "204": { description: removed }
+        "403": { description: not in scope }
+        "404": { description: not found }
+
+  /reports/regulatory-compliance:
+    get:
+      operationId: getRegulatoryComplianceReport
+      tags: [regulatory, reports]
+      summary: Tenant-wide regulatory compliance overview across all contracts.
+      responses:
+        "200":
+          description: ok
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/RegulatoryComplianceReport" }
 
   # ───────────── AUDIT LOG ─────────────
 
@@ -12159,3 +12426,355 @@ components:
         ref: { type: string }
         note: { type: string }
         snippet: { type: string }
+
+    # ── Regulatory compliance (Task #231) ─────────────────────────────────
+
+    RegulatoryApplicabilityRule:
+      type: object
+      required: [kind]
+      properties:
+        kind:
+          type: string
+          enum: [data_processing, ai_usage, service_type, jurisdiction, industry, size_bracket, contract_type, always]
+        values:
+          type: array
+          items: { type: string }
+        note: { type: string }
+
+    RegulatoryRequirement:
+      type: object
+      required:
+        - id
+        - frameworkId
+        - code
+        - title
+        - description
+        - normRef
+        - severity
+        - sortOrder
+        - createdAt
+        - updatedAt
+      properties:
+        id: { type: string }
+        frameworkId: { type: string }
+        code: { type: string }
+        title: { type: string }
+        description: { type: string }
+        normRef: { type: string }
+        recommendedClauseFamily:
+          oneOf:
+            - { type: string }
+            - { type: "null" }
+        recommendedClauseText:
+          oneOf:
+            - { type: string }
+            - { type: "null" }
+        severity:
+          type: string
+          enum: [must, should, info]
+        sortOrder: { type: integer }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+
+    RegulatoryRequirementInput:
+      type: object
+      required: [code, title, description, normRef]
+      properties:
+        code: { type: string, minLength: 1, maxLength: 60 }
+        title: { type: string, minLength: 2, maxLength: 200 }
+        description: { type: string }
+        normRef: { type: string, minLength: 2, maxLength: 200 }
+        recommendedClauseFamily:
+          oneOf:
+            - { type: string }
+            - { type: "null" }
+        recommendedClauseText:
+          oneOf:
+            - { type: string }
+            - { type: "null" }
+        severity:
+          type: string
+          enum: [must, should, info]
+        sortOrder: { type: integer }
+
+    RegulatoryRequirementPatch:
+      type: object
+      properties:
+        code: { type: string }
+        title: { type: string }
+        description: { type: string }
+        normRef: { type: string }
+        recommendedClauseFamily:
+          oneOf:
+            - { type: string }
+            - { type: "null" }
+        recommendedClauseText:
+          oneOf:
+            - { type: string }
+            - { type: "null" }
+        severity:
+          type: string
+          enum: [must, should, info]
+        sortOrder: { type: integer }
+
+    RegulatoryFramework:
+      type: object
+      required:
+        - id
+        - tenantId
+        - isSystem
+        - code
+        - title
+        - shortLabel
+        - jurisdiction
+        - summary
+        - version
+        - applicabilityRules
+        - active
+        - sortOrder
+        - requirements
+        - createdAt
+        - updatedAt
+      properties:
+        id: { type: string }
+        tenantId:
+          oneOf:
+            - { type: string }
+            - { type: "null" }
+        isSystem: { type: boolean }
+        code: { type: string }
+        title: { type: string }
+        shortLabel: { type: string }
+        jurisdiction: { type: string }
+        summary: { type: string }
+        url:
+          oneOf:
+            - { type: string }
+            - { type: "null" }
+        version: { type: string }
+        applicabilityRules:
+          type: array
+          items: { $ref: "#/components/schemas/RegulatoryApplicabilityRule" }
+        active: { type: boolean }
+        sortOrder: { type: integer }
+        requirements:
+          type: array
+          items: { $ref: "#/components/schemas/RegulatoryRequirement" }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+
+    RegulatoryFrameworkInput:
+      type: object
+      required: [code, title, shortLabel, summary]
+      properties:
+        code: { type: string, minLength: 2, maxLength: 60 }
+        title: { type: string, minLength: 2, maxLength: 200 }
+        shortLabel: { type: string, minLength: 1, maxLength: 30 }
+        jurisdiction: { type: string, maxLength: 4 }
+        summary: { type: string }
+        url:
+          oneOf:
+            - { type: string }
+            - { type: "null" }
+        version: { type: string }
+        applicabilityRules:
+          type: array
+          items: { $ref: "#/components/schemas/RegulatoryApplicabilityRule" }
+        active: { type: boolean }
+        sortOrder: { type: integer }
+
+    RegulatoryFrameworkPatch:
+      type: object
+      properties:
+        code: { type: string }
+        title: { type: string }
+        shortLabel: { type: string }
+        jurisdiction: { type: string }
+        summary: { type: string }
+        url:
+          oneOf:
+            - { type: string }
+            - { type: "null" }
+        version: { type: string }
+        applicabilityRules:
+          type: array
+          items: { $ref: "#/components/schemas/RegulatoryApplicabilityRule" }
+        active: { type: boolean }
+        sortOrder: { type: integer }
+
+    RegulatoryFinding:
+      type: object
+      required: [requirementId, status, note]
+      properties:
+        requirementId: { type: string }
+        status:
+          type: string
+          enum: [met, partial, missing]
+        note: { type: string }
+        suggestion:
+          oneOf:
+            - { type: string }
+            - { type: "null" }
+        contractClauseId:
+          oneOf:
+            - { type: string }
+            - { type: "null" }
+        snippet:
+          oneOf:
+            - { type: string }
+            - { type: "null" }
+
+    ContractRegulatoryAssessment:
+      type: object
+      required:
+        - id
+        - tenantId
+        - contractId
+        - frameworkId
+        - applicability
+        - findings
+        - overallStatus
+        - createdAt
+        - updatedAt
+      properties:
+        id: { type: string }
+        tenantId: { type: string }
+        contractId: { type: string }
+        frameworkId: { type: string }
+        applicability:
+          type: string
+          enum: [auto_applicable, auto_not_applicable, manual_added, manual_removed]
+        applicabilityReason:
+          oneOf:
+            - { type: string }
+            - { type: "null" }
+        findings:
+          type: array
+          items: { $ref: "#/components/schemas/RegulatoryFinding" }
+        overallStatus:
+          type: string
+          enum: [compliant, partial, non_compliant, not_evaluated]
+        aiInvocationId:
+          oneOf:
+            - { type: string }
+            - { type: "null" }
+        lastEvaluatedAt:
+          oneOf:
+            - { type: string, format: date-time }
+            - { type: "null" }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+
+    ContractRegulatoryBundle:
+      type: object
+      required: [contractId, assessments, frameworks]
+      properties:
+        contractId: { type: string }
+        assessments:
+          type: array
+          items: { $ref: "#/components/schemas/ContractRegulatoryAssessment" }
+        frameworks:
+          type: array
+          items: { $ref: "#/components/schemas/RegulatoryFramework" }
+
+    ContractRegulatoryCheckResult:
+      type: object
+      required: [ok, contractId, frameworksEvaluated, assessments]
+      properties:
+        ok: { type: boolean }
+        contractId: { type: string }
+        applicabilityInvocationId:
+          oneOf:
+            - { type: string }
+            - { type: "null" }
+        frameworksEvaluated: { type: integer }
+        assessments:
+          type: array
+          items: { $ref: "#/components/schemas/ContractRegulatoryAssessment" }
+
+    RegulatoryComplianceContractItem:
+      type: object
+      required:
+        - contractId
+        - contractTitle
+        - contractStatus
+        - applicableCount
+        - compliant
+        - partial
+        - nonCompliant
+        - notEvaluated
+        - overall
+        - frameworks
+      properties:
+        contractId: { type: string }
+        contractTitle: { type: string }
+        contractStatus: { type: string }
+        dealId:
+          oneOf:
+            - { type: string }
+            - { type: "null" }
+        accountId:
+          oneOf:
+            - { type: string }
+            - { type: "null" }
+        brandId:
+          oneOf:
+            - { type: string }
+            - { type: "null" }
+        applicableCount: { type: integer }
+        compliant: { type: integer }
+        partial: { type: integer }
+        nonCompliant: { type: integer }
+        notEvaluated: { type: integer }
+        overall:
+          type: string
+          enum: [compliant, partial, non_compliant, not_evaluated]
+        frameworks:
+          type: array
+          items:
+            type: object
+            required: [frameworkId, code, shortLabel, overallStatus, applicability]
+            properties:
+              frameworkId: { type: string }
+              code: { type: string }
+              shortLabel: { type: string }
+              overallStatus:
+                type: string
+                enum: [compliant, partial, non_compliant, not_evaluated]
+              applicability:
+                type: string
+                enum: [auto_applicable, auto_not_applicable, manual_added, manual_removed]
+
+    RegulatoryComplianceFrameworkSummary:
+      type: object
+      required:
+        - frameworkId
+        - code
+        - shortLabel
+        - title
+        - applicableContracts
+        - compliant
+        - partial
+        - nonCompliant
+        - notEvaluated
+      properties:
+        frameworkId: { type: string }
+        code: { type: string }
+        shortLabel: { type: string }
+        title: { type: string }
+        applicableContracts: { type: integer }
+        compliant: { type: integer }
+        partial: { type: integer }
+        nonCompliant: { type: integer }
+        notEvaluated: { type: integer }
+
+    RegulatoryComplianceReport:
+      type: object
+      required: [items, frameworkSummary]
+      properties:
+        items:
+          type: array
+          items: { $ref: "#/components/schemas/RegulatoryComplianceContractItem" }
+        frameworkSummary:
+          type: array
+          items: { $ref: "#/components/schemas/RegulatoryComplianceFrameworkSummary" }

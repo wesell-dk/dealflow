@@ -81,6 +81,7 @@ import { AiPromptPanel } from "@/components/copilot/ai-prompt-panel";
 import { Breadcrumbs } from "@/components/patterns/breadcrumbs";
 import { LintPanel } from "@/components/contract/lint-panel";
 import { NegotiationStrategyTab } from "@/components/contract/negotiation-strategy-tab";
+import { RegulatorySection } from "@/components/contract/regulatory-section";
 
 /**
  * Kleiner Badge für den Konsistenz-Tab — zeigt die Fehler-Anzahl als roter
@@ -327,6 +328,9 @@ export default function Contract() {
           <TabsTrigger value="negotiation" data-testid="contract-tab-negotiation">
             {t("pages.contracts.tabs.negotiation")}
           </TabsTrigger>
+          <TabsTrigger value="regulatory" data-testid="contract-tab-regulatory">
+            Regulatorik
+          </TabsTrigger>
         </TabsList>
 
         <TabsContent value="overview" className="mt-4 space-y-6" data-testid="contract-tabpanel-overview">
@@ -554,6 +558,10 @@ export default function Contract() {
 
         <TabsContent value="negotiation" className="mt-4 space-y-6" data-testid="contract-tabpanel-negotiation">
           <NegotiationStrategyTab contractId={id} clauses={clauses ?? []} />
+        </TabsContent>
+
+        <TabsContent value="regulatory" className="mt-4 space-y-6" data-testid="contract-tabpanel-regulatory">
+          <RegulatorySection contractId={id} />
         </TabsContent>
       </Tabs>
 

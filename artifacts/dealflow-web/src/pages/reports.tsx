@@ -43,9 +43,15 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { useToast } from "@/hooks/use-toast";
-import { Bell, CalendarClock, CheckCircle2, Clock, ExternalLink, UserPlus, ArrowRight } from "lucide-react";
+import {
+  Bell, CalendarClock, CheckCircle2, Clock, ExternalLink, UserPlus, ArrowRight,
+  ShieldCheck, AlertTriangle, XCircle, HelpCircle,
+} from "lucide-react";
 import { ResponsiveContainer, ComposedChart, AreaChart, Area, BarChart, Bar, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend } from "recharts";
 import { AiAcceptanceTile } from "@/components/reports/ai-acceptance-tile";
+import {
+  useGetRegulatoryComplianceReport,
+} from "@workspace/api-client-react";
 import { TONE_TEXT_CLASSES } from "@/components/patterns/status-badges";
 
 export default function Reports() {
@@ -778,6 +784,8 @@ export default function Reports() {
         </Card>
       </div>
 
+      <RegulatoryComplianceCard onOpenContract={(id) => navigate(`/contracts/${id}`)} />
+
       <Card>
         <CardHeader>
           <CardTitle>Performance by Owner</CardTitle>
@@ -1031,5 +1039,214 @@ function RenewalActionRow({
         </Button>
       </div>
     </div>
+  );
+}
+
+// ───────────────────────────────────────────────────────────────────────────
+// Regulatorik-Compliance Übersicht (Task #231)
+// Aggregiert alle Vertragsbewertungen pro Tenant, gruppiert nach Framework
+// und nach Vertrag. Verträge mit nicht-konformen Befunden stehen oben.
+// ───────────────────────────────────────────────────────────────────────────
+function RegulatoryComplianceCard(props: { onOpenContract: (id: string) => void }) {
+  const { onOpenContract } = props;
+  const { data, isLoading } = useGetRegulatoryComplianceReport();
+
+  const items = data?.items ?? [];
+  const summary = data?.frameworkSummary ?? [];
+
+  // Items mit Problemen oben.
+  const sortedItems = useMemo(() => {
+    const order = (s: string) =>
+      s === "non_compliant" ? 0 : s === "partial" ? 1 : s === "not_evaluated" ? 2 : 3;
+    return [...items].sort((a, b) => order(a.overall) - order(b.overall));
+  }, [items]);
+
+  const totals = useMemo(() => {
+    const t = { compliant: 0, partial: 0, nonCompliant: 0, notEvaluated: 0 };
+    for (const it of items) {
+      if (it.overall === "compliant") t.compliant++;
+      else if (it.overall === "partial") t.partial++;
+      else if (it.overall === "non_compliant") t.nonCompliant++;
+      else t.notEvaluated++;
+    }
+    return t;
+  }, [items]);
+
+  const statusBadge = (s: string) => {
+    if (s === "compliant") {
+      return (
+        <Badge variant="outline" className="bg-emerald-500/10 text-emerald-700 border-emerald-500/30">
+          <CheckCircle2 className="h-3 w-3 mr-1" />Konform
+        </Badge>
+      );
+    }
+    if (s === "partial") {
+      return (
+        <Badge variant="outline" className="bg-amber-500/10 text-amber-700 border-amber-500/30">
+          <AlertTriangle className="h-3 w-3 mr-1" />Teilweise
+        </Badge>
+      );
+    }
+    if (s === "non_compliant") {
+      return (
+        <Badge variant="destructive">
+          <XCircle className="h-3 w-3 mr-1" />Nicht konform
+        </Badge>
+      );
+    }
+    return (
+      <Badge variant="outline" className="text-muted-foreground">
+        <HelpCircle className="h-3 w-3 mr-1" />Nicht bewertet
+      </Badge>
+    );
+  };
+
+  return (
+    <Card data-testid="card-regulatory-compliance-report">
+      <CardHeader className="flex flex-row items-center gap-2">
+        <ShieldCheck className="h-5 w-5 text-primary" />
+        <div>
+          <CardTitle>Regulatorik-Compliance</CardTitle>
+          <p className="text-sm text-muted-foreground mt-1">
+            Übersicht über die Compliance-Bewertung aller Verträge mit
+            anwendbaren EU-/DE-Regulatoriken (DSGVO, EU AI Act, DSA, NIS2,
+            LkSG …).
+          </p>
+        </div>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        {isLoading ? (
+          <Skeleton className="h-32 w-full" />
+        ) : items.length === 0 ? (
+          <p className="text-sm text-muted-foreground py-4 text-center">
+            Noch keine Verträge bewertet. Öffne einen Vertrag und starte den
+            KI-Check, um Daten zu erzeugen.
+          </p>
+        ) : (
+          <>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-center text-sm">
+              <div className="rounded-md border p-3 bg-emerald-500/5">
+                <div className="text-3xl font-semibold text-emerald-700">{totals.compliant}</div>
+                <div className="text-muted-foreground text-xs mt-1">Konform</div>
+              </div>
+              <div className="rounded-md border p-3 bg-amber-500/5">
+                <div className="text-3xl font-semibold text-amber-700">{totals.partial}</div>
+                <div className="text-muted-foreground text-xs mt-1">Teilweise</div>
+              </div>
+              <div className="rounded-md border p-3 bg-destructive/5">
+                <div className="text-3xl font-semibold text-destructive">{totals.nonCompliant}</div>
+                <div className="text-muted-foreground text-xs mt-1">Nicht konform</div>
+              </div>
+              <div className="rounded-md border p-3">
+                <div className="text-3xl font-semibold text-muted-foreground">{totals.notEvaluated}</div>
+                <div className="text-muted-foreground text-xs mt-1">Nicht bewertet</div>
+              </div>
+            </div>
+
+            {summary.length > 0 && (
+              <div>
+                <h3 className="text-sm font-medium mb-2">Pro Regulatorik</h3>
+                <div className="border rounded-md">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Regulatorik</TableHead>
+                        <TableHead className="text-center">Anwendbar</TableHead>
+                        <TableHead className="text-center text-emerald-700">Konform</TableHead>
+                        <TableHead className="text-center text-amber-700">Teilweise</TableHead>
+                        <TableHead className="text-center text-destructive">Nicht konform</TableHead>
+                        <TableHead className="text-center text-muted-foreground">Offen</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {summary.map((s) => (
+                        <TableRow key={s.frameworkId} data-testid={`row-fw-summary-${s.code}`}>
+                          <TableCell>
+                            <div className="flex items-center gap-2">
+                              <Badge variant="outline" className="font-mono text-[10px]">
+                                {s.shortLabel}
+                              </Badge>
+                              <span className="text-sm">{s.title}</span>
+                            </div>
+                          </TableCell>
+                          <TableCell className="text-center">{s.applicableContracts}</TableCell>
+                          <TableCell className="text-center font-medium">{s.compliant}</TableCell>
+                          <TableCell className="text-center font-medium">{s.partial}</TableCell>
+                          <TableCell className="text-center font-medium">{s.nonCompliant}</TableCell>
+                          <TableCell className="text-center font-medium">{s.notEvaluated}</TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              </div>
+            )}
+
+            <div>
+              <h3 className="text-sm font-medium mb-2">Verträge</h3>
+              <div className="border rounded-md">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Vertrag</TableHead>
+                      <TableHead>Regulatoriken</TableHead>
+                      <TableHead className="w-[160px]">Status</TableHead>
+                      <TableHead className="text-right w-[60px]"></TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {sortedItems.map((it) => (
+                      <TableRow key={it.contractId} data-testid={`row-contract-compliance-${it.contractId}`}>
+                        <TableCell>
+                          <div className="font-medium">{it.contractTitle}</div>
+                          <div className="text-xs text-muted-foreground">{it.contractStatus}</div>
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex flex-wrap gap-1">
+                            {it.frameworks.length === 0 ? (
+                              <span className="text-xs text-muted-foreground">—</span>
+                            ) : (
+                              it.frameworks.map((f) => (
+                                <Badge
+                                  key={f.frameworkId}
+                                  variant="outline"
+                                  className={`text-[10px] ${
+                                    f.overallStatus === "non_compliant"
+                                      ? "border-destructive/40 text-destructive"
+                                      : f.overallStatus === "partial"
+                                      ? "border-amber-500/40 text-amber-700"
+                                      : f.overallStatus === "compliant"
+                                      ? "border-emerald-500/40 text-emerald-700"
+                                      : ""
+                                  }`}
+                                  title={f.overallStatus}
+                                >
+                                  {f.shortLabel}
+                                </Badge>
+                              ))
+                            )}
+                          </div>
+                        </TableCell>
+                        <TableCell>{statusBadge(it.overall)}</TableCell>
+                        <TableCell className="text-right">
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            onClick={() => onOpenContract(it.contractId)}
+                            data-testid={`button-open-contract-${it.contractId}`}
+                          >
+                            <ExternalLink className="h-4 w-4" />
+                          </Button>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+            </div>
+          </>
+        )}
+      </CardContent>
+    </Card>
   );
 }

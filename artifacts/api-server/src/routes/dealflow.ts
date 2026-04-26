@@ -149,6 +149,9 @@ import {
   leadsTable,
   legalSourcesTable,
   legalPrecedentsTable,
+  regulatoryFrameworksTable,
+  regulatoryRequirementsTable,
+  contractRegulatoryAssessmentsTable,
 } from '@workspace/db';
 import { createHash } from 'node:crypto';
 import {
@@ -188,7 +191,14 @@ import {
   type SecondOpinionEnvelope,
 } from '../lib/ai';
 import { recordRecommendation, clampConfidence, confidenceLevelToScore } from '../lib/ai/recommendations.js';
-import type { HelpAssistantInput, ContractRiskInput, ContractConsistencyInput, ContractNegotiationInput } from '../lib/ai/prompts/dealflow';
+import type {
+  HelpAssistantInput,
+  ContractRiskInput,
+  ContractConsistencyInput,
+  ContractNegotiationInput,
+  RegulatoryApplicabilityInput,
+  RegulatoryCheckInput,
+} from '../lib/ai/prompts/dealflow';
 import { runContractLint, type ContractLintInput } from '../lib/contractLinter/index.js';
 import {
   searchLegalKnowledge,
@@ -21277,6 +21287,914 @@ router.get('/legal-knowledge/precedents/:id', async (req, res) => {
   if (!row) { res.status(404).json({ error: 'not_found' }); return; }
   res.json(mapLegalPrecedent(row));
 });
+
+// ╔═══════════════════════════════════════════════════════════════════════╗
+// ║  Regulatorik-Compliance (Task #231)                                    ║
+// ║  - Bibliothek: System + Tenant; Admin-CRUD                             ║
+// ║  - Pro Vertrag: Anwendbarkeits-Check + Compliance-Check via KI         ║
+// ║  - Reporting-Übersicht über alle aktiven Verträge                      ║
+// ╚═══════════════════════════════════════════════════════════════════════╝
+
+const VALID_FRAMEWORK_APPLICABILITY = new Set([
+  'auto_applicable',
+  'auto_not_applicable',
+  'manual_added',
+  'manual_removed',
+]);
+const VALID_OVERALL_STATUS = new Set([
+  'compliant', 'partial', 'non_compliant', 'not_evaluated',
+]);
+const VALID_REQ_SEVERITY = new Set(['must', 'should', 'info']);
+
+function mapRegulatoryFramework(
+  row: typeof regulatoryFrameworksTable.$inferSelect,
+  requirements: Array<typeof regulatoryRequirementsTable.$inferSelect> = [],
+) {
+  return {
+    id: row.id,
+    tenantId: row.tenantId,
+    isSystem: row.tenantId === null,
+    code: row.code,
+    title: row.title,
+    shortLabel: row.shortLabel,
+    jurisdiction: row.jurisdiction,
+    summary: row.summary,
+    url: row.url,
+    version: row.version,
+    applicabilityRules: row.applicabilityRules ?? [],
+    active: row.active,
+    sortOrder: row.sortOrder,
+    requirements: requirements.map(mapRegulatoryRequirement),
+    createdAt: iso(row.createdAt)!,
+    updatedAt: iso(row.updatedAt)!,
+  };
+}
+
+function mapRegulatoryRequirement(
+  row: typeof regulatoryRequirementsTable.$inferSelect,
+) {
+  return {
+    id: row.id,
+    frameworkId: row.frameworkId,
+    code: row.code,
+    title: row.title,
+    description: row.description,
+    normRef: row.normRef,
+    recommendedClauseFamily: row.recommendedClauseFamily,
+    recommendedClauseText: row.recommendedClauseText,
+    severity: row.severity,
+    sortOrder: row.sortOrder,
+    createdAt: iso(row.createdAt)!,
+    updatedAt: iso(row.updatedAt)!,
+  };
+}
+
+function mapAssessment(
+  row: typeof contractRegulatoryAssessmentsTable.$inferSelect,
+) {
+  return {
+    id: row.id,
+    tenantId: row.tenantId,
+    contractId: row.contractId,
+    frameworkId: row.frameworkId,
+    applicability: row.applicability,
+    applicabilityReason: row.applicabilityReason,
+    findings: row.findings ?? [],
+    overallStatus: row.overallStatus,
+    aiInvocationId: row.aiInvocationId,
+    lastEvaluatedAt: iso(row.lastEvaluatedAt),
+    createdAt: iso(row.createdAt)!,
+    updatedAt: iso(row.updatedAt)!,
+  };
+}
+
+// Lädt alle Frameworks (System + Tenant), inkl. Requirements, sortiert.
+async function loadFrameworksWithRequirements(tenantId: string, opts: { includeInactive?: boolean } = {}) {
+  const fwRows = await db
+    .select()
+    .from(regulatoryFrameworksTable)
+    .where(
+      opts.includeInactive
+        ? or(isNull(regulatoryFrameworksTable.tenantId), eq(regulatoryFrameworksTable.tenantId, tenantId))
+        : and(
+          or(isNull(regulatoryFrameworksTable.tenantId), eq(regulatoryFrameworksTable.tenantId, tenantId)),
+          eq(regulatoryFrameworksTable.active, true),
+        ),
+    )
+    .orderBy(asc(regulatoryFrameworksTable.sortOrder), asc(regulatoryFrameworksTable.code));
+  if (fwRows.length === 0) return [];
+  const fwIds = fwRows.map((r) => r.id);
+  const reqRows = await db
+    .select()
+    .from(regulatoryRequirementsTable)
+    .where(inArray(regulatoryRequirementsTable.frameworkId, fwIds))
+    .orderBy(asc(regulatoryRequirementsTable.sortOrder), asc(regulatoryRequirementsTable.code));
+  const byFw = new Map<string, typeof reqRows>();
+  for (const r of reqRows) {
+    const arr = byFw.get(r.frameworkId) ?? [];
+    arr.push(r);
+    byFw.set(r.frameworkId, arr);
+  }
+  return fwRows.map((f) => mapRegulatoryFramework(f, byFw.get(f.id) ?? []));
+}
+
+// ── Heuristik: Service-/Vertrags-Signale aus Vertrags-Kontext ableiten ──
+//
+// Diese Signale fließen sowohl in den KI-Anwendbarkeits-Prompt als auch in
+// die deterministische Vorauswahl. Die Heuristik ist bewusst grob — die KI
+// entscheidet endgültig.
+function deriveContractSignals(ctx: ContractContext): {
+  industry: string | null;
+  sizeBracket: string | null;
+  jurisdiction: string | null;
+  contractType: string | null;
+  dataProcessing: boolean;
+  aiUsage: boolean;
+  serviceType: string | null;
+  clauseFamilies: string[];
+} {
+  const families = ctx.clauses.map((c) => c.family.toLowerCase());
+  const text = (ctx.clauses.map((c) => `${c.family} ${c.summary}`).join(' ') + ' ' + ctx.contract.title).toLowerCase();
+  const dataProcessing =
+    families.some((f) => f.includes('data') || f.includes('avv') || f.includes('dpa') || f.includes('confidential'))
+    || /personenbezogen|datenverarb|dsgvo|gdpr|auftragsverarbeit/.test(text);
+  const aiUsage =
+    families.some((f) => f.includes('ai') || f.includes('ki'))
+    || /künstliche intelligenz|machine learning|kI-system|ai system|llm|gpt/.test(text);
+  let serviceType: string | null = null;
+  if (/marketplace|plattform|platform|hosting/.test(text)) serviceType = 'platform';
+  else if (/cloud|saas|managed services/.test(text)) serviceType = 'saas';
+  return {
+    industry: ctx.account.industry ?? null,
+    sizeBracket: null,
+    jurisdiction: null,
+    contractType: ctx.contract.template ?? null,
+    dataProcessing,
+    aiUsage,
+    serviceType,
+    clauseFamilies: Array.from(new Set(families)),
+  };
+}
+
+// Aggregiert overallStatus aus Findings + Requirements-Severity.
+function aggregateOverallStatus(
+  findings: Array<{ requirementId: string; status: 'met' | 'partial' | 'missing' }>,
+  requirements: Array<{ id: string; severity: string }>,
+): 'compliant' | 'partial' | 'non_compliant' {
+  if (findings.length === 0) return 'partial';
+  const reqMap = new Map(requirements.map((r) => [r.id, r.severity]));
+  let hasMissing = false;
+  let hasPartial = false;
+  let hasMustMissing = false;
+  for (const f of findings) {
+    if (f.status === 'missing') {
+      hasMissing = true;
+      if ((reqMap.get(f.requirementId) ?? 'must') === 'must') hasMustMissing = true;
+    } else if (f.status === 'partial') {
+      hasPartial = true;
+    }
+  }
+  if (hasMustMissing) return 'non_compliant';
+  if (hasMissing || hasPartial) return 'partial';
+  return 'compliant';
+}
+
+// ── Admin: Frameworks — list ─────────────────────────────────────────────
+router.get('/admin/regulatory-frameworks', async (req, res) => {
+  if (!requireAdmin(req, res)) return;
+  const scope = getScope(req);
+  const list = await loadFrameworksWithRequirements(scope.tenantId, { includeInactive: true });
+  res.json(list);
+});
+
+// ── Admin: Framework — single ───────────────────────────────────────────
+router.get('/admin/regulatory-frameworks/:id', async (req, res) => {
+  if (!requireAdmin(req, res)) return;
+  const scope = getScope(req);
+  const id = String(req.params['id'] ?? '');
+  const [row] = await db.select().from(regulatoryFrameworksTable).where(eq(regulatoryFrameworksTable.id, id));
+  if (!row) { res.status(404).json({ error: 'not_found' }); return; }
+  if (row.tenantId !== null && row.tenantId !== scope.tenantId) {
+    res.status(404).json({ error: 'not_found' }); return;
+  }
+  const reqs = await db
+    .select()
+    .from(regulatoryRequirementsTable)
+    .where(eq(regulatoryRequirementsTable.frameworkId, id))
+    .orderBy(asc(regulatoryRequirementsTable.sortOrder), asc(regulatoryRequirementsTable.code));
+  res.json(mapRegulatoryFramework(row, reqs));
+});
+
+// ── Admin: Framework — create ───────────────────────────────────────────
+router.post('/admin/regulatory-frameworks', async (req, res) => {
+  if (!requireAdmin(req, res)) return;
+  const scope = getScope(req);
+  const b = req.body as {
+    code?: string; title?: string; shortLabel?: string;
+    jurisdiction?: string; summary?: string; url?: string | null;
+    version?: string;
+    applicabilityRules?: Array<{ kind: string; values?: string[]; note?: string }>;
+    active?: boolean; sortOrder?: number;
+  } | undefined;
+  if (!b || typeof b.code !== 'string' || typeof b.title !== 'string'
+    || typeof b.shortLabel !== 'string' || typeof b.summary !== 'string') {
+    res.status(422).json({ error: 'code, title, shortLabel, summary required' });
+    return;
+  }
+  const dup = await db
+    .select()
+    .from(regulatoryFrameworksTable)
+    .where(and(eq(regulatoryFrameworksTable.tenantId, scope.tenantId), eq(regulatoryFrameworksTable.code, b.code)));
+  if (dup.length) {
+    res.status(409).json({ error: `regulatory framework "${b.code}" already exists for this tenant` });
+    return;
+  }
+  const newId = `rf_${randomBytes(6).toString('hex')}`;
+  const row = {
+    id: newId,
+    tenantId: scope.tenantId,
+    code: b.code.trim(),
+    title: b.title.trim(),
+    shortLabel: b.shortLabel.trim().slice(0, 30),
+    jurisdiction: (b.jurisdiction ?? 'EU').toUpperCase().slice(0, 4),
+    summary: b.summary,
+    url: b.url ?? null,
+    version: b.version ?? '1.0',
+    applicabilityRules: Array.isArray(b.applicabilityRules) ? b.applicabilityRules.slice(0, 20) : [],
+    active: b.active !== false,
+    sortOrder: typeof b.sortOrder === 'number' ? b.sortOrder : 100,
+  };
+  await db.insert(regulatoryFrameworksTable).values(row);
+  const [saved] = await db.select().from(regulatoryFrameworksTable).where(eq(regulatoryFrameworksTable.id, newId));
+  await writeAuditFromReq(req, {
+    entityType: 'regulatory_framework', entityId: newId, action: 'create',
+    summary: `Regulatorik angelegt: ${row.code}`,
+    before: null, after: saved,
+  });
+  res.status(201).json(mapRegulatoryFramework(saved!, []));
+});
+
+// ── Admin: Framework — patch ────────────────────────────────────────────
+router.patch('/admin/regulatory-frameworks/:id', async (req, res) => {
+  if (!requireAdmin(req, res)) return;
+  const scope = getScope(req);
+  const id = String(req.params['id'] ?? '');
+  const [existing] = await db.select().from(regulatoryFrameworksTable).where(eq(regulatoryFrameworksTable.id, id));
+  if (!existing) { res.status(404).json({ error: 'not_found' }); return; }
+  if (existing.tenantId === null) {
+    res.status(403).json({ error: 'system framework — clone into your tenant to override' });
+    return;
+  }
+  if (existing.tenantId !== scope.tenantId) {
+    res.status(404).json({ error: 'not_found' }); return;
+  }
+  const b = req.body as Partial<{
+    code: string; title: string; shortLabel: string; jurisdiction: string;
+    summary: string; url: string | null; version: string;
+    applicabilityRules: Array<{ kind: string; values?: string[]; note?: string }>;
+    active: boolean; sortOrder: number;
+  }>;
+  const patch: Record<string, unknown> = { updatedAt: new Date() };
+  for (const k of ['code', 'title', 'shortLabel', 'jurisdiction', 'summary', 'url', 'version', 'active', 'sortOrder'] as const) {
+    if (b[k] !== undefined) patch[k] = b[k];
+  }
+  if (b.applicabilityRules !== undefined) {
+    patch['applicabilityRules'] = Array.isArray(b.applicabilityRules) ? b.applicabilityRules.slice(0, 20) : [];
+  }
+  await db.update(regulatoryFrameworksTable).set(patch).where(eq(regulatoryFrameworksTable.id, id));
+  const [saved] = await db.select().from(regulatoryFrameworksTable).where(eq(regulatoryFrameworksTable.id, id));
+  await writeAuditFromReq(req, {
+    entityType: 'regulatory_framework', entityId: id, action: 'update',
+    summary: `Regulatorik bearbeitet: ${saved!.code}`,
+    before: existing, after: saved,
+  });
+  const reqs = await db
+    .select()
+    .from(regulatoryRequirementsTable)
+    .where(eq(regulatoryRequirementsTable.frameworkId, id))
+    .orderBy(asc(regulatoryRequirementsTable.sortOrder), asc(regulatoryRequirementsTable.code));
+  res.json(mapRegulatoryFramework(saved!, reqs));
+});
+
+// ── Admin: Framework — delete ───────────────────────────────────────────
+router.delete('/admin/regulatory-frameworks/:id', async (req, res) => {
+  if (!requireAdmin(req, res)) return;
+  const scope = getScope(req);
+  const id = String(req.params['id'] ?? '');
+  const [existing] = await db.select().from(regulatoryFrameworksTable).where(eq(regulatoryFrameworksTable.id, id));
+  if (!existing) { res.status(404).json({ error: 'not_found' }); return; }
+  if (existing.tenantId === null) {
+    res.status(403).json({ error: 'system framework cannot be deleted' });
+    return;
+  }
+  if (existing.tenantId !== scope.tenantId) {
+    res.status(404).json({ error: 'not_found' }); return;
+  }
+  await db.delete(regulatoryRequirementsTable).where(eq(regulatoryRequirementsTable.frameworkId, id));
+  await db.delete(contractRegulatoryAssessmentsTable).where(eq(contractRegulatoryAssessmentsTable.frameworkId, id));
+  await db.delete(regulatoryFrameworksTable).where(eq(regulatoryFrameworksTable.id, id));
+  await writeAuditFromReq(req, {
+    entityType: 'regulatory_framework', entityId: id, action: 'delete',
+    summary: `Regulatorik gelöscht: ${existing.code}`,
+    before: existing, after: null,
+  });
+  res.status(204).end();
+});
+
+// ── Admin: Requirement — create ─────────────────────────────────────────
+router.post('/admin/regulatory-frameworks/:id/requirements', async (req, res) => {
+  if (!requireAdmin(req, res)) return;
+  const scope = getScope(req);
+  const fwId = String(req.params['id'] ?? '');
+  const [fw] = await db.select().from(regulatoryFrameworksTable).where(eq(regulatoryFrameworksTable.id, fwId));
+  if (!fw) { res.status(404).json({ error: 'framework_not_found' }); return; }
+  if (fw.tenantId === null) {
+    res.status(403).json({ error: 'system framework — clone into your tenant before adding requirements' });
+    return;
+  }
+  if (fw.tenantId !== scope.tenantId) {
+    res.status(404).json({ error: 'framework_not_found' }); return;
+  }
+  const b = req.body as {
+    code?: string; title?: string; description?: string; normRef?: string;
+    recommendedClauseFamily?: string | null;
+    recommendedClauseText?: string | null;
+    severity?: string; sortOrder?: number;
+  } | undefined;
+  if (!b || typeof b.code !== 'string' || typeof b.title !== 'string'
+    || typeof b.description !== 'string' || typeof b.normRef !== 'string') {
+    res.status(422).json({ error: 'code, title, description, normRef required' });
+    return;
+  }
+  if (b.severity && !VALID_REQ_SEVERITY.has(b.severity)) {
+    res.status(422).json({ error: 'severity must be must|should|info' });
+    return;
+  }
+  const newId = `rr_${randomBytes(6).toString('hex')}`;
+  await db.insert(regulatoryRequirementsTable).values({
+    id: newId,
+    frameworkId: fwId,
+    code: b.code.trim(),
+    title: b.title.trim(),
+    description: b.description,
+    normRef: b.normRef.trim(),
+    recommendedClauseFamily: b.recommendedClauseFamily ?? null,
+    recommendedClauseText: b.recommendedClauseText ?? null,
+    severity: b.severity ?? 'must',
+    sortOrder: typeof b.sortOrder === 'number' ? b.sortOrder : 100,
+  });
+  const [saved] = await db.select().from(regulatoryRequirementsTable).where(eq(regulatoryRequirementsTable.id, newId));
+  await writeAuditFromReq(req, {
+    entityType: 'regulatory_requirement', entityId: newId, action: 'create',
+    summary: `Regulatorik-Anforderung angelegt: ${saved!.code} (${fw.code})`,
+    before: null, after: saved,
+  });
+  res.status(201).json(mapRegulatoryRequirement(saved!));
+});
+
+// ── Admin: Requirement — patch ──────────────────────────────────────────
+router.patch('/admin/regulatory-frameworks/:id/requirements/:reqId', async (req, res) => {
+  if (!requireAdmin(req, res)) return;
+  const scope = getScope(req);
+  const fwId = String(req.params['id'] ?? '');
+  const reqId = String(req.params['reqId'] ?? '');
+  const [fw] = await db.select().from(regulatoryFrameworksTable).where(eq(regulatoryFrameworksTable.id, fwId));
+  if (!fw) { res.status(404).json({ error: 'framework_not_found' }); return; }
+  if (fw.tenantId === null) {
+    res.status(403).json({ error: 'system framework — read-only' }); return;
+  }
+  if (fw.tenantId !== scope.tenantId) {
+    res.status(404).json({ error: 'framework_not_found' }); return;
+  }
+  const [existing] = await db
+    .select()
+    .from(regulatoryRequirementsTable)
+    .where(and(eq(regulatoryRequirementsTable.id, reqId), eq(regulatoryRequirementsTable.frameworkId, fwId)));
+  if (!existing) { res.status(404).json({ error: 'not_found' }); return; }
+  const b = req.body as Partial<{
+    code: string; title: string; description: string; normRef: string;
+    recommendedClauseFamily: string | null;
+    recommendedClauseText: string | null;
+    severity: string; sortOrder: number;
+  }>;
+  if (b.severity && !VALID_REQ_SEVERITY.has(b.severity)) {
+    res.status(422).json({ error: 'severity must be must|should|info' });
+    return;
+  }
+  const patch: Record<string, unknown> = { updatedAt: new Date() };
+  for (const k of ['code', 'title', 'description', 'normRef', 'recommendedClauseFamily', 'recommendedClauseText', 'severity', 'sortOrder'] as const) {
+    if (b[k] !== undefined) patch[k] = b[k];
+  }
+  await db.update(regulatoryRequirementsTable).set(patch).where(eq(regulatoryRequirementsTable.id, reqId));
+  const [saved] = await db.select().from(regulatoryRequirementsTable).where(eq(regulatoryRequirementsTable.id, reqId));
+  await writeAuditFromReq(req, {
+    entityType: 'regulatory_requirement', entityId: reqId, action: 'update',
+    summary: `Regulatorik-Anforderung bearbeitet: ${saved!.code}`,
+    before: existing, after: saved,
+  });
+  res.json(mapRegulatoryRequirement(saved!));
+});
+
+// ── Admin: Requirement — delete ─────────────────────────────────────────
+router.delete('/admin/regulatory-frameworks/:id/requirements/:reqId', async (req, res) => {
+  if (!requireAdmin(req, res)) return;
+  const scope = getScope(req);
+  const fwId = String(req.params['id'] ?? '');
+  const reqId = String(req.params['reqId'] ?? '');
+  const [fw] = await db.select().from(regulatoryFrameworksTable).where(eq(regulatoryFrameworksTable.id, fwId));
+  if (!fw) { res.status(404).json({ error: 'framework_not_found' }); return; }
+  if (fw.tenantId === null) {
+    res.status(403).json({ error: 'system framework — read-only' }); return;
+  }
+  if (fw.tenantId !== scope.tenantId) {
+    res.status(404).json({ error: 'framework_not_found' }); return;
+  }
+  const [existing] = await db
+    .select()
+    .from(regulatoryRequirementsTable)
+    .where(and(eq(regulatoryRequirementsTable.id, reqId), eq(regulatoryRequirementsTable.frameworkId, fwId)));
+  if (!existing) { res.status(404).json({ error: 'not_found' }); return; }
+  await db.delete(regulatoryRequirementsTable).where(eq(regulatoryRequirementsTable.id, reqId));
+  await writeAuditFromReq(req, {
+    entityType: 'regulatory_requirement', entityId: reqId, action: 'delete',
+    summary: `Regulatorik-Anforderung gelöscht: ${existing.code}`,
+    before: existing, after: null,
+  });
+  res.status(204).end();
+});
+
+// ── User: Frameworks — read-only list (für Vertragsseite) ──────────────
+router.get('/regulatory-frameworks', async (req, res) => {
+  const scope = getScope(req);
+  const list = await loadFrameworksWithRequirements(scope.tenantId);
+  res.json(list);
+});
+
+// ── Contract: list assessments + framework details ─────────────────────
+router.get('/contracts/:contractId/regulations', async (req, res) => {
+  const scope = getScope(req);
+  const contractId = String(req.params['contractId'] ?? '');
+  const status = await entityScopeStatus(req, 'contract', contractId);
+  if (status === 'missing') { res.status(404).json({ error: 'not_found' }); return; }
+  if (status === 'forbidden') { res.status(403).json({ error: 'forbidden' }); return; }
+  const assessments = await db
+    .select()
+    .from(contractRegulatoryAssessmentsTable)
+    .where(and(
+      eq(contractRegulatoryAssessmentsTable.tenantId, scope.tenantId),
+      eq(contractRegulatoryAssessmentsTable.contractId, contractId),
+    ));
+  const frameworks = await loadFrameworksWithRequirements(scope.tenantId);
+  res.json({
+    contractId,
+    assessments: assessments.map(mapAssessment),
+    frameworks,
+  });
+});
+
+// ── Contract: run AI applicability + per-framework compliance check ────
+router.post('/contracts/:contractId/regulations/check', async (req, res) => {
+  const scope = getScope(req);
+  if (!isAIConfigured()) {
+    res.status(503).json({ ok: false, error: 'AI provider not configured', code: 'config_error' });
+    return;
+  }
+  const contractId = String(req.params['contractId'] ?? '');
+  let ctx: ContractContext;
+  try {
+    ctx = await buildContractContext(req, contractId);
+  } catch (e) {
+    if (handleScopeError(e, res)) return;
+    throw e;
+  }
+  const frameworks = await loadFrameworksWithRequirements(scope.tenantId);
+  if (frameworks.length === 0) {
+    res.json({ ok: true, contractId, frameworksEvaluated: 0, assessments: [] });
+    return;
+  }
+  const signals = deriveContractSignals(ctx);
+
+  // Bestehende User-Overrides (manual_added/manual_removed) respektieren.
+  const existing = await db
+    .select()
+    .from(contractRegulatoryAssessmentsTable)
+    .where(and(
+      eq(contractRegulatoryAssessmentsTable.tenantId, scope.tenantId),
+      eq(contractRegulatoryAssessmentsTable.contractId, contractId),
+    ));
+  const overrides = new Map<string, typeof existing[number]>();
+  for (const e of existing) {
+    if (e.applicability === 'manual_added' || e.applicability === 'manual_removed') {
+      overrides.set(e.frameworkId, e);
+    }
+  }
+
+  // 1) Anwendbarkeits-Check via KI.
+  let applicabilitySelections: Array<{ frameworkId: string; applicable: boolean; reason: string }> = [];
+  let applicabilityInvocationId: string | null = null;
+  try {
+    const result = await runStructured<RegulatoryApplicabilityInput, {
+      selections: Array<{ frameworkId: string; applicable: boolean; reason: string }>;
+      notes: string[];
+      confidence: 'low' | 'medium' | 'high';
+      confidenceReason: string;
+    }>({
+      promptKey: 'contract.regulatoryApplicability',
+      input: {
+        contract: ctx,
+        signals,
+        frameworks: frameworks.map((f) => ({
+          id: f.id, code: f.code, title: f.title,
+          shortLabel: f.shortLabel, summary: f.summary,
+          jurisdiction: f.jurisdiction,
+          applicabilityRules: f.applicabilityRules,
+        })),
+      },
+      scope,
+      entityRef: { entityType: 'contract', entityId: contractId },
+    });
+    applicabilityInvocationId = result.invocationId;
+    applicabilitySelections = (result.output.selections ?? []).filter((s) =>
+      frameworks.some((f) => f.id === s.frameworkId),
+    );
+  } catch (err) {
+    if (err instanceof AIOrchestrationError) {
+      mapAiOrchestrationErrorToHttp(err, res, 'regulatory-applicability');
+      return;
+    }
+    throw err;
+  }
+
+  // 2) Pro Framework, das anwendbar ist (oder manuell hinzugefügt wurde),
+  //    Compliance-Check ausführen. Reihenfolge bleibt deterministisch
+  //    (sortOrder), damit das UI eine stabile Liste zeigt.
+  const applicableIds = new Set(
+    applicabilitySelections.filter((s) => s.applicable).map((s) => s.frameworkId),
+  );
+  // Manual_added immer reinnehmen, auch wenn die KI applicable=false sagt.
+  for (const [fid, ov] of overrides) {
+    if (ov.applicability === 'manual_added') applicableIds.add(fid);
+    if (ov.applicability === 'manual_removed') applicableIds.delete(fid);
+  }
+
+  // Klauseln mit Body laden (für Compliance-Prompt).
+  const clauseRows = await db
+    .select()
+    .from(contractClausesTable)
+    .where(eq(contractClausesTable.contractId, contractId));
+  const variantIds = clauseRows.map((c) => c.activeVariantId).filter((v): v is string => !!v);
+  const variantMap = new Map<string, string>();
+  if (variantIds.length) {
+    const vRows = await db
+      .select()
+      .from(clauseVariantsTable)
+      .where(inArray(clauseVariantsTable.id, variantIds));
+    for (const v of vRows) variantMap.set(v.id, v.body ?? '');
+  }
+  const promptClauses = clauseRows.map((c) => ({
+    id: c.id,
+    family: c.family,
+    summary: c.editedSummary || c.summary,
+    body: c.editedBody || (c.activeVariantId ? variantMap.get(c.activeVariantId) ?? '' : ''),
+  }));
+
+  const assessmentsOut: Array<ReturnType<typeof mapAssessment>> = [];
+  // Frameworks, die nach Anwendbarkeits-Check NICHT anwendbar sind:
+  // wir persistieren das ebenfalls, damit das UI nicht jedes Mal aufs Neue
+  // den vollen Catalogue prüft.
+  for (const fw of frameworks) {
+    const sel = applicabilitySelections.find((s) => s.frameworkId === fw.id);
+    const ov = overrides.get(fw.id);
+    const isApplicable = applicableIds.has(fw.id);
+
+    let applicability: string;
+    let applicabilityReason: string | null;
+    if (ov?.applicability === 'manual_added') {
+      applicability = 'manual_added';
+      applicabilityReason = ov.applicabilityReason ?? 'Manuell hinzugefügt';
+    } else if (ov?.applicability === 'manual_removed') {
+      applicability = 'manual_removed';
+      applicabilityReason = ov.applicabilityReason ?? 'Manuell entfernt';
+    } else if (isApplicable) {
+      applicability = 'auto_applicable';
+      applicabilityReason = sel?.reason ?? null;
+    } else {
+      applicability = 'auto_not_applicable';
+      applicabilityReason = sel?.reason ?? null;
+    }
+
+    let findings: Array<{
+      requirementId: string;
+      status: 'met' | 'partial' | 'missing';
+      note: string;
+      suggestion: string | null;
+      contractClauseId: string | null;
+      snippet: string | null;
+    }> = [];
+    let overallStatus: 'compliant' | 'partial' | 'non_compliant' | 'not_evaluated' = 'not_evaluated';
+    let aiInvocationId: string | null = null;
+    let lastEvaluatedAt: Date | null = null;
+
+    if (isApplicable && fw.requirements.length > 0) {
+      try {
+        const result = await runStructured<RegulatoryCheckInput, {
+          findings: Array<{
+            requirementId: string;
+            status: 'met' | 'partial' | 'missing';
+            note: string;
+            suggestion: string | null;
+            contractClauseId: string | null;
+            snippet: string | null;
+          }>;
+          overallStatus: 'compliant' | 'partial' | 'non_compliant';
+          summary: string;
+          confidence: 'low' | 'medium' | 'high';
+          confidenceReason: string;
+        }>({
+          promptKey: 'contract.regulatoryCheck',
+          input: {
+            framework: {
+              id: fw.id, code: fw.code, title: fw.title,
+              shortLabel: fw.shortLabel, summary: fw.summary,
+              jurisdiction: fw.jurisdiction,
+            },
+            requirements: fw.requirements.map((r) => ({
+              id: r.id, code: r.code, title: r.title,
+              description: r.description, normRef: r.normRef,
+              severity: r.severity,
+              recommendedClauseFamily: r.recommendedClauseFamily,
+              recommendedClauseText: r.recommendedClauseText,
+            })),
+            contract: {
+              id: ctx.contract.id,
+              title: ctx.contract.title,
+              contractType: ctx.contract.template ?? null,
+              language: 'de',
+            },
+            clauses: promptClauses,
+          },
+          scope,
+          entityRef: { entityType: 'contract', entityId: contractId },
+        });
+        const validIds = new Set(fw.requirements.map((r) => r.id));
+        findings = (result.output.findings ?? []).filter((f) => validIds.has(f.requirementId));
+        // Aggregat ggf. neu berechnen (KI kann inkonsistent sein).
+        overallStatus = aggregateOverallStatus(findings, fw.requirements);
+        aiInvocationId = result.invocationId;
+        lastEvaluatedAt = new Date();
+
+        const recId = await recordRecommendation({
+          tenantId: scope.tenantId,
+          promptKey: 'contract.regulatoryCheck',
+          suggestion: { frameworkId: fw.id, findings, overallStatus, summary: result.output.summary },
+          confidence: confidenceLevelToScore(result.output.confidence),
+          entityType: 'contract',
+          entityId: contractId,
+          aiInvocationId: result.invocationId,
+        });
+        void recId;
+      } catch (err) {
+        if (err instanceof AIOrchestrationError) {
+          // Pro Framework fehlerhaften Check loggen, aber mit "not_evaluated"
+          // weitermachen — sonst stoppt der ganze Vertrag bei einem einzigen
+          // Provider-Fehler.
+          console.error(`[regulatory-check/${fw.code}]`, err.code, err.message);
+          overallStatus = 'not_evaluated';
+        } else {
+          throw err;
+        }
+      }
+    }
+
+    const assessmentId = `cra_${randomUUID().slice(0, 8)}`;
+    const inserted = await db
+      .insert(contractRegulatoryAssessmentsTable)
+      .values({
+        id: assessmentId,
+        tenantId: scope.tenantId,
+        contractId,
+        frameworkId: fw.id,
+        applicability,
+        applicabilityReason,
+        findings,
+        overallStatus,
+        aiInvocationId,
+        lastEvaluatedAt,
+      })
+      .onConflictDoUpdate({
+        target: [contractRegulatoryAssessmentsTable.contractId, contractRegulatoryAssessmentsTable.frameworkId],
+        set: {
+          applicability,
+          applicabilityReason,
+          findings,
+          overallStatus,
+          aiInvocationId,
+          lastEvaluatedAt,
+          updatedAt: new Date(),
+        },
+      })
+      .returning();
+    assessmentsOut.push(mapAssessment(inserted[0]!));
+  }
+
+  await writeAuditFromReq(req, {
+    entityType: 'contract', entityId: contractId, action: 'update',
+    summary: `Regulatorik-Check ausgeführt (${assessmentsOut.filter((a) => a.applicability === 'auto_applicable' || a.applicability === 'manual_added').length} anwendbar)`,
+    before: null, after: { applicabilityInvocationId, frameworksEvaluated: assessmentsOut.length },
+  });
+
+  res.json({
+    ok: true,
+    contractId,
+    applicabilityInvocationId,
+    frameworksEvaluated: assessmentsOut.length,
+    assessments: assessmentsOut,
+  });
+});
+
+// ── Contract: manuell hinzufügen ────────────────────────────────────────
+router.post('/contracts/:contractId/regulations/:frameworkId', async (req, res) => {
+  const scope = getScope(req);
+  const contractId = String(req.params['contractId'] ?? '');
+  const frameworkId = String(req.params['frameworkId'] ?? '');
+  const status = await entityScopeStatus(req, 'contract', contractId);
+  if (status === 'missing') { res.status(404).json({ error: 'not_found' }); return; }
+  if (status === 'forbidden') { res.status(403).json({ error: 'forbidden' }); return; }
+  const [fw] = await db.select().from(regulatoryFrameworksTable).where(eq(regulatoryFrameworksTable.id, frameworkId));
+  if (!fw) { res.status(404).json({ error: 'framework_not_found' }); return; }
+  if (fw.tenantId !== null && fw.tenantId !== scope.tenantId) {
+    res.status(404).json({ error: 'framework_not_found' }); return;
+  }
+  const b = (req.body ?? {}) as { reason?: string };
+  const reason = (b.reason ?? '').trim() || `Manuell hinzugefügt: ${fw.code}`;
+  const id = `cra_${randomUUID().slice(0, 8)}`;
+  const inserted = await db
+    .insert(contractRegulatoryAssessmentsTable)
+    .values({
+      id,
+      tenantId: scope.tenantId,
+      contractId,
+      frameworkId,
+      applicability: 'manual_added',
+      applicabilityReason: reason,
+      findings: [],
+      overallStatus: 'not_evaluated',
+    })
+    .onConflictDoUpdate({
+      target: [contractRegulatoryAssessmentsTable.contractId, contractRegulatoryAssessmentsTable.frameworkId],
+      set: {
+        applicability: 'manual_added',
+        applicabilityReason: reason,
+        updatedAt: new Date(),
+      },
+    })
+    .returning();
+  await writeAuditFromReq(req, {
+    entityType: 'contract', entityId: contractId, action: 'update',
+    summary: `Regulatorik manuell hinzugefügt: ${fw.code}`,
+    before: null, after: inserted[0],
+  });
+  res.status(201).json(mapAssessment(inserted[0]!));
+});
+
+// ── Contract: manuell entfernen ─────────────────────────────────────────
+router.delete('/contracts/:contractId/regulations/:frameworkId', async (req, res) => {
+  const scope = getScope(req);
+  const contractId = String(req.params['contractId'] ?? '');
+  const frameworkId = String(req.params['frameworkId'] ?? '');
+  const status = await entityScopeStatus(req, 'contract', contractId);
+  if (status === 'missing') { res.status(404).json({ error: 'not_found' }); return; }
+  if (status === 'forbidden') { res.status(403).json({ error: 'forbidden' }); return; }
+  const [fw] = await db.select().from(regulatoryFrameworksTable).where(eq(regulatoryFrameworksTable.id, frameworkId));
+  if (!fw) { res.status(404).json({ error: 'framework_not_found' }); return; }
+  const id = `cra_${randomUUID().slice(0, 8)}`;
+  const inserted = await db
+    .insert(contractRegulatoryAssessmentsTable)
+    .values({
+      id,
+      tenantId: scope.tenantId,
+      contractId,
+      frameworkId,
+      applicability: 'manual_removed',
+      applicabilityReason: 'Manuell entfernt',
+      findings: [],
+      overallStatus: 'not_evaluated',
+    })
+    .onConflictDoUpdate({
+      target: [contractRegulatoryAssessmentsTable.contractId, contractRegulatoryAssessmentsTable.frameworkId],
+      set: {
+        applicability: 'manual_removed',
+        applicabilityReason: 'Manuell entfernt',
+        findings: [],
+        overallStatus: 'not_evaluated',
+        updatedAt: new Date(),
+      },
+    })
+    .returning();
+  await writeAuditFromReq(req, {
+    entityType: 'contract', entityId: contractId, action: 'update',
+    summary: `Regulatorik manuell entfernt: ${fw.code}`,
+    before: null, after: inserted[0],
+  });
+  res.status(204).end();
+});
+
+// ── Reporting: Übersicht über alle Verträge ────────────────────────────
+router.get('/reports/regulatory-compliance', async (req, res) => {
+  const scope = getScope(req);
+  // Verträge im Scope (active/draft/etc.). Wir filtern hart auf nicht-archived.
+  const contracts = await db
+    .select({
+      id: contractsTable.id,
+      title: contractsTable.title,
+      status: contractsTable.status,
+      dealId: contractsTable.dealId,
+      accountId: contractsTable.accountId,
+      brandId: contractsTable.brandId,
+    })
+    .from(contractsTable)
+    .where(eq(contractsTable.tenantId, scope.tenantId))
+    .limit(500);
+  if (contracts.length === 0) {
+    res.json({ items: [], frameworkSummary: [] });
+    return;
+  }
+  const cids = contracts.map((c) => c.id);
+  const assessments = await db
+    .select()
+    .from(contractRegulatoryAssessmentsTable)
+    .where(and(
+      eq(contractRegulatoryAssessmentsTable.tenantId, scope.tenantId),
+      inArray(contractRegulatoryAssessmentsTable.contractId, cids),
+    ));
+  const frameworks = await loadFrameworksWithRequirements(scope.tenantId);
+  const fwMap = new Map(frameworks.map((f) => [f.id, f]));
+
+  // Per-Vertrag aggregieren.
+  const byContract = new Map<string, typeof assessments>();
+  for (const a of assessments) {
+    const arr = byContract.get(a.contractId) ?? [];
+    arr.push(a);
+    byContract.set(a.contractId, arr);
+  }
+  const items = contracts.map((c) => {
+    const list = byContract.get(c.id) ?? [];
+    const applicable = list.filter((a) => a.applicability === 'auto_applicable' || a.applicability === 'manual_added');
+    const compliant = applicable.filter((a) => a.overallStatus === 'compliant').length;
+    const partial = applicable.filter((a) => a.overallStatus === 'partial').length;
+    const nonCompliant = applicable.filter((a) => a.overallStatus === 'non_compliant').length;
+    const notEvaluated = applicable.filter((a) => a.overallStatus === 'not_evaluated').length;
+    const overall = nonCompliant > 0 ? 'non_compliant'
+      : partial > 0 ? 'partial'
+      : notEvaluated > 0 && compliant === 0 ? 'not_evaluated'
+      : compliant > 0 ? 'compliant'
+      : 'not_evaluated';
+    return {
+      contractId: c.id,
+      contractTitle: c.title,
+      contractStatus: c.status,
+      dealId: c.dealId,
+      accountId: c.accountId,
+      brandId: c.brandId,
+      applicableCount: applicable.length,
+      compliant,
+      partial,
+      nonCompliant,
+      notEvaluated,
+      overall,
+      frameworks: applicable.map((a) => ({
+        frameworkId: a.frameworkId,
+        code: fwMap.get(a.frameworkId)?.code ?? '?',
+        shortLabel: fwMap.get(a.frameworkId)?.shortLabel ?? '?',
+        overallStatus: a.overallStatus,
+        applicability: a.applicability,
+      })),
+    };
+  });
+
+  // Pro Framework: wie viele Verträge sind anwendbar / compliant / nicht.
+  const frameworkSummary = frameworks.map((f) => {
+    const fl = assessments.filter((a) => a.frameworkId === f.id);
+    const applicable = fl.filter((a) => a.applicability === 'auto_applicable' || a.applicability === 'manual_added');
+    return {
+      frameworkId: f.id,
+      code: f.code,
+      shortLabel: f.shortLabel,
+      title: f.title,
+      applicableContracts: applicable.length,
+      compliant: applicable.filter((a) => a.overallStatus === 'compliant').length,
+      partial: applicable.filter((a) => a.overallStatus === 'partial').length,
+      nonCompliant: applicable.filter((a) => a.overallStatus === 'non_compliant').length,
+      notEvaluated: applicable.filter((a) => a.overallStatus === 'not_evaluated').length,
+    };
+  });
+
+  res.json({ items, frameworkSummary });
+});
+
+// Verhindert TS-Warnungen für nicht erreichbare Konstanten.
+void VALID_FRAMEWORK_APPLICABILITY;
+void VALID_OVERALL_STATUS;
 
 export default router;
 

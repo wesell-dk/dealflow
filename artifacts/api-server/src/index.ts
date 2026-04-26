@@ -9,6 +9,7 @@ import {
   backfillPricingCategoriesIdempotent,
 } from "./lib/seed";
 import { seedLegalSourcesIdempotent } from "./lib/seedLegalSources";
+import { seedRegulatoryFrameworksIdempotent } from "./lib/seedRegulatoryFrameworks";
 import { pruneExpiredSessions } from "./lib/auth";
 import { runAllGenerators } from "./insights/generators";
 import { runRetentionSweep } from "./gdpr/service";
@@ -44,6 +45,10 @@ await seedLegalSourcesIdempotent().catch((err) => {
 });
 await backfillPricingCategoriesIdempotent().catch((err) => {
   logger.error({ err }, "Pricing-categories backfill failed");
+});
+
+await seedRegulatoryFrameworksIdempotent().catch((err) => {
+  logger.error({ err }, "Regulatory frameworks seed failed");
 });
 
 await runAllGenerators().catch((err) => {

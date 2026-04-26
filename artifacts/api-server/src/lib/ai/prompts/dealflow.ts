@@ -1197,6 +1197,215 @@ export const leadWidgetSummary: PromptDefinition<
   toolName: "report_lead_widget_summary",
 };
 
+// ───────────────────────── 13. Regulatorik — Anwendbarkeit (Task #231) ─────────────────────────
+//
+// Bestimmt aus dem Vertragskontext (Account-Branche, Datenfluss, KI-Nutzung,
+// Vertragstyp, Jurisdiktion, Klausel-Familien) welche Regulierungen aus der
+// Bibliothek einschlägig sind. Die KI wählt ausschließlich aus den im Input
+// gelieferten Frameworks und liefert pro Auswahl eine Begründung.
+
+const RegulatoryApplicabilitySelection = z.object({
+  frameworkId: z.string().min(2).max(80),
+  applicable: z.boolean(),
+  reason: z.string().min(4).max(600),
+});
+
+const RegulatoryApplicabilityOutput = z.object({
+  selections: z.array(RegulatoryApplicabilitySelection).max(40),
+  notes: z.array(z.string().min(2).max(280)).max(5),
+  confidence: CONFIDENCE_LEVEL,
+  confidenceReason: CONFIDENCE_REASON,
+});
+
+export interface RegulatoryApplicabilityInput {
+  contract: ContractContext;
+  /** Heuristisch ermittelte Signale aus Vertrag/Account/Klauseln. */
+  signals: {
+    industry: string | null;
+    sizeBracket: string | null;
+    jurisdiction: string | null;
+    contractType: string | null;
+    dataProcessing: boolean;
+    aiUsage: boolean;
+    serviceType: string | null;
+    clauseFamilies: string[];
+  };
+  /** Bibliothek (System + Tenant). KI MUSS frameworkId aus dieser Liste wählen. */
+  frameworks: Array<{
+    id: string;
+    code: string;
+    title: string;
+    shortLabel: string;
+    summary: string;
+    jurisdiction: string;
+    applicabilityRules: Array<{ kind: string; values?: string[]; note?: string }>;
+  }>;
+}
+
+export const contractRegulatoryApplicability: PromptDefinition<
+  RegulatoryApplicabilityInput,
+  z.infer<typeof RegulatoryApplicabilityOutput>
+> = {
+  key: "contract.regulatoryApplicability",
+  model: "claude-sonnet-4-6",
+  system:
+    "Du bist DealFlow-Copilot im Modus Regulatorik-Anwendbarkeit. Du " +
+    "erhältst einen Vertrag mit Branche, Jurisdiktion, Datenfluss-/KI-" +
+    "Indikatoren und Klausel-Familien sowie eine Liste verfügbarer " +
+    "Regulierungen. Du entscheidest pro Regulierung, ob sie auf den Vertrag " +
+    "anwendbar ist (true/false) und begründest die Entscheidung in 1-3 " +
+    "Sätzen unter Bezug auf konkrete Signale (z. B. \"Account-Branche " +
+    "Healthcare → Hochrisiko-KI\"). Wähle frameworkId NUR aus der mitge" +
+    "lieferten Liste; erfinde keine IDs. Sei eher inklusiv: bei plausibler " +
+    "Anwendbarkeit applicable=true mit klarer Begründung. Liefere für JEDE " +
+    "Regulierung in der Liste genau eine Selection. " +
+    SAFE_GERMAN_HINT,
+  buildUser: (input) => {
+    const fwList = input.frameworks
+      .map((f) =>
+        `- ${f.id} (${f.code}, ${f.jurisdiction}): ${f.title}\n` +
+        `    ${f.summary.slice(0, 280)}\n` +
+        `    Trigger: ${f.applicabilityRules.map((r) => r.kind + (r.values ? `=${r.values.join("/")}` : "")).join("; ")}`,
+      )
+      .join("\n");
+    return (
+      `Vertrag: ${input.contract.contract.title} (Status: ${input.contract.contract.status})\n` +
+      `Account: ${input.contract.account.name}, Branche: ${input.signals.industry ?? "?"}, Land: ${input.contract.account.country}\n` +
+      `Größe: ${input.signals.sizeBracket ?? "?"}\n` +
+      `Vertragstyp: ${input.signals.contractType ?? "?"}\n` +
+      `Jurisdiktion: ${input.signals.jurisdiction ?? "?"}\n` +
+      `Datenverarbeitung erkennbar: ${input.signals.dataProcessing}\n` +
+      `KI-Nutzung erkennbar: ${input.signals.aiUsage}\n` +
+      `Service-Typ-Hinweis: ${input.signals.serviceType ?? "—"}\n` +
+      `Klausel-Familien: ${input.signals.clauseFamilies.join(", ") || "—"}\n\n` +
+      `Verfügbare Regulierungen:\n${fwList}`
+    );
+  },
+  outputSchema: RegulatoryApplicabilityOutput,
+  toolDescription:
+    "Liefert pro Regulierung eine Anwendbarkeits-Entscheidung (applicable + " +
+    "reason). frameworkId stammt strikt aus der Eingabeliste. Plus globale " +
+    "notes, confidence und confidenceReason.",
+  toolName: "report_regulatory_applicability",
+};
+
+// ───────────────────────── 14. Regulatorik — Compliance-Check (Task #231) ─────────────────────────
+//
+// Prüft die Vertragsklauseln gegen die Pflicht-Anforderungen EINER konkreten
+// Regulierung. Pro Anforderung liefert die KI: Status (met/partial/missing),
+// kurze Notiz, ggf. Snippet der Vertragsstelle und konkrete Empfehlung.
+
+const RegulatoryFinding = z.object({
+  requirementId: z.string().min(2).max(80),
+  status: z.union([z.literal("met"), z.literal("partial"), z.literal("missing")]),
+  note: z.string().min(2).max(500),
+  // Empfehlung, was zu tun ist (oder null wenn met).
+  suggestion: z.string().min(2).max(600).nullable(),
+  // Optional: ID der Vertragsklausel, in der die Anforderung belegt ist.
+  contractClauseId: z.string().max(80).nullable(),
+  // Optional: kurzer Auszug aus der Klausel als Beleg.
+  snippet: z.string().max(400).nullable(),
+});
+
+const RegulatoryCheckOutput = z.object({
+  findings: z.array(RegulatoryFinding).max(40),
+  // Aggregat: compliant = alle met; partial = mind. ein partial/missing aber
+  // kein must-missing; non_compliant = mind. ein "must" missing.
+  overallStatus: z.union([
+    z.literal("compliant"),
+    z.literal("partial"),
+    z.literal("non_compliant"),
+  ]),
+  summary: z.string().min(4).max(500),
+  confidence: CONFIDENCE_LEVEL,
+  confidenceReason: CONFIDENCE_REASON,
+});
+
+export interface RegulatoryCheckInput {
+  framework: {
+    id: string;
+    code: string;
+    title: string;
+    shortLabel: string;
+    summary: string;
+    jurisdiction: string;
+  };
+  requirements: Array<{
+    id: string;
+    code: string;
+    title: string;
+    description: string;
+    normRef: string;
+    severity: string;
+    recommendedClauseFamily: string | null;
+    recommendedClauseText: string | null;
+  }>;
+  contract: {
+    id: string;
+    title: string;
+    contractType: string | null;
+    language: "de" | "en";
+  };
+  clauses: Array<{
+    id: string;
+    family: string;
+    summary: string;
+    body: string;
+  }>;
+}
+
+export const contractRegulatoryCheck: PromptDefinition<
+  RegulatoryCheckInput,
+  z.infer<typeof RegulatoryCheckOutput>
+> = {
+  key: "contract.regulatoryCheck",
+  model: "claude-sonnet-4-6",
+  system:
+    "Du bist DealFlow-Copilot im Modus Regulatorik-Compliance. Du erhältst " +
+    "EINE Regulierung mit ihren Pflicht-Anforderungen (requirements) und die " +
+    "Klauseln des zu prüfenden Vertrags. Pro Anforderung entscheidest du: " +
+    "met (klar abgedeckt), partial (teilweise abgedeckt — wesentliche Aspekte " +
+    "fehlen), missing (nicht erkennbar). Bei partial/missing lieferst du eine " +
+    "konkrete, umsetzbare Empfehlung in Vertragssprache (suggestion). Wenn " +
+    "eine Klausel als Beleg dient, gibst du contractClauseId UND snippet (max. " +
+    "200 Zeichen) an. Wähle requirementId NUR aus der gelieferten Liste; " +
+    "erfinde keine. Liefere overallStatus aggregiert: 'compliant' = alle " +
+    "Anforderungen met; 'partial' = ein/mehrere partial/missing aber kein " +
+    "kritisches must-missing; 'non_compliant' = mindestens eine must-" +
+    "Anforderung missing. Schreibe im Stil eines Senior-Vertragsanwalts: " +
+    "präzise, mit Norm-Bezug, ohne Marketing-Floskeln. " +
+    SAFE_GERMAN_HINT,
+  buildUser: (input) => {
+    const reqList = input.requirements
+      .map(
+        (r) =>
+          `- ${r.id} [${r.code}, ${r.severity}] ${r.title} (${r.normRef})\n` +
+          `    ${r.description}` +
+          (r.recommendedClauseFamily
+            ? `\n    Erwartete Klausel-Familie: ${r.recommendedClauseFamily}`
+            : ""),
+      )
+      .join("\n");
+    const clauseList = input.clauses
+      .map((c) => `[${c.id}] § ${c.family} — ${c.summary}\n${(c.body ?? "").slice(0, 1500)}`)
+      .join("\n\n");
+    return (
+      `Regulierung: ${input.framework.title} (${input.framework.code}, ${input.framework.jurisdiction})\n` +
+      `Kurzbeschreibung: ${input.framework.summary.slice(0, 400)}\n\n` +
+      `Vertrag: ${input.contract.title} (Typ: ${input.contract.contractType ?? "?"}, Sprache: ${input.contract.language})\n\n` +
+      `Pflicht-Anforderungen:\n${reqList}\n\n` +
+      `Vertrags-Klauseln:\n${clauseList || "(keine Klauseln im Vertrag — alle missing)"}\n`
+    );
+  },
+  outputSchema: RegulatoryCheckOutput,
+  toolDescription:
+    "Liefert pro Pflicht-Anforderung der Regulierung einen Status (met/" +
+    "partial/missing) mit Notiz, optionaler suggestion, contractClauseId und " +
+    "snippet. Plus aggregierter overallStatus (compliant/partial/non_compliant), " +
+    "summary, confidence und confidenceReason.",
+  toolName: "report_regulatory_check",
+};
+
 // ───────────────────────── Bundle ─────────────────────────
 
 export const DEALFLOW_PROMPTS = {
@@ -1216,4 +1425,6 @@ export const DEALFLOW_PROMPTS = {
   [clauseImportSegment.key]: clauseImportSegment,
   [contractConsistency.key]: contractConsistency,
   [leadWidgetSummary.key]: leadWidgetSummary,
+  [contractRegulatoryApplicability.key]: contractRegulatoryApplicability,
+  [contractRegulatoryCheck.key]: contractRegulatoryCheck,
 } as const;

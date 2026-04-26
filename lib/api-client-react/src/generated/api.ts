@@ -31,6 +31,7 @@ import type {
   ActiveScopeUpdateResult,
   AddClauseResult,
   AddContractClauseBody,
+  AddContractRegulatoryFrameworkBody,
   AdminUser,
   AdminUserCreate,
   AdminUserUpdate,
@@ -116,6 +117,9 @@ import type {
   ContractPlaybook,
   ContractPlaybookCreate,
   ContractPlaybookUpdate,
+  ContractRegulatoryAssessment,
+  ContractRegulatoryBundle,
+  ContractRegulatoryCheckResult,
   ContractRiskEnvelope,
   ContractType,
   ContractTypeCreate,
@@ -296,6 +300,13 @@ import type {
   QuoteVersion,
   QuoteVersionInput,
   ReactionInput,
+  RegulatoryComplianceReport,
+  RegulatoryFramework,
+  RegulatoryFrameworkInput,
+  RegulatoryFrameworkPatch,
+  RegulatoryRequirement,
+  RegulatoryRequirementInput,
+  RegulatoryRequirementPatch,
   RenewalBulkInput,
   RenewalBulkResult,
   RenewalFollowupResult,
@@ -17155,6 +17166,1237 @@ export function useGetLegalPrecedentForUser<
   },
 ): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
   const queryOptions = getGetLegalPrecedentForUserQueryOptions(id, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary List regulatory frameworks (system + tenant), incl. inactive, for admin.
+ */
+export const getListRegulatoryFrameworksUrl = () => {
+  return `/api/v1/admin/regulatory-frameworks`;
+};
+
+export const listRegulatoryFrameworks = async (
+  options?: RequestInit,
+): Promise<RegulatoryFramework[]> => {
+  return customFetch<RegulatoryFramework[]>(getListRegulatoryFrameworksUrl(), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getListRegulatoryFrameworksQueryKey = () => {
+  return [`/api/v1/admin/regulatory-frameworks`] as const;
+};
+
+export const getListRegulatoryFrameworksQueryOptions = <
+  TData = Awaited<ReturnType<typeof listRegulatoryFrameworks>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof listRegulatoryFrameworks>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey =
+    queryOptions?.queryKey ?? getListRegulatoryFrameworksQueryKey();
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof listRegulatoryFrameworks>>
+  > = ({ signal }) => listRegulatoryFrameworks({ signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof listRegulatoryFrameworks>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type ListRegulatoryFrameworksQueryResult = NonNullable<
+  Awaited<ReturnType<typeof listRegulatoryFrameworks>>
+>;
+export type ListRegulatoryFrameworksQueryError = ErrorType<unknown>;
+
+/**
+ * @summary List regulatory frameworks (system + tenant), incl. inactive, for admin.
+ */
+
+export function useListRegulatoryFrameworks<
+  TData = Awaited<ReturnType<typeof listRegulatoryFrameworks>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof listRegulatoryFrameworks>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getListRegulatoryFrameworksQueryOptions(options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+export const getCreateRegulatoryFrameworkUrl = () => {
+  return `/api/v1/admin/regulatory-frameworks`;
+};
+
+export const createRegulatoryFramework = async (
+  regulatoryFrameworkInput: RegulatoryFrameworkInput,
+  options?: RequestInit,
+): Promise<RegulatoryFramework> => {
+  return customFetch<RegulatoryFramework>(getCreateRegulatoryFrameworkUrl(), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(regulatoryFrameworkInput),
+  });
+};
+
+export const getCreateRegulatoryFrameworkMutationOptions = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof createRegulatoryFramework>>,
+    TError,
+    { data: BodyType<RegulatoryFrameworkInput> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof createRegulatoryFramework>>,
+  TError,
+  { data: BodyType<RegulatoryFrameworkInput> },
+  TContext
+> => {
+  const mutationKey = ["createRegulatoryFramework"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof createRegulatoryFramework>>,
+    { data: BodyType<RegulatoryFrameworkInput> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return createRegulatoryFramework(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type CreateRegulatoryFrameworkMutationResult = NonNullable<
+  Awaited<ReturnType<typeof createRegulatoryFramework>>
+>;
+export type CreateRegulatoryFrameworkMutationBody =
+  BodyType<RegulatoryFrameworkInput>;
+export type CreateRegulatoryFrameworkMutationError = ErrorType<void>;
+
+export const useCreateRegulatoryFramework = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof createRegulatoryFramework>>,
+    TError,
+    { data: BodyType<RegulatoryFrameworkInput> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof createRegulatoryFramework>>,
+  TError,
+  { data: BodyType<RegulatoryFrameworkInput> },
+  TContext
+> => {
+  return useMutation(getCreateRegulatoryFrameworkMutationOptions(options));
+};
+
+export const getGetRegulatoryFrameworkUrl = (id: string) => {
+  return `/api/v1/admin/regulatory-frameworks/${id}`;
+};
+
+export const getRegulatoryFramework = async (
+  id: string,
+  options?: RequestInit,
+): Promise<RegulatoryFramework> => {
+  return customFetch<RegulatoryFramework>(getGetRegulatoryFrameworkUrl(id), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getGetRegulatoryFrameworkQueryKey = (id: string) => {
+  return [`/api/v1/admin/regulatory-frameworks/${id}`] as const;
+};
+
+export const getGetRegulatoryFrameworkQueryOptions = <
+  TData = Awaited<ReturnType<typeof getRegulatoryFramework>>,
+  TError = ErrorType<void>,
+>(
+  id: string,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getRegulatoryFramework>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey =
+    queryOptions?.queryKey ?? getGetRegulatoryFrameworkQueryKey(id);
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof getRegulatoryFramework>>
+  > = ({ signal }) => getRegulatoryFramework(id, { signal, ...requestOptions });
+
+  return {
+    queryKey,
+    queryFn,
+    enabled: !!id,
+    ...queryOptions,
+  } as UseQueryOptions<
+    Awaited<ReturnType<typeof getRegulatoryFramework>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetRegulatoryFrameworkQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getRegulatoryFramework>>
+>;
+export type GetRegulatoryFrameworkQueryError = ErrorType<void>;
+
+export function useGetRegulatoryFramework<
+  TData = Awaited<ReturnType<typeof getRegulatoryFramework>>,
+  TError = ErrorType<void>,
+>(
+  id: string,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getRegulatoryFramework>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetRegulatoryFrameworkQueryOptions(id, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+export const getUpdateRegulatoryFrameworkUrl = (id: string) => {
+  return `/api/v1/admin/regulatory-frameworks/${id}`;
+};
+
+export const updateRegulatoryFramework = async (
+  id: string,
+  regulatoryFrameworkPatch: RegulatoryFrameworkPatch,
+  options?: RequestInit,
+): Promise<RegulatoryFramework> => {
+  return customFetch<RegulatoryFramework>(getUpdateRegulatoryFrameworkUrl(id), {
+    ...options,
+    method: "PATCH",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(regulatoryFrameworkPatch),
+  });
+};
+
+export const getUpdateRegulatoryFrameworkMutationOptions = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof updateRegulatoryFramework>>,
+    TError,
+    { id: string; data: BodyType<RegulatoryFrameworkPatch> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof updateRegulatoryFramework>>,
+  TError,
+  { id: string; data: BodyType<RegulatoryFrameworkPatch> },
+  TContext
+> => {
+  const mutationKey = ["updateRegulatoryFramework"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof updateRegulatoryFramework>>,
+    { id: string; data: BodyType<RegulatoryFrameworkPatch> }
+  > = (props) => {
+    const { id, data } = props ?? {};
+
+    return updateRegulatoryFramework(id, data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type UpdateRegulatoryFrameworkMutationResult = NonNullable<
+  Awaited<ReturnType<typeof updateRegulatoryFramework>>
+>;
+export type UpdateRegulatoryFrameworkMutationBody =
+  BodyType<RegulatoryFrameworkPatch>;
+export type UpdateRegulatoryFrameworkMutationError = ErrorType<void>;
+
+export const useUpdateRegulatoryFramework = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof updateRegulatoryFramework>>,
+    TError,
+    { id: string; data: BodyType<RegulatoryFrameworkPatch> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof updateRegulatoryFramework>>,
+  TError,
+  { id: string; data: BodyType<RegulatoryFrameworkPatch> },
+  TContext
+> => {
+  return useMutation(getUpdateRegulatoryFrameworkMutationOptions(options));
+};
+
+export const getDeleteRegulatoryFrameworkUrl = (id: string) => {
+  return `/api/v1/admin/regulatory-frameworks/${id}`;
+};
+
+export const deleteRegulatoryFramework = async (
+  id: string,
+  options?: RequestInit,
+): Promise<void> => {
+  return customFetch<void>(getDeleteRegulatoryFrameworkUrl(id), {
+    ...options,
+    method: "DELETE",
+  });
+};
+
+export const getDeleteRegulatoryFrameworkMutationOptions = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof deleteRegulatoryFramework>>,
+    TError,
+    { id: string },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof deleteRegulatoryFramework>>,
+  TError,
+  { id: string },
+  TContext
+> => {
+  const mutationKey = ["deleteRegulatoryFramework"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof deleteRegulatoryFramework>>,
+    { id: string }
+  > = (props) => {
+    const { id } = props ?? {};
+
+    return deleteRegulatoryFramework(id, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type DeleteRegulatoryFrameworkMutationResult = NonNullable<
+  Awaited<ReturnType<typeof deleteRegulatoryFramework>>
+>;
+
+export type DeleteRegulatoryFrameworkMutationError = ErrorType<void>;
+
+export const useDeleteRegulatoryFramework = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof deleteRegulatoryFramework>>,
+    TError,
+    { id: string },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof deleteRegulatoryFramework>>,
+  TError,
+  { id: string },
+  TContext
+> => {
+  return useMutation(getDeleteRegulatoryFrameworkMutationOptions(options));
+};
+
+export const getCreateRegulatoryRequirementUrl = (id: string) => {
+  return `/api/v1/admin/regulatory-frameworks/${id}/requirements`;
+};
+
+export const createRegulatoryRequirement = async (
+  id: string,
+  regulatoryRequirementInput: RegulatoryRequirementInput,
+  options?: RequestInit,
+): Promise<RegulatoryRequirement> => {
+  return customFetch<RegulatoryRequirement>(
+    getCreateRegulatoryRequirementUrl(id),
+    {
+      ...options,
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...options?.headers },
+      body: JSON.stringify(regulatoryRequirementInput),
+    },
+  );
+};
+
+export const getCreateRegulatoryRequirementMutationOptions = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof createRegulatoryRequirement>>,
+    TError,
+    { id: string; data: BodyType<RegulatoryRequirementInput> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof createRegulatoryRequirement>>,
+  TError,
+  { id: string; data: BodyType<RegulatoryRequirementInput> },
+  TContext
+> => {
+  const mutationKey = ["createRegulatoryRequirement"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof createRegulatoryRequirement>>,
+    { id: string; data: BodyType<RegulatoryRequirementInput> }
+  > = (props) => {
+    const { id, data } = props ?? {};
+
+    return createRegulatoryRequirement(id, data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type CreateRegulatoryRequirementMutationResult = NonNullable<
+  Awaited<ReturnType<typeof createRegulatoryRequirement>>
+>;
+export type CreateRegulatoryRequirementMutationBody =
+  BodyType<RegulatoryRequirementInput>;
+export type CreateRegulatoryRequirementMutationError = ErrorType<void>;
+
+export const useCreateRegulatoryRequirement = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof createRegulatoryRequirement>>,
+    TError,
+    { id: string; data: BodyType<RegulatoryRequirementInput> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof createRegulatoryRequirement>>,
+  TError,
+  { id: string; data: BodyType<RegulatoryRequirementInput> },
+  TContext
+> => {
+  return useMutation(getCreateRegulatoryRequirementMutationOptions(options));
+};
+
+export const getUpdateRegulatoryRequirementUrl = (
+  id: string,
+  reqId: string,
+) => {
+  return `/api/v1/admin/regulatory-frameworks/${id}/requirements/${reqId}`;
+};
+
+export const updateRegulatoryRequirement = async (
+  id: string,
+  reqId: string,
+  regulatoryRequirementPatch: RegulatoryRequirementPatch,
+  options?: RequestInit,
+): Promise<RegulatoryRequirement> => {
+  return customFetch<RegulatoryRequirement>(
+    getUpdateRegulatoryRequirementUrl(id, reqId),
+    {
+      ...options,
+      method: "PATCH",
+      headers: { "Content-Type": "application/json", ...options?.headers },
+      body: JSON.stringify(regulatoryRequirementPatch),
+    },
+  );
+};
+
+export const getUpdateRegulatoryRequirementMutationOptions = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof updateRegulatoryRequirement>>,
+    TError,
+    { id: string; reqId: string; data: BodyType<RegulatoryRequirementPatch> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof updateRegulatoryRequirement>>,
+  TError,
+  { id: string; reqId: string; data: BodyType<RegulatoryRequirementPatch> },
+  TContext
+> => {
+  const mutationKey = ["updateRegulatoryRequirement"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof updateRegulatoryRequirement>>,
+    { id: string; reqId: string; data: BodyType<RegulatoryRequirementPatch> }
+  > = (props) => {
+    const { id, reqId, data } = props ?? {};
+
+    return updateRegulatoryRequirement(id, reqId, data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type UpdateRegulatoryRequirementMutationResult = NonNullable<
+  Awaited<ReturnType<typeof updateRegulatoryRequirement>>
+>;
+export type UpdateRegulatoryRequirementMutationBody =
+  BodyType<RegulatoryRequirementPatch>;
+export type UpdateRegulatoryRequirementMutationError = ErrorType<void>;
+
+export const useUpdateRegulatoryRequirement = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof updateRegulatoryRequirement>>,
+    TError,
+    { id: string; reqId: string; data: BodyType<RegulatoryRequirementPatch> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof updateRegulatoryRequirement>>,
+  TError,
+  { id: string; reqId: string; data: BodyType<RegulatoryRequirementPatch> },
+  TContext
+> => {
+  return useMutation(getUpdateRegulatoryRequirementMutationOptions(options));
+};
+
+export const getDeleteRegulatoryRequirementUrl = (
+  id: string,
+  reqId: string,
+) => {
+  return `/api/v1/admin/regulatory-frameworks/${id}/requirements/${reqId}`;
+};
+
+export const deleteRegulatoryRequirement = async (
+  id: string,
+  reqId: string,
+  options?: RequestInit,
+): Promise<void> => {
+  return customFetch<void>(getDeleteRegulatoryRequirementUrl(id, reqId), {
+    ...options,
+    method: "DELETE",
+  });
+};
+
+export const getDeleteRegulatoryRequirementMutationOptions = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof deleteRegulatoryRequirement>>,
+    TError,
+    { id: string; reqId: string },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof deleteRegulatoryRequirement>>,
+  TError,
+  { id: string; reqId: string },
+  TContext
+> => {
+  const mutationKey = ["deleteRegulatoryRequirement"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof deleteRegulatoryRequirement>>,
+    { id: string; reqId: string }
+  > = (props) => {
+    const { id, reqId } = props ?? {};
+
+    return deleteRegulatoryRequirement(id, reqId, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type DeleteRegulatoryRequirementMutationResult = NonNullable<
+  Awaited<ReturnType<typeof deleteRegulatoryRequirement>>
+>;
+
+export type DeleteRegulatoryRequirementMutationError = ErrorType<void>;
+
+export const useDeleteRegulatoryRequirement = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof deleteRegulatoryRequirement>>,
+    TError,
+    { id: string; reqId: string },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof deleteRegulatoryRequirement>>,
+  TError,
+  { id: string; reqId: string },
+  TContext
+> => {
+  return useMutation(getDeleteRegulatoryRequirementMutationOptions(options));
+};
+
+/**
+ * @summary Read-only list of active regulatory frameworks visible to the user
+(system + tenant), including their requirements. Used by the contract
+Regulatorik panel to populate the manual-add menu.
+
+ */
+export const getListActiveRegulatoryFrameworksUrl = () => {
+  return `/api/v1/regulatory-frameworks`;
+};
+
+export const listActiveRegulatoryFrameworks = async (
+  options?: RequestInit,
+): Promise<RegulatoryFramework[]> => {
+  return customFetch<RegulatoryFramework[]>(
+    getListActiveRegulatoryFrameworksUrl(),
+    {
+      ...options,
+      method: "GET",
+    },
+  );
+};
+
+export const getListActiveRegulatoryFrameworksQueryKey = () => {
+  return [`/api/v1/regulatory-frameworks`] as const;
+};
+
+export const getListActiveRegulatoryFrameworksQueryOptions = <
+  TData = Awaited<ReturnType<typeof listActiveRegulatoryFrameworks>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof listActiveRegulatoryFrameworks>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey =
+    queryOptions?.queryKey ?? getListActiveRegulatoryFrameworksQueryKey();
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof listActiveRegulatoryFrameworks>>
+  > = ({ signal }) =>
+    listActiveRegulatoryFrameworks({ signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof listActiveRegulatoryFrameworks>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type ListActiveRegulatoryFrameworksQueryResult = NonNullable<
+  Awaited<ReturnType<typeof listActiveRegulatoryFrameworks>>
+>;
+export type ListActiveRegulatoryFrameworksQueryError = ErrorType<unknown>;
+
+/**
+ * @summary Read-only list of active regulatory frameworks visible to the user
+(system + tenant), including their requirements. Used by the contract
+Regulatorik panel to populate the manual-add menu.
+
+ */
+
+export function useListActiveRegulatoryFrameworks<
+  TData = Awaited<ReturnType<typeof listActiveRegulatoryFrameworks>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof listActiveRegulatoryFrameworks>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getListActiveRegulatoryFrameworksQueryOptions(options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary List regulatory assessments + framework details for a contract.
+ */
+export const getListContractRegulatoryAssessmentsUrl = (contractId: string) => {
+  return `/api/v1/contracts/${contractId}/regulations`;
+};
+
+export const listContractRegulatoryAssessments = async (
+  contractId: string,
+  options?: RequestInit,
+): Promise<ContractRegulatoryBundle> => {
+  return customFetch<ContractRegulatoryBundle>(
+    getListContractRegulatoryAssessmentsUrl(contractId),
+    {
+      ...options,
+      method: "GET",
+    },
+  );
+};
+
+export const getListContractRegulatoryAssessmentsQueryKey = (
+  contractId: string,
+) => {
+  return [`/api/v1/contracts/${contractId}/regulations`] as const;
+};
+
+export const getListContractRegulatoryAssessmentsQueryOptions = <
+  TData = Awaited<ReturnType<typeof listContractRegulatoryAssessments>>,
+  TError = ErrorType<void>,
+>(
+  contractId: string,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof listContractRegulatoryAssessments>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey =
+    queryOptions?.queryKey ??
+    getListContractRegulatoryAssessmentsQueryKey(contractId);
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof listContractRegulatoryAssessments>>
+  > = ({ signal }) =>
+    listContractRegulatoryAssessments(contractId, {
+      signal,
+      ...requestOptions,
+    });
+
+  return {
+    queryKey,
+    queryFn,
+    enabled: !!contractId,
+    ...queryOptions,
+  } as UseQueryOptions<
+    Awaited<ReturnType<typeof listContractRegulatoryAssessments>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type ListContractRegulatoryAssessmentsQueryResult = NonNullable<
+  Awaited<ReturnType<typeof listContractRegulatoryAssessments>>
+>;
+export type ListContractRegulatoryAssessmentsQueryError = ErrorType<void>;
+
+/**
+ * @summary List regulatory assessments + framework details for a contract.
+ */
+
+export function useListContractRegulatoryAssessments<
+  TData = Awaited<ReturnType<typeof listContractRegulatoryAssessments>>,
+  TError = ErrorType<void>,
+>(
+  contractId: string,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof listContractRegulatoryAssessments>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getListContractRegulatoryAssessmentsQueryOptions(
+    contractId,
+    options,
+  );
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Run AI applicability check + per-applicable-framework compliance check
+against the contract's clauses. Persists assessments and returns the
+full set.
+
+ */
+export const getRunContractRegulatoryCheckUrl = (contractId: string) => {
+  return `/api/v1/contracts/${contractId}/regulations/check`;
+};
+
+export const runContractRegulatoryCheck = async (
+  contractId: string,
+  options?: RequestInit,
+): Promise<ContractRegulatoryCheckResult> => {
+  return customFetch<ContractRegulatoryCheckResult>(
+    getRunContractRegulatoryCheckUrl(contractId),
+    {
+      ...options,
+      method: "POST",
+    },
+  );
+};
+
+export const getRunContractRegulatoryCheckMutationOptions = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof runContractRegulatoryCheck>>,
+    TError,
+    { contractId: string },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof runContractRegulatoryCheck>>,
+  TError,
+  { contractId: string },
+  TContext
+> => {
+  const mutationKey = ["runContractRegulatoryCheck"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof runContractRegulatoryCheck>>,
+    { contractId: string }
+  > = (props) => {
+    const { contractId } = props ?? {};
+
+    return runContractRegulatoryCheck(contractId, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type RunContractRegulatoryCheckMutationResult = NonNullable<
+  Awaited<ReturnType<typeof runContractRegulatoryCheck>>
+>;
+
+export type RunContractRegulatoryCheckMutationError = ErrorType<void>;
+
+/**
+ * @summary Run AI applicability check + per-applicable-framework compliance check
+against the contract's clauses. Persists assessments and returns the
+full set.
+
+ */
+export const useRunContractRegulatoryCheck = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof runContractRegulatoryCheck>>,
+    TError,
+    { contractId: string },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof runContractRegulatoryCheck>>,
+  TError,
+  { contractId: string },
+  TContext
+> => {
+  return useMutation(getRunContractRegulatoryCheckMutationOptions(options));
+};
+
+/**
+ * @summary Manually add a framework to a contract (overrides auto-detection).
+ */
+export const getAddContractRegulatoryFrameworkUrl = (
+  contractId: string,
+  frameworkId: string,
+) => {
+  return `/api/v1/contracts/${contractId}/regulations/${frameworkId}`;
+};
+
+export const addContractRegulatoryFramework = async (
+  contractId: string,
+  frameworkId: string,
+  addContractRegulatoryFrameworkBody?: AddContractRegulatoryFrameworkBody,
+  options?: RequestInit,
+): Promise<ContractRegulatoryAssessment> => {
+  return customFetch<ContractRegulatoryAssessment>(
+    getAddContractRegulatoryFrameworkUrl(contractId, frameworkId),
+    {
+      ...options,
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...options?.headers },
+      body: JSON.stringify(addContractRegulatoryFrameworkBody),
+    },
+  );
+};
+
+export const getAddContractRegulatoryFrameworkMutationOptions = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof addContractRegulatoryFramework>>,
+    TError,
+    {
+      contractId: string;
+      frameworkId: string;
+      data: BodyType<AddContractRegulatoryFrameworkBody>;
+    },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof addContractRegulatoryFramework>>,
+  TError,
+  {
+    contractId: string;
+    frameworkId: string;
+    data: BodyType<AddContractRegulatoryFrameworkBody>;
+  },
+  TContext
+> => {
+  const mutationKey = ["addContractRegulatoryFramework"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof addContractRegulatoryFramework>>,
+    {
+      contractId: string;
+      frameworkId: string;
+      data: BodyType<AddContractRegulatoryFrameworkBody>;
+    }
+  > = (props) => {
+    const { contractId, frameworkId, data } = props ?? {};
+
+    return addContractRegulatoryFramework(
+      contractId,
+      frameworkId,
+      data,
+      requestOptions,
+    );
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type AddContractRegulatoryFrameworkMutationResult = NonNullable<
+  Awaited<ReturnType<typeof addContractRegulatoryFramework>>
+>;
+export type AddContractRegulatoryFrameworkMutationBody =
+  BodyType<AddContractRegulatoryFrameworkBody>;
+export type AddContractRegulatoryFrameworkMutationError = ErrorType<void>;
+
+/**
+ * @summary Manually add a framework to a contract (overrides auto-detection).
+ */
+export const useAddContractRegulatoryFramework = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof addContractRegulatoryFramework>>,
+    TError,
+    {
+      contractId: string;
+      frameworkId: string;
+      data: BodyType<AddContractRegulatoryFrameworkBody>;
+    },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof addContractRegulatoryFramework>>,
+  TError,
+  {
+    contractId: string;
+    frameworkId: string;
+    data: BodyType<AddContractRegulatoryFrameworkBody>;
+  },
+  TContext
+> => {
+  return useMutation(getAddContractRegulatoryFrameworkMutationOptions(options));
+};
+
+/**
+ * @summary Manually remove a framework from a contract (overrides auto-detection).
+ */
+export const getRemoveContractRegulatoryFrameworkUrl = (
+  contractId: string,
+  frameworkId: string,
+) => {
+  return `/api/v1/contracts/${contractId}/regulations/${frameworkId}`;
+};
+
+export const removeContractRegulatoryFramework = async (
+  contractId: string,
+  frameworkId: string,
+  options?: RequestInit,
+): Promise<void> => {
+  return customFetch<void>(
+    getRemoveContractRegulatoryFrameworkUrl(contractId, frameworkId),
+    {
+      ...options,
+      method: "DELETE",
+    },
+  );
+};
+
+export const getRemoveContractRegulatoryFrameworkMutationOptions = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof removeContractRegulatoryFramework>>,
+    TError,
+    { contractId: string; frameworkId: string },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof removeContractRegulatoryFramework>>,
+  TError,
+  { contractId: string; frameworkId: string },
+  TContext
+> => {
+  const mutationKey = ["removeContractRegulatoryFramework"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof removeContractRegulatoryFramework>>,
+    { contractId: string; frameworkId: string }
+  > = (props) => {
+    const { contractId, frameworkId } = props ?? {};
+
+    return removeContractRegulatoryFramework(
+      contractId,
+      frameworkId,
+      requestOptions,
+    );
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type RemoveContractRegulatoryFrameworkMutationResult = NonNullable<
+  Awaited<ReturnType<typeof removeContractRegulatoryFramework>>
+>;
+
+export type RemoveContractRegulatoryFrameworkMutationError = ErrorType<void>;
+
+/**
+ * @summary Manually remove a framework from a contract (overrides auto-detection).
+ */
+export const useRemoveContractRegulatoryFramework = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof removeContractRegulatoryFramework>>,
+    TError,
+    { contractId: string; frameworkId: string },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof removeContractRegulatoryFramework>>,
+  TError,
+  { contractId: string; frameworkId: string },
+  TContext
+> => {
+  return useMutation(
+    getRemoveContractRegulatoryFrameworkMutationOptions(options),
+  );
+};
+
+/**
+ * @summary Tenant-wide regulatory compliance overview across all contracts.
+ */
+export const getGetRegulatoryComplianceReportUrl = () => {
+  return `/api/v1/reports/regulatory-compliance`;
+};
+
+export const getRegulatoryComplianceReport = async (
+  options?: RequestInit,
+): Promise<RegulatoryComplianceReport> => {
+  return customFetch<RegulatoryComplianceReport>(
+    getGetRegulatoryComplianceReportUrl(),
+    {
+      ...options,
+      method: "GET",
+    },
+  );
+};
+
+export const getGetRegulatoryComplianceReportQueryKey = () => {
+  return [`/api/v1/reports/regulatory-compliance`] as const;
+};
+
+export const getGetRegulatoryComplianceReportQueryOptions = <
+  TData = Awaited<ReturnType<typeof getRegulatoryComplianceReport>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getRegulatoryComplianceReport>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey =
+    queryOptions?.queryKey ?? getGetRegulatoryComplianceReportQueryKey();
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof getRegulatoryComplianceReport>>
+  > = ({ signal }) =>
+    getRegulatoryComplianceReport({ signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getRegulatoryComplianceReport>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetRegulatoryComplianceReportQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getRegulatoryComplianceReport>>
+>;
+export type GetRegulatoryComplianceReportQueryError = ErrorType<unknown>;
+
+/**
+ * @summary Tenant-wide regulatory compliance overview across all contracts.
+ */
+
+export function useGetRegulatoryComplianceReport<
+  TData = Awaited<ReturnType<typeof getRegulatoryComplianceReport>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getRegulatoryComplianceReport>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetRegulatoryComplianceReportQueryOptions(options);
 
   const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
     queryKey: QueryKey;

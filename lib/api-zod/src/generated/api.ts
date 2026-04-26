@@ -7950,6 +7950,607 @@ export const GetLegalPrecedentForUserResponse = zod.object({
   createdAt: zod.coerce.date(),
 });
 
+/**
+ * @summary List regulatory frameworks (system + tenant), incl. inactive, for admin.
+ */
+export const ListRegulatoryFrameworksResponseItem = zod.object({
+  id: zod.string(),
+  tenantId: zod.union([zod.string(), zod.null()]),
+  isSystem: zod.boolean(),
+  code: zod.string(),
+  title: zod.string(),
+  shortLabel: zod.string(),
+  jurisdiction: zod.string(),
+  summary: zod.string(),
+  url: zod.union([zod.string(), zod.null()]).optional(),
+  version: zod.string(),
+  applicabilityRules: zod.array(
+    zod.object({
+      kind: zod.enum([
+        "data_processing",
+        "ai_usage",
+        "service_type",
+        "jurisdiction",
+        "industry",
+        "size_bracket",
+        "contract_type",
+        "always",
+      ]),
+      values: zod.array(zod.string()).optional(),
+      note: zod.string().optional(),
+    }),
+  ),
+  active: zod.boolean(),
+  sortOrder: zod.number(),
+  requirements: zod.array(
+    zod.object({
+      id: zod.string(),
+      frameworkId: zod.string(),
+      code: zod.string(),
+      title: zod.string(),
+      description: zod.string(),
+      normRef: zod.string(),
+      recommendedClauseFamily: zod.union([zod.string(), zod.null()]).optional(),
+      recommendedClauseText: zod.union([zod.string(), zod.null()]).optional(),
+      severity: zod.enum(["must", "should", "info"]),
+      sortOrder: zod.number(),
+      createdAt: zod.coerce.date(),
+      updatedAt: zod.coerce.date(),
+    }),
+  ),
+  createdAt: zod.coerce.date(),
+  updatedAt: zod.coerce.date(),
+});
+export const ListRegulatoryFrameworksResponse = zod.array(
+  ListRegulatoryFrameworksResponseItem,
+);
+
+export const createRegulatoryFrameworkBodyCodeMin = 2;
+export const createRegulatoryFrameworkBodyCodeMax = 60;
+
+export const createRegulatoryFrameworkBodyTitleMin = 2;
+export const createRegulatoryFrameworkBodyTitleMax = 200;
+
+export const createRegulatoryFrameworkBodyShortLabelMax = 30;
+
+export const createRegulatoryFrameworkBodyJurisdictionMax = 4;
+
+export const CreateRegulatoryFrameworkBody = zod.object({
+  code: zod
+    .string()
+    .min(createRegulatoryFrameworkBodyCodeMin)
+    .max(createRegulatoryFrameworkBodyCodeMax),
+  title: zod
+    .string()
+    .min(createRegulatoryFrameworkBodyTitleMin)
+    .max(createRegulatoryFrameworkBodyTitleMax),
+  shortLabel: zod
+    .string()
+    .min(1)
+    .max(createRegulatoryFrameworkBodyShortLabelMax),
+  jurisdiction: zod
+    .string()
+    .max(createRegulatoryFrameworkBodyJurisdictionMax)
+    .optional(),
+  summary: zod.string(),
+  url: zod.union([zod.string(), zod.null()]).optional(),
+  version: zod.string().optional(),
+  applicabilityRules: zod
+    .array(
+      zod.object({
+        kind: zod.enum([
+          "data_processing",
+          "ai_usage",
+          "service_type",
+          "jurisdiction",
+          "industry",
+          "size_bracket",
+          "contract_type",
+          "always",
+        ]),
+        values: zod.array(zod.string()).optional(),
+        note: zod.string().optional(),
+      }),
+    )
+    .optional(),
+  active: zod.boolean().optional(),
+  sortOrder: zod.number().optional(),
+});
+
+export const GetRegulatoryFrameworkParams = zod.object({
+  id: zod.coerce.string(),
+});
+
+export const GetRegulatoryFrameworkResponse = zod.object({
+  id: zod.string(),
+  tenantId: zod.union([zod.string(), zod.null()]),
+  isSystem: zod.boolean(),
+  code: zod.string(),
+  title: zod.string(),
+  shortLabel: zod.string(),
+  jurisdiction: zod.string(),
+  summary: zod.string(),
+  url: zod.union([zod.string(), zod.null()]).optional(),
+  version: zod.string(),
+  applicabilityRules: zod.array(
+    zod.object({
+      kind: zod.enum([
+        "data_processing",
+        "ai_usage",
+        "service_type",
+        "jurisdiction",
+        "industry",
+        "size_bracket",
+        "contract_type",
+        "always",
+      ]),
+      values: zod.array(zod.string()).optional(),
+      note: zod.string().optional(),
+    }),
+  ),
+  active: zod.boolean(),
+  sortOrder: zod.number(),
+  requirements: zod.array(
+    zod.object({
+      id: zod.string(),
+      frameworkId: zod.string(),
+      code: zod.string(),
+      title: zod.string(),
+      description: zod.string(),
+      normRef: zod.string(),
+      recommendedClauseFamily: zod.union([zod.string(), zod.null()]).optional(),
+      recommendedClauseText: zod.union([zod.string(), zod.null()]).optional(),
+      severity: zod.enum(["must", "should", "info"]),
+      sortOrder: zod.number(),
+      createdAt: zod.coerce.date(),
+      updatedAt: zod.coerce.date(),
+    }),
+  ),
+  createdAt: zod.coerce.date(),
+  updatedAt: zod.coerce.date(),
+});
+
+export const UpdateRegulatoryFrameworkParams = zod.object({
+  id: zod.coerce.string(),
+});
+
+export const UpdateRegulatoryFrameworkBody = zod.object({
+  code: zod.string().optional(),
+  title: zod.string().optional(),
+  shortLabel: zod.string().optional(),
+  jurisdiction: zod.string().optional(),
+  summary: zod.string().optional(),
+  url: zod.union([zod.string(), zod.null()]).optional(),
+  version: zod.string().optional(),
+  applicabilityRules: zod
+    .array(
+      zod.object({
+        kind: zod.enum([
+          "data_processing",
+          "ai_usage",
+          "service_type",
+          "jurisdiction",
+          "industry",
+          "size_bracket",
+          "contract_type",
+          "always",
+        ]),
+        values: zod.array(zod.string()).optional(),
+        note: zod.string().optional(),
+      }),
+    )
+    .optional(),
+  active: zod.boolean().optional(),
+  sortOrder: zod.number().optional(),
+});
+
+export const UpdateRegulatoryFrameworkResponse = zod.object({
+  id: zod.string(),
+  tenantId: zod.union([zod.string(), zod.null()]),
+  isSystem: zod.boolean(),
+  code: zod.string(),
+  title: zod.string(),
+  shortLabel: zod.string(),
+  jurisdiction: zod.string(),
+  summary: zod.string(),
+  url: zod.union([zod.string(), zod.null()]).optional(),
+  version: zod.string(),
+  applicabilityRules: zod.array(
+    zod.object({
+      kind: zod.enum([
+        "data_processing",
+        "ai_usage",
+        "service_type",
+        "jurisdiction",
+        "industry",
+        "size_bracket",
+        "contract_type",
+        "always",
+      ]),
+      values: zod.array(zod.string()).optional(),
+      note: zod.string().optional(),
+    }),
+  ),
+  active: zod.boolean(),
+  sortOrder: zod.number(),
+  requirements: zod.array(
+    zod.object({
+      id: zod.string(),
+      frameworkId: zod.string(),
+      code: zod.string(),
+      title: zod.string(),
+      description: zod.string(),
+      normRef: zod.string(),
+      recommendedClauseFamily: zod.union([zod.string(), zod.null()]).optional(),
+      recommendedClauseText: zod.union([zod.string(), zod.null()]).optional(),
+      severity: zod.enum(["must", "should", "info"]),
+      sortOrder: zod.number(),
+      createdAt: zod.coerce.date(),
+      updatedAt: zod.coerce.date(),
+    }),
+  ),
+  createdAt: zod.coerce.date(),
+  updatedAt: zod.coerce.date(),
+});
+
+export const DeleteRegulatoryFrameworkParams = zod.object({
+  id: zod.coerce.string(),
+});
+
+export const CreateRegulatoryRequirementParams = zod.object({
+  id: zod.coerce.string(),
+});
+
+export const createRegulatoryRequirementBodyCodeMax = 60;
+
+export const createRegulatoryRequirementBodyTitleMin = 2;
+export const createRegulatoryRequirementBodyTitleMax = 200;
+
+export const createRegulatoryRequirementBodyNormRefMin = 2;
+export const createRegulatoryRequirementBodyNormRefMax = 200;
+
+export const CreateRegulatoryRequirementBody = zod.object({
+  code: zod.string().min(1).max(createRegulatoryRequirementBodyCodeMax),
+  title: zod
+    .string()
+    .min(createRegulatoryRequirementBodyTitleMin)
+    .max(createRegulatoryRequirementBodyTitleMax),
+  description: zod.string(),
+  normRef: zod
+    .string()
+    .min(createRegulatoryRequirementBodyNormRefMin)
+    .max(createRegulatoryRequirementBodyNormRefMax),
+  recommendedClauseFamily: zod.union([zod.string(), zod.null()]).optional(),
+  recommendedClauseText: zod.union([zod.string(), zod.null()]).optional(),
+  severity: zod.enum(["must", "should", "info"]).optional(),
+  sortOrder: zod.number().optional(),
+});
+
+export const UpdateRegulatoryRequirementParams = zod.object({
+  id: zod.coerce.string(),
+  reqId: zod.coerce.string(),
+});
+
+export const UpdateRegulatoryRequirementBody = zod.object({
+  code: zod.string().optional(),
+  title: zod.string().optional(),
+  description: zod.string().optional(),
+  normRef: zod.string().optional(),
+  recommendedClauseFamily: zod.union([zod.string(), zod.null()]).optional(),
+  recommendedClauseText: zod.union([zod.string(), zod.null()]).optional(),
+  severity: zod.enum(["must", "should", "info"]).optional(),
+  sortOrder: zod.number().optional(),
+});
+
+export const UpdateRegulatoryRequirementResponse = zod.object({
+  id: zod.string(),
+  frameworkId: zod.string(),
+  code: zod.string(),
+  title: zod.string(),
+  description: zod.string(),
+  normRef: zod.string(),
+  recommendedClauseFamily: zod.union([zod.string(), zod.null()]).optional(),
+  recommendedClauseText: zod.union([zod.string(), zod.null()]).optional(),
+  severity: zod.enum(["must", "should", "info"]),
+  sortOrder: zod.number(),
+  createdAt: zod.coerce.date(),
+  updatedAt: zod.coerce.date(),
+});
+
+export const DeleteRegulatoryRequirementParams = zod.object({
+  id: zod.coerce.string(),
+  reqId: zod.coerce.string(),
+});
+
+/**
+ * @summary Read-only list of active regulatory frameworks visible to the user
+(system + tenant), including their requirements. Used by the contract
+Regulatorik panel to populate the manual-add menu.
+
+ */
+export const ListActiveRegulatoryFrameworksResponseItem = zod.object({
+  id: zod.string(),
+  tenantId: zod.union([zod.string(), zod.null()]),
+  isSystem: zod.boolean(),
+  code: zod.string(),
+  title: zod.string(),
+  shortLabel: zod.string(),
+  jurisdiction: zod.string(),
+  summary: zod.string(),
+  url: zod.union([zod.string(), zod.null()]).optional(),
+  version: zod.string(),
+  applicabilityRules: zod.array(
+    zod.object({
+      kind: zod.enum([
+        "data_processing",
+        "ai_usage",
+        "service_type",
+        "jurisdiction",
+        "industry",
+        "size_bracket",
+        "contract_type",
+        "always",
+      ]),
+      values: zod.array(zod.string()).optional(),
+      note: zod.string().optional(),
+    }),
+  ),
+  active: zod.boolean(),
+  sortOrder: zod.number(),
+  requirements: zod.array(
+    zod.object({
+      id: zod.string(),
+      frameworkId: zod.string(),
+      code: zod.string(),
+      title: zod.string(),
+      description: zod.string(),
+      normRef: zod.string(),
+      recommendedClauseFamily: zod.union([zod.string(), zod.null()]).optional(),
+      recommendedClauseText: zod.union([zod.string(), zod.null()]).optional(),
+      severity: zod.enum(["must", "should", "info"]),
+      sortOrder: zod.number(),
+      createdAt: zod.coerce.date(),
+      updatedAt: zod.coerce.date(),
+    }),
+  ),
+  createdAt: zod.coerce.date(),
+  updatedAt: zod.coerce.date(),
+});
+export const ListActiveRegulatoryFrameworksResponse = zod.array(
+  ListActiveRegulatoryFrameworksResponseItem,
+);
+
+/**
+ * @summary List regulatory assessments + framework details for a contract.
+ */
+export const ListContractRegulatoryAssessmentsParams = zod.object({
+  contractId: zod.coerce.string(),
+});
+
+export const ListContractRegulatoryAssessmentsResponse = zod.object({
+  contractId: zod.string(),
+  assessments: zod.array(
+    zod.object({
+      id: zod.string(),
+      tenantId: zod.string(),
+      contractId: zod.string(),
+      frameworkId: zod.string(),
+      applicability: zod.enum([
+        "auto_applicable",
+        "auto_not_applicable",
+        "manual_added",
+        "manual_removed",
+      ]),
+      applicabilityReason: zod.union([zod.string(), zod.null()]).optional(),
+      findings: zod.array(
+        zod.object({
+          requirementId: zod.string(),
+          status: zod.enum(["met", "partial", "missing"]),
+          note: zod.string(),
+          suggestion: zod.union([zod.string(), zod.null()]).optional(),
+          contractClauseId: zod.union([zod.string(), zod.null()]).optional(),
+          snippet: zod.union([zod.string(), zod.null()]).optional(),
+        }),
+      ),
+      overallStatus: zod.enum([
+        "compliant",
+        "partial",
+        "non_compliant",
+        "not_evaluated",
+      ]),
+      aiInvocationId: zod.union([zod.string(), zod.null()]).optional(),
+      lastEvaluatedAt: zod.union([zod.coerce.date(), zod.null()]).optional(),
+      createdAt: zod.coerce.date(),
+      updatedAt: zod.coerce.date(),
+    }),
+  ),
+  frameworks: zod.array(
+    zod.object({
+      id: zod.string(),
+      tenantId: zod.union([zod.string(), zod.null()]),
+      isSystem: zod.boolean(),
+      code: zod.string(),
+      title: zod.string(),
+      shortLabel: zod.string(),
+      jurisdiction: zod.string(),
+      summary: zod.string(),
+      url: zod.union([zod.string(), zod.null()]).optional(),
+      version: zod.string(),
+      applicabilityRules: zod.array(
+        zod.object({
+          kind: zod.enum([
+            "data_processing",
+            "ai_usage",
+            "service_type",
+            "jurisdiction",
+            "industry",
+            "size_bracket",
+            "contract_type",
+            "always",
+          ]),
+          values: zod.array(zod.string()).optional(),
+          note: zod.string().optional(),
+        }),
+      ),
+      active: zod.boolean(),
+      sortOrder: zod.number(),
+      requirements: zod.array(
+        zod.object({
+          id: zod.string(),
+          frameworkId: zod.string(),
+          code: zod.string(),
+          title: zod.string(),
+          description: zod.string(),
+          normRef: zod.string(),
+          recommendedClauseFamily: zod
+            .union([zod.string(), zod.null()])
+            .optional(),
+          recommendedClauseText: zod
+            .union([zod.string(), zod.null()])
+            .optional(),
+          severity: zod.enum(["must", "should", "info"]),
+          sortOrder: zod.number(),
+          createdAt: zod.coerce.date(),
+          updatedAt: zod.coerce.date(),
+        }),
+      ),
+      createdAt: zod.coerce.date(),
+      updatedAt: zod.coerce.date(),
+    }),
+  ),
+});
+
+/**
+ * @summary Run AI applicability check + per-applicable-framework compliance check
+against the contract's clauses. Persists assessments and returns the
+full set.
+
+ */
+export const RunContractRegulatoryCheckParams = zod.object({
+  contractId: zod.coerce.string(),
+});
+
+export const RunContractRegulatoryCheckResponse = zod.object({
+  ok: zod.boolean(),
+  contractId: zod.string(),
+  applicabilityInvocationId: zod.union([zod.string(), zod.null()]).optional(),
+  frameworksEvaluated: zod.number(),
+  assessments: zod.array(
+    zod.object({
+      id: zod.string(),
+      tenantId: zod.string(),
+      contractId: zod.string(),
+      frameworkId: zod.string(),
+      applicability: zod.enum([
+        "auto_applicable",
+        "auto_not_applicable",
+        "manual_added",
+        "manual_removed",
+      ]),
+      applicabilityReason: zod.union([zod.string(), zod.null()]).optional(),
+      findings: zod.array(
+        zod.object({
+          requirementId: zod.string(),
+          status: zod.enum(["met", "partial", "missing"]),
+          note: zod.string(),
+          suggestion: zod.union([zod.string(), zod.null()]).optional(),
+          contractClauseId: zod.union([zod.string(), zod.null()]).optional(),
+          snippet: zod.union([zod.string(), zod.null()]).optional(),
+        }),
+      ),
+      overallStatus: zod.enum([
+        "compliant",
+        "partial",
+        "non_compliant",
+        "not_evaluated",
+      ]),
+      aiInvocationId: zod.union([zod.string(), zod.null()]).optional(),
+      lastEvaluatedAt: zod.union([zod.coerce.date(), zod.null()]).optional(),
+      createdAt: zod.coerce.date(),
+      updatedAt: zod.coerce.date(),
+    }),
+  ),
+});
+
+/**
+ * @summary Manually add a framework to a contract (overrides auto-detection).
+ */
+export const AddContractRegulatoryFrameworkParams = zod.object({
+  contractId: zod.coerce.string(),
+  frameworkId: zod.coerce.string(),
+});
+
+export const AddContractRegulatoryFrameworkBody = zod.object({
+  reason: zod.string().optional(),
+});
+
+/**
+ * @summary Manually remove a framework from a contract (overrides auto-detection).
+ */
+export const RemoveContractRegulatoryFrameworkParams = zod.object({
+  contractId: zod.coerce.string(),
+  frameworkId: zod.coerce.string(),
+});
+
+/**
+ * @summary Tenant-wide regulatory compliance overview across all contracts.
+ */
+export const GetRegulatoryComplianceReportResponse = zod.object({
+  items: zod.array(
+    zod.object({
+      contractId: zod.string(),
+      contractTitle: zod.string(),
+      contractStatus: zod.string(),
+      dealId: zod.union([zod.string(), zod.null()]).optional(),
+      accountId: zod.union([zod.string(), zod.null()]).optional(),
+      brandId: zod.union([zod.string(), zod.null()]).optional(),
+      applicableCount: zod.number(),
+      compliant: zod.number(),
+      partial: zod.number(),
+      nonCompliant: zod.number(),
+      notEvaluated: zod.number(),
+      overall: zod.enum([
+        "compliant",
+        "partial",
+        "non_compliant",
+        "not_evaluated",
+      ]),
+      frameworks: zod.array(
+        zod.object({
+          frameworkId: zod.string(),
+          code: zod.string(),
+          shortLabel: zod.string(),
+          overallStatus: zod.enum([
+            "compliant",
+            "partial",
+            "non_compliant",
+            "not_evaluated",
+          ]),
+          applicability: zod.enum([
+            "auto_applicable",
+            "auto_not_applicable",
+            "manual_added",
+            "manual_removed",
+          ]),
+        }),
+      ),
+    }),
+  ),
+  frameworkSummary: zod.array(
+    zod.object({
+      frameworkId: zod.string(),
+      code: zod.string(),
+      shortLabel: zod.string(),
+      title: zod.string(),
+      applicableContracts: zod.number(),
+      compliant: zod.number(),
+      partial: zod.number(),
+      nonCompliant: zod.number(),
+      notEvaluated: zod.number(),
+    }),
+  ),
+});
+
 export const ListAuditEntriesQueryParams = zod.object({
   entityType: zod.coerce.string().optional(),
   entityId: zod.coerce.string().optional(),
