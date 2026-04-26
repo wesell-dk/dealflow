@@ -29,6 +29,7 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { AlertTriangle, Sparkles, TrendingUp, MessageSquare, Send, Plus } from "lucide-react";
+import { TONE_ICON_CLASSES, getInsightKindTone } from "@/components/patterns/status-badges";
 
 function ChatPanel({ threadId }: { threadId: string }) {
   const { t } = useTranslation();
@@ -178,9 +179,10 @@ export default function Copilot() {
   }, [threads, activeThreadId]);
 
   const insightIcon = (kind: string) => {
-    if (kind === "Risk") return <AlertTriangle className="h-4 w-4 text-rose-500" />;
-    if (kind === "NextAction") return <Sparkles className="h-4 w-4 text-amber-500" />;
-    if (kind === "Opportunity") return <TrendingUp className="h-4 w-4 text-emerald-500" />;
+    const tone = getInsightKindTone(kind);
+    if (kind === "Risk") return <AlertTriangle className={`h-4 w-4 ${TONE_ICON_CLASSES[tone]}`} />;
+    if (kind === "NextAction") return <Sparkles className={`h-4 w-4 ${TONE_ICON_CLASSES[tone]}`} />;
+    if (kind === "Opportunity") return <TrendingUp className={`h-4 w-4 ${TONE_ICON_CLASSES[tone]}`} />;
     return <Sparkles className="h-4 w-4 text-primary" />;
   };
 

@@ -53,22 +53,20 @@ import {
 import { Library, Palette, Save, Pencil, Trash2, Link2, Plus, Languages, FileUp, Inbox, Sparkles } from "lucide-react";
 import { Link } from "wouter";
 import { useToast } from "@/hooks/use-toast";
-
-function toneClass(tone: string) {
-  switch (tone) {
-    case "zart": return "bg-rose-500/10 text-rose-600 border-rose-500/30";
-    case "moderat": return "bg-amber-500/10 text-amber-600 border-amber-500/30";
-    case "standard": return "bg-sky-500/10 text-sky-600 border-sky-500/30";
-    case "streng": return "bg-emerald-500/10 text-emerald-600 border-emerald-500/30";
-    case "hart": return "bg-indigo-500/10 text-indigo-600 border-indigo-500/30";
-    default: return "bg-muted text-muted-foreground";
-  }
-}
+import {
+  ClauseToneBadge,
+  ClauseCompatibilityBadge,
+  TranslationStatusBadge,
+  OverrideMarkerBadge,
+  TONE_TEXT_CLASSES,
+  TONE_ICON_CLASSES,
+  TONE_DOT_CLASSES,
+  TONE_TINT_BG_CLASSES,
+  getSeverityTone,
+} from "@/components/patterns/status-badges";
 
 function severityDot(severity?: string) {
-  if (severity === "high") return "bg-destructive";
-  if (severity === "medium") return "bg-amber-500";
-  return "bg-emerald-500";
+  return TONE_DOT_CLASSES[getSeverityTone(severity)];
 }
 
 export default function Clauses() {
@@ -249,9 +247,7 @@ export default function Clauses() {
                           <span className={`w-2.5 h-2.5 rounded-full shrink-0 ${severityDot(v.severity)}`} />
                         </div>
                         <div className="flex items-center gap-2 flex-wrap">
-                          <Badge variant="outline" className={`${toneClass(v.tone)} text-xs`}>
-                            {v.tone}
-                          </Badge>
+                          <ClauseToneBadge tone={v.tone} label={v.tone} />
                           <span className="text-xs text-muted-foreground">
                             {t("pages.clauses.severityScore")}: <strong className="tabular-nums">{v.severityScore}</strong>
                           </span>
@@ -418,9 +414,7 @@ function BrandOverridesSection({
                       <div className="text-xs text-muted-foreground">{v.tone} · {v.severityScore}</div>
                     </div>
                     {ov && (
-                      <Badge variant="outline" className="bg-amber-500/10 text-amber-600 border-amber-500/30 text-xs">
-                        {t("pages.clauses.overrideHasOverride")}
-                      </Badge>
+                      <OverrideMarkerBadge label={t("pages.clauses.overrideHasOverride")} />
                     )}
                     <Button
                       size="sm"
@@ -662,14 +656,10 @@ function CompatibilityRulesSection({ families }: { families: FamilyLite[] }) {
               return (
                 <div key={r.id} className="flex items-center gap-2 px-3 py-2 text-sm" data-testid={`compat-row-${r.id}`}>
                   <span className="font-medium truncate">{from ? `${from.family} · ${from.name}` : r.fromVariantId}</span>
-                  <Badge
-                    variant="outline"
-                    className={r.kind === "conflicts"
-                      ? "bg-rose-500/10 text-rose-600 border-rose-500/30"
-                      : "bg-amber-500/10 text-amber-600 border-amber-500/30"}
-                  >
-                    {r.kind === "requires" ? t("pages.clauses.compatRequires") : t("pages.clauses.compatConflicts")}
-                  </Badge>
+                  <ClauseCompatibilityBadge
+                    kind={r.kind === "conflicts" ? "conflicts" : "requires"}
+                    label={r.kind === "requires" ? t("pages.clauses.compatRequires") : t("pages.clauses.compatConflicts")}
+                  />
                   <span className="font-medium truncate">{to ? `${to.family} · ${to.name}` : r.toVariantId}</span>
                   {r.note && <span className="text-xs text-muted-foreground italic ml-2">{r.note}</span>}
                   <Button
@@ -795,17 +785,11 @@ function ClauseTranslationsSection({
                     <div className="flex-1 min-w-0">
                       <div className="font-medium truncate">{v.name}</div>
                       <div className="text-xs text-muted-foreground flex items-center gap-2 mt-0.5">
-                        <Badge variant="outline" className="bg-emerald-500/10 text-emerald-600 border-emerald-500/30 text-xs">
-                          DE · {t("pages.clauses.translationPresent")}
-                        </Badge>
+                        <TranslationStatusBadge present locale="de" label={t("pages.clauses.translationPresent")} />
                         {enTr ? (
-                          <Badge variant="outline" className="bg-sky-500/10 text-sky-600 border-sky-500/30 text-xs">
-                            EN · {t("pages.clauses.translationPresent")}
-                          </Badge>
+                          <TranslationStatusBadge present locale="en" label={t("pages.clauses.translationPresent")} />
                         ) : (
-                          <Badge variant="outline" className="bg-amber-500/10 text-amber-600 border-amber-500/30 text-xs">
-                            EN · {t("pages.clauses.translationMissing")}
-                          </Badge>
+                          <TranslationStatusBadge present={false} locale="en" label={t("pages.clauses.translationMissing")} />
                         )}
                       </div>
                     </div>
@@ -1175,12 +1159,12 @@ function SuggestionsTile() {
         data-testid="suggestions-tile"
       >
         <CardContent className="py-4 flex items-center gap-3">
-          <div className="rounded-md bg-amber-500/10 p-2 text-amber-600">
+          <div className={`rounded-md p-2 ${TONE_TINT_BG_CLASSES.warning} ${TONE_ICON_CLASSES.warning}`}>
             <Inbox className="h-5 w-5" />
           </div>
           <div className="flex-1">
             <div className="font-semibold flex items-center gap-2">
-              <Sparkles className="h-4 w-4 text-amber-500" />
+              <Sparkles className={`h-4 w-4 ${TONE_ICON_CLASSES.warning}`} />
               {t("pages.clauseSuggestions.tileTitle")}
             </div>
             <p className="text-xs text-muted-foreground">
@@ -1188,7 +1172,7 @@ function SuggestionsTile() {
             </p>
           </div>
           <div className="text-right">
-            <div className="text-2xl font-bold tabular-nums text-amber-600">{open}</div>
+            <div className={`text-2xl font-bold tabular-nums ${TONE_TEXT_CLASSES.warning}`}>{open}</div>
             <div className="text-xs text-muted-foreground">{t("pages.clauseSuggestions.statOpen")}</div>
           </div>
         </CardContent>

@@ -1,9 +1,9 @@
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 
-type Tone = "neutral" | "info" | "success" | "warning" | "danger" | "muted";
+export type Tone = "neutral" | "info" | "success" | "warning" | "danger" | "muted";
 
-const TONE_CLASSES: Record<Tone, string> = {
+export const TONE_CLASSES: Record<Tone, string> = {
   neutral:
     "border-border bg-muted text-foreground",
   info:
@@ -18,6 +18,62 @@ const TONE_CLASSES: Record<Tone, string> = {
     "border-border bg-background text-muted-foreground",
 };
 
+// Text-only tone classes for highlighting numbers, headings, etc. without a
+// full badge background. Use when a Badge is too heavy (e.g. KPI counters,
+// at-risk number highlights).
+export const TONE_TEXT_CLASSES: Record<Tone, string> = {
+  neutral: "text-foreground",
+  info: "text-sky-700 dark:text-sky-300",
+  success: "text-emerald-700 dark:text-emerald-300",
+  warning: "text-amber-700 dark:text-amber-300",
+  danger: "text-rose-700 dark:text-rose-300",
+  muted: "text-muted-foreground",
+};
+
+// Icon-only tone classes (slightly brighter than text) for status icons that
+// sit on a neutral background (e.g. lucide icons in card headers).
+export const TONE_ICON_CLASSES: Record<Tone, string> = {
+  neutral: "text-foreground",
+  info: "text-sky-600 dark:text-sky-400",
+  success: "text-emerald-600 dark:text-emerald-400",
+  warning: "text-amber-600 dark:text-amber-400",
+  danger: "text-rose-600 dark:text-rose-400",
+  muted: "text-muted-foreground",
+};
+
+// Solid status dot classes (filled circles indicating severity / status).
+// Use for small severity / status indicators rendered as a colored dot.
+export const TONE_DOT_CLASSES: Record<Tone, string> = {
+  neutral: "bg-foreground",
+  info: "bg-sky-500",
+  success: "bg-emerald-500",
+  warning: "bg-amber-500",
+  danger: "bg-destructive",
+  muted: "bg-muted-foreground",
+};
+
+// Tinted background classes (10% opacity tone behind icons / chips).
+// Use when an icon needs a soft tone-colored backdrop, not a full badge.
+export const TONE_TINT_BG_CLASSES: Record<Tone, string> = {
+  neutral: "bg-muted",
+  info: "bg-sky-500/10",
+  success: "bg-emerald-500/10",
+  warning: "bg-amber-500/10",
+  danger: "bg-rose-500/10",
+  muted: "bg-muted/50",
+};
+
+// ─── Severity (low/medium/high) → Tone ──────────────────────────────────────
+const SEVERITY_TONE: Record<string, Tone> = {
+  low: "success",
+  medium: "warning",
+  high: "danger",
+  critical: "danger",
+};
+export function getSeverityTone(severity: string | null | undefined): Tone {
+  return SEVERITY_TONE[(severity ?? "").toLowerCase()] ?? "neutral";
+}
+
 interface ToneBadgeProps {
   tone: Tone;
   children: React.ReactNode;
@@ -26,7 +82,7 @@ interface ToneBadgeProps {
   title?: string;
 }
 
-function ToneBadge({ tone, children, className, testId, title }: ToneBadgeProps) {
+export function ToneBadge({ tone, children, className, testId, title }: ToneBadgeProps) {
   return (
     <Badge
       variant="outline"
@@ -338,4 +394,147 @@ export function RenewalBucketBadge({ bucket, className, testId }: { bucket: stri
       {label}
     </ToneBadge>
   );
+}
+
+// ─── Negotiation Reaction (question/objection/counterproposal/...) ─────────
+const NEGOTIATION_REACTION_TONE: Record<string, Tone> = {
+  question: "info",
+  objection: "warning",
+  counterproposal: "info",
+  acceptance: "success",
+  partial: "warning",
+  price_rejected: "danger",
+  clause_rejected: "danger",
+  term_change: "info",
+  deferred: "muted",
+};
+const NEGOTIATION_REACTION_LABEL: Record<string, string> = {
+  question: "Frage",
+  objection: "Einwand",
+  counterproposal: "Gegenvorschlag",
+  acceptance: "Akzeptiert",
+  partial: "Teilweise",
+  price_rejected: "Preis abgelehnt",
+  clause_rejected: "Klausel abgelehnt",
+  term_change: "Laufzeit-Änderung",
+  deferred: "Vertagt",
+};
+export function NegotiationReactionBadge({ type, className, testId }: { type: string | null | undefined; className?: string; testId?: string }) {
+  const k = (type ?? "").toLowerCase();
+  const tone = NEGOTIATION_REACTION_TONE[k] ?? "neutral";
+  const label = NEGOTIATION_REACTION_LABEL[k] ?? type ?? "—";
+  return (
+    <ToneBadge tone={tone} className={className} testId={testId}>
+      {label}
+    </ToneBadge>
+  );
+}
+
+// ─── Price-Increase Counter (accepted / pending / rejected) ────────────────
+export function PriceIncreaseCounterBadge({
+  kind, count, label, className, testId,
+}: {
+  kind: "accepted" | "pending" | "rejected";
+  count: number;
+  label: string;
+  className?: string;
+  testId?: string;
+}) {
+  const tone: Tone = kind === "accepted" ? "success" : kind === "pending" ? "warning" : "danger";
+  return (
+    <ToneBadge tone={tone} className={className} testId={testId}>
+      {count} {label}
+    </ToneBadge>
+  );
+}
+
+// ─── Clause Tone (zart / moderat / standard / streng / hart) ───────────────
+// Mapping rationale: härter = heavier risk for the counter-party position.
+// "zart" = soft fallback (danger flag — concession); "hart" = strict baseline.
+const CLAUSE_TONE_TONE: Record<string, Tone> = {
+  zart: "danger",
+  moderat: "warning",
+  standard: "info",
+  streng: "success",
+  hart: "neutral",
+};
+export function ClauseToneBadge({ tone, label, className, testId }: { tone: string | null | undefined; label?: string; className?: string; testId?: string }) {
+  const k = (tone ?? "").toLowerCase();
+  const t = CLAUSE_TONE_TONE[k] ?? "neutral";
+  return (
+    <ToneBadge tone={t} className={cn("text-xs", className)} testId={testId}>
+      {label ?? tone ?? "—"}
+    </ToneBadge>
+  );
+}
+
+// ─── Clause Suggestion Status (open / accepted / rejected) ─────────────────
+const SUGGESTION_STATUS_TONE: Record<string, Tone> = {
+  open: "warning",
+  accepted: "success",
+  rejected: "danger",
+};
+export function SuggestionStatusBadge({ status, label, className, testId }: { status: string | null | undefined; label?: string; className?: string; testId?: string }) {
+  const k = (status ?? "").toLowerCase();
+  const tone = SUGGESTION_STATUS_TONE[k] ?? "neutral";
+  return (
+    <ToneBadge tone={tone} className={cn("text-xs", className)} testId={testId}>
+      {label ?? status ?? "—"}
+    </ToneBadge>
+  );
+}
+
+// ─── Clause Compatibility (requires / conflicts) ───────────────────────────
+export function ClauseCompatibilityBadge({
+  kind, label, className, testId,
+}: {
+  kind: "requires" | "conflicts";
+  label: string;
+  className?: string;
+  testId?: string;
+}) {
+  const tone: Tone = kind === "conflicts" ? "danger" : "warning";
+  return (
+    <ToneBadge tone={tone} className={className} testId={testId}>
+      {label}
+    </ToneBadge>
+  );
+}
+
+// ─── Translation Status per locale (present / missing) ─────────────────────
+export function TranslationStatusBadge({
+  present, locale, label, className, testId,
+}: {
+  present: boolean;
+  locale: string;
+  label: string;
+  className?: string;
+  testId?: string;
+}) {
+  // present = success (DE/EN already there). missing = warning (admin must fill).
+  const tone: Tone = present ? (locale.toLowerCase() === "en" ? "info" : "success") : "warning";
+  return (
+    <ToneBadge tone={tone} className={cn("text-xs", className)} testId={testId}>
+      {locale.toUpperCase()} · {label}
+    </ToneBadge>
+  );
+}
+
+// ─── Override Marker (brand has an override defined) ───────────────────────
+export function OverrideMarkerBadge({ label, className, testId }: { label: string; className?: string; testId?: string }) {
+  return (
+    <ToneBadge tone="warning" className={cn("text-xs", className)} testId={testId}>
+      {label}
+    </ToneBadge>
+  );
+}
+
+// ─── Copilot Insight Kind helper ───────────────────────────────────────────
+const INSIGHT_KIND_TONE: Record<string, Tone> = {
+  Risk: "danger",
+  NextAction: "warning",
+  Opportunity: "success",
+};
+export function getInsightKindTone(kind: string | null | undefined): Tone {
+  return INSIGHT_KIND_TONE[kind ?? ""] ?? "neutral";
 }

@@ -45,6 +45,7 @@ import { useToast } from "@/hooks/use-toast";
 import { Bell, CalendarClock, CheckCircle2, Clock, ExternalLink } from "lucide-react";
 import { ResponsiveContainer, ComposedChart, AreaChart, Area, BarChart, Bar, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend } from "recharts";
 import { AiAcceptanceTile } from "@/components/reports/ai-acceptance-tile";
+import { TONE_TEXT_CLASSES } from "@/components/patterns/status-badges";
 
 export default function Reports() {
   const { t } = useTranslation();
@@ -387,7 +388,7 @@ export default function Reports() {
             <CardTitle className="text-sm font-medium">Renewals mit Risiko</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className={`text-2xl font-bold ${(renewalSummary?.atRisk.count ?? 0) > 0 ? "text-amber-600" : ""}`}>
+            <div className={`text-2xl font-bold ${(renewalSummary?.atRisk.count ?? 0) > 0 ? TONE_TEXT_CLASSES.warning : ""}`}>
               {renewalSummary?.atRisk.count ?? 0}
             </div>
             <div className="text-xs text-muted-foreground mt-1">Score ≥ 70</div>
@@ -518,7 +519,7 @@ export default function Reports() {
             <CardTitle className="text-sm font-medium">Offene Klausel-Abweichungen</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className={`text-2xl font-bold ${(dashboard?.openDeviationsCount ?? 0) > 0 ? "text-amber-600" : ""}`}>
+            <div className={`text-2xl font-bold ${(dashboard?.openDeviationsCount ?? 0) > 0 ? TONE_TEXT_CLASSES.warning : ""}`}>
               {dashboard?.openDeviationsCount ?? 0}
             </div>
             <div className="text-xs text-muted-foreground mt-1">Im sichtbaren Scope</div>
@@ -529,7 +530,7 @@ export default function Reports() {
             <CardTitle className="text-sm font-medium">Überfällige Pflichten</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className={`text-2xl font-bold ${(dashboard?.overdueObligationsCount ?? 0) > 0 ? "text-red-600" : ""}`}>
+            <div className={`text-2xl font-bold ${(dashboard?.overdueObligationsCount ?? 0) > 0 ? TONE_TEXT_CLASSES.danger : ""}`}>
               {dashboard?.overdueObligationsCount ?? 0}
             </div>
             <div className="text-xs text-muted-foreground mt-1">aus signierten Verträgen</div>

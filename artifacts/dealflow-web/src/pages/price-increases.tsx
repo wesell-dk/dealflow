@@ -2,12 +2,14 @@ import { useTranslation } from "react-i18next";
 import { Link } from "wouter";
 import { useListPriceIncreases } from "@workspace/api-client-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { TrendingUp } from "lucide-react";
 import { PageHeader } from "@/components/patterns/page-header";
 import { EmptyStateCard } from "@/components/patterns/empty-state-card";
-import { PriceIncreaseStatusBadge } from "@/components/patterns/status-badges";
+import {
+  PriceIncreaseStatusBadge,
+  PriceIncreaseCounterBadge,
+} from "@/components/patterns/status-badges";
 
 export default function PriceIncreases() {
   const { t } = useTranslation();
@@ -53,15 +55,21 @@ export default function PriceIncreases() {
                 </div>
 
                 <div className="flex flex-wrap items-center gap-2">
-                  <Badge variant="outline" className="bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-300 dark:border-emerald-900/50">
-                    {campaign.acceptedCount} {t("pages.priceIncreasesList.accepted")}
-                  </Badge>
-                  <Badge variant="outline" className="bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/40 dark:text-amber-300 dark:border-amber-900/50">
-                    {campaign.pendingCount} {t("pages.priceIncreasesList.pending")}
-                  </Badge>
-                  <Badge variant="outline" className="bg-rose-50 text-rose-700 border-rose-200 dark:bg-rose-950/40 dark:text-rose-300 dark:border-rose-900/50">
-                    {campaign.rejectedCount} {t("pages.priceIncreasesList.rejected")}
-                  </Badge>
+                  <PriceIncreaseCounterBadge
+                    kind="accepted"
+                    count={campaign.acceptedCount}
+                    label={t("pages.priceIncreasesList.accepted")}
+                  />
+                  <PriceIncreaseCounterBadge
+                    kind="pending"
+                    count={campaign.pendingCount}
+                    label={t("pages.priceIncreasesList.pending")}
+                  />
+                  <PriceIncreaseCounterBadge
+                    kind="rejected"
+                    count={campaign.rejectedCount}
+                    label={t("pages.priceIncreasesList.rejected")}
+                  />
                 </div>
 
                 <div className="pt-4 border-t">

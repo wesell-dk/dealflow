@@ -27,21 +27,10 @@ import {
 import { formatDistanceToNow, format } from "date-fns";
 import { useToast } from "@/hooks/use-toast";
 import { Breadcrumbs } from "@/components/patterns/breadcrumbs";
+import { NegotiationReactionBadge, TONE_ICON_CLASSES, TONE_CLASSES } from "@/components/patterns/status-badges";
 import { useTranslation } from "react-i18next";
 
 type ReactionTypeKey = "question" | "objection" | "counterproposal" | "acceptance" | "partial" | "price_rejected" | "clause_rejected" | "term_change" | "deferred";
-
-const reactionBadgeVariant: Record<string, { label: string; className: string }> = {
-  question:         { label: "Frage",             className: "bg-blue-100 text-blue-700 border-blue-200" },
-  objection:        { label: "Einwand",           className: "bg-orange-100 text-orange-700 border-orange-200" },
-  counterproposal:  { label: "Gegenvorschlag",    className: "bg-purple-100 text-purple-700 border-purple-200" },
-  acceptance:       { label: "Akzeptiert",        className: "bg-green-100 text-green-700 border-green-200" },
-  partial:          { label: "Teilweise",         className: "bg-yellow-100 text-yellow-700 border-yellow-200" },
-  price_rejected:   { label: "Preis abgelehnt",   className: "bg-rose-100 text-rose-700 border-rose-200" },
-  clause_rejected:  { label: "Klausel abgelehnt", className: "bg-red-100 text-red-700 border-red-200" },
-  term_change:      { label: "Laufzeit-Änderung", className: "bg-indigo-100 text-indigo-700 border-indigo-200" },
-  deferred:         { label: "Vertagt",           className: "bg-gray-100 text-gray-700 border-gray-200" },
-};
 
 const followUpLabel: Record<string, string> = {
   new_quote_version: "Neue Angebotsversion",
@@ -229,7 +218,6 @@ export default function NegotiationWorkspace() {
                 <div className="space-y-6">
                   {neg.reactions.map((r) => {
                     const impact = impactsByReaction.get(r.id);
-                    const badge = reactionBadgeVariant[r.type] ?? { label: r.type, className: "" };
                     let Icon = MessageSquare;
                     if (r.type === "objection" || r.type === "clause_rejected") Icon = AlertTriangle;
                     else if (r.type === "counterproposal" || r.type === "partial" || r.type === "term_change") Icon = RefreshCw;
@@ -237,8 +225,8 @@ export default function NegotiationWorkspace() {
 
                     const TrendIcon = impact?.riskTrend === "up" ? TrendingUp
                       : impact?.riskTrend === "down" ? TrendingDown : Minus;
-                    const trendColor = impact?.riskTrend === "up" ? "text-red-600"
-                      : impact?.riskTrend === "down" ? "text-green-600" : "text-muted-foreground";
+                    const trendColor = impact?.riskTrend === "up" ? TONE_ICON_CLASSES.danger
+                      : impact?.riskTrend === "down" ? TONE_ICON_CLASSES.success : "text-muted-foreground";
 
                     return (
                       <div key={r.id} className="rounded-lg border p-4 space-y-3">
@@ -247,7 +235,7 @@ export default function NegotiationWorkspace() {
                             <div className="mt-1 bg-muted p-2 rounded-full h-fit"><Icon className="h-4 w-4" /></div>
                             <div>
                               <div className="flex items-center gap-2 flex-wrap">
-                                <Badge variant="outline" className={badge.className}>{badge.label}</Badge>
+                                <NegotiationReactionBadge type={r.type} />
                                 <h4 className="font-semibold text-base">{r.topic}</h4>
                               </div>
                               <div className="flex items-center gap-2 mt-1 text-xs text-muted-foreground">
@@ -328,7 +316,7 @@ export default function NegotiationWorkspace() {
                               )}
 
                               {impact.approvalsTriggered.length > 0 && (
-                                <div className="flex items-start gap-2 rounded bg-orange-50 border border-orange-200 p-2 text-xs text-orange-900">
+                                <div className={`flex items-start gap-2 rounded border p-2 text-xs ${TONE_CLASSES.warning}`}>
                                   <ShieldAlert className="h-4 w-4 shrink-0 mt-0.5" />
                                   <div>
                                     {impact.approvalsTriggered.map((a, i) => (

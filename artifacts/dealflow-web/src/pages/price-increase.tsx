@@ -31,6 +31,7 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 import { CheckCircle2, Clock, XCircle, MessageSquarePlus } from "lucide-react";
 import { Breadcrumbs } from "@/components/patterns/breadcrumbs";
+import { TONE_TEXT_CLASSES, TONE_ICON_CLASSES, TONE_DOT_CLASSES } from "@/components/patterns/status-badges";
 
 function ResponseDialog({ campaignId, letterId, onDone }: { campaignId: string; letterId: string; onDone: () => void }) {
   const { t } = useTranslation();
@@ -132,8 +133,8 @@ export default function PriceIncrease() {
       <div className="grid gap-4 md:grid-cols-3">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium text-green-700 dark:text-green-400">Accepted</CardTitle>
-            <CheckCircle2 className="h-4 w-4 text-green-600" />
+            <CardTitle className={`text-sm font-medium ${TONE_TEXT_CLASSES.success}`}>Accepted</CardTitle>
+            <CheckCircle2 className={`h-4 w-4 ${TONE_ICON_CLASSES.success}`} />
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">{campaign.acceptedCount}</div>
@@ -141,8 +142,8 @@ export default function PriceIncrease() {
         </Card>
         <Card>
           <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium text-amber-700 dark:text-amber-400">Pending</CardTitle>
-            <Clock className="h-4 w-4 text-amber-600" />
+            <CardTitle className={`text-sm font-medium ${TONE_TEXT_CLASSES.warning}`}>Pending</CardTitle>
+            <Clock className={`h-4 w-4 ${TONE_ICON_CLASSES.warning}`} />
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">{campaign.pendingCount}</div>
@@ -150,8 +151,8 @@ export default function PriceIncrease() {
         </Card>
         <Card>
           <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium text-red-700 dark:text-red-400">Rejected</CardTitle>
-            <XCircle className="h-4 w-4 text-red-600" />
+            <CardTitle className={`text-sm font-medium ${TONE_TEXT_CLASSES.danger}`}>Rejected</CardTitle>
+            <XCircle className={`h-4 w-4 ${TONE_ICON_CLASSES.danger}`} />
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">{campaign.rejectedCount}</div>
@@ -165,9 +166,9 @@ export default function PriceIncrease() {
         </CardHeader>
         <CardContent>
           <div className="h-4 w-full rounded-full overflow-hidden flex">
-            <div style={{ width: `${acceptedPct}%` }} className="bg-green-500 h-full transition-all" title={`Accepted: ${acceptedPct}%`} />
-            <div style={{ width: `${pendingPct}%` }} className="bg-amber-400 h-full transition-all" title={`Pending: ${pendingPct}%`} />
-            <div style={{ width: `${rejectedPct}%` }} className="bg-red-500 h-full transition-all" title={`Rejected: ${rejectedPct}%`} />
+            <div style={{ width: `${acceptedPct}%` }} className={`${TONE_DOT_CLASSES.success} h-full transition-all`} title={`Accepted: ${acceptedPct}%`} />
+            <div style={{ width: `${pendingPct}%` }} className={`${TONE_DOT_CLASSES.warning} h-full transition-all`} title={`Pending: ${pendingPct}%`} />
+            <div style={{ width: `${rejectedPct}%` }} className={`${TONE_DOT_CLASSES.danger} h-full transition-all`} title={`Rejected: ${rejectedPct}%`} />
           </div>
           <div className="flex justify-between mt-2 text-xs text-muted-foreground">
             <span>{acceptedPct}% Accepted</span>

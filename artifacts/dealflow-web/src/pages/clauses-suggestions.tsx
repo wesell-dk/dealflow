@@ -52,6 +52,7 @@ import {
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/auth-context";
+import { SuggestionStatusBadge, TONE_TEXT_CLASSES, type Tone } from "@/components/patterns/status-badges";
 
 function diffWords(a: string, b: string): { text: string; kind: "same" | "add" | "del" }[] {
   const aw = a.split(/(\s+)/);
@@ -75,12 +76,6 @@ function diffWords(a: string, b: string): { text: string; kind: "same" | "add" |
   return out;
 }
 
-function statusBadge(status: string) {
-  if (status === "open") return "bg-amber-500/10 text-amber-700 border-amber-500/30";
-  if (status === "accepted") return "bg-emerald-500/10 text-emerald-700 border-emerald-500/30";
-  if (status === "rejected") return "bg-rose-500/10 text-rose-700 border-rose-500/30";
-  return "bg-muted text-muted-foreground";
-}
 
 type Action = "new_variant" | "replace_variant" | "add_translation" | "discard";
 
@@ -279,18 +274,19 @@ function StatTile({
   tone: "amber" | "emerald" | "rose" | "sky";
   testId: string;
 }) {
-  const colorMap = {
-    amber: "text-amber-600",
-    emerald: "text-emerald-600",
-    rose: "text-rose-600",
-    sky: "text-sky-600",
-  } as const;
+  const toneMap: Record<typeof tone, Tone> = {
+    amber: "warning",
+    emerald: "success",
+    rose: "danger",
+    sky: "info",
+  };
+  const colorClass = TONE_TEXT_CLASSES[toneMap[tone]];
   return (
     <Card data-testid={testId}>
       <CardContent className="py-4 flex items-center justify-between">
         <div>
           <div className="text-xs text-muted-foreground flex items-center gap-1">{icon}{label}</div>
-          <div className={`text-2xl font-bold tabular-nums ${colorMap[tone]}`}>{value}</div>
+          <div className={`text-2xl font-bold tabular-nums ${colorClass}`}>{value}</div>
         </div>
       </CardContent>
     </Card>
@@ -310,9 +306,10 @@ function SuggestionRow({ s, onOpen }: { s: ClauseSuggestion; onOpen: () => void 
           <div className="flex items-center gap-2 flex-wrap">
             <span className="font-semibold">{s.proposedName}</span>
             {s.familyName && <Badge variant="outline" className="text-xs">{s.familyName}</Badge>}
-            <Badge variant="outline" className={`text-xs ${statusBadge(s.status)}`}>
-              {t(`pages.clauseSuggestions.status${s.status[0].toUpperCase()}${s.status.slice(1)}`, s.status)}
-            </Badge>
+            <SuggestionStatusBadge
+              status={s.status}
+              label={t(`pages.clauseSuggestions.status${s.status[0].toUpperCase()}${s.status.slice(1)}`, s.status)}
+            />
             <Badge variant="outline" className="text-xs">
               {s.sourceType === "edit" ? t("pages.clauseSuggestions.sourceEdit") : t("pages.clauseSuggestions.sourceAdHoc")}
             </Badge>
@@ -409,9 +406,10 @@ function SuggestionDialog({
               </DialogTitle>
               <DialogDescription className="flex flex-wrap gap-2 items-center">
                 {detail.familyName && <Badge variant="outline">{detail.familyName}</Badge>}
-                <Badge variant="outline" className={statusBadge(detail.status)}>
-                  {t(`pages.clauseSuggestions.status${detail.status[0].toUpperCase()}${detail.status.slice(1)}`, detail.status)}
-                </Badge>
+                <SuggestionStatusBadge
+                  status={detail.status}
+                  label={t(`pages.clauseSuggestions.status${detail.status[0].toUpperCase()}${detail.status.slice(1)}`, detail.status)}
+                />
                 <Badge variant="outline">
                   {detail.sourceType === "edit" ? t("pages.clauseSuggestions.sourceEdit") : t("pages.clauseSuggestions.sourceAdHoc")}
                 </Badge>
