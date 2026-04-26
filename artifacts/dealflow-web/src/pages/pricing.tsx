@@ -36,6 +36,7 @@ import { ArrowRight, Tag, Shield, Percent, Clock, AlertTriangle, Layers, CheckCi
 import { BundleFormDialog } from "@/components/pricing/bundle-form-dialog";
 import { PricePositionFormDialog } from "@/components/pricing/price-position-form-dialog";
 import { PriceRuleFormDialog } from "@/components/pricing/price-rule-form-dialog";
+import { PricingCategoriesPanel } from "@/components/pricing/categories-panel";
 import { EmptyStateCard } from "@/components/patterns/empty-state-card";
 
 function ResolvePanel() {
@@ -74,8 +75,8 @@ function ResolvePanel() {
       <CardContent className="space-y-4">
         <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
           <Input placeholder={t("pages.pricing.sku")} value={sku} onChange={(e) => setSku(e.target.value)} />
-          <Input placeholder="Brand ID" value={brandId} onChange={(e) => setBrandId(e.target.value)} />
-          <Input placeholder="Company ID" value={companyId} onChange={(e) => setCompanyId(e.target.value)} />
+          <Input placeholder={t("pages.pricing.brandIdPlaceholder")} value={brandId} onChange={(e) => setBrandId(e.target.value)} />
+          <Input placeholder={t("pages.pricing.companyIdPlaceholder")} value={companyId} onChange={(e) => setCompanyId(e.target.value)} />
           <Button onClick={onResolve} disabled={loading || !sku.trim()}>
             {t("pages.pricing.resolve")}
           </Button>
@@ -232,6 +233,7 @@ function BundlesPanel() {
 }
 
 function PositionsPanel({ positions }: { positions: PricePosition[] | undefined }) {
+  const { t } = useTranslation();
   const qc = useQueryClient();
   const { toast } = useToast();
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -247,13 +249,13 @@ function PositionsPanel({ positions }: { positions: PricePosition[] | undefined 
         qc.invalidateQueries({ queryKey: getListPricePositionsQueryKey() }),
         qc.invalidateQueries({ queryKey: getGetPricingSummaryQueryKey() }),
       ]);
-      toast({ title: "price position deleted", description: confirmDelete.sku });
+      toast({ title: t("pages.pricing.positions.deleted"), description: confirmDelete.sku });
       setConfirmDelete(null);
     } catch (e: unknown) {
       const body = (e as { response?: { data?: { error?: string } } })?.response?.data;
       toast({
-        title: "Delete failed",
-        description: body?.error ?? (e instanceof Error ? e.message : "Unknown"),
+        title: t("pages.pricing.positions.deleteFailed"),
+        description: body?.error ?? (e instanceof Error ? e.message : "Unbekannt"),
         variant: "destructive",
       });
     }
@@ -262,31 +264,38 @@ function PositionsPanel({ positions }: { positions: PricePosition[] | undefined 
   return (
     <>
       <div className="flex justify-between items-center mb-3">
-        <div className="text-sm text-muted-foreground">{positions?.length ?? 0} price positions</div>
+        <div className="text-sm text-muted-foreground">
+          {t("pages.pricing.positions.count", { count: positions?.length ?? 0 })}
+        </div>
         <Button
           size="sm"
           onClick={() => { setEditing(undefined); setDialogOpen(true); }}
           data-testid="button-new-price-position"
         >
-          <Plus className="mr-2 h-4 w-4" /> Neue price position
+          <Plus className="mr-2 h-4 w-4" /> {t("pages.pricing.positions.new")}
         </Button>
       </div>
       <div className="border rounded-md bg-card">
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead className="sticky left-0 bg-background z-20 md:static md:bg-transparent">SKU</TableHead>
-              <TableHead>Name</TableHead>
-              <TableHead>Category</TableHead>
-              <TableHead>Brand / Company</TableHead>
-              <TableHead className="text-right">List Price</TableHead>
-              <TableHead>Version</TableHead>
-              <TableHead>Status</TableHead>
-              <TableHead className="w-24 text-right">Actions</TableHead>
+              <TableHead className="sticky left-0 bg-background z-20 md:static md:bg-transparent">
+                {t("pages.pricing.positions.headers.sku")}
+              </TableHead>
+              <TableHead>{t("pages.pricing.positions.headers.name")}</TableHead>
+              <TableHead>{t("pages.pricing.positions.headers.category")}</TableHead>
+              <TableHead>{t("pages.pricing.positions.headers.brandCompany")}</TableHead>
+              <TableHead className="text-right">{t("pages.pricing.positions.headers.listPrice")}</TableHead>
+              <TableHead>{t("pages.pricing.positions.headers.version")}</TableHead>
+              <TableHead>{t("pages.pricing.positions.headers.status")}</TableHead>
+              <TableHead className="w-24 text-right">{t("pages.pricing.positions.headers.actions")}</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
-            {positions?.map((pos) => (
+            {positions?.map((pos) => {
+              const catLabel = pos.categoryName ?? pos.category;
+              const subLabel = pos.subcategoryName;
+              return (
               <TableRow key={pos.id} data-testid={`row-position-${pos.id}`}>
                 <TableCell className="font-medium text-xs font-mono sticky left-0 bg-background z-10 md:static md:bg-transparent">{pos.sku}</TableCell>
                 <TableCell>
@@ -295,7 +304,10 @@ function PositionsPanel({ positions }: { positions: PricePosition[] | undefined 
                     {pos.isStandard && <Badge variant="secondary" className="text-[10px]">STD</Badge>}
                   </div>
                 </TableCell>
-                <TableCell className="text-muted-foreground text-sm">{pos.category}</TableCell>
+                <TableCell className="text-muted-foreground text-sm">
+                  {catLabel}
+                  {subLabel && <span className="text-xs"> · {subLabel}</span>}
+                </TableCell>
                 <TableCell className="text-sm">
                   <div>{pos.brandName}</div>
                   <div className="text-xs text-muted-foreground">{pos.companyName}</div>
@@ -314,7 +326,7 @@ function PositionsPanel({ positions }: { positions: PricePosition[] | undefined 
                       variant="ghost"
                       onClick={() => { setEditing(pos); setDialogOpen(true); }}
                       data-testid={`button-edit-position-${pos.id}`}
-                      aria-label="Edit"
+                      aria-label={t("common.edit")}
                     >
                       <Pencil className="h-4 w-4" />
                     </Button>
@@ -323,18 +335,19 @@ function PositionsPanel({ positions }: { positions: PricePosition[] | undefined 
                       variant="ghost"
                       onClick={() => setConfirmDelete(pos)}
                       data-testid={`button-delete-position-${pos.id}`}
-                      aria-label="Delete"
+                      aria-label={t("common.delete")}
                     >
                       <Trash2 className="h-4 w-4 text-destructive" />
                     </Button>
                   </div>
                 </TableCell>
               </TableRow>
-            ))}
+              );
+            })}
             {positions?.length === 0 && (
               <TableRow>
                 <TableCell colSpan={8} className="h-24 text-center text-muted-foreground">
-                  No price positions yet — create one via "New price position".
+                  {t("pages.pricing.positions.empty")}
                 </TableCell>
               </TableRow>
             )}
@@ -351,20 +364,22 @@ function PositionsPanel({ positions }: { positions: PricePosition[] | undefined 
       <AlertDialog open={!!confirmDelete} onOpenChange={(v) => { if (!v) setConfirmDelete(null); }}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>price position delete?</AlertDialogTitle>
+            <AlertDialogTitle>{t("pages.pricing.positions.deleteConfirmTitle")}</AlertDialogTitle>
             <AlertDialogDescription>
-              {confirmDelete?.sku} — {confirmDelete?.name}. Versions-Historie wird mit deleted.
-              This action cannot be undone.
+              {t("pages.pricing.positions.deleteConfirmBody", {
+                sku: confirmDelete?.sku ?? "",
+                name: confirmDelete?.name ?? "",
+              })}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogCancel>{t("common.cancel")}</AlertDialogCancel>
             <AlertDialogAction
               onClick={onDelete}
               className="bg-destructive hover:bg-destructive/90"
               data-testid="button-confirm-delete-position"
             >
-              Delete
+              {t("common.delete")}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
@@ -374,6 +389,7 @@ function PositionsPanel({ positions }: { positions: PricePosition[] | undefined 
 }
 
 function RulesPanel({ rules }: { rules: PriceRule[] | undefined }) {
+  const { t } = useTranslation();
   const qc = useQueryClient();
   const { toast } = useToast();
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -386,13 +402,13 @@ function RulesPanel({ rules }: { rules: PriceRule[] | undefined }) {
     try {
       await del.mutateAsync({ id: confirmDelete.id });
       await qc.invalidateQueries({ queryKey: getListPriceRulesQueryKey() });
-      toast({ title: "Regel deleted", description: confirmDelete.name });
+      toast({ title: t("pages.pricing.rules.deleted"), description: confirmDelete.name });
       setConfirmDelete(null);
     } catch (e: unknown) {
       const body = (e as { response?: { data?: { error?: string } } })?.response?.data;
       toast({
-        title: "Delete failed",
-        description: body?.error ?? (e instanceof Error ? e.message : "Unknown"),
+        title: t("pages.pricing.rules.deleteFailed"),
+        description: body?.error ?? (e instanceof Error ? e.message : "Unbekannt"),
         variant: "destructive",
       });
     }
@@ -401,13 +417,15 @@ function RulesPanel({ rules }: { rules: PriceRule[] | undefined }) {
   return (
     <>
       <div className="flex justify-between items-center mb-3">
-        <div className="text-sm text-muted-foreground">{rules?.length ?? 0} pricing rules</div>
+        <div className="text-sm text-muted-foreground">
+          {t("pages.pricing.rules.count", { count: rules?.length ?? 0 })}
+        </div>
         <Button
           size="sm"
           onClick={() => { setEditing(undefined); setDialogOpen(true); }}
           data-testid="button-new-price-rule"
         >
-          <Plus className="mr-2 h-4 w-4" /> Neue pricing rule
+          <Plus className="mr-2 h-4 w-4" /> {t("pages.pricing.rules.new")}
         </Button>
       </div>
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
@@ -429,7 +447,7 @@ function RulesPanel({ rules }: { rules: PriceRule[] | undefined }) {
                 <div className="font-mono text-xs p-1.5 bg-primary/10 text-primary-foreground font-semibold rounded border border-primary/20 bg-primary text-primary-foreground text-center">{rule.effect}</div>
               </div>
               <div className="mt-4 text-xs text-muted-foreground flex justify-between items-center">
-                <span>Priority: <span className="font-medium text-foreground">{rule.priority}</span></span>
+                <span>{t("pages.pricing.rules.priority")}: <span className="font-medium text-foreground">{rule.priority}</span></span>
                 <div className="flex gap-1">
                   <Button
                     size="icon"
@@ -437,7 +455,7 @@ function RulesPanel({ rules }: { rules: PriceRule[] | undefined }) {
                     className="h-7 w-7"
                     onClick={() => { setEditing(rule); setDialogOpen(true); }}
                     data-testid={`button-edit-rule-${rule.id}`}
-                    aria-label="Edit"
+                    aria-label={t("common.edit")}
                   >
                     <Pencil className="h-3.5 w-3.5" />
                   </Button>
@@ -447,7 +465,7 @@ function RulesPanel({ rules }: { rules: PriceRule[] | undefined }) {
                     className="h-7 w-7"
                     onClick={() => setConfirmDelete(rule)}
                     data-testid={`button-delete-rule-${rule.id}`}
-                    aria-label="Delete"
+                    aria-label={t("common.delete")}
                   >
                     <Trash2 className="h-3.5 w-3.5 text-destructive" />
                   </Button>
@@ -458,7 +476,7 @@ function RulesPanel({ rules }: { rules: PriceRule[] | undefined }) {
         ))}
         {rules?.length === 0 && (
           <div className="col-span-full p-8 text-center border rounded-md text-muted-foreground bg-muted/10">
-            No pricing rules yet — create one via "New pricing rule".
+            {t("pages.pricing.rules.empty")}
           </div>
         )}
       </div>
@@ -472,19 +490,19 @@ function RulesPanel({ rules }: { rules: PriceRule[] | undefined }) {
       <AlertDialog open={!!confirmDelete} onOpenChange={(v) => { if (!v) setConfirmDelete(null); }}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>pricing rule delete?</AlertDialogTitle>
+            <AlertDialogTitle>{t("pages.pricing.rules.deleteConfirmTitle")}</AlertDialogTitle>
             <AlertDialogDescription>
-              {confirmDelete?.name}. This action cannot be undone.
+              {t("pages.pricing.rules.deleteConfirmBody", { name: confirmDelete?.name ?? "" })}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogCancel>{t("common.cancel")}</AlertDialogCancel>
             <AlertDialogAction
               onClick={onDelete}
               className="bg-destructive hover:bg-destructive/90"
               data-testid="button-confirm-delete-rule"
             >
-              Delete
+              {t("common.delete")}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
@@ -506,15 +524,15 @@ export default function Pricing() {
   return (
     <div className="flex flex-col gap-6">
       <div>
-        <h1 className="text-3xl font-bold tracking-tight">Pricing Workspace</h1>
-        <p className="text-muted-foreground mt-1">Manage standard price lists, discounts, and guardrails.</p>
+        <h1 className="text-3xl font-bold tracking-tight">{t("pages.pricing.workspaceTitle")}</h1>
+        <p className="text-muted-foreground mt-1">{t("pages.pricing.subtitle")}</p>
       </div>
 
       {summary && (
         <div className="grid gap-4 md:grid-cols-4">
           <Card>
             <CardHeader className="flex flex-row items-center justify-between pb-2">
-              <CardTitle className="text-sm font-medium">Total Positions</CardTitle>
+              <CardTitle className="text-sm font-medium">{t("pages.pricing.kpi.totalPositions")}</CardTitle>
               <Tag className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
@@ -523,7 +541,7 @@ export default function Pricing() {
           </Card>
           <Card>
             <CardHeader className="flex flex-row items-center justify-between pb-2">
-              <CardTitle className="text-sm font-medium">Active Positions</CardTitle>
+              <CardTitle className="text-sm font-medium">{t("pages.pricing.kpi.activePositions")}</CardTitle>
               <Shield className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
@@ -532,7 +550,7 @@ export default function Pricing() {
           </Card>
           <Card>
             <CardHeader className="flex flex-row items-center justify-between pb-2">
-              <CardTitle className="text-sm font-medium">Pending Approvals</CardTitle>
+              <CardTitle className="text-sm font-medium">{t("pages.pricing.kpi.pendingApprovals")}</CardTitle>
               <AlertTriangle className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
@@ -541,7 +559,7 @@ export default function Pricing() {
           </Card>
           <Card>
             <CardHeader className="flex flex-row items-center justify-between pb-2">
-              <CardTitle className="text-sm font-medium">Standard Coverage</CardTitle>
+              <CardTitle className="text-sm font-medium">{t("pages.pricing.kpi.standardCoverage")}</CardTitle>
               <Percent className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
@@ -553,20 +571,25 @@ export default function Pricing() {
 
       <Tabs defaultValue="positions" className="mt-2">
         <TabsList>
-          <TabsTrigger value="positions">Price Positions</TabsTrigger>
-          <TabsTrigger value="rules">Pricing Rules</TabsTrigger>
-          <TabsTrigger value="bundles" data-testid="tab-bundles">{t("pages.pricing.bundles.tab")}</TabsTrigger>
-          <TabsTrigger value="resolve">Resolve</TabsTrigger>
+          <TabsTrigger value="positions" data-testid="tab-positions">{t("pages.pricing.tabs.positions")}</TabsTrigger>
+          <TabsTrigger value="rules" data-testid="tab-rules">{t("pages.pricing.tabs.rules")}</TabsTrigger>
+          <TabsTrigger value="bundles" data-testid="tab-bundles">{t("pages.pricing.tabs.bundles")}</TabsTrigger>
+          <TabsTrigger value="categories" data-testid="tab-categories">{t("pages.pricing.tabs.categories")}</TabsTrigger>
+          <TabsTrigger value="resolve" data-testid="tab-resolve">{t("pages.pricing.tabs.resolve")}</TabsTrigger>
         </TabsList>
 
         <TabsContent value="bundles" className="mt-4">
           <BundlesPanel />
         </TabsContent>
 
+        <TabsContent value="categories" className="mt-4">
+          <PricingCategoriesPanel />
+        </TabsContent>
+
         <TabsContent value="resolve" className="mt-4">
           <ResolvePanel />
         </TabsContent>
-        
+
         <TabsContent value="positions" className="mt-4">
           <PositionsPanel positions={positions} />
         </TabsContent>
@@ -581,7 +604,7 @@ export default function Pricing() {
           <CardHeader className="pb-3">
             <CardTitle className="flex items-center gap-2 text-lg">
               <Clock className="h-5 w-5 text-muted-foreground" />
-              Recent Changes
+              {t("pages.pricing.recentChangesTitle")}
             </CardTitle>
           </CardHeader>
           <CardContent>

@@ -83,6 +83,9 @@ import {
   pricePositionsTable,
   pricePositionBundlesTable,
   pricePositionBundleItemsTable,
+  pricingCategoriesTable,
+  pricingSubcategoriesTable,
+  pricingCategorySequencesTable,
   priceRulesTable,
   approvalsTable,
   approvalChainTemplatesTable,
@@ -538,7 +541,7 @@ router.post('/orgs/companies', async (req, res) => {
   if (!validateInline(req, res, { body: Z.CreateCompanyBody })) return;
   if (!requireAdmin(req, res)) return;
   const scope = getScope(req);
-  const b = req.body as { name: string; legalName: string; country: string; currency: string };
+  const b = req.body as { name: string; legalName: string; country: string; currency: string; code?: string | null };
   const name = b.name.trim();
   const country = normCountry(b.country);
   const currency = normCurrency(b.currency);
@@ -548,6 +551,16 @@ router.post('/orgs/companies', async (req, res) => {
   const existing = await db.select().from(companiesTable)
     .where(and(eq(companiesTable.tenantId, scope.tenantId), eq(companiesTable.name, name)));
   if (existing.length) { res.status(409).json({ error: `company "${name}" already exists in this tenant` }); return; }
+  // Optionaler Code für SKU-Präfix — Großbuchstaben/Ziffern, tenant-eindeutig.
+  let code: string | null = null;
+  if (b.code != null && b.code !== '') {
+    const v = String(b.code).trim().toUpperCase();
+    if (!/^[A-Z0-9]{2,8}$/.test(v)) { res.status(422).json({ error: 'code must match ^[A-Z0-9]{2,8}$' }); return; }
+    const dup = await db.select().from(companiesTable)
+      .where(and(eq(companiesTable.tenantId, scope.tenantId), eq(companiesTable.code, v)));
+    if (dup.length) { res.status(409).json({ error: `company code "${v}" already taken in this tenant` }); return; }
+    code = v;
+  }
   const newId = `co_${randomBytes(6).toString('hex')}`;
   const row = {
     id: newId,
@@ -556,6 +569,7 @@ router.post('/orgs/companies', async (req, res) => {
     legalName: b.legalName.trim(),
     country,
     currency,
+    code,
   };
   await db.insert(companiesTable).values(row);
   await writeAuditFromReq(req, {
@@ -576,7 +590,7 @@ router.patch('/orgs/companies/:id', async (req, res) => {
   const [existing] = await db.select().from(companiesTable).where(eq(companiesTable.id, req.params.id));
   if (!existing) { res.status(404).json({ error: 'not found' }); return; }
   if (existing.tenantId !== scope.tenantId) { res.status(403).json({ error: 'forbidden' }); return; }
-  const body = req.body as Partial<{ name: string; legalName: string; country: string; currency: string }>;
+  const body = req.body as Partial<{ name: string; legalName: string; country: string; currency: string; code: string | null }>;
   const patch: Partial<typeof companiesTable.$inferInsert> = {};
   if (typeof body.name === 'string') {
     const v = body.name.trim();
@@ -602,6 +616,22 @@ router.patch('/orgs/companies/:id', async (req, res) => {
     const v = normCurrency(body.currency);
     if (!/^[A-Z]{3}$/.test(v)) { res.status(422).json({ error: 'currency must be ISO-4217' }); return; }
     patch.currency = v;
+  }
+  if (body.code !== undefined) {
+    if (body.code === null || body.code === '') {
+      patch.code = null;
+    } else {
+      const v = String(body.code).trim().toUpperCase();
+      if (!/^[A-Z0-9]{2,8}$/.test(v)) { res.status(422).json({ error: 'code must match ^[A-Z0-9]{2,8}$' }); return; }
+      if (v !== (existing.code ?? '')) {
+        const dup = await db.select().from(companiesTable)
+          .where(and(eq(companiesTable.tenantId, scope.tenantId), eq(companiesTable.code, v)));
+        if (dup.length && dup[0]!.id !== existing.id) {
+          res.status(409).json({ error: `company code "${v}" already taken in this tenant` }); return;
+        }
+      }
+      patch.code = v;
+    }
   }
   if (Object.keys(patch).length) {
     await db.update(companiesTable).set(patch).where(eq(companiesTable.id, existing.id));
@@ -5104,14 +5134,46 @@ router.delete('/quote-attachments/:id', async (req, res) => {
 });
 
 // ── PRICING ──
-function mapPricePosition(p: typeof pricePositionsTable.$inferSelect, brandName: string, companyName: string) {
+// Mapping inkl. neuer Kategorie-/Unterkategorie-Felder (Task #221). Für ältere
+// Konsumenten bleibt `category` als gespiegelter Text erhalten.
+type PricingCatRow = typeof pricingCategoriesTable.$inferSelect;
+type PricingSubRow = typeof pricingSubcategoriesTable.$inferSelect;
+function mapPricePosition(
+  p: typeof pricePositionsTable.$inferSelect,
+  brandName: string,
+  companyName: string,
+  catLookup?: Map<string, PricingCatRow>,
+  subLookup?: Map<string, PricingSubRow>,
+) {
+  const cat = p.categoryId ? catLookup?.get(p.categoryId) ?? null : null;
+  const sub = p.subcategoryId ? subLookup?.get(p.subcategoryId) ?? null : null;
   return {
     id: p.id, sku: p.sku, name: p.name, category: p.category,
+    categoryId: p.categoryId ?? null,
+    subcategoryId: p.subcategoryId ?? null,
+    categoryName: cat?.name ?? null,
+    subcategoryName: sub?.name ?? null,
+    categoryCode: cat?.code ?? null,
+    subcategoryCode: sub?.code ?? null,
     listPrice: num(p.listPrice), currency: p.currency, status: p.status,
     validFrom: typeof p.validFrom === 'string' ? p.validFrom : iso(p.validFrom)!.slice(0, 10),
     validUntil: p.validUntil ? (typeof p.validUntil === 'string' ? p.validUntil : iso(p.validUntil)!.slice(0, 10)) : null,
     brandId: p.brandId, brandName, companyId: p.companyId, companyName,
     version: p.version, isStandard: p.isStandard,
+  };
+}
+
+async function getPricingCategoryLookups(tenantId: string): Promise<{
+  cats: Map<string, PricingCatRow>;
+  subs: Map<string, PricingSubRow>;
+}> {
+  const [cats, subs] = await Promise.all([
+    db.select().from(pricingCategoriesTable).where(eq(pricingCategoriesTable.tenantId, tenantId)),
+    db.select().from(pricingSubcategoriesTable).where(eq(pricingSubcategoriesTable.tenantId, tenantId)),
+  ]);
+  return {
+    cats: new Map(cats.map(c => [c.id, c])),
+    subs: new Map(subs.map(s => [s.id, s])),
   };
 }
 
@@ -5126,18 +5188,78 @@ router.get('/price-positions', async (req, res) => {
   const tenantRows = rows.map(r => r.p);
   const brands = await getBrandMap();
   const companies = await getCompanyMap();
+  const { cats, subs } = await getPricingCategoryLookups(scope.tenantId);
   const allowC = await allowedCompanyIds(req);
   const allowB = await allowedBrandIds(req);
   const filtered = (scope.tenantWide && !hasActiveScopeFilter(scope))
     ? tenantRows
     : tenantRows.filter(p => allowC.includes(p.companyId) || allowB.includes(p.brandId));
-  res.json(filtered.map(p => mapPricePosition(p, brands.get(p.brandId)?.name ?? '', companies.get(p.companyId)?.name ?? '')));
+  res.json(filtered.map(p => mapPricePosition(p, brands.get(p.brandId)?.name ?? '', companies.get(p.companyId)?.name ?? '', cats, subs)));
 });
+
+// ── Auto-SKU-Generator ──
+// Atomarer Sequenzschritt pro (tenantId, prefix). `INSERT … ON CONFLICT …
+// DO UPDATE … RETURNING next_value` läuft race-safe ab und gibt den frisch
+// inkrementierten Wert zurück. Aufrufer formatieren das Ergebnis als
+// `{prefix}-{NNN}` mit min. drei Stellen.
+async function bumpSkuSequence(tenantId: string, prefix: string): Promise<number> {
+  const seqId = `pseq_${randomBytes(6).toString('hex')}`;
+  const result = await db.execute(sql`
+    INSERT INTO "pricing_category_sequences" ("id", "tenant_id", "prefix", "next_value")
+    VALUES (${seqId}, ${tenantId}, ${prefix}, 1)
+    ON CONFLICT ("tenant_id", "prefix") DO UPDATE
+      SET "next_value" = "pricing_category_sequences"."next_value" + 1
+    RETURNING "next_value"
+  `);
+  const rows = (result as unknown as { rows: Array<{ next_value: number | string }> }).rows;
+  const v = rows[0]?.next_value;
+  return typeof v === 'number' ? v : parseInt(String(v ?? '1'), 10);
+}
+
+async function peekSkuSequence(tenantId: string, prefix: string): Promise<number> {
+  const [row] = await db.select().from(pricingCategorySequencesTable)
+    .where(and(eq(pricingCategorySequencesTable.tenantId, tenantId), eq(pricingCategorySequencesTable.prefix, prefix)));
+  return row ? row.nextValue + 1 : 1;
+}
+
+function formatSku(prefix: string, n: number): string {
+  return `${prefix}-${String(n).padStart(3, '0')}`;
+}
+
+async function buildSkuPrefix(
+  tenantId: string,
+  companyId: string,
+  categoryId: string,
+  subcategoryId: string | null,
+): Promise<{ ok: true; prefix: string; categoryRow: PricingCatRow; subcategoryRow: PricingSubRow } | { ok: false; status: number; error: string }> {
+  const [co] = await db.select().from(companiesTable).where(eq(companiesTable.id, companyId));
+  if (!co || co.tenantId !== tenantId) return { ok: false, status: 404, error: 'company not found in tenant' };
+  if (!co.code) return { ok: false, status: 422, error: 'company is missing a SKU code; set companies.code first' };
+  const [cat] = await db.select().from(pricingCategoriesTable)
+    .where(and(eq(pricingCategoriesTable.id, categoryId), eq(pricingCategoriesTable.tenantId, tenantId)));
+  if (!cat) return { ok: false, status: 404, error: 'category not found in tenant' };
+  if (cat.status !== 'active') return { ok: false, status: 422, error: 'category is archived' };
+  // Unterkategorie ist Pflicht — die Auto-SKU enthält {COMPANY}-{KAT}-{SUBKAT}-{NNN}.
+  if (!subcategoryId) return { ok: false, status: 422, error: 'subcategoryId is required' };
+  const [s] = await db.select().from(pricingSubcategoriesTable)
+    .where(and(
+      eq(pricingSubcategoriesTable.id, subcategoryId),
+      eq(pricingSubcategoriesTable.tenantId, tenantId),
+      eq(pricingSubcategoriesTable.categoryId, categoryId),
+    ));
+  if (!s) return { ok: false, status: 422, error: 'subcategory does not belong to category' };
+  if (s.status !== 'active') return { ok: false, status: 422, error: 'subcategory is archived' };
+  const prefix = `${co.code}-${cat.code}-${s.code}`;
+  return { ok: true, prefix, categoryRow: cat, subcategoryRow: s };
+}
 
 router.post('/price-positions', async (req, res) => {
   if (!validateInline(req, res, { body: Z.CreatePricePositionBody })) return;
   const scope = getScope(req);
-  const b = req.body;
+  const b = req.body as {
+    name: string; categoryId: string; subcategoryId: string;
+    listPrice: number; currency: string; brandId: string; companyId: string; validFrom: string;
+  };
   // Scope-check target brand/company. Apply intersection (Permission ∩ Active).
   if (!scope.tenantWide || hasActiveScopeFilter(scope)) {
     const brandAllowed = (await allowedBrandIds(req)).includes(b.brandId);
@@ -5148,9 +5270,23 @@ router.post('/price-positions', async (req, res) => {
     const [co] = await db.select().from(companiesTable).where(eq(companiesTable.id, b.companyId));
     if (!co || co.tenantId !== scope.tenantId) { res.status(403).json({ error: 'forbidden' }); return; }
   }
+  // Brand muss zur Company gehören.
+  const [br] = await db.select().from(brandsTable).where(eq(brandsTable.id, b.brandId));
+  if (!br || br.companyId !== b.companyId) { res.status(422).json({ error: 'brand does not belong to company' }); return; }
+
+  const prefRes = await buildSkuPrefix(scope.tenantId, b.companyId, b.categoryId, b.subcategoryId);
+  if (!prefRes.ok) { res.status(prefRes.status).json({ error: prefRes.error }); return; }
+  const next = await bumpSkuSequence(scope.tenantId, prefRes.prefix);
+  const sku = formatSku(prefRes.prefix, next);
+
   const id = `pp_${randomUUID().slice(0, 8)}`;
   await db.insert(pricePositionsTable).values({
-    id, sku: b.sku, name: b.name, category: b.category, listPrice: String(b.listPrice),
+    id, sku, name: b.name,
+    // Legacy-Freitext spiegelt den Kategorie-Namen, damit Altcode unverändert läuft.
+    category: prefRes.categoryRow.name,
+    categoryId: b.categoryId,
+    subcategoryId: b.subcategoryId,
+    listPrice: String(b.listPrice),
     currency: b.currency, status: 'draft', validFrom: b.validFrom, validUntil: null,
     brandId: b.brandId, companyId: b.companyId, version: 1, isStandard: true,
   });
@@ -5159,12 +5295,13 @@ router.post('/price-positions', async (req, res) => {
   // (pricePositionsTable hat selbst kein createdAt).
   await writeAuditFromReq(req, {
     entityType: 'price_position', entityId: id, action: 'created',
-    summary: `Preis ${b.sku} als Entwurf angelegt`,
+    summary: `Preis ${sku} als Entwurf angelegt`,
   });
   const [p] = await db.select().from(pricePositionsTable).where(eq(pricePositionsTable.id, id));
   const brands = await getBrandMap();
   const companies = await getCompanyMap();
-  res.status(201).json(mapPricePosition(p!, brands.get(p!.brandId)?.name ?? '', companies.get(p!.companyId)?.name ?? ''));
+  const { cats, subs } = await getPricingCategoryLookups(scope.tenantId);
+  res.status(201).json(mapPricePosition(p!, brands.get(p!.brandId)?.name ?? '', companies.get(p!.companyId)?.name ?? '', cats, subs));
 });
 
 router.patch('/price-positions/:id', async (req, res) => {
@@ -5173,16 +5310,40 @@ router.patch('/price-positions/:id', async (req, res) => {
   if (stP !== 'ok') { res.status(stP === 'missing' ? 404 : 403).json({ error: stP === 'missing' ? 'not found' : 'forbidden' }); return; }
   const [existing] = await db.select().from(pricePositionsTable).where(eq(pricePositionsTable.id, req.params.id));
   if (!existing) { res.status(404).json({ error: 'not found' }); return; }
-  const b = req.body;
+  const scope = getScope(req);
+  const b = req.body as Partial<{
+    name: string; categoryId: string; subcategoryId: string | null;
+    listPrice: number; currency: string; status: string;
+    validFrom: string; validUntil: string | null;
+    brandId: string; isStandard: boolean;
+  }>;
   // Brand-Wechsel respektiert das Scope-Modell: das neue Brand muss im Tenant sein.
   if (b.brandId && b.brandId !== existing.brandId) {
     const [br] = await db.select().from(brandsTable).where(eq(brandsTable.id, b.brandId));
     if (!br || br.companyId !== existing.companyId) { res.status(422).json({ error: 'brand outside company scope' }); return; }
   }
   const patch: Partial<typeof pricePositionsTable.$inferInsert> = {};
-  if (b.sku !== undefined) patch.sku = b.sku;
   if (b.name !== undefined) patch.name = b.name;
-  if (b.category !== undefined) patch.category = b.category;
+  // Kategorie/Unterkategorie ändern → Mirror-Text mitführen, SKU bleibt immutable.
+  if (b.categoryId !== undefined || b.subcategoryId !== undefined) {
+    const targetCatId = b.categoryId ?? existing.categoryId;
+    if (!targetCatId) { res.status(422).json({ error: 'categoryId required' }); return; }
+    const targetSubId = b.subcategoryId !== undefined ? b.subcategoryId : existing.subcategoryId;
+    if (!targetSubId) { res.status(422).json({ error: 'subcategoryId required' }); return; }
+    const [cat] = await db.select().from(pricingCategoriesTable)
+      .where(and(eq(pricingCategoriesTable.id, targetCatId), eq(pricingCategoriesTable.tenantId, scope.tenantId)));
+    if (!cat) { res.status(404).json({ error: 'category not found in tenant' }); return; }
+    const [sub] = await db.select().from(pricingSubcategoriesTable)
+      .where(and(
+        eq(pricingSubcategoriesTable.id, targetSubId),
+        eq(pricingSubcategoriesTable.tenantId, scope.tenantId),
+        eq(pricingSubcategoriesTable.categoryId, targetCatId),
+      ));
+    if (!sub) { res.status(422).json({ error: 'subcategory does not belong to category' }); return; }
+    patch.categoryId = targetCatId;
+    patch.subcategoryId = targetSubId;
+    patch.category = cat.name;
+  }
   if (b.listPrice !== undefined) patch.listPrice = String(b.listPrice);
   if (b.currency !== undefined) patch.currency = b.currency;
   if (b.status !== undefined) patch.status = b.status;
@@ -5190,6 +5351,7 @@ router.patch('/price-positions/:id', async (req, res) => {
   if (b.validUntil !== undefined) patch.validUntil = b.validUntil;
   if (b.brandId !== undefined) patch.brandId = b.brandId;
   if (b.isStandard !== undefined) patch.isStandard = b.isStandard;
+  // Bewusst NICHT übernehmen: sku, companyId — beide nach Anlage immutable.
   if (Object.keys(patch).length > 0) {
     await db.update(pricePositionsTable).set(patch).where(eq(pricePositionsTable.id, req.params.id));
   }
@@ -5200,7 +5362,245 @@ router.patch('/price-positions/:id', async (req, res) => {
   const [p] = await db.select().from(pricePositionsTable).where(eq(pricePositionsTable.id, req.params.id));
   const brands = await getBrandMap();
   const companies = await getCompanyMap();
-  res.json(mapPricePosition(p!, brands.get(p!.brandId)?.name ?? '', companies.get(p!.companyId)?.name ?? ''));
+  const { cats, subs } = await getPricingCategoryLookups(scope.tenantId);
+  res.json(mapPricePosition(p!, brands.get(p!.brandId)?.name ?? '', companies.get(p!.companyId)?.name ?? '', cats, subs));
+});
+
+// ── Pricing-Kategorien & Unterkategorien (Task #221) ──
+// Tenant-scoped, code+name. Soft-delete (Status `archived`) statt Hard-Delete,
+// sobald Positionen darauf verweisen.
+
+function mapPricingCategory(
+  cat: PricingCatRow,
+  subs: PricingSubRow[],
+  posCountByCat: Map<string, number>,
+  posCountBySub: Map<string, number>,
+) {
+  return {
+    id: cat.id,
+    code: cat.code,
+    name: cat.name,
+    sortOrder: cat.sortOrder,
+    status: cat.status as 'active' | 'archived',
+    positionCount: posCountByCat.get(cat.id) ?? 0,
+    subcategories: subs
+      .filter(s => s.categoryId === cat.id)
+      .sort((a, b) => a.sortOrder - b.sortOrder || a.code.localeCompare(b.code))
+      .map(s => ({
+        id: s.id,
+        categoryId: s.categoryId,
+        code: s.code,
+        name: s.name,
+        sortOrder: s.sortOrder,
+        status: s.status as 'active' | 'archived',
+        positionCount: posCountBySub.get(s.id) ?? 0,
+      })),
+  };
+}
+
+async function getCategoryUsageCounts(tenantId: string): Promise<{
+  byCat: Map<string, number>;
+  bySub: Map<string, number>;
+}> {
+  const tenantPositions = await db
+    .select({
+      categoryId: pricePositionsTable.categoryId,
+      subcategoryId: pricePositionsTable.subcategoryId,
+    })
+    .from(pricePositionsTable)
+    .innerJoin(companiesTable, eq(companiesTable.id, pricePositionsTable.companyId))
+    .where(eq(companiesTable.tenantId, tenantId));
+  const byCat = new Map<string, number>();
+  const bySub = new Map<string, number>();
+  for (const r of tenantPositions) {
+    if (r.categoryId) byCat.set(r.categoryId, (byCat.get(r.categoryId) ?? 0) + 1);
+    if (r.subcategoryId) bySub.set(r.subcategoryId, (bySub.get(r.subcategoryId) ?? 0) + 1);
+  }
+  return { byCat, bySub };
+}
+
+router.get('/pricing/categories', async (req, res) => {
+  const scope = getScope(req);
+  const includeArchived = req.query.includeArchived === 'true' || req.query.includeArchived === '1';
+  const cats = await db.select().from(pricingCategoriesTable)
+    .where(eq(pricingCategoriesTable.tenantId, scope.tenantId));
+  const subs = await db.select().from(pricingSubcategoriesTable)
+    .where(eq(pricingSubcategoriesTable.tenantId, scope.tenantId));
+  const { byCat, bySub } = await getCategoryUsageCounts(scope.tenantId);
+  const visibleCats = includeArchived ? cats : cats.filter(c => c.status === 'active');
+  const visibleSubs = includeArchived ? subs : subs.filter(s => s.status === 'active');
+  const result = visibleCats
+    .sort((a, b) => a.sortOrder - b.sortOrder || a.code.localeCompare(b.code))
+    .map(c => mapPricingCategory(c, visibleSubs, byCat, bySub));
+  res.json(result);
+});
+
+router.post('/pricing/categories', async (req, res) => {
+  if (!validateInline(req, res, { body: Z.CreatePricingCategoryBody })) return;
+  if (!requireAdmin(req, res)) return;
+  const scope = getScope(req);
+  const b = req.body as { code: string; name: string; sortOrder?: number };
+  const code = b.code.trim().toUpperCase();
+  if (!/^[A-Z0-9]{2,8}$/.test(code)) { res.status(422).json({ error: 'code must match ^[A-Z0-9]{2,8}$' }); return; }
+  const dup = await db.select().from(pricingCategoriesTable)
+    .where(and(eq(pricingCategoriesTable.tenantId, scope.tenantId), eq(pricingCategoriesTable.code, code)));
+  if (dup.length) { res.status(409).json({ error: `category code "${code}" already exists in this tenant` }); return; }
+  const id = `pcat_${randomBytes(6).toString('hex')}`;
+  const row = {
+    id, tenantId: scope.tenantId, code, name: b.name.trim(),
+    sortOrder: typeof b.sortOrder === 'number' ? b.sortOrder : 0,
+    status: 'active' as const,
+  };
+  await db.insert(pricingCategoriesTable).values(row);
+  await writeAuditFromReq(req, { entityType: 'pricing_category', entityId: id, action: 'create', summary: `Kategorie "${code}" angelegt` });
+  res.status(201).json(mapPricingCategory({ ...row, createdAt: new Date() }, [], new Map(), new Map()));
+});
+
+router.patch('/pricing/categories/:id', async (req, res) => {
+  if (!validateInline(req, res, { body: Z.UpdatePricingCategoryBody })) return;
+  if (!requireAdmin(req, res)) return;
+  const scope = getScope(req);
+  const [existing] = await db.select().from(pricingCategoriesTable).where(eq(pricingCategoriesTable.id, req.params.id));
+  if (!existing || existing.tenantId !== scope.tenantId) { res.status(404).json({ error: 'not found' }); return; }
+  const b = req.body as Partial<{ code: string; name: string; sortOrder: number; status: 'active' | 'archived' }>;
+  const patch: Partial<typeof pricingCategoriesTable.$inferInsert> = {};
+  if (typeof b.code === 'string') {
+    const v = b.code.trim().toUpperCase();
+    if (!/^[A-Z0-9]{2,8}$/.test(v)) { res.status(422).json({ error: 'code must match ^[A-Z0-9]{2,8}$' }); return; }
+    if (v !== existing.code) {
+      const dup = await db.select().from(pricingCategoriesTable)
+        .where(and(eq(pricingCategoriesTable.tenantId, scope.tenantId), eq(pricingCategoriesTable.code, v)));
+      if (dup.length) { res.status(409).json({ error: `category code "${v}" already exists` }); return; }
+    }
+    patch.code = v;
+  }
+  if (typeof b.name === 'string') patch.name = b.name.trim();
+  if (typeof b.sortOrder === 'number') patch.sortOrder = b.sortOrder;
+  if (b.status === 'active' || b.status === 'archived') patch.status = b.status;
+  if (Object.keys(patch).length) {
+    await db.update(pricingCategoriesTable).set(patch).where(eq(pricingCategoriesTable.id, existing.id));
+  }
+  const [updated] = await db.select().from(pricingCategoriesTable).where(eq(pricingCategoriesTable.id, existing.id));
+  const subs = await db.select().from(pricingSubcategoriesTable)
+    .where(and(eq(pricingSubcategoriesTable.tenantId, scope.tenantId), eq(pricingSubcategoriesTable.categoryId, existing.id)));
+  const { byCat, bySub } = await getCategoryUsageCounts(scope.tenantId);
+  res.json(mapPricingCategory(updated!, subs, byCat, bySub));
+});
+
+router.delete('/pricing/categories/:id', async (req, res) => {
+  if (!requireAdmin(req, res)) return;
+  const scope = getScope(req);
+  const [existing] = await db.select().from(pricingCategoriesTable).where(eq(pricingCategoriesTable.id, req.params.id));
+  if (!existing || existing.tenantId !== scope.tenantId) { res.status(404).json({ error: 'not found' }); return; }
+  const { byCat } = await getCategoryUsageCounts(scope.tenantId);
+  const usage = byCat.get(existing.id) ?? 0;
+  if (usage > 0) {
+    // Soft-delete: nur Status auf "archived" setzen, damit historische
+    // Positionen weiter referenzierbar bleiben.
+    await db.update(pricingCategoriesTable).set({ status: 'archived' }).where(eq(pricingCategoriesTable.id, existing.id));
+    await writeAuditFromReq(req, { entityType: 'pricing_category', entityId: existing.id, action: 'archive', summary: `Kategorie "${existing.code}" archiviert (${usage} Positionen)` });
+  } else {
+    await db.delete(pricingSubcategoriesTable).where(and(eq(pricingSubcategoriesTable.tenantId, scope.tenantId), eq(pricingSubcategoriesTable.categoryId, existing.id)));
+    await db.delete(pricingCategoriesTable).where(eq(pricingCategoriesTable.id, existing.id));
+    await writeAuditFromReq(req, { entityType: 'pricing_category', entityId: existing.id, action: 'delete', summary: `Kategorie "${existing.code}" gelöscht` });
+  }
+  res.status(204).end();
+});
+
+router.post('/pricing/categories/:id/subcategories', async (req, res) => {
+  if (!validateInline(req, res, { body: Z.CreatePricingSubcategoryBody })) return;
+  if (!requireAdmin(req, res)) return;
+  const scope = getScope(req);
+  const [parent] = await db.select().from(pricingCategoriesTable).where(eq(pricingCategoriesTable.id, req.params.id));
+  if (!parent || parent.tenantId !== scope.tenantId) { res.status(404).json({ error: 'category not found' }); return; }
+  if (parent.status !== 'active') { res.status(422).json({ error: 'parent category is archived' }); return; }
+  const b = req.body as { code: string; name: string; sortOrder?: number };
+  const code = b.code.trim().toUpperCase();
+  if (!/^[A-Z0-9]{2,8}$/.test(code)) { res.status(422).json({ error: 'code must match ^[A-Z0-9]{2,8}$' }); return; }
+  const dup = await db.select().from(pricingSubcategoriesTable)
+    .where(and(
+      eq(pricingSubcategoriesTable.tenantId, scope.tenantId),
+      eq(pricingSubcategoriesTable.categoryId, parent.id),
+      eq(pricingSubcategoriesTable.code, code),
+    ));
+  if (dup.length) { res.status(409).json({ error: `subcategory code "${code}" already exists in category` }); return; }
+  const id = `psub_${randomBytes(6).toString('hex')}`;
+  const row = {
+    id, tenantId: scope.tenantId, categoryId: parent.id, code, name: b.name.trim(),
+    sortOrder: typeof b.sortOrder === 'number' ? b.sortOrder : 0,
+    status: 'active' as const,
+  };
+  await db.insert(pricingSubcategoriesTable).values(row);
+  await writeAuditFromReq(req, { entityType: 'pricing_subcategory', entityId: id, action: 'create', summary: `Unterkategorie "${parent.code}/${code}" angelegt` });
+  res.status(201).json({
+    id: row.id, categoryId: row.categoryId, code: row.code, name: row.name,
+    sortOrder: row.sortOrder, status: row.status, positionCount: 0,
+  });
+});
+
+router.patch('/pricing/subcategories/:id', async (req, res) => {
+  if (!validateInline(req, res, { body: Z.UpdatePricingSubcategoryBody })) return;
+  if (!requireAdmin(req, res)) return;
+  const scope = getScope(req);
+  const [existing] = await db.select().from(pricingSubcategoriesTable).where(eq(pricingSubcategoriesTable.id, req.params.id));
+  if (!existing || existing.tenantId !== scope.tenantId) { res.status(404).json({ error: 'not found' }); return; }
+  const b = req.body as Partial<{ code: string; name: string; sortOrder: number; status: 'active' | 'archived' }>;
+  const patch: Partial<typeof pricingSubcategoriesTable.$inferInsert> = {};
+  if (typeof b.code === 'string') {
+    const v = b.code.trim().toUpperCase();
+    if (!/^[A-Z0-9]{2,8}$/.test(v)) { res.status(422).json({ error: 'code must match ^[A-Z0-9]{2,8}$' }); return; }
+    if (v !== existing.code) {
+      const dup = await db.select().from(pricingSubcategoriesTable)
+        .where(and(
+          eq(pricingSubcategoriesTable.tenantId, scope.tenantId),
+          eq(pricingSubcategoriesTable.categoryId, existing.categoryId),
+          eq(pricingSubcategoriesTable.code, v),
+        ));
+      if (dup.length) { res.status(409).json({ error: `subcategory code "${v}" already exists` }); return; }
+    }
+    patch.code = v;
+  }
+  if (typeof b.name === 'string') patch.name = b.name.trim();
+  if (typeof b.sortOrder === 'number') patch.sortOrder = b.sortOrder;
+  if (b.status === 'active' || b.status === 'archived') patch.status = b.status;
+  if (Object.keys(patch).length) {
+    await db.update(pricingSubcategoriesTable).set(patch).where(eq(pricingSubcategoriesTable.id, existing.id));
+  }
+  const [updated] = await db.select().from(pricingSubcategoriesTable).where(eq(pricingSubcategoriesTable.id, existing.id));
+  const { bySub } = await getCategoryUsageCounts(scope.tenantId);
+  res.json({
+    id: updated!.id, categoryId: updated!.categoryId, code: updated!.code, name: updated!.name,
+    sortOrder: updated!.sortOrder, status: updated!.status, positionCount: bySub.get(updated!.id) ?? 0,
+  });
+});
+
+router.delete('/pricing/subcategories/:id', async (req, res) => {
+  if (!requireAdmin(req, res)) return;
+  const scope = getScope(req);
+  const [existing] = await db.select().from(pricingSubcategoriesTable).where(eq(pricingSubcategoriesTable.id, req.params.id));
+  if (!existing || existing.tenantId !== scope.tenantId) { res.status(404).json({ error: 'not found' }); return; }
+  const { bySub } = await getCategoryUsageCounts(scope.tenantId);
+  const usage = bySub.get(existing.id) ?? 0;
+  if (usage > 0) {
+    await db.update(pricingSubcategoriesTable).set({ status: 'archived' }).where(eq(pricingSubcategoriesTable.id, existing.id));
+    await writeAuditFromReq(req, { entityType: 'pricing_subcategory', entityId: existing.id, action: 'archive', summary: `Unterkategorie "${existing.code}" archiviert (${usage} Positionen)` });
+  } else {
+    await db.delete(pricingSubcategoriesTable).where(eq(pricingSubcategoriesTable.id, existing.id));
+    await writeAuditFromReq(req, { entityType: 'pricing_subcategory', entityId: existing.id, action: 'delete', summary: `Unterkategorie "${existing.code}" gelöscht` });
+  }
+  res.status(204).end();
+});
+
+router.get('/pricing/sku-preview', async (req, res) => {
+  const scope = getScope(req);
+  const companyId = String(req.query.companyId ?? '');
+  const categoryId = String(req.query.categoryId ?? '');
+  const subcategoryId = req.query.subcategoryId ? String(req.query.subcategoryId) : '';
+  if (!companyId || !categoryId || !subcategoryId) { res.status(422).json({ error: 'companyId, categoryId and subcategoryId are required' }); return; }
+  const prefRes = await buildSkuPrefix(scope.tenantId, companyId, categoryId, subcategoryId);
+  if (!prefRes.ok) { res.status(prefRes.status).json({ error: prefRes.error }); return; }
+  const next = await peekSkuSequence(scope.tenantId, prefRes.prefix);
+  res.json({ prefix: prefRes.prefix, nextSku: formatSku(prefRes.prefix, next) });
 });
 
 router.delete('/price-positions/:id', async (req, res) => {

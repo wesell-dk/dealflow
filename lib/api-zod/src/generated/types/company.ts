@@ -15,4 +15,12 @@ export interface Company {
   legalName: string;
   country: string;
   currency: string;
+  /**
+   * Kurzcode für die Auto-SKU-Generierung im Pricing-Workspace ({COMPANY}-{KAT}-{SUBKAT}-{NNN}). Tenant-eindeutig. Nur Großbuchstaben + Ziffern.
+   * @minLength 2
+   * @maxLength 8
+   * @nullable
+   * @pattern ^[A-Z0-9]+$
+   */
+  code?: string | null;
 }

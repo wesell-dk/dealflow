@@ -92,6 +92,10 @@ export const companiesTable = pgTable("companies", {
   legalName: text("legal_name").notNull(),
   country: text("country").notNull(),
   currency: text("currency").notNull(),
+  // Kurzcode für SKU-Generierung (z. B. "HX", "HXUK"). Tenant-unique, A-Z0-9, 2–8 Zeichen.
+  // NULL erlaubt bei Bestand → backfill aus Name beim Boot. Wird für Auto-SKU im
+  // Pricing-Workspace zwingend benötigt: {COMPANY}-{KAT}-{SUBKAT}-{NNN}.
+  code: text("code"),
 });
 
 export const brandsTable = pgTable("brands", {
@@ -513,12 +517,53 @@ export const industryProfilesTable = pgTable("industry_profiles", {
   createdAt: ts("created_at"),
 });
 
+// Pricing — Kategorien & Unterkategorien
+// Tenant-scoped, code+name. `status='active'|'archived'` (kein hard-delete bei
+// Verwendung). Codes sind tenant-eindeutig pro Ebene und fließen in die
+// Auto-SKU ein: {COMPANY}-{KAT}-{SUBKAT}-{NNN}.
+export const pricingCategoriesTable = pgTable("pricing_categories", {
+  id: id(),
+  tenantId: text("tenant_id").notNull(),
+  code: text("code").notNull(),
+  name: text("name").notNull(),
+  sortOrder: integer("sort_order").notNull().default(0),
+  status: text("status").notNull().default("active"),
+  createdAt: ts("created_at"),
+});
+
+export const pricingSubcategoriesTable = pgTable("pricing_subcategories", {
+  id: id(),
+  tenantId: text("tenant_id").notNull(),
+  categoryId: text("category_id").notNull(),
+  code: text("code").notNull(),
+  name: text("name").notNull(),
+  sortOrder: integer("sort_order").notNull().default(0),
+  status: text("status").notNull().default("active"),
+  createdAt: ts("created_at"),
+});
+
+// Atomic Sequence-Counter pro SKU-Präfix `{COMPANY}-{KAT}-{SUBKAT}` (oder
+// `{COMPANY}-{KAT}` ohne Unterkategorie). Wird in einer Transaktion per
+// `INSERT … ON CONFLICT … DO UPDATE … RETURNING next_value` race-safe
+// inkrementiert — keine separate Initialisierung pro Präfix nötig.
+export const pricingCategorySequencesTable = pgTable("pricing_category_sequences", {
+  id: id(),
+  tenantId: text("tenant_id").notNull(),
+  // Präfix in Großbuchstaben, ohne abschließenden Bindestrich.
+  prefix: text("prefix").notNull(),
+  nextValue: integer("next_value").notNull().default(1),
+});
+
 // Pricing
 export const pricePositionsTable = pgTable("price_positions", {
   id: id(),
   sku: text("sku").notNull(),
   name: text("name").notNull(),
   category: text("category").notNull(),
+  // Verweise auf gemanagte Kategorien/Unterkategorien (Pflicht für neue
+  // Positionen, nullable für Altdaten bis Backfill durchgelaufen ist).
+  categoryId: text("category_id"),
+  subcategoryId: text("subcategory_id"),
   listPrice: numeric("list_price").notNull(),
   currency: text("currency").notNull(),
   status: text("status").notNull(),

@@ -10,9 +10,9 @@ Multi-tenant, multi-company, multi-brand. Deal-centric.
 import type { PricePositionPatchStatus } from "./pricePositionPatchStatus";
 
 export interface PricePositionPatch {
-  sku?: string;
   name?: string;
-  category?: string;
+  categoryId?: string;
+  subcategoryId?: string;
   listPrice?: number;
   currency?: string;
   status?: PricePositionPatchStatus;

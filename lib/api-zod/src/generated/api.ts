@@ -269,6 +269,11 @@ export const ListCompaniesQueryParams = zod.object({
     ),
 });
 
+export const listCompaniesResponseCodeMin = 2;
+export const listCompaniesResponseCodeMax = 8;
+
+export const listCompaniesResponseCodeRegExp = new RegExp("^[A-Z0-9]+$");
+
 export const ListCompaniesResponseItem = zod.object({
   id: zod.string(),
   tenantId: zod.string(),
@@ -276,6 +281,15 @@ export const ListCompaniesResponseItem = zod.object({
   legalName: zod.string(),
   country: zod.string(),
   currency: zod.string(),
+  code: zod
+    .string()
+    .min(listCompaniesResponseCodeMin)
+    .max(listCompaniesResponseCodeMax)
+    .regex(listCompaniesResponseCodeRegExp)
+    .nullish()
+    .describe(
+      "Kurzcode für die Auto-SKU-Generierung im Pricing-Workspace ({COMPANY}-{KAT}-{SUBKAT}-{NNN}). Tenant-eindeutig. Nur Großbuchstaben + Ziffern.",
+    ),
 });
 export const ListCompaniesResponse = zod.array(ListCompaniesResponseItem);
 
@@ -292,6 +306,11 @@ export const createCompanyBodyCountryMax = 2;
 export const createCompanyBodyCurrencyMin = 3;
 export const createCompanyBodyCurrencyMax = 3;
 
+export const createCompanyBodyCodeMin = 2;
+export const createCompanyBodyCodeMax = 8;
+
+export const createCompanyBodyCodeRegExp = new RegExp("^[A-Z0-9]+$");
+
 export const CreateCompanyBody = zod.object({
   name: zod.string().min(1).max(createCompanyBodyNameMax),
   legalName: zod.string().min(1).max(createCompanyBodyLegalNameMax),
@@ -305,6 +324,15 @@ export const CreateCompanyBody = zod.object({
     .min(createCompanyBodyCurrencyMin)
     .max(createCompanyBodyCurrencyMax)
     .describe("ISO-4217 (z. B. EUR, CHF, USD)"),
+  code: zod
+    .string()
+    .min(createCompanyBodyCodeMin)
+    .max(createCompanyBodyCodeMax)
+    .regex(createCompanyBodyCodeRegExp)
+    .nullish()
+    .describe(
+      "Optional. Kurzcode für SKU-Präfix. Falls leer, wird beim Backfill automatisch ein Vorschlag aus dem Namen generiert (Tenant-Unique).",
+    ),
 });
 
 /**
@@ -324,6 +352,11 @@ export const updateCompanyBodyCountryMax = 2;
 export const updateCompanyBodyCurrencyMin = 3;
 export const updateCompanyBodyCurrencyMax = 3;
 
+export const updateCompanyBodyCodeMin = 2;
+export const updateCompanyBodyCodeMax = 8;
+
+export const updateCompanyBodyCodeRegExp = new RegExp("^[A-Z0-9]+$");
+
 export const UpdateCompanyBody = zod.object({
   name: zod.string().min(1).max(updateCompanyBodyNameMax).optional(),
   legalName: zod.string().min(1).max(updateCompanyBodyLegalNameMax).optional(),
@@ -337,7 +370,18 @@ export const UpdateCompanyBody = zod.object({
     .min(updateCompanyBodyCurrencyMin)
     .max(updateCompanyBodyCurrencyMax)
     .optional(),
+  code: zod
+    .string()
+    .min(updateCompanyBodyCodeMin)
+    .max(updateCompanyBodyCodeMax)
+    .regex(updateCompanyBodyCodeRegExp)
+    .nullish(),
 });
+
+export const updateCompanyResponseCodeMin = 2;
+export const updateCompanyResponseCodeMax = 8;
+
+export const updateCompanyResponseCodeRegExp = new RegExp("^[A-Z0-9]+$");
 
 export const UpdateCompanyResponse = zod.object({
   id: zod.string(),
@@ -346,6 +390,15 @@ export const UpdateCompanyResponse = zod.object({
   legalName: zod.string(),
   country: zod.string(),
   currency: zod.string(),
+  code: zod
+    .string()
+    .min(updateCompanyResponseCodeMin)
+    .max(updateCompanyResponseCodeMax)
+    .regex(updateCompanyResponseCodeRegExp)
+    .nullish()
+    .describe(
+      "Kurzcode für die Auto-SKU-Generierung im Pricing-Workspace ({COMPANY}-{KAT}-{SUBKAT}-{NNN}). Tenant-eindeutig. Nur Großbuchstaben + Ziffern.",
+    ),
 });
 
 /**
@@ -3133,11 +3186,195 @@ export const DeleteIndustryProfileParams = zod.object({
   id: zod.coerce.string(),
 });
 
+export const ListPricingCategoriesQueryParams = zod.object({
+  includeArchived: zod.coerce.boolean().optional(),
+});
+
+export const ListPricingCategoriesResponseItem = zod.object({
+  id: zod.string(),
+  code: zod.string(),
+  name: zod.string(),
+  sortOrder: zod.number(),
+  status: zod.enum(["active", "archived"]),
+  positionCount: zod
+    .number()
+    .optional()
+    .describe(
+      "Anzahl Preispositionen, die aktuell auf diese Kategorie verweisen.",
+    ),
+  subcategories: zod.array(
+    zod.object({
+      id: zod.string(),
+      categoryId: zod.string(),
+      code: zod.string(),
+      name: zod.string(),
+      sortOrder: zod.number(),
+      status: zod.enum(["active", "archived"]),
+      positionCount: zod.number().optional(),
+    }),
+  ),
+});
+export const ListPricingCategoriesResponse = zod.array(
+  ListPricingCategoriesResponseItem,
+);
+
+export const createPricingCategoryBodyCodeMin = 2;
+export const createPricingCategoryBodyCodeMax = 8;
+
+export const createPricingCategoryBodyCodeRegExp = new RegExp("^[A-Z0-9]+$");
+export const createPricingCategoryBodyNameMax = 100;
+
+export const CreatePricingCategoryBody = zod.object({
+  code: zod
+    .string()
+    .min(createPricingCategoryBodyCodeMin)
+    .max(createPricingCategoryBodyCodeMax)
+    .regex(createPricingCategoryBodyCodeRegExp),
+  name: zod.string().min(1).max(createPricingCategoryBodyNameMax),
+  sortOrder: zod.number().optional(),
+});
+
+export const UpdatePricingCategoryParams = zod.object({
+  id: zod.coerce.string(),
+});
+
+export const updatePricingCategoryBodyCodeMin = 2;
+export const updatePricingCategoryBodyCodeMax = 8;
+
+export const updatePricingCategoryBodyCodeRegExp = new RegExp("^[A-Z0-9]+$");
+export const updatePricingCategoryBodyNameMax = 100;
+
+export const UpdatePricingCategoryBody = zod.object({
+  code: zod
+    .string()
+    .min(updatePricingCategoryBodyCodeMin)
+    .max(updatePricingCategoryBodyCodeMax)
+    .regex(updatePricingCategoryBodyCodeRegExp)
+    .optional(),
+  name: zod.string().min(1).max(updatePricingCategoryBodyNameMax).optional(),
+  sortOrder: zod.number().optional(),
+  status: zod.enum(["active", "archived"]).optional(),
+});
+
+export const UpdatePricingCategoryResponse = zod.object({
+  id: zod.string(),
+  code: zod.string(),
+  name: zod.string(),
+  sortOrder: zod.number(),
+  status: zod.enum(["active", "archived"]),
+  positionCount: zod
+    .number()
+    .optional()
+    .describe(
+      "Anzahl Preispositionen, die aktuell auf diese Kategorie verweisen.",
+    ),
+  subcategories: zod.array(
+    zod.object({
+      id: zod.string(),
+      categoryId: zod.string(),
+      code: zod.string(),
+      name: zod.string(),
+      sortOrder: zod.number(),
+      status: zod.enum(["active", "archived"]),
+      positionCount: zod.number().optional(),
+    }),
+  ),
+});
+
+/**
+ * @summary Kategorie archivieren (soft-delete bei verknüpften Positionen)
+ */
+export const ArchivePricingCategoryParams = zod.object({
+  id: zod.coerce.string(),
+});
+
+export const CreatePricingSubcategoryParams = zod.object({
+  id: zod.coerce.string(),
+});
+
+export const createPricingSubcategoryBodyCodeMin = 2;
+export const createPricingSubcategoryBodyCodeMax = 8;
+
+export const createPricingSubcategoryBodyCodeRegExp = new RegExp("^[A-Z0-9]+$");
+export const createPricingSubcategoryBodyNameMax = 100;
+
+export const CreatePricingSubcategoryBody = zod.object({
+  code: zod
+    .string()
+    .min(createPricingSubcategoryBodyCodeMin)
+    .max(createPricingSubcategoryBodyCodeMax)
+    .regex(createPricingSubcategoryBodyCodeRegExp),
+  name: zod.string().min(1).max(createPricingSubcategoryBodyNameMax),
+  sortOrder: zod.number().optional(),
+});
+
+export const UpdatePricingSubcategoryParams = zod.object({
+  id: zod.coerce.string(),
+});
+
+export const updatePricingSubcategoryBodyCodeMin = 2;
+export const updatePricingSubcategoryBodyCodeMax = 8;
+
+export const updatePricingSubcategoryBodyCodeRegExp = new RegExp("^[A-Z0-9]+$");
+export const updatePricingSubcategoryBodyNameMax = 100;
+
+export const UpdatePricingSubcategoryBody = zod.object({
+  code: zod
+    .string()
+    .min(updatePricingSubcategoryBodyCodeMin)
+    .max(updatePricingSubcategoryBodyCodeMax)
+    .regex(updatePricingSubcategoryBodyCodeRegExp)
+    .optional(),
+  name: zod.string().min(1).max(updatePricingSubcategoryBodyNameMax).optional(),
+  sortOrder: zod.number().optional(),
+  status: zod.enum(["active", "archived"]).optional(),
+});
+
+export const UpdatePricingSubcategoryResponse = zod.object({
+  id: zod.string(),
+  categoryId: zod.string(),
+  code: zod.string(),
+  name: zod.string(),
+  sortOrder: zod.number(),
+  status: zod.enum(["active", "archived"]),
+  positionCount: zod.number().optional(),
+});
+
+export const ArchivePricingSubcategoryParams = zod.object({
+  id: zod.coerce.string(),
+});
+
+/**
+ * @summary Vorschau der nächsten Auto-SKU für ein Präfix (verbraucht keine Sequenznummer)
+ */
+export const PreviewPricingSkuQueryParams = zod.object({
+  companyId: zod.coerce.string(),
+  categoryId: zod.coerce.string(),
+  subcategoryId: zod.coerce.string(),
+});
+
+export const PreviewPricingSkuResponse = zod.object({
+  prefix: zod.string(),
+  nextSku: zod.string(),
+});
+
 export const ListPricePositionsResponseItem = zod.object({
   id: zod.string(),
   sku: zod.string(),
   name: zod.string(),
   category: zod.string(),
+  categoryId: zod
+    .string()
+    .nullish()
+    .describe("Verweis auf gemanagte Pricing-Kategorie."),
+  subcategoryId: zod
+    .string()
+    .nullish()
+    .describe("Optionale Unterkategorie unterhalb der Pricing-Kategorie."),
+  categoryName: zod.string().nullish(),
+  subcategoryName: zod.string().nullish(),
+  categoryCode: zod.string().nullish(),
+  subcategoryCode: zod.string().nullish(),
   listPrice: zod.number(),
   currency: zod.string(),
   status: zod.string(),
@@ -3155,9 +3392,9 @@ export const ListPricePositionsResponse = zod.array(
 );
 
 export const CreatePricePositionBody = zod.object({
-  sku: zod.string(),
   name: zod.string(),
-  category: zod.string(),
+  categoryId: zod.string(),
+  subcategoryId: zod.string(),
   listPrice: zod.number(),
   currency: zod.string(),
   brandId: zod.string(),
@@ -3170,9 +3407,9 @@ export const UpdatePricePositionParams = zod.object({
 });
 
 export const UpdatePricePositionBody = zod.object({
-  sku: zod.string().optional(),
   name: zod.string().optional(),
-  category: zod.string().optional(),
+  categoryId: zod.string().optional(),
+  subcategoryId: zod.string().optional(),
   listPrice: zod.number().optional(),
   currency: zod.string().optional(),
   status: zod.enum(["draft", "active", "archived"]).optional(),
@@ -3187,6 +3424,18 @@ export const UpdatePricePositionResponse = zod.object({
   sku: zod.string(),
   name: zod.string(),
   category: zod.string(),
+  categoryId: zod
+    .string()
+    .nullish()
+    .describe("Verweis auf gemanagte Pricing-Kategorie."),
+  subcategoryId: zod
+    .string()
+    .nullish()
+    .describe("Optionale Unterkategorie unterhalb der Pricing-Kategorie."),
+  categoryName: zod.string().nullish(),
+  subcategoryName: zod.string().nullish(),
+  categoryCode: zod.string().nullish(),
+  subcategoryCode: zod.string().nullish(),
   listPrice: zod.number(),
   currency: zod.string(),
   status: zod.string(),

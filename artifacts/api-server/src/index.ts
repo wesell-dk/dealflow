@@ -6,6 +6,7 @@ import {
   seedQuoteTemplatesIdempotent,
   seedPlaceholderObjectsIdempotent,
   seedContractMvpAugmentationIdempotent,
+  backfillPricingCategoriesIdempotent,
 } from "./lib/seed";
 import { seedLegalSourcesIdempotent } from "./lib/seedLegalSources";
 import { pruneExpiredSessions } from "./lib/auth";
@@ -40,6 +41,9 @@ await seedContractMvpAugmentationIdempotent().catch((err) => {
 
 await seedLegalSourcesIdempotent().catch((err) => {
   logger.error({ err }, "Legal sources seed failed");
+});
+await backfillPricingCategoriesIdempotent().catch((err) => {
+  logger.error({ err }, "Pricing-categories backfill failed");
 });
 
 await runAllGenerators().catch((err) => {

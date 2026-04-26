@@ -42,6 +42,8 @@ import {
   industryProfilesTable,
   pricePositionBundlesTable,
   pricePositionBundleItemsTable,
+  pricingCategoriesTable,
+  pricingSubcategoriesTable,
   contractTypesTable,
   contractPlaybooksTable,
   obligationsTable,
@@ -215,6 +217,63 @@ export async function ensureSchemaColumns(): Promise<void> {
   await db.execute(
     sql`CREATE INDEX IF NOT EXISTS "email_send_log_channel_idx" ON "email_send_log" ("channel_id", "sent_at")`,
   );
+  // Task #221 — Pricing-Kategorien & Auto-SKU
+  await db.execute(
+    sql`ALTER TABLE "companies" ADD COLUMN IF NOT EXISTS "code" text`,
+  );
+  await db.execute(
+    sql`ALTER TABLE "price_positions" ADD COLUMN IF NOT EXISTS "category_id" text`,
+  );
+  await db.execute(
+    sql`ALTER TABLE "price_positions" ADD COLUMN IF NOT EXISTS "subcategory_id" text`,
+  );
+  await db.execute(sql`
+    CREATE TABLE IF NOT EXISTS "pricing_categories" (
+      "id" text PRIMARY KEY,
+      "tenant_id" text NOT NULL,
+      "code" text NOT NULL,
+      "name" text NOT NULL,
+      "sort_order" integer NOT NULL DEFAULT 0,
+      "status" text NOT NULL DEFAULT 'active',
+      "created_at" timestamp with time zone NOT NULL DEFAULT now()
+    )
+  `);
+  await db.execute(sql`
+    CREATE UNIQUE INDEX IF NOT EXISTS "pricing_categories_tenant_code_uniq"
+      ON "pricing_categories" ("tenant_id", "code")
+  `);
+  await db.execute(sql`
+    CREATE TABLE IF NOT EXISTS "pricing_subcategories" (
+      "id" text PRIMARY KEY,
+      "tenant_id" text NOT NULL,
+      "category_id" text NOT NULL,
+      "code" text NOT NULL,
+      "name" text NOT NULL,
+      "sort_order" integer NOT NULL DEFAULT 0,
+      "status" text NOT NULL DEFAULT 'active',
+      "created_at" timestamp with time zone NOT NULL DEFAULT now()
+    )
+  `);
+  await db.execute(sql`
+    CREATE UNIQUE INDEX IF NOT EXISTS "pricing_subcategories_cat_code_uniq"
+      ON "pricing_subcategories" ("category_id", "code")
+  `);
+  await db.execute(sql`
+    CREATE TABLE IF NOT EXISTS "pricing_category_sequences" (
+      "id" text PRIMARY KEY,
+      "tenant_id" text NOT NULL,
+      "prefix" text NOT NULL,
+      "next_value" integer NOT NULL DEFAULT 1
+    )
+  `);
+  await db.execute(sql`
+    CREATE UNIQUE INDEX IF NOT EXISTS "pricing_category_sequences_prefix_uniq"
+      ON "pricing_category_sequences" ("tenant_id", "prefix")
+  `);
+  await db.execute(sql`
+    CREATE UNIQUE INDEX IF NOT EXISTS "companies_tenant_code_uniq"
+      ON "companies" ("tenant_id", "code") WHERE "code" IS NOT NULL
+  `);
 }
 
 export async function seedIfEmpty(): Promise<void> {
@@ -233,9 +292,9 @@ export async function seedIfEmpty(): Promise<void> {
   });
 
   const companies = [
-    { id: "co_helix", tenantId: "tn_root", name: "Helix DACH", legalName: "Helix Industrial GmbH", country: "DE", currency: "EUR" },
-    { id: "co_helix_uk", tenantId: "tn_root", name: "Helix UK", legalName: "Helix Industrial Ltd.", country: "GB", currency: "GBP" },
-    { id: "co_helix_us", tenantId: "tn_root", name: "Helix North America", legalName: "Helix Industrial Inc.", country: "US", currency: "USD" },
+    { id: "co_helix", tenantId: "tn_root", name: "Helix DACH", legalName: "Helix Industrial GmbH", country: "DE", currency: "EUR", code: "HX" },
+    { id: "co_helix_uk", tenantId: "tn_root", name: "Helix UK", legalName: "Helix Industrial Ltd.", country: "GB", currency: "GBP", code: "HXUK" },
+    { id: "co_helix_us", tenantId: "tn_root", name: "Helix North America", legalName: "Helix Industrial Inc.", country: "US", currency: "USD", code: "HXUS" },
   ];
   await db.insert(companiesTable).values(companies);
 
@@ -477,33 +536,53 @@ export async function seedIfEmpty(): Promise<void> {
     }
   }
 
-  // Pricing
-  const positionSeed = [
-    ["HX-CORE-LIC",   "Helix Core Platform License",   "Software", 240000, "EUR", "active",  "br_helix",     "co_helix"],
-    ["HX-PRO-LIC",    "Helix Pro Platform License",    "Software", 360000, "EUR", "active",  "br_helix_pro", "co_helix"],
-    ["HX-IMPL",       "Implementation & Onboarding",   "Service",  85000,  "EUR", "active",  "br_helix",     "co_helix"],
-    ["HX-SUP-PREM",   "Premium Support 24/7",          "Service",  48000,  "EUR", "active",  "br_helix",     "co_helix"],
-    ["HX-INTEG",      "Integration Services (per project)","Service",35000,"EUR", "active",  "br_helix",     "co_helix"],
-    ["HX-TRAIN",      "Training Programme",            "Service",  12000,  "EUR", "active",  "br_helix",     "co_helix"],
-    ["HX-CORE-UK",    "Helix Core Platform License",   "Software", 210000, "GBP", "active",  "br_helix_uk",  "co_helix_uk"],
-    ["HX-CORE-US",    "Helix Core Platform License",   "Software", 265000, "USD", "active",  "br_helix_us",  "co_helix_us"],
-    ["HX-VEL-LIC",    "Helix Velocity Edge License",   "Software", 195000, "USD", "draft",   "br_helix_us",  "co_helix_us"],
-    ["HX-SENS-PIPE",  "Pipeline Sensor Suite",         "Hardware", 32000,  "EUR", "active",  "br_helix_pro", "co_helix"],
-    ["HX-SENS-VESL",  "Vessel Telemetry Module",       "Hardware", 28000,  "EUR", "active",  "br_helix",     "co_helix"],
-    ["HX-ROBOT-INT",  "Robotics Integration Pack",     "Hardware", 145000, "EUR", "review",  "br_helix_pro", "co_helix"],
+  // Pricing — gemanagte Kategorien & Unterkategorien (Task #221)
+  await db.insert(pricingCategoriesTable).values([
+    { id: "pcat_sw", tenantId: "tn_root", code: "SW",  name: "Software", sortOrder: 10, status: "active" },
+    { id: "pcat_sv", tenantId: "tn_root", code: "SV",  name: "Service",  sortOrder: 20, status: "active" },
+    { id: "pcat_hw", tenantId: "tn_root", code: "HW",  name: "Hardware", sortOrder: 30, status: "active" },
+  ]);
+  await db.insert(pricingSubcategoriesTable).values([
+    { id: "psub_sw_lic",   tenantId: "tn_root", categoryId: "pcat_sw", code: "LIC",  name: "Lizenz",         sortOrder: 10, status: "active" },
+    { id: "psub_sw_addon", tenantId: "tn_root", categoryId: "pcat_sw", code: "ADD",  name: "Add-on",         sortOrder: 20, status: "active" },
+    { id: "psub_sv_impl",  tenantId: "tn_root", categoryId: "pcat_sv", code: "IMPL", name: "Implementierung",sortOrder: 10, status: "active" },
+    { id: "psub_sv_sup",   tenantId: "tn_root", categoryId: "pcat_sv", code: "SUP",  name: "Support",        sortOrder: 20, status: "active" },
+    { id: "psub_sv_train", tenantId: "tn_root", categoryId: "pcat_sv", code: "TRN",  name: "Training",       sortOrder: 30, status: "active" },
+    { id: "psub_hw_sens",  tenantId: "tn_root", categoryId: "pcat_hw", code: "SENS", name: "Sensorik",       sortOrder: 10, status: "active" },
+    { id: "psub_hw_robot", tenantId: "tn_root", categoryId: "pcat_hw", code: "ROB",  name: "Robotik",        sortOrder: 20, status: "active" },
+  ]);
+
+  // SKU folgt dem neuen Schema {COMPANY}-{KAT}-{SUBKAT}-{NNN}. Sequenzen werden
+  // unten nach dem Insert auf den höchsten genutzten Wert gesetzt.
+  const positionSeed: Array<[string, string, string, string, string, number, string, string, string, string, string]> = [
+    // [sku, name, kategorieName, kategorieId, unterkategorieId, preis, currency, status, brand, company, NNN]
+    ["HX-SW-LIC-001",   "Helix Core Platform Lizenz",       "Software", "pcat_sw", "psub_sw_lic",   240000, "EUR", "active",  "br_helix",     "co_helix",    "001"],
+    ["HX-SW-LIC-002",   "Helix Pro Platform Lizenz",        "Software", "pcat_sw", "psub_sw_lic",   360000, "EUR", "active",  "br_helix_pro", "co_helix",    "002"],
+    ["HX-SV-IMPL-001",  "Implementation & Onboarding",      "Service",  "pcat_sv", "psub_sv_impl",  85000,  "EUR", "active",  "br_helix",     "co_helix",    "001"],
+    ["HX-SV-SUP-001",   "Premium Support 24/7",             "Service",  "pcat_sv", "psub_sv_sup",   48000,  "EUR", "active",  "br_helix",     "co_helix",    "001"],
+    ["HX-SV-IMPL-002",  "Integration Services (pro Projekt)","Service", "pcat_sv", "psub_sv_impl",  35000,  "EUR", "active",  "br_helix",     "co_helix",    "002"],
+    ["HX-SV-TRN-001",   "Trainingsprogramm",                "Service",  "pcat_sv", "psub_sv_train", 12000,  "EUR", "active",  "br_helix",     "co_helix",    "001"],
+    ["HXUK-SW-LIC-001", "Helix Core Platform Lizenz (UK)",  "Software", "pcat_sw", "psub_sw_lic",   210000, "GBP", "active",  "br_helix_uk",  "co_helix_uk", "001"],
+    ["HXUS-SW-LIC-001", "Helix Core Platform Lizenz (US)",  "Software", "pcat_sw", "psub_sw_lic",   265000, "USD", "active",  "br_helix_us",  "co_helix_us", "001"],
+    ["HXUS-SW-LIC-002", "Helix Velocity Edge Lizenz",       "Software", "pcat_sw", "psub_sw_lic",   195000, "USD", "draft",   "br_helix_us",  "co_helix_us", "002"],
+    ["HX-HW-SENS-001",  "Pipeline-Sensor Suite",            "Hardware", "pcat_hw", "psub_hw_sens",  32000,  "EUR", "active",  "br_helix_pro", "co_helix",    "001"],
+    ["HX-HW-SENS-002",  "Vessel-Telemetrie-Modul",          "Hardware", "pcat_hw", "psub_hw_sens",  28000,  "EUR", "active",  "br_helix",     "co_helix",    "002"],
+    ["HX-HW-ROB-001",   "Robotics Integration Pack",        "Hardware", "pcat_hw", "psub_hw_robot", 145000, "EUR", "review",  "br_helix_pro", "co_helix",    "001"],
   ];
   await db.insert(pricePositionsTable).values(positionSeed.map((p, i) => ({
     id: id("pp", i + 1),
-    sku: p[0] as string,
-    name: p[1] as string,
-    category: p[2] as string,
-    listPrice: String(p[3]),
-    currency: p[4] as string,
-    status: p[5] as string,
+    sku: p[0],
+    name: p[1],
+    category: p[2],
+    categoryId: p[3],
+    subcategoryId: p[4],
+    listPrice: String(p[5]),
+    currency: p[6],
+    status: p[7],
     validFrom: isoDate(daysFromNow(-90)),
     validUntil: null,
-    brandId: p[6] as string,
-    companyId: p[7] as string,
+    brandId: p[8],
+    companyId: p[9],
     version: 2,
     isStandard: true,
   })));
@@ -895,9 +974,187 @@ export async function seedIfEmpty(): Promise<void> {
     { id: "ev_009", entityType: "quote",          entityId: "qt_001",  version: 2, label: "Discounted",    snapshot: '{"discount":8}', actor: "Anna Brandt",    comment: "Increased discount after negotiation.",         createdAt: daysFromNow(-4) },
   ]);
 
+  // SKU-Sequenzen passend zu den oben angelegten Positionen vorbelegen, damit
+  // die nächste Auto-SKU pro Präfix korrekt weiterzählt.
+  await db.execute(sql`
+    INSERT INTO "pricing_category_sequences" ("id", "tenant_id", "prefix", "next_value")
+    VALUES
+      ('pseq_hx_sw_lic',   'tn_root', 'HX-SW-LIC',   3),
+      ('pseq_hx_sv_impl',  'tn_root', 'HX-SV-IMPL',  3),
+      ('pseq_hx_sv_sup',   'tn_root', 'HX-SV-SUP',   2),
+      ('pseq_hx_sv_trn',   'tn_root', 'HX-SV-TRN',   2),
+      ('pseq_hxuk_sw_lic', 'tn_root', 'HXUK-SW-LIC', 2),
+      ('pseq_hxus_sw_lic', 'tn_root', 'HXUS-SW-LIC', 3),
+      ('pseq_hx_hw_sens',  'tn_root', 'HX-HW-SENS',  3),
+      ('pseq_hx_hw_rob',   'tn_root', 'HX-HW-ROB',   2)
+    ON CONFLICT DO NOTHING
+  `);
+
   await seedQuoteTemplatesIdempotent();
 
   logger.info("Seed complete.");
+}
+
+/**
+ * Idempotenter Backfill für Task #221 — Pricing-Kategorien & Auto-SKU.
+ *
+ * Wird bei jedem Boot ausgeführt und:
+ * 1. setzt fehlende `companies.code` aus dem Namen ab (tenant-eindeutig)
+ * 2. legt pro Tenant Pricing-Kategorien aus den Distinct-Werten der bestehenden
+ *    `price_positions.category` (Freitext) an, falls noch keine vorhanden sind
+ * 3. verknüpft bestehende Positionen mit `categoryId`
+ * 4. initialisiert `pricing_category_sequences` aus den höchsten heute genutzten
+ *    NNN-Werten je Präfix.
+ *
+ * Sicher mehrfach aufrufbar — überspringt alle Schritte, deren Ergebnis bereits
+ * vorliegt (z. B. Codes gesetzt, Kategorie-IDs verknüpft).
+ */
+export async function backfillPricingCategoriesIdempotent(): Promise<void> {
+  // 1) Company-Codes ergänzen
+  const companiesNeedingCode = await db.select().from(companiesTable).where(sql`${companiesTable.code} IS NULL`);
+  if (companiesNeedingCode.length > 0) {
+    const usedByTenant = new Map<string, Set<string>>();
+    const existing = await db.select().from(companiesTable).where(sql`${companiesTable.code} IS NOT NULL`);
+    for (const c of existing) {
+      if (!c.code) continue;
+      if (!usedByTenant.has(c.tenantId)) usedByTenant.set(c.tenantId, new Set());
+      usedByTenant.get(c.tenantId)!.add(c.code.toUpperCase());
+    }
+    for (const co of companiesNeedingCode) {
+      const taken = usedByTenant.get(co.tenantId) ?? new Set<string>();
+      const base = (co.name.replace(/[^A-Za-z0-9]/g, "").toUpperCase() || "CO").slice(0, 4);
+      let candidate = base;
+      let i = 2;
+      while (taken.has(candidate) || candidate.length < 2) {
+        candidate = `${base}${i}`;
+        i++;
+        if (candidate.length > 8) candidate = candidate.slice(0, 8);
+      }
+      taken.add(candidate);
+      usedByTenant.set(co.tenantId, taken);
+      await db.update(companiesTable).set({ code: candidate }).where(eq(companiesTable.id, co.id));
+      logger.info({ companyId: co.id, code: candidate }, "Backfilled company code");
+    }
+  }
+
+  // 2) Kategorien pro Tenant aus Freitext herleiten
+  const tenants = await db.select({ id: tenantsTable.id }).from(tenantsTable);
+  for (const ten of tenants) {
+    const existingCats = await db.select().from(pricingCategoriesTable).where(eq(pricingCategoriesTable.tenantId, ten.id));
+    if (existingCats.length > 0) continue; // Tenant hat bereits Kategorien
+    const distinctRows = await db.execute(sql`
+      SELECT DISTINCT TRIM(pp."category") AS "name"
+      FROM "price_positions" pp
+      INNER JOIN "companies" co ON co."id" = pp."company_id"
+      WHERE co."tenant_id" = ${ten.id}
+        AND pp."category" IS NOT NULL
+        AND TRIM(pp."category") <> ''
+    `);
+    const names = (distinctRows as unknown as { rows: Array<{ name: string }> }).rows
+      .map(r => r.name)
+      .filter((n): n is string => typeof n === "string" && n.length > 0);
+    if (names.length === 0) continue;
+    const usedCodes = new Set<string>();
+    let order = 10;
+    for (const name of names) {
+      const baseRaw = name.replace(/[^A-Za-z0-9]/g, "").toUpperCase().slice(0, 4) || "CAT";
+      let code = baseRaw;
+      let i = 2;
+      while (usedCodes.has(code)) { code = `${baseRaw}${i}`; i++; }
+      usedCodes.add(code);
+      const catId = `pcat_${ten.id}_${order}`.slice(0, 32);
+      await db.insert(pricingCategoriesTable).values({
+        id: catId, tenantId: ten.id, code, name, sortOrder: order, status: "active",
+      });
+      logger.info({ tenantId: ten.id, code, name, catId }, "Backfilled pricing category");
+      order += 10;
+    }
+  }
+
+  // 3a) Pro Kategorie eine Default-Unterkategorie "STD" anlegen, damit jede
+  //     Kategorie sofort eine Auto-SKU vergeben kann (Subkategorie ist Pflicht).
+  const allCatsForStd = await db.select().from(pricingCategoriesTable);
+  for (const c of allCatsForStd) {
+    const existingStd = await db.select().from(pricingSubcategoriesTable).where(
+      and(eq(pricingSubcategoriesTable.categoryId, c.id), eq(pricingSubcategoriesTable.code, "STD")),
+    );
+    if (existingStd.length > 0) continue;
+    await db.insert(pricingSubcategoriesTable).values({
+      id: `psub_${c.id}_std`.slice(0, 32),
+      tenantId: c.tenantId,
+      categoryId: c.id,
+      code: "STD",
+      name: "Standard",
+      sortOrder: 0,
+      status: "active",
+    });
+    logger.info({ tenantId: c.tenantId, categoryId: c.id }, "Backfilled default subcategory STD");
+  }
+
+  // 3b) Vorhandene Positionen mit categoryId + subcategoryId verknüpfen
+  //     (über Name → Kategorie; Sub-Default = STD).
+  const positionsWithoutCat = await db
+    .select({ p: pricePositionsTable, tenantId: companiesTable.tenantId })
+    .from(pricePositionsTable)
+    .innerJoin(companiesTable, eq(companiesTable.id, pricePositionsTable.companyId))
+    .where(sql`(${pricePositionsTable.categoryId} IS NULL OR ${pricePositionsTable.subcategoryId} IS NULL) AND ${pricePositionsTable.category} IS NOT NULL`);
+  if (positionsWithoutCat.length > 0) {
+    const allCats = await db.select().from(pricingCategoriesTable);
+    const allSubs = await db.select().from(pricingSubcategoriesTable);
+    const catLookup = new Map<string, string>();
+    for (const c of allCats) catLookup.set(`${c.tenantId}\u0001${c.name.trim().toLowerCase()}`, c.id);
+    const stdLookup = new Map<string, string>();
+    for (const s of allSubs) {
+      if (s.code === "STD") stdLookup.set(`${s.tenantId}\u0001${s.categoryId}`, s.id);
+    }
+    for (const row of positionsWithoutCat) {
+      const targetCatId = row.p.categoryId
+        ?? catLookup.get(`${row.tenantId}\u0001${row.p.category.trim().toLowerCase()}`);
+      if (!targetCatId) continue;
+      const targetSubId = row.p.subcategoryId
+        ?? stdLookup.get(`${row.tenantId}\u0001${targetCatId}`);
+      if (!targetSubId) continue;
+      const patch: { categoryId?: string; subcategoryId?: string } = {};
+      if (!row.p.categoryId) patch.categoryId = targetCatId;
+      if (!row.p.subcategoryId) patch.subcategoryId = targetSubId;
+      if (Object.keys(patch).length > 0) {
+        await db.update(pricePositionsTable).set(patch).where(eq(pricePositionsTable.id, row.p.id));
+      }
+    }
+  }
+
+  // 4) Sequenzen aus genutzten NNN-Suffixen pro Präfix initialisieren
+  const skuRows = await db.execute(sql`
+    SELECT co."tenant_id" AS "tenant_id", pp."sku" AS "sku"
+    FROM "price_positions" pp
+    INNER JOIN "companies" co ON co."id" = pp."company_id"
+    WHERE pp."sku" ~ '^[A-Z0-9]+(-[A-Z0-9]+){2,3}$'
+  `);
+  const seqMax = new Map<string, number>();
+  for (const r of (skuRows as unknown as { rows: Array<{ tenant_id: string; sku: string }> }).rows) {
+    const m = r.sku.match(/^(.+)-([0-9]{1,6})$/);
+    if (!m) continue;
+    const [, prefix, nnnStr] = m;
+    const n = parseInt(nnnStr!, 10);
+    if (!Number.isFinite(n)) continue;
+    const key = `${r.tenant_id}\u0001${prefix}`;
+    seqMax.set(key, Math.max(seqMax.get(key) ?? 0, n));
+  }
+  for (const [key, maxN] of seqMax.entries()) {
+    const [tenantId, prefix] = key.split("\u0001");
+    if (!tenantId || !prefix) continue;
+    // `next_value` speichert die zuletzt vergebene NNN (siehe bumpSkuSequence:
+    // INSERT mit 1 → erste SKU 001; ON CONFLICT +1 RETURNING). Damit nach dem
+    // Backfill die nächste vergebene SKU `maxN + 1` ist, muss `next_value` auf
+    // `maxN` stehen — der nächste Bump erhöht dann auf `maxN + 1` und gibt
+    // diesen Wert zurück.
+    await db.execute(sql`
+      INSERT INTO "pricing_category_sequences" ("id", "tenant_id", "prefix", "next_value")
+      VALUES (${"pseq_" + Math.random().toString(36).slice(2, 10)}, ${tenantId}, ${prefix}, ${maxN})
+      ON CONFLICT ("tenant_id", "prefix") DO UPDATE
+        SET "next_value" = GREATEST("pricing_category_sequences"."next_value", EXCLUDED."next_value")
+    `);
+  }
 }
 
 /**

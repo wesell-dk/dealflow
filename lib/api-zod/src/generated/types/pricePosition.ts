@@ -13,6 +13,24 @@ export interface PricePosition {
   sku: string;
   name: string;
   category: string;
+  /**
+   * Verweis auf gemanagte Pricing-Kategorie.
+   * @nullable
+   */
+  categoryId?: string | null;
+  /**
+   * Optionale Unterkategorie unterhalb der Pricing-Kategorie.
+   * @nullable
+   */
+  subcategoryId?: string | null;
+  /** @nullable */
+  categoryName?: string | null;
+  /** @nullable */
+  subcategoryName?: string | null;
+  /** @nullable */
+  categoryCode?: string | null;
+  /** @nullable */
+  subcategoryCode?: string | null;
   listPrice: number;
   currency: string;
   status: string;

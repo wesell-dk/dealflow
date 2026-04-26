@@ -8,13 +8,8 @@ Multi-tenant, multi-company, multi-brand. Deal-centric.
  * OpenAPI spec version: 0.1.0
  */
 
-export interface PricePositionInput {
-  name: string;
+export type PreviewPricingSkuParams = {
+  companyId: string;
   categoryId: string;
   subcategoryId: string;
-  listPrice: number;
-  currency: string;
-  brandId: string;
-  companyId: string;
-  validFrom: Date;
-}
+};

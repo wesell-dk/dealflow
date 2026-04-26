@@ -1,6 +1,10 @@
 import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { useListPricePositions, type PricePosition } from "@workspace/api-client-react";
+import {
+  useListPricePositions,
+  useListPricingCategories,
+  type PricePosition,
+} from "@workspace/api-client-react";
 import {
   Dialog, DialogContent, DialogDescription, DialogFooter,
   DialogHeader, DialogTitle,
@@ -33,26 +37,29 @@ interface PickState { selected: boolean; quantity: number }
 export function PricebookPickerDialog({ open, onOpenChange, onConfirm }: Props) {
   const { t } = useTranslation();
   const { data: positions, isLoading } = useListPricePositions();
+  const { data: categoryEntities } = useListPricingCategories();
 
   const [search, setSearch] = useState("");
   const [category, setCategory] = useState<string>("");
   const [picks, setPicks] = useState<Record<string, PickState>>({});
 
   const categories = useMemo(() => {
-    const set = new Set<string>();
-    positions?.forEach(p => p.category && set.add(p.category));
-    return ["", ...Array.from(set).sort()];
-  }, [positions]);
+    const list = (categoryEntities ?? [])
+      .filter(c => c.status === "active")
+      .map(c => c.name);
+    return ["", ...list];
+  }, [categoryEntities]);
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
     return (positions ?? []).filter(p => {
-      if (category && p.category !== category) return false;
+      const posCategoryName = p.categoryName ?? p.category;
+      if (category && posCategoryName !== category) return false;
       if (!q) return true;
       return (
         p.sku.toLowerCase().includes(q) ||
         p.name.toLowerCase().includes(q) ||
-        (p.category ?? "").toLowerCase().includes(q)
+        (posCategoryName ?? "").toLowerCase().includes(q)
       );
     });
   }, [positions, search, category]);
@@ -167,7 +174,7 @@ export function PricebookPickerDialog({ open, onOpenChange, onConfirm }: Props) 
                           <div>{p.name}</div>
                           {p.isStandard && <Badge variant="secondary" className="text-[10px] mt-0.5">STD</Badge>}
                         </td>
-                        <td className="px-3 py-2 text-muted-foreground">{p.category}</td>
+                        <td className="px-3 py-2 text-muted-foreground">{p.categoryName ?? p.category}</td>
                         <td className="px-3 py-2 text-right tabular-nums">
                           {p.listPrice.toLocaleString()} {p.currency}
                         </td>

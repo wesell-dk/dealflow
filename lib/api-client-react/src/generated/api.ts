@@ -226,6 +226,7 @@ import type {
   ListNegotiationsParams,
   ListObligationsParams,
   ListOrderConfirmationsParams,
+  ListPricingCategoriesParams,
   ListQuoteTemplatesParams,
   ListQuotesParams,
   ListRenewalsParams,
@@ -248,6 +249,7 @@ import type {
   PlatformTenant,
   PlatformTenantCreate,
   PlatformTenantUpdate,
+  PreviewPricingSkuParams,
   PriceBundle,
   PriceBundleCreate,
   PriceBundleItemsReplace,
@@ -263,7 +265,14 @@ import type {
   PriceRule,
   PriceRuleInput,
   PriceRulePatch,
+  PricingCategory,
+  PricingCategoryInput,
+  PricingCategoryPatch,
   PricingReviewEnvelope,
+  PricingSkuPreview,
+  PricingSubcategory,
+  PricingSubcategoryInput,
+  PricingSubcategoryPatch,
   PricingSummary,
   Quote,
   QuoteAttachment,
@@ -7298,6 +7307,683 @@ export const useDeleteIndustryProfile = <
 > => {
   return useMutation(getDeleteIndustryProfileMutationOptions(options));
 };
+
+export const getListPricingCategoriesUrl = (
+  params?: ListPricingCategoriesParams,
+) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? "null" : value.toString());
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0
+    ? `/api/v1/pricing/categories?${stringifiedParams}`
+    : `/api/v1/pricing/categories`;
+};
+
+export const listPricingCategories = async (
+  params?: ListPricingCategoriesParams,
+  options?: RequestInit,
+): Promise<PricingCategory[]> => {
+  return customFetch<PricingCategory[]>(getListPricingCategoriesUrl(params), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getListPricingCategoriesQueryKey = (
+  params?: ListPricingCategoriesParams,
+) => {
+  return [`/api/v1/pricing/categories`, ...(params ? [params] : [])] as const;
+};
+
+export const getListPricingCategoriesQueryOptions = <
+  TData = Awaited<ReturnType<typeof listPricingCategories>>,
+  TError = ErrorType<unknown>,
+>(
+  params?: ListPricingCategoriesParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof listPricingCategories>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey =
+    queryOptions?.queryKey ?? getListPricingCategoriesQueryKey(params);
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof listPricingCategories>>
+  > = ({ signal }) =>
+    listPricingCategories(params, { signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof listPricingCategories>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type ListPricingCategoriesQueryResult = NonNullable<
+  Awaited<ReturnType<typeof listPricingCategories>>
+>;
+export type ListPricingCategoriesQueryError = ErrorType<unknown>;
+
+export function useListPricingCategories<
+  TData = Awaited<ReturnType<typeof listPricingCategories>>,
+  TError = ErrorType<unknown>,
+>(
+  params?: ListPricingCategoriesParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof listPricingCategories>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getListPricingCategoriesQueryOptions(params, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+export const getCreatePricingCategoryUrl = () => {
+  return `/api/v1/pricing/categories`;
+};
+
+export const createPricingCategory = async (
+  pricingCategoryInput: PricingCategoryInput,
+  options?: RequestInit,
+): Promise<PricingCategory> => {
+  return customFetch<PricingCategory>(getCreatePricingCategoryUrl(), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(pricingCategoryInput),
+  });
+};
+
+export const getCreatePricingCategoryMutationOptions = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof createPricingCategory>>,
+    TError,
+    { data: BodyType<PricingCategoryInput> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof createPricingCategory>>,
+  TError,
+  { data: BodyType<PricingCategoryInput> },
+  TContext
+> => {
+  const mutationKey = ["createPricingCategory"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof createPricingCategory>>,
+    { data: BodyType<PricingCategoryInput> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return createPricingCategory(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type CreatePricingCategoryMutationResult = NonNullable<
+  Awaited<ReturnType<typeof createPricingCategory>>
+>;
+export type CreatePricingCategoryMutationBody = BodyType<PricingCategoryInput>;
+export type CreatePricingCategoryMutationError = ErrorType<void>;
+
+export const useCreatePricingCategory = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof createPricingCategory>>,
+    TError,
+    { data: BodyType<PricingCategoryInput> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof createPricingCategory>>,
+  TError,
+  { data: BodyType<PricingCategoryInput> },
+  TContext
+> => {
+  return useMutation(getCreatePricingCategoryMutationOptions(options));
+};
+
+export const getUpdatePricingCategoryUrl = (id: string) => {
+  return `/api/v1/pricing/categories/${id}`;
+};
+
+export const updatePricingCategory = async (
+  id: string,
+  pricingCategoryPatch: PricingCategoryPatch,
+  options?: RequestInit,
+): Promise<PricingCategory> => {
+  return customFetch<PricingCategory>(getUpdatePricingCategoryUrl(id), {
+    ...options,
+    method: "PATCH",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(pricingCategoryPatch),
+  });
+};
+
+export const getUpdatePricingCategoryMutationOptions = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof updatePricingCategory>>,
+    TError,
+    { id: string; data: BodyType<PricingCategoryPatch> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof updatePricingCategory>>,
+  TError,
+  { id: string; data: BodyType<PricingCategoryPatch> },
+  TContext
+> => {
+  const mutationKey = ["updatePricingCategory"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof updatePricingCategory>>,
+    { id: string; data: BodyType<PricingCategoryPatch> }
+  > = (props) => {
+    const { id, data } = props ?? {};
+
+    return updatePricingCategory(id, data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type UpdatePricingCategoryMutationResult = NonNullable<
+  Awaited<ReturnType<typeof updatePricingCategory>>
+>;
+export type UpdatePricingCategoryMutationBody = BodyType<PricingCategoryPatch>;
+export type UpdatePricingCategoryMutationError = ErrorType<void>;
+
+export const useUpdatePricingCategory = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof updatePricingCategory>>,
+    TError,
+    { id: string; data: BodyType<PricingCategoryPatch> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof updatePricingCategory>>,
+  TError,
+  { id: string; data: BodyType<PricingCategoryPatch> },
+  TContext
+> => {
+  return useMutation(getUpdatePricingCategoryMutationOptions(options));
+};
+
+/**
+ * @summary Kategorie archivieren (soft-delete bei verknüpften Positionen)
+ */
+export const getArchivePricingCategoryUrl = (id: string) => {
+  return `/api/v1/pricing/categories/${id}`;
+};
+
+export const archivePricingCategory = async (
+  id: string,
+  options?: RequestInit,
+): Promise<void> => {
+  return customFetch<void>(getArchivePricingCategoryUrl(id), {
+    ...options,
+    method: "DELETE",
+  });
+};
+
+export const getArchivePricingCategoryMutationOptions = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof archivePricingCategory>>,
+    TError,
+    { id: string },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof archivePricingCategory>>,
+  TError,
+  { id: string },
+  TContext
+> => {
+  const mutationKey = ["archivePricingCategory"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof archivePricingCategory>>,
+    { id: string }
+  > = (props) => {
+    const { id } = props ?? {};
+
+    return archivePricingCategory(id, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type ArchivePricingCategoryMutationResult = NonNullable<
+  Awaited<ReturnType<typeof archivePricingCategory>>
+>;
+
+export type ArchivePricingCategoryMutationError = ErrorType<void>;
+
+/**
+ * @summary Kategorie archivieren (soft-delete bei verknüpften Positionen)
+ */
+export const useArchivePricingCategory = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof archivePricingCategory>>,
+    TError,
+    { id: string },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof archivePricingCategory>>,
+  TError,
+  { id: string },
+  TContext
+> => {
+  return useMutation(getArchivePricingCategoryMutationOptions(options));
+};
+
+export const getCreatePricingSubcategoryUrl = (id: string) => {
+  return `/api/v1/pricing/categories/${id}/subcategories`;
+};
+
+export const createPricingSubcategory = async (
+  id: string,
+  pricingSubcategoryInput: PricingSubcategoryInput,
+  options?: RequestInit,
+): Promise<PricingSubcategory> => {
+  return customFetch<PricingSubcategory>(getCreatePricingSubcategoryUrl(id), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(pricingSubcategoryInput),
+  });
+};
+
+export const getCreatePricingSubcategoryMutationOptions = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof createPricingSubcategory>>,
+    TError,
+    { id: string; data: BodyType<PricingSubcategoryInput> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof createPricingSubcategory>>,
+  TError,
+  { id: string; data: BodyType<PricingSubcategoryInput> },
+  TContext
+> => {
+  const mutationKey = ["createPricingSubcategory"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof createPricingSubcategory>>,
+    { id: string; data: BodyType<PricingSubcategoryInput> }
+  > = (props) => {
+    const { id, data } = props ?? {};
+
+    return createPricingSubcategory(id, data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type CreatePricingSubcategoryMutationResult = NonNullable<
+  Awaited<ReturnType<typeof createPricingSubcategory>>
+>;
+export type CreatePricingSubcategoryMutationBody =
+  BodyType<PricingSubcategoryInput>;
+export type CreatePricingSubcategoryMutationError = ErrorType<void>;
+
+export const useCreatePricingSubcategory = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof createPricingSubcategory>>,
+    TError,
+    { id: string; data: BodyType<PricingSubcategoryInput> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof createPricingSubcategory>>,
+  TError,
+  { id: string; data: BodyType<PricingSubcategoryInput> },
+  TContext
+> => {
+  return useMutation(getCreatePricingSubcategoryMutationOptions(options));
+};
+
+export const getUpdatePricingSubcategoryUrl = (id: string) => {
+  return `/api/v1/pricing/subcategories/${id}`;
+};
+
+export const updatePricingSubcategory = async (
+  id: string,
+  pricingSubcategoryPatch: PricingSubcategoryPatch,
+  options?: RequestInit,
+): Promise<PricingSubcategory> => {
+  return customFetch<PricingSubcategory>(getUpdatePricingSubcategoryUrl(id), {
+    ...options,
+    method: "PATCH",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(pricingSubcategoryPatch),
+  });
+};
+
+export const getUpdatePricingSubcategoryMutationOptions = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof updatePricingSubcategory>>,
+    TError,
+    { id: string; data: BodyType<PricingSubcategoryPatch> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof updatePricingSubcategory>>,
+  TError,
+  { id: string; data: BodyType<PricingSubcategoryPatch> },
+  TContext
+> => {
+  const mutationKey = ["updatePricingSubcategory"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof updatePricingSubcategory>>,
+    { id: string; data: BodyType<PricingSubcategoryPatch> }
+  > = (props) => {
+    const { id, data } = props ?? {};
+
+    return updatePricingSubcategory(id, data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type UpdatePricingSubcategoryMutationResult = NonNullable<
+  Awaited<ReturnType<typeof updatePricingSubcategory>>
+>;
+export type UpdatePricingSubcategoryMutationBody =
+  BodyType<PricingSubcategoryPatch>;
+export type UpdatePricingSubcategoryMutationError = ErrorType<void>;
+
+export const useUpdatePricingSubcategory = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof updatePricingSubcategory>>,
+    TError,
+    { id: string; data: BodyType<PricingSubcategoryPatch> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof updatePricingSubcategory>>,
+  TError,
+  { id: string; data: BodyType<PricingSubcategoryPatch> },
+  TContext
+> => {
+  return useMutation(getUpdatePricingSubcategoryMutationOptions(options));
+};
+
+export const getArchivePricingSubcategoryUrl = (id: string) => {
+  return `/api/v1/pricing/subcategories/${id}`;
+};
+
+export const archivePricingSubcategory = async (
+  id: string,
+  options?: RequestInit,
+): Promise<void> => {
+  return customFetch<void>(getArchivePricingSubcategoryUrl(id), {
+    ...options,
+    method: "DELETE",
+  });
+};
+
+export const getArchivePricingSubcategoryMutationOptions = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof archivePricingSubcategory>>,
+    TError,
+    { id: string },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof archivePricingSubcategory>>,
+  TError,
+  { id: string },
+  TContext
+> => {
+  const mutationKey = ["archivePricingSubcategory"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof archivePricingSubcategory>>,
+    { id: string }
+  > = (props) => {
+    const { id } = props ?? {};
+
+    return archivePricingSubcategory(id, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type ArchivePricingSubcategoryMutationResult = NonNullable<
+  Awaited<ReturnType<typeof archivePricingSubcategory>>
+>;
+
+export type ArchivePricingSubcategoryMutationError = ErrorType<void>;
+
+export const useArchivePricingSubcategory = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof archivePricingSubcategory>>,
+    TError,
+    { id: string },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof archivePricingSubcategory>>,
+  TError,
+  { id: string },
+  TContext
+> => {
+  return useMutation(getArchivePricingSubcategoryMutationOptions(options));
+};
+
+/**
+ * @summary Vorschau der nächsten Auto-SKU für ein Präfix (verbraucht keine Sequenznummer)
+ */
+export const getPreviewPricingSkuUrl = (params: PreviewPricingSkuParams) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? "null" : value.toString());
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0
+    ? `/api/v1/pricing/sku-preview?${stringifiedParams}`
+    : `/api/v1/pricing/sku-preview`;
+};
+
+export const previewPricingSku = async (
+  params: PreviewPricingSkuParams,
+  options?: RequestInit,
+): Promise<PricingSkuPreview> => {
+  return customFetch<PricingSkuPreview>(getPreviewPricingSkuUrl(params), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getPreviewPricingSkuQueryKey = (
+  params?: PreviewPricingSkuParams,
+) => {
+  return [`/api/v1/pricing/sku-preview`, ...(params ? [params] : [])] as const;
+};
+
+export const getPreviewPricingSkuQueryOptions = <
+  TData = Awaited<ReturnType<typeof previewPricingSku>>,
+  TError = ErrorType<void>,
+>(
+  params: PreviewPricingSkuParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof previewPricingSku>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey =
+    queryOptions?.queryKey ?? getPreviewPricingSkuQueryKey(params);
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof previewPricingSku>>
+  > = ({ signal }) => previewPricingSku(params, { signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof previewPricingSku>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type PreviewPricingSkuQueryResult = NonNullable<
+  Awaited<ReturnType<typeof previewPricingSku>>
+>;
+export type PreviewPricingSkuQueryError = ErrorType<void>;
+
+/**
+ * @summary Vorschau der nächsten Auto-SKU für ein Präfix (verbraucht keine Sequenznummer)
+ */
+
+export function usePreviewPricingSku<
+  TData = Awaited<ReturnType<typeof previewPricingSku>>,
+  TError = ErrorType<void>,
+>(
+  params: PreviewPricingSkuParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof previewPricingSku>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getPreviewPricingSkuQueryOptions(params, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
 
 export const getListPricePositionsUrl = () => {
   return `/api/v1/price-positions`;

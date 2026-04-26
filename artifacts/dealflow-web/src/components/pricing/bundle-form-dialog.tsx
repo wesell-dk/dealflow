@@ -5,6 +5,7 @@ import {
   useCreatePriceBundle,
   useUpdatePriceBundle,
   useReplacePriceBundleItems,
+  useListPricingCategories,
   getListPriceBundlesQueryKey,
   type PriceBundle,
 } from "@workspace/api-client-react";
@@ -16,6 +17,9 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import {
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+} from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { Loader2, Plus, Trash2 } from "lucide-react";
 import { PricebookPickerDialog, type PricebookPickedItem } from "./pricebook-picker-dialog";
@@ -45,6 +49,7 @@ export function BundleFormDialog({ open, onOpenChange, bundle }: Props) {
   const createMut = useCreatePriceBundle();
   const updateMut = useUpdatePriceBundle();
   const replaceMut = useReplacePriceBundleItems();
+  const categoriesQ = useListPricingCategories();
 
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
@@ -185,12 +190,25 @@ export function BundleFormDialog({ open, onOpenChange, bundle }: Props) {
               </div>
               <div className="grid gap-2">
                 <Label>{t("pages.pricing.category")}</Label>
-                <Input
-                  value={category}
-                  onChange={(e) => setCategory(e.target.value)}
-                  placeholder="Plan, Hardware, Service…"
-                  data-testid="input-bundle-category"
-                />
+                <Select
+                  value={category || "__none__"}
+                  onValueChange={(v) => setCategory(v === "__none__" ? "" : v)}
+                >
+                  <SelectTrigger data-testid="input-bundle-category">
+                    <SelectValue placeholder={categoriesQ.isLoading ? "Lade …" : "—"} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="__none__" textValue="—">—</SelectItem>
+                    {(categoriesQ.data ?? [])
+                      .filter(c => c.status === "active")
+                      .map(c => (
+                        <SelectItem key={c.id} value={c.name} textValue={c.name}>
+                          <span className="font-mono text-xs mr-2">{c.code}</span>
+                          {c.name}
+                        </SelectItem>
+                      ))}
+                  </SelectContent>
+                </Select>
               </div>
             </div>
             <div>

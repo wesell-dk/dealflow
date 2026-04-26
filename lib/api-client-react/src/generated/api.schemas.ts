@@ -633,6 +633,14 @@ export interface Company {
   legalName: string;
   country: string;
   currency: string;
+  /**
+   * Kurzcode für die Auto-SKU-Generierung im Pricing-Workspace ({COMPANY}-{KAT}-{SUBKAT}-{NNN}). Tenant-eindeutig. Nur Großbuchstaben + Ziffern.
+   * @minLength 2
+   * @maxLength 8
+   * @nullable
+   * @pattern ^[A-Z0-9]+$
+   */
+  code?: string | null;
 }
 
 /**
@@ -735,6 +743,14 @@ export interface CompanyCreate {
    * @maxLength 3
    */
   currency: string;
+  /**
+   * Optional. Kurzcode für SKU-Präfix. Falls leer, wird beim Backfill automatisch ein Vorschlag aus dem Namen generiert (Tenant-Unique).
+   * @minLength 2
+   * @maxLength 8
+   * @nullable
+   * @pattern ^[A-Z0-9]+$
+   */
+  code?: string | null;
 }
 
 export interface CompanyUpdate {
@@ -758,6 +774,13 @@ export interface CompanyUpdate {
    * @maxLength 3
    */
   currency?: string;
+  /**
+   * @minLength 2
+   * @maxLength 8
+   * @nullable
+   * @pattern ^[A-Z0-9]+$
+   */
+  code?: string | null;
 }
 
 export interface BrandCreate {
@@ -2294,6 +2317,24 @@ export interface PricePosition {
   sku: string;
   name: string;
   category: string;
+  /**
+   * Verweis auf gemanagte Pricing-Kategorie.
+   * @nullable
+   */
+  categoryId?: string | null;
+  /**
+   * Optionale Unterkategorie unterhalb der Pricing-Kategorie.
+   * @nullable
+   */
+  subcategoryId?: string | null;
+  /** @nullable */
+  categoryName?: string | null;
+  /** @nullable */
+  subcategoryName?: string | null;
+  /** @nullable */
+  categoryCode?: string | null;
+  /** @nullable */
+  subcategoryCode?: string | null;
   listPrice: number;
   currency: string;
   status: string;
@@ -2309,9 +2350,9 @@ export interface PricePosition {
 }
 
 export interface PricePositionInput {
-  sku: string;
   name: string;
-  category: string;
+  categoryId: string;
+  subcategoryId: string;
   listPrice: number;
   currency: string;
   brandId: string;
@@ -2329,9 +2370,9 @@ export const PricePositionPatchStatus = {
 } as const;
 
 export interface PricePositionPatch {
-  sku?: string;
   name?: string;
-  category?: string;
+  categoryId?: string;
+  subcategoryId?: string;
   listPrice?: number;
   currency?: string;
   status?: PricePositionPatchStatus;
@@ -2340,6 +2381,126 @@ export interface PricePositionPatch {
   validUntil?: string | null;
   brandId?: string;
   isStandard?: boolean;
+}
+
+export type PricingCategoryStatus =
+  (typeof PricingCategoryStatus)[keyof typeof PricingCategoryStatus];
+
+export const PricingCategoryStatus = {
+  active: "active",
+  archived: "archived",
+} as const;
+
+export type PricingSubcategoryStatus =
+  (typeof PricingSubcategoryStatus)[keyof typeof PricingSubcategoryStatus];
+
+export const PricingSubcategoryStatus = {
+  active: "active",
+  archived: "archived",
+} as const;
+
+export interface PricingSubcategory {
+  id: string;
+  categoryId: string;
+  code: string;
+  name: string;
+  sortOrder: number;
+  status: PricingSubcategoryStatus;
+  positionCount?: number;
+}
+
+export interface PricingCategory {
+  id: string;
+  code: string;
+  name: string;
+  sortOrder: number;
+  status: PricingCategoryStatus;
+  /** Anzahl Preispositionen, die aktuell auf diese Kategorie verweisen. */
+  positionCount?: number;
+  subcategories: PricingSubcategory[];
+}
+
+export interface PricingCategoryInput {
+  /**
+   * @minLength 2
+   * @maxLength 8
+   * @pattern ^[A-Z0-9]+$
+   */
+  code: string;
+  /**
+   * @minLength 1
+   * @maxLength 100
+   */
+  name: string;
+  sortOrder?: number;
+}
+
+export type PricingCategoryPatchStatus =
+  (typeof PricingCategoryPatchStatus)[keyof typeof PricingCategoryPatchStatus];
+
+export const PricingCategoryPatchStatus = {
+  active: "active",
+  archived: "archived",
+} as const;
+
+export interface PricingCategoryPatch {
+  /**
+   * @minLength 2
+   * @maxLength 8
+   * @pattern ^[A-Z0-9]+$
+   */
+  code?: string;
+  /**
+   * @minLength 1
+   * @maxLength 100
+   */
+  name?: string;
+  sortOrder?: number;
+  status?: PricingCategoryPatchStatus;
+}
+
+export interface PricingSubcategoryInput {
+  /**
+   * @minLength 2
+   * @maxLength 8
+   * @pattern ^[A-Z0-9]+$
+   */
+  code: string;
+  /**
+   * @minLength 1
+   * @maxLength 100
+   */
+  name: string;
+  sortOrder?: number;
+}
+
+export type PricingSubcategoryPatchStatus =
+  (typeof PricingSubcategoryPatchStatus)[keyof typeof PricingSubcategoryPatchStatus];
+
+export const PricingSubcategoryPatchStatus = {
+  active: "active",
+  archived: "archived",
+} as const;
+
+export interface PricingSubcategoryPatch {
+  /**
+   * @minLength 2
+   * @maxLength 8
+   * @pattern ^[A-Z0-9]+$
+   */
+  code?: string;
+  /**
+   * @minLength 1
+   * @maxLength 100
+   */
+  name?: string;
+  sortOrder?: number;
+  status?: PricingSubcategoryPatchStatus;
+}
+
+export interface PricingSkuPreview {
+  prefix: string;
+  nextSku: string;
 }
 
 export interface PriceRule {
@@ -6343,6 +6504,16 @@ export type ListQuoteTemplatesParams = {
 export type ListAttachmentLibraryParams = {
   category?: string;
   tag?: string;
+};
+
+export type ListPricingCategoriesParams = {
+  includeArchived?: boolean;
+};
+
+export type PreviewPricingSkuParams = {
+  companyId: string;
+  categoryId: string;
+  subcategoryId: string;
 };
 
 export type ListApprovalsParams = {

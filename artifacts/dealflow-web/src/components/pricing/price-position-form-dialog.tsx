@@ -1,10 +1,13 @@
 import { useEffect, useMemo, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   useCreatePricePosition,
   useUpdatePricePosition,
   useListBrands,
   useListCompanies,
+  useListPricingCategories,
+  usePreviewPricingSku,
   getListPricePositionsQueryKey,
   getGetPricingSummaryQueryKey,
   type PricePosition,
@@ -30,13 +33,14 @@ interface Props {
   position?: PricePosition;
 }
 
-const STATUS_OPTIONS: Array<{ value: "draft" | "active" | "archived"; label: string }> = [
-  { value: "draft", label: "Draft" },
-  { value: "active", label: "Active" },
-  { value: "archived", label: "Archived" },
+const STATUS_OPTIONS: Array<{ value: "draft" | "active" | "archived"; labelKey: string }> = [
+  { value: "draft", labelKey: "common.draft" },
+  { value: "active", labelKey: "common.active" },
+  { value: "archived", labelKey: "common.archived" },
 ];
 
 export function PricePositionFormDialog({ open, onOpenChange, position }: Props) {
+  const { t } = useTranslation();
   const { toast } = useToast();
   const qc = useQueryClient();
   const isEdit = !!position;
@@ -45,10 +49,11 @@ export function PricePositionFormDialog({ open, onOpenChange, position }: Props)
   const updateMut = useUpdatePricePosition();
   const brandsQ = useListBrands();
   const companiesQ = useListCompanies();
+  const categoriesQ = useListPricingCategories();
 
-  const [sku, setSku] = useState("");
   const [name, setName] = useState("");
-  const [category, setCategory] = useState("");
+  const [categoryId, setCategoryId] = useState<string>("");
+  const [subcategoryId, setSubcategoryId] = useState<string>("");
   const [listPrice, setListPrice] = useState<string>("");
   const [currency, setCurrency] = useState("EUR");
   const [companyId, setCompanyId] = useState<string>("");
@@ -58,18 +63,31 @@ export function PricePositionFormDialog({ open, onOpenChange, position }: Props)
   const [status, setStatus] = useState<"draft" | "active" | "archived">("draft");
   const [isStandard, setIsStandard] = useState(true);
 
-  // Brand-Liste auf gewählte Company filtern. Sub-Brands behalten wir bewusst
-  // — Pricing kann Marken-spezifisch sein (Premium- vs Lite-Sub-Brand).
   const filteredBrands = useMemo(() => {
     return (brandsQ.data ?? []).filter(b => !companyId || b.companyId === companyId);
   }, [brandsQ.data, companyId]);
 
+  const activeCategories = useMemo(
+    () => (categoriesQ.data ?? []).filter(c => c.status === "active"),
+    [categoriesQ.data],
+  );
+
+  const selectedCategory = useMemo(
+    () => activeCategories.find(c => c.id === categoryId),
+    [activeCategories, categoryId],
+  );
+
+  const activeSubcategories = useMemo(
+    () => (selectedCategory?.subcategories ?? []).filter(s => s.status === "active"),
+    [selectedCategory],
+  );
+
   useEffect(() => {
     if (!open) return;
     if (position) {
-      setSku(position.sku);
       setName(position.name);
-      setCategory(position.category);
+      setCategoryId(position.categoryId ?? "");
+      setSubcategoryId(position.subcategoryId ?? "");
       setListPrice(String(position.listPrice));
       setCurrency(position.currency);
       setCompanyId(position.companyId);
@@ -79,9 +97,9 @@ export function PricePositionFormDialog({ open, onOpenChange, position }: Props)
       setStatus((position.status as "draft" | "active" | "archived") ?? "draft");
       setIsStandard(position.isStandard);
     } else {
-      setSku("");
       setName("");
-      setCategory("");
+      setCategoryId("");
+      setSubcategoryId("");
       setListPrice("");
       setCurrency("EUR");
       setCompanyId("");
@@ -93,40 +111,89 @@ export function PricePositionFormDialog({ open, onOpenChange, position }: Props)
     }
   }, [open, position]);
 
-  // Wenn Company sich ändert UND aktuelles Brand nicht mehr passt → Brand zurücksetzen.
+  // Reset brand if it no longer matches selected company.
   useEffect(() => {
     if (!brandId) return;
     const valid = filteredBrands.some(b => b.id === brandId);
     if (!valid) setBrandId("");
   }, [filteredBrands, brandId]);
 
+  // Reset subcategory when changing category.
+  useEffect(() => {
+    if (!subcategoryId) return;
+    const valid = activeSubcategories.some(s => s.id === subcategoryId);
+    if (!valid) setSubcategoryId("");
+  }, [activeSubcategories, subcategoryId]);
+
+  // Live SKU preview — only when creating + all required parts present
+  // (Unterkategorie ist Teil der Auto-SKU und damit Pflicht).
+  const canPreview = !isEdit && !!companyId && !!categoryId && !!subcategoryId && open;
+  const previewParams = {
+    companyId: companyId || "_",
+    categoryId: categoryId || "_",
+    subcategoryId: subcategoryId || "_",
+  };
+  const previewQ = usePreviewPricingSku(
+    previewParams,
+    {
+      query: {
+        enabled: canPreview,
+        staleTime: 5_000,
+        refetchOnWindowFocus: false,
+        retry: false,
+        queryKey: [
+          "/api/v1/pricing/sku-preview",
+          previewParams,
+        ] as const,
+      },
+    },
+  );
+
   const submit = async () => {
-    const trimmedSku = sku.trim();
     const trimmedName = name.trim();
-    const trimmedCategory = category.trim();
     const lp = Number(listPrice);
-    if (!trimmedSku || !trimmedName || !trimmedCategory) {
-      toast({ title: "Required fields missing", description: "SKU, name and category are required.", variant: "destructive" });
+    if (!trimmedName) {
+      toast({ title: t("common.required"), description: t("common.name"), variant: "destructive" });
+      return;
+    }
+    if (!categoryId) {
+      toast({ title: t("common.required"), description: t("pages.pricing.positionForm.categoryMissingError"), variant: "destructive" });
+      return;
+    }
+    if (!subcategoryId) {
+      toast({ title: t("common.required"), description: t("pages.pricing.positionForm.subcategoryMissingError"), variant: "destructive" });
       return;
     }
     if (!Number.isFinite(lp) || lp < 0) {
-      toast({ title: "Invalid price", description: "List price must be a non-negative number.", variant: "destructive" });
+      toast({
+        title: t("pages.pricing.positionForm.invalidPriceTitle"),
+        description: t("pages.pricing.positionForm.invalidPriceBody"),
+        variant: "destructive",
+      });
       return;
     }
     if (!companyId || !brandId) {
-      toast({ title: "Assignment missing", description: "Choose a company and brand.", variant: "destructive" });
+      toast({
+        title: t("pages.pricing.positionForm.missingAssignmentTitle"),
+        description: t("pages.pricing.positionForm.missingAssignmentBody"),
+        variant: "destructive",
+      });
       return;
     }
     if (!/^\d{4}-\d{2}-\d{2}$/.test(validFrom)) {
-      toast({ title: "Invalid date", description: "Valid from must be in YYYY-MM-DD format.", variant: "destructive" });
+      toast({
+        title: t("pages.pricing.positionForm.invalidDateTitle"),
+        description: t("pages.pricing.positionForm.invalidDateBody"),
+        variant: "destructive",
+      });
       return;
     }
     try {
       if (isEdit && position) {
         const patch: PricePositionPatch = {
-          sku: trimmedSku,
           name: trimmedName,
-          category: trimmedCategory,
+          categoryId,
+          subcategoryId,
           listPrice: lp,
           currency: currency.trim().toUpperCase() || "EUR",
           status,
@@ -136,20 +203,20 @@ export function PricePositionFormDialog({ open, onOpenChange, position }: Props)
           isStandard,
         };
         await updateMut.mutateAsync({ id: position.id, data: patch });
-        toast({ title: "Price position updated", description: trimmedSku });
+        toast({ title: t("pages.pricing.positionForm.updatedToast"), description: position.sku });
       } else {
         const body: PricePositionInput = {
-          sku: trimmedSku,
           name: trimmedName,
-          category: trimmedCategory,
+          categoryId,
+          subcategoryId,
           listPrice: lp,
           currency: currency.trim().toUpperCase() || "EUR",
           brandId,
           companyId,
           validFrom,
         };
-        await createMut.mutateAsync({ data: body });
-        toast({ title: "Price position created", description: trimmedSku });
+        const created = await createMut.mutateAsync({ data: body });
+        toast({ title: t("pages.pricing.positionForm.createdToast"), description: created.sku });
       }
       await Promise.all([
         qc.invalidateQueries({ queryKey: getListPricePositionsQueryKey() }),
@@ -157,11 +224,13 @@ export function PricePositionFormDialog({ open, onOpenChange, position }: Props)
       ]);
       onOpenChange(false);
     } catch (e: unknown) {
-      const status = (e as { response?: { status?: number } })?.response?.status;
+      const httpStatus = (e as { response?: { status?: number } })?.response?.status;
       const body = (e as { response?: { data?: { error?: string } } })?.response?.data;
       toast({
-        title: status === 403 ? "Not authorized" : "Save failed",
-        description: body?.error ?? (e instanceof Error ? e.message : "Unknown error"),
+        title: httpStatus === 403
+          ? t("pages.pricing.positionForm.forbiddenToast")
+          : t("pages.pricing.positionForm.saveFailedToast"),
+        description: body?.error ?? (e instanceof Error ? e.message : t("pages.pricing.positionForm.unknownError")),
         variant: "destructive",
       });
     }
@@ -169,38 +238,99 @@ export function PricePositionFormDialog({ open, onOpenChange, position }: Props)
 
   const busy = createMut.isPending || updateMut.isPending;
 
+  const skuLabel = isEdit ? "SKU" : t("pages.pricing.positionForm.skuAuto");
+  const skuValue = isEdit
+    ? position?.sku ?? ""
+    : (canPreview
+        ? (previewQ.isLoading
+            ? t("pages.pricing.positionForm.skuLoading")
+            : (previewQ.data?.nextSku ?? t("pages.pricing.positionForm.previewError")))
+        : t("pages.pricing.positionForm.skuMissing"));
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-2xl">
         <DialogHeader>
-          <DialogTitle>{isEdit ? "Edit price position" : "New price position"}</DialogTitle>
+          <DialogTitle>{isEdit ? t("pages.pricing.positionForm.titleEdit") : t("pages.pricing.positions.new")}</DialogTitle>
           <DialogDescription>
             {isEdit
-              ? "Adjust list price, status and validity. For larger structural changes use a new version."
-              : "Create a standard price for a brand / company. Used by the price resolver."}
+              ? t("pages.pricing.positionForm.descriptionEdit")
+              : t("pages.pricing.positionForm.descriptionCreate")}
           </DialogDescription>
         </DialogHeader>
 
         <div className="space-y-4 py-2">
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1.5">
-              <Label htmlFor="pp-sku">SKU *</Label>
-              <Input id="pp-sku" value={sku} onChange={e => setSku(e.target.value)} placeholder="HX-CORE-LIC" data-testid="input-pp-sku" />
+              <Label htmlFor="pp-sku">{skuLabel}</Label>
+              <Input
+                id="pp-sku"
+                value={skuValue}
+                readOnly
+                disabled
+                className="font-mono text-sm bg-muted/40"
+                data-testid="input-pp-sku"
+              />
+              <p className="text-[11px] text-muted-foreground">
+                {t("pages.pricing.positionForm.skuImmutable")}
+              </p>
             </div>
             <div className="space-y-1.5">
-              <Label htmlFor="pp-category">Category *</Label>
-              <Input id="pp-category" value={category} onChange={e => setCategory(e.target.value)} placeholder="Licenses, services…" data-testid="input-pp-category" />
+              <Label htmlFor="pp-name">{t("common.name")} *</Label>
+              <Input id="pp-name" value={name} onChange={e => setName(e.target.value)} placeholder={t("pages.pricing.positionForm.namePlaceholder")} data-testid="input-pp-name" />
             </div>
           </div>
 
-          <div className="space-y-1.5">
-            <Label htmlFor="pp-name">Name *</Label>
-            <Input id="pp-name" value={name} onChange={e => setName(e.target.value)} placeholder="Helix Core License" data-testid="input-pp-name" />
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1.5">
+              <Label>{t("pages.pricing.category")} *</Label>
+              <Select value={categoryId} onValueChange={(v) => { setCategoryId(v); setSubcategoryId(""); }}>
+                <SelectTrigger data-testid="select-pp-category">
+                  <SelectValue placeholder={
+                    categoriesQ.isLoading
+                      ? t("pages.pricing.positionForm.loadingPlaceholder")
+                      : t("pages.pricing.positionForm.categoryRequired")
+                  } />
+                </SelectTrigger>
+                <SelectContent>
+                  {activeCategories.map(c => (
+                    <SelectItem key={c.id} value={c.id} textValue={c.name}>
+                      <span className="font-mono text-xs mr-2">{c.code}</span>
+                      {c.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1.5">
+              <Label>{t("pages.pricing.subcategory")} *</Label>
+              <Select
+                value={subcategoryId}
+                onValueChange={setSubcategoryId}
+                disabled={!categoryId}
+              >
+                <SelectTrigger data-testid="select-pp-subcategory">
+                  <SelectValue placeholder={
+                    !categoryId
+                      ? t("pages.pricing.positionForm.subcategoryDisabled")
+                      : t("pages.pricing.positionForm.subcategoryRequired")
+                  } />
+                </SelectTrigger>
+                <SelectContent>
+                  {activeSubcategories.map(s => (
+                    <SelectItem key={s.id} value={s.id} textValue={s.name}>
+                      <span className="font-mono text-xs mr-2">{s.code}</span>
+                      {s.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
           </div>
 
           <div className="grid grid-cols-3 gap-3">
             <div className="space-y-1.5">
-              <Label htmlFor="pp-price">List price *</Label>
+              <Label htmlFor="pp-price">{t("pages.pricing.positionForm.listPriceLabel")} *</Label>
               <Input
                 id="pp-price"
                 type="number"
@@ -214,38 +344,52 @@ export function PricePositionFormDialog({ open, onOpenChange, position }: Props)
               />
             </div>
             <div className="space-y-1.5">
-              <Label htmlFor="pp-currency">Currency</Label>
+              <Label htmlFor="pp-currency">{t("pages.pricing.positionForm.currencyLabel")}</Label>
               <Input id="pp-currency" value={currency} onChange={e => setCurrency(e.target.value.toUpperCase())} maxLength={3} placeholder="EUR" data-testid="input-pp-currency" />
             </div>
             <div className="space-y-1.5">
-              <Label htmlFor="pp-status">Status</Label>
+              <Label htmlFor="pp-status">{t("pages.pricing.positionForm.statusLabel")}</Label>
               <Select value={status} onValueChange={(v) => setStatus(v as "draft" | "active" | "archived")} disabled={!isEdit}>
                 <SelectTrigger id="pp-status" data-testid="select-pp-status"><SelectValue /></SelectTrigger>
                 <SelectContent>
-                  {STATUS_OPTIONS.map(o => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}
+                  {STATUS_OPTIONS.map(o => <SelectItem key={o.value} value={o.value}>{t(o.labelKey, o.value)}</SelectItem>)}
                 </SelectContent>
               </Select>
-              {!isEdit && <p className="text-[11px] text-muted-foreground">New positions start as draft.</p>}
+              {!isEdit && <p className="text-[11px] text-muted-foreground">{t("pages.pricing.positionForm.draftStartHint")}</p>}
             </div>
           </div>
 
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1.5">
-              <Label>Company *</Label>
+              <Label>{t("pages.pricing.positionForm.companyLabel")} *</Label>
               <Select value={companyId} onValueChange={setCompanyId} disabled={isEdit}>
-                <SelectTrigger data-testid="select-pp-company"><SelectValue placeholder={companiesQ.isLoading ? "Loading…" : "Select"} /></SelectTrigger>
+                <SelectTrigger data-testid="select-pp-company">
+                  <SelectValue placeholder={
+                    companiesQ.isLoading
+                      ? t("pages.pricing.positionForm.loadingPlaceholder")
+                      : t("pages.pricing.positionForm.selectPlaceholder")
+                  } />
+                </SelectTrigger>
                 <SelectContent>
                   {(companiesQ.data ?? []).map(c => (
                     <SelectItem key={c.id} value={c.id} textValue={c.name}>{c.name}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>
-              {isEdit && <p className="text-[11px] text-muted-foreground">Company cannot be changed after creation.</p>}
+              {isEdit && <p className="text-[11px] text-muted-foreground">{t("pages.pricing.positionForm.companyImmutable")}</p>}
             </div>
             <div className="space-y-1.5">
-              <Label>Brand *</Label>
+              <Label>{t("pages.pricing.positionForm.brandLabel")} *</Label>
               <Select value={brandId} onValueChange={setBrandId} disabled={!companyId}>
-                <SelectTrigger data-testid="select-pp-brand"><SelectValue placeholder={!companyId ? "Select a company first" : (brandsQ.isLoading ? "Loading…" : "Select")} /></SelectTrigger>
+                <SelectTrigger data-testid="select-pp-brand">
+                  <SelectValue placeholder={
+                    !companyId
+                      ? t("pages.pricing.positionForm.brandDisabledPlaceholder")
+                      : (brandsQ.isLoading
+                          ? t("pages.pricing.positionForm.loadingPlaceholder")
+                          : t("pages.pricing.positionForm.selectPlaceholder"))
+                  } />
+                </SelectTrigger>
                 <SelectContent>
                   {filteredBrands.map(b => (
                     <SelectItem key={b.id} value={b.id} textValue={b.name}>{b.name}</SelectItem>
@@ -257,11 +401,11 @@ export function PricePositionFormDialog({ open, onOpenChange, position }: Props)
 
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1.5">
-              <Label htmlFor="pp-vfrom">Valid from *</Label>
+              <Label htmlFor="pp-vfrom">{t("pages.pricing.positionForm.validFromLabel")} *</Label>
               <Input id="pp-vfrom" type="date" value={validFrom} onChange={e => setValidFrom(e.target.value)} data-testid="input-pp-validfrom" />
             </div>
             <div className="space-y-1.5">
-              <Label htmlFor="pp-vto">Valid until</Label>
+              <Label htmlFor="pp-vto">{t("pages.pricing.positionForm.validUntilLabel")}</Label>
               <Input
                 id="pp-vto"
                 type="date"
@@ -270,7 +414,7 @@ export function PricePositionFormDialog({ open, onOpenChange, position }: Props)
                 disabled={!isEdit}
                 data-testid="input-pp-validuntil"
               />
-              {!isEdit && <p className="text-[11px] text-muted-foreground">Left open at creation — you can set this later if needed.</p>}
+              {!isEdit && <p className="text-[11px] text-muted-foreground">{t("pages.pricing.positionForm.validUntilCreateHint")}</p>}
             </div>
           </div>
 
@@ -282,16 +426,16 @@ export function PricePositionFormDialog({ open, onOpenChange, position }: Props)
                 onChange={e => setIsStandard(e.target.checked)}
                 data-testid="checkbox-pp-standard"
               />
-              <span>Mark as standard price (counts towards the standard-coverage KPI)</span>
+              <span>{t("pages.pricing.positionForm.isStandardLabel")}</span>
             </label>
           )}
         </div>
 
         <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)} disabled={busy}>Cancel</Button>
+          <Button variant="outline" onClick={() => onOpenChange(false)} disabled={busy}>{t("pages.pricing.positionForm.cancel")}</Button>
           <Button onClick={submit} disabled={busy} data-testid="button-pp-submit">
             {busy && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-            {isEdit ? "Save" : "Create"}
+            {isEdit ? t("pages.pricing.positionForm.save") : t("pages.pricing.positionForm.create")}
           </Button>
         </DialogFooter>
       </DialogContent>

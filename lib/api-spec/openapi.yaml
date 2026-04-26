@@ -1711,6 +1711,161 @@ paths:
 
   # ───────────── PRICING ─────────────
 
+  /pricing/categories:
+    get:
+      operationId: listPricingCategories
+      tags: [pricing]
+      parameters:
+        - in: query
+          name: includeArchived
+          required: false
+          schema: { type: boolean }
+      responses:
+        "200":
+          description: ok
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/PricingCategory" }
+    post:
+      operationId: createPricingCategory
+      tags: [pricing]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/PricingCategoryInput" }
+      responses:
+        "201":
+          description: created
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PricingCategory" }
+        "403": { description: forbidden }
+        "409": { description: code already exists in tenant }
+
+  /pricing/categories/{id}:
+    patch:
+      operationId: updatePricingCategory
+      tags: [pricing]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/PricingCategoryPatch" }
+      responses:
+        "200":
+          description: ok
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PricingCategory" }
+        "403": { description: forbidden }
+        "404": { description: not found }
+    delete:
+      operationId: archivePricingCategory
+      tags: [pricing]
+      summary: Kategorie archivieren (soft-delete bei verknüpften Positionen)
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        "204": { description: archived }
+        "403": { description: forbidden }
+        "404": { description: not found }
+
+  /pricing/categories/{id}/subcategories:
+    post:
+      operationId: createPricingSubcategory
+      tags: [pricing]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/PricingSubcategoryInput" }
+      responses:
+        "201":
+          description: created
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PricingSubcategory" }
+        "403": { description: forbidden }
+        "404": { description: category not found }
+        "409": { description: code already exists }
+
+  /pricing/subcategories/{id}:
+    patch:
+      operationId: updatePricingSubcategory
+      tags: [pricing]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/PricingSubcategoryPatch" }
+      responses:
+        "200":
+          description: ok
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PricingSubcategory" }
+        "403": { description: forbidden }
+        "404": { description: not found }
+    delete:
+      operationId: archivePricingSubcategory
+      tags: [pricing]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        "204": { description: archived }
+        "403": { description: forbidden }
+        "404": { description: not found }
+
+  /pricing/sku-preview:
+    get:
+      operationId: previewPricingSku
+      tags: [pricing]
+      summary: Vorschau der nächsten Auto-SKU für ein Präfix (verbraucht keine Sequenznummer)
+      parameters:
+        - in: query
+          name: companyId
+          required: true
+          schema: { type: string }
+        - in: query
+          name: categoryId
+          required: true
+          schema: { type: string }
+        - in: query
+          name: subcategoryId
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: ok
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PricingSkuPreview" }
+        "404": { description: company / category not found in tenant }
+
   /price-positions:
     get:
       operationId: listPricePositions
@@ -6268,6 +6423,14 @@ components:
         legalName: { type: string }
         country: { type: string }
         currency: { type: string }
+        code:
+          type: ["string", "null"]
+          minLength: 2
+          maxLength: 8
+          pattern: "^[A-Z0-9]+$"
+          description: >-
+            Kurzcode für die Auto-SKU-Generierung im Pricing-Workspace
+            ({COMPANY}-{KAT}-{SUBKAT}-{NNN}). Tenant-eindeutig. Nur Großbuchstaben + Ziffern.
 
     Brand:
       type: object
@@ -6357,6 +6520,14 @@ components:
           minLength: 3
           maxLength: 3
           description: ISO-4217 (z. B. EUR, CHF, USD)
+        code:
+          type: ["string", "null"]
+          minLength: 2
+          maxLength: 8
+          pattern: "^[A-Z0-9]+$"
+          description: >-
+            Optional. Kurzcode für SKU-Präfix. Falls leer, wird beim Backfill
+            automatisch ein Vorschlag aus dem Namen generiert (Tenant-Unique).
 
     CompanyUpdate:
       type: object
@@ -6365,6 +6536,11 @@ components:
         legalName: { type: string, minLength: 1, maxLength: 200 }
         country: { type: string, minLength: 2, maxLength: 2 }
         currency: { type: string, minLength: 3, maxLength: 3 }
+        code:
+          type: ["string", "null"]
+          minLength: 2
+          maxLength: 8
+          pattern: "^[A-Z0-9]+$"
 
     BrandCreate:
       type: object
@@ -7729,7 +7905,20 @@ components:
         id: { type: string }
         sku: { type: string }
         name: { type: string }
+        # Legacy-Freitext-Kategorie. Wird beim Anlegen automatisch aus dem
+        # Namen der referenzierten Pricing-Kategorie gespiegelt; bleibt für
+        # ältere Konsumenten lesbar.
         category: { type: string }
+        categoryId:
+          type: ["string", "null"]
+          description: Verweis auf gemanagte Pricing-Kategorie.
+        subcategoryId:
+          type: ["string", "null"]
+          description: Optionale Unterkategorie unterhalb der Pricing-Kategorie.
+        categoryName: { type: ["string", "null"] }
+        subcategoryName: { type: ["string", "null"] }
+        categoryCode: { type: ["string", "null"] }
+        subcategoryCode: { type: ["string", "null"] }
         listPrice: { type: number }
         currency: { type: string }
         status: { type: string }
@@ -7746,11 +7935,15 @@ components:
 
     PricePositionInput:
       type: object
-      required: [sku, name, category, listPrice, currency, brandId, companyId, validFrom]
+      # SKU wird serverseitig generiert ({COMPANY}-{KAT}-{SUBKAT}-{NNN}) und
+      # ist deshalb kein Pflichtfeld mehr im Body. Kategorie und
+      # Unterkategorie sind beide Pflicht — die Auto-SKU besteht aus allen
+      # vier Bestandteilen.
+      required: [name, categoryId, subcategoryId, listPrice, currency, brandId, companyId, validFrom]
       properties:
-        sku: { type: string }
         name: { type: string }
-        category: { type: string }
+        categoryId: { type: string }
+        subcategoryId: { type: string }
         listPrice: { type: number }
         currency: { type: string }
         brandId: { type: string }
@@ -7759,10 +7952,14 @@ components:
 
     PricePositionPatch:
       type: object
+      # SKU + companyId sind nach Anlage immutable und werden im Patch-Body
+      # bewusst ausgelassen (auch wenn ein Client sie schickt → ignoriert).
+      # categoryId/subcategoryId dürfen geändert werden, müssen aber immer als
+      # gültiges Paar (Subkategorie gehört zur Kategorie) übergeben werden.
       properties:
-        sku: { type: string }
         name: { type: string }
-        category: { type: string }
+        categoryId: { type: string }
+        subcategoryId: { type: string }
         listPrice: { type: number }
         currency: { type: string }
         status: { type: string, enum: [draft, active, archived] }
@@ -7772,6 +7969,89 @@ components:
           format: date
         brandId: { type: string }
         isStandard: { type: boolean }
+
+    PricingCategory:
+      type: object
+      required: [id, code, name, sortOrder, status, subcategories]
+      properties:
+        id: { type: string }
+        code: { type: string }
+        name: { type: string }
+        sortOrder: { type: integer }
+        status: { type: string, enum: [active, archived] }
+        positionCount:
+          type: integer
+          description: Anzahl Preispositionen, die aktuell auf diese Kategorie verweisen.
+        subcategories:
+          type: array
+          items: { $ref: "#/components/schemas/PricingSubcategory" }
+
+    PricingSubcategory:
+      type: object
+      required: [id, categoryId, code, name, sortOrder, status]
+      properties:
+        id: { type: string }
+        categoryId: { type: string }
+        code: { type: string }
+        name: { type: string }
+        sortOrder: { type: integer }
+        status: { type: string, enum: [active, archived] }
+        positionCount: { type: integer }
+
+    PricingCategoryInput:
+      type: object
+      required: [code, name]
+      properties:
+        code:
+          type: string
+          minLength: 2
+          maxLength: 8
+          pattern: "^[A-Z0-9]+$"
+        name: { type: string, minLength: 1, maxLength: 100 }
+        sortOrder: { type: integer }
+
+    PricingCategoryPatch:
+      type: object
+      properties:
+        code:
+          type: string
+          minLength: 2
+          maxLength: 8
+          pattern: "^[A-Z0-9]+$"
+        name: { type: string, minLength: 1, maxLength: 100 }
+        sortOrder: { type: integer }
+        status: { type: string, enum: [active, archived] }
+
+    PricingSubcategoryInput:
+      type: object
+      required: [code, name]
+      properties:
+        code:
+          type: string
+          minLength: 2
+          maxLength: 8
+          pattern: "^[A-Z0-9]+$"
+        name: { type: string, minLength: 1, maxLength: 100 }
+        sortOrder: { type: integer }
+
+    PricingSubcategoryPatch:
+      type: object
+      properties:
+        code:
+          type: string
+          minLength: 2
+          maxLength: 8
+          pattern: "^[A-Z0-9]+$"
+        name: { type: string, minLength: 1, maxLength: 100 }
+        sortOrder: { type: integer }
+        status: { type: string, enum: [active, archived] }
+
+    PricingSkuPreview:
+      type: object
+      required: [prefix, nextSku]
+      properties:
+        prefix: { type: string }
+        nextSku: { type: string }
 
     PriceRule:
       type: object

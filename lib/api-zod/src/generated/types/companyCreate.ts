@@ -31,4 +31,12 @@ export interface CompanyCreate {
    * @maxLength 3
    */
   currency: string;
+  /**
+   * Optional. Kurzcode für SKU-Präfix. Falls leer, wird beim Backfill automatisch ein Vorschlag aus dem Namen generiert (Tenant-Unique).
+   * @minLength 2
+   * @maxLength 8
+   * @nullable
+   * @pattern ^[A-Z0-9]+$
+   */
+  code?: string | null;
 }
