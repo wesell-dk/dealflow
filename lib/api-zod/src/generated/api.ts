@@ -2445,6 +2445,18 @@ export const GetDealResponse = zod
             .describe(
               "Wenn aus einer Renewal als Folgevertrag erzeugt: id des Vorvertrags.",
             ),
+          sourceOrderConfirmationId: zod
+            .string()
+            .nullish()
+            .describe(
+              "Wenn der Vertrag automatisch aus dem Kunden-Versand einer Auftragsbestätigung (POST \/order-confirmations\/:id\/send) entstanden ist: id der Quell-OC. Pro Tenant ist diese Beziehung 1:1.",
+            ),
+          sourceOrderConfirmationNumber: zod
+            .string()
+            .nullish()
+            .describe(
+              "Lesefreundliche Nummer der Quell-Auftragsbestätigung (gespiegelt für UI-Anzeige; nicht persistiert).",
+            ),
         }),
       ),
       approvals: zod.array(
@@ -4267,6 +4279,18 @@ export const ListContractsResponseItem = zod.object({
     .describe(
       "Wenn aus einer Renewal als Folgevertrag erzeugt: id des Vorvertrags.",
     ),
+  sourceOrderConfirmationId: zod
+    .string()
+    .nullish()
+    .describe(
+      "Wenn der Vertrag automatisch aus dem Kunden-Versand einer Auftragsbestätigung (POST \/order-confirmations\/:id\/send) entstanden ist: id der Quell-OC. Pro Tenant ist diese Beziehung 1:1.",
+    ),
+  sourceOrderConfirmationNumber: zod
+    .string()
+    .nullish()
+    .describe(
+      "Lesefreundliche Nummer der Quell-Auftragsbestätigung (gespiegelt für UI-Anzeige; nicht persistiert).",
+    ),
 });
 export const ListContractsResponse = zod.array(ListContractsResponseItem);
 
@@ -4338,6 +4362,18 @@ export const GetContractResponse = zod
       .nullish()
       .describe(
         "Wenn aus einer Renewal als Folgevertrag erzeugt: id des Vorvertrags.",
+      ),
+    sourceOrderConfirmationId: zod
+      .string()
+      .nullish()
+      .describe(
+        "Wenn der Vertrag automatisch aus dem Kunden-Versand einer Auftragsbestätigung (POST \/order-confirmations\/:id\/send) entstanden ist: id der Quell-OC. Pro Tenant ist diese Beziehung 1:1.",
+      ),
+    sourceOrderConfirmationNumber: zod
+      .string()
+      .nullish()
+      .describe(
+        "Lesefreundliche Nummer der Quell-Auftragsbestätigung (gespiegelt für UI-Anzeige; nicht persistiert).",
       ),
   })
   .and(
@@ -4438,6 +4474,18 @@ export const PatchContractResponse = zod.object({
     .nullish()
     .describe(
       "Wenn aus einer Renewal als Folgevertrag erzeugt: id des Vorvertrags.",
+    ),
+  sourceOrderConfirmationId: zod
+    .string()
+    .nullish()
+    .describe(
+      "Wenn der Vertrag automatisch aus dem Kunden-Versand einer Auftragsbestätigung (POST \/order-confirmations\/:id\/send) entstanden ist: id der Quell-OC. Pro Tenant ist diese Beziehung 1:1.",
+    ),
+  sourceOrderConfirmationNumber: zod
+    .string()
+    .nullish()
+    .describe(
+      "Lesefreundliche Nummer der Quell-Auftragsbestätigung (gespiegelt für UI-Anzeige; nicht persistiert).",
     ),
 });
 
@@ -7881,6 +7929,7 @@ export const ListOrderConfirmationsResponseItem = zod.object({
     "preparing",
     "checks_pending",
     "ready_for_handover",
+    "sent_to_customer",
     "in_onboarding",
     "completed",
   ]),
@@ -7919,6 +7968,7 @@ export const GetOrderConfirmationResponse = zod
       "preparing",
       "checks_pending",
       "ready_for_handover",
+      "sent_to_customer",
       "in_onboarding",
       "completed",
     ]),
@@ -7944,6 +7994,30 @@ export const GetOrderConfirmationResponse = zod
       handoverDeliveryDate: zod.string().nullish(),
       handoverCriticalNotes: zod.string().nullish(),
       handoverReady: zod.boolean().optional(),
+      sentToCustomerAt: zod.coerce
+        .date()
+        .nullish()
+        .describe(
+          "Zeitstempel des Versands an den Kunden (POST \/order-confirmations\/:id\/send).",
+        ),
+      sentToCustomerEmail: zod
+        .string()
+        .nullish()
+        .describe(
+          "Optional protokollierte Empfänger-E-Mail des Kunden-Versands.",
+        ),
+      sentToCustomerNote: zod
+        .string()
+        .nullish()
+        .describe(
+          "Optionaler Vermerk, der mit dem Kunden-Versand mitgeschickt wurde.",
+        ),
+      contractNumber: zod
+        .string()
+        .nullish()
+        .describe(
+          "Nummer\/Titel des verlinkten Vertrags (gesetzt sobald per \/send ein Draft-Vertrag automatisch erzeugt wurde).",
+        ),
       daysSinceHandover: zod.number().nullish(),
       slaDeadline: zod.string().nullish(),
       slaBreached: zod.boolean().optional(),
@@ -7992,6 +8066,7 @@ export const HandoverOrderConfirmationResponse = zod
       "preparing",
       "checks_pending",
       "ready_for_handover",
+      "sent_to_customer",
       "in_onboarding",
       "completed",
     ]),
@@ -8017,6 +8092,30 @@ export const HandoverOrderConfirmationResponse = zod
       handoverDeliveryDate: zod.string().nullish(),
       handoverCriticalNotes: zod.string().nullish(),
       handoverReady: zod.boolean().optional(),
+      sentToCustomerAt: zod.coerce
+        .date()
+        .nullish()
+        .describe(
+          "Zeitstempel des Versands an den Kunden (POST \/order-confirmations\/:id\/send).",
+        ),
+      sentToCustomerEmail: zod
+        .string()
+        .nullish()
+        .describe(
+          "Optional protokollierte Empfänger-E-Mail des Kunden-Versands.",
+        ),
+      sentToCustomerNote: zod
+        .string()
+        .nullish()
+        .describe(
+          "Optionaler Vermerk, der mit dem Kunden-Versand mitgeschickt wurde.",
+        ),
+      contractNumber: zod
+        .string()
+        .nullish()
+        .describe(
+          "Nummer\/Titel des verlinkten Vertrags (gesetzt sobald per \/send ein Draft-Vertrag automatisch erzeugt wurde).",
+        ),
       daysSinceHandover: zod.number().nullish(),
       slaDeadline: zod.string().nullish(),
       slaBreached: zod.boolean().optional(),
@@ -8056,6 +8155,7 @@ export const CompleteOrderConfirmationResponse = zod
       "preparing",
       "checks_pending",
       "ready_for_handover",
+      "sent_to_customer",
       "in_onboarding",
       "completed",
     ]),
@@ -8081,6 +8181,139 @@ export const CompleteOrderConfirmationResponse = zod
       handoverDeliveryDate: zod.string().nullish(),
       handoverCriticalNotes: zod.string().nullish(),
       handoverReady: zod.boolean().optional(),
+      sentToCustomerAt: zod.coerce
+        .date()
+        .nullish()
+        .describe(
+          "Zeitstempel des Versands an den Kunden (POST \/order-confirmations\/:id\/send).",
+        ),
+      sentToCustomerEmail: zod
+        .string()
+        .nullish()
+        .describe(
+          "Optional protokollierte Empfänger-E-Mail des Kunden-Versands.",
+        ),
+      sentToCustomerNote: zod
+        .string()
+        .nullish()
+        .describe(
+          "Optionaler Vermerk, der mit dem Kunden-Versand mitgeschickt wurde.",
+        ),
+      contractNumber: zod
+        .string()
+        .nullish()
+        .describe(
+          "Nummer\/Titel des verlinkten Vertrags (gesetzt sobald per \/send ein Draft-Vertrag automatisch erzeugt wurde).",
+        ),
+      daysSinceHandover: zod.number().nullish(),
+      slaDeadline: zod.string().nullish(),
+      slaBreached: zod.boolean().optional(),
+      escalations: zod.array(
+        zod.object({
+          checkId: zod.string(),
+          label: zod.string(),
+          reason: zod.string(),
+        }),
+      ),
+      checks: zod.array(
+        zod.object({
+          id: zod.string(),
+          label: zod.string(),
+          status: zod.string(),
+          required: zod.boolean(),
+          detail: zod.string().nullish(),
+        }),
+      ),
+    }),
+  );
+
+/**
+ * @summary Versendet die Auftragsbestätigung an den Kunden (Statuswechsel auf sent_to_customer) und erzeugt idempotent einen Vertrags-Draft, der via sourceOrderConfirmationId zurück verlinkt ist.
+ */
+export const SendOrderConfirmationToCustomerParams = zod.object({
+  id: zod.coerce.string(),
+});
+
+export const SendOrderConfirmationToCustomerBody = zod
+  .object({
+    recipientEmail: zod
+      .string()
+      .nullish()
+      .describe(
+        "Optionale Empfänger-E-Mail beim Kunden (rein dokumentarisch).",
+      ),
+    note: zod
+      .string()
+      .nullish()
+      .describe("Optionaler Vermerk, der mit dem Versand abgespeichert wird."),
+  })
+  .describe(
+    "Eingabe für POST \/order-confirmations\/:id\/send. Beide Felder optional — ohne Recipient-Email wird der Versand nur intern protokolliert.",
+  );
+
+export const SendOrderConfirmationToCustomerResponse = zod
+  .object({
+    id: zod.string(),
+    dealId: zod.string(),
+    dealName: zod.string(),
+    contractId: zod.string().nullish(),
+    sourceQuoteId: zod.string().nullish(),
+    sourceQuoteNumber: zod.string().nullish(),
+    number: zod.string(),
+    status: zod.enum([
+      "preparing",
+      "checks_pending",
+      "ready_for_handover",
+      "sent_to_customer",
+      "in_onboarding",
+      "completed",
+    ]),
+    readinessScore: zod.number(),
+    totalAmount: zod.number(),
+    currency: zod.string(),
+    expectedDelivery: zod.string().nullish(),
+    handoverAt: zod.string().nullish(),
+    salesOwnerId: zod.string().nullish(),
+    salesOwnerName: zod.string().nullish(),
+    onboardingOwnerId: zod.string().nullish(),
+    onboardingOwnerName: zod.string().nullish(),
+    handoverStartedAt: zod.string().nullish(),
+    slaDays: zod.number(),
+    activeOwner: zod.enum(["sales", "onboarding"]).optional(),
+    createdAt: zod.coerce.date(),
+  })
+  .and(
+    zod.object({
+      handoverNote: zod.string().nullish(),
+      handoverContact: zod.string().nullish(),
+      handoverContactEmail: zod.string().nullish(),
+      handoverDeliveryDate: zod.string().nullish(),
+      handoverCriticalNotes: zod.string().nullish(),
+      handoverReady: zod.boolean().optional(),
+      sentToCustomerAt: zod.coerce
+        .date()
+        .nullish()
+        .describe(
+          "Zeitstempel des Versands an den Kunden (POST \/order-confirmations\/:id\/send).",
+        ),
+      sentToCustomerEmail: zod
+        .string()
+        .nullish()
+        .describe(
+          "Optional protokollierte Empfänger-E-Mail des Kunden-Versands.",
+        ),
+      sentToCustomerNote: zod
+        .string()
+        .nullish()
+        .describe(
+          "Optionaler Vermerk, der mit dem Kunden-Versand mitgeschickt wurde.",
+        ),
+      contractNumber: zod
+        .string()
+        .nullish()
+        .describe(
+          "Nummer\/Titel des verlinkten Vertrags (gesetzt sobald per \/send ein Draft-Vertrag automatisch erzeugt wurde).",
+        ),
       daysSinceHandover: zod.number().nullish(),
       slaDeadline: zod.string().nullish(),
       slaBreached: zod.boolean().optional(),

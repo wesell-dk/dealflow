@@ -23,6 +23,26 @@ export type OrderConfirmationDetail = OrderConfirmation & {
   /** @nullable */
   handoverCriticalNotes?: string | null;
   handoverReady?: boolean;
+  /**
+   * Zeitstempel des Versands an den Kunden (POST /order-confirmations/:id/send).
+   * @nullable
+   */
+  sentToCustomerAt?: Date | null;
+  /**
+   * Optional protokollierte Empfänger-E-Mail des Kunden-Versands.
+   * @nullable
+   */
+  sentToCustomerEmail?: string | null;
+  /**
+   * Optionaler Vermerk, der mit dem Kunden-Versand mitgeschickt wurde.
+   * @nullable
+   */
+  sentToCustomerNote?: string | null;
+  /**
+   * Nummer/Titel des verlinkten Vertrags (gesetzt sobald per /send ein Draft-Vertrag automatisch erzeugt wurde).
+   * @nullable
+   */
+  contractNumber?: string | null;
   /** @nullable */
   daysSinceHandover?: number | null;
   /** @nullable */

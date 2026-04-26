@@ -799,6 +799,11 @@ export const contractsTable = pgTable("contracts", {
   // zu machen und 2) beim Signieren des Folgevertrags die Renewal automatisch
   // auf "won" zu schalten (siehe POST /renewals/:id/issue-followup).
   predecessorContractId: text("predecessor_contract_id"),
+  // Verweis auf die Auftragsbestätigung, aus der dieser Vertrag (Draft) per
+  // POST /order-confirmations/:id/send automatisch angelegt wurde. Wird für
+  // die Idempotenz der Auto-Anlage genutzt (ein OC darf höchstens einen
+  // Draft erzeugen) und um den Vertrag im UI bidirektional zu verlinken.
+  sourceOrderConfirmationId: text("source_order_confirmation_id"),
 }, (t) => ({
   // Pro Tenant darf jeder Vorvertrag nur EINEN Folgevertrag-Draft haben — sonst
   // gäbe es bei zwei parallelen "Folgevertrag anlegen"-Klicks zwei Drafts und
@@ -806,6 +811,12 @@ export const contractsTable = pgTable("contracts", {
   // NULL als distinct, daher konstrainen wir nur effektiv die Folgeverträge.
   predecessorUq: uniqueIndex("contracts_tenant_predecessor_uq")
     .on(t.tenantId, t.predecessorContractId),
+  // Pro Tenant darf jede Auftragsbestätigung höchstens einen Vertrag-Draft
+  // automatisch erzeugen (siehe POST /order-confirmations/:id/send). NULL ist
+  // in Postgres distinct, daher constrained dies nur tatsächlich verlinkte
+  // Verträge.
+  sourceOcUq: uniqueIndex("contracts_tenant_source_oc_uq")
+    .on(t.tenantId, t.sourceOrderConfirmationId),
 }));
 
 export const contractTypesTable = pgTable("contract_types", {
@@ -1328,6 +1339,12 @@ export const orderConfirmationsTable = pgTable("order_confirmations", {
   handoverCriticalNotes: text("handover_critical_notes"),
   slaDays: integer("sla_days").notNull().default(7),
   completedAt: timestamp("completed_at", { withTimezone: true }),
+  // Wann wurde die Auftragsbestätigung an den Kunden versendet (Statuswechsel
+  // ready_for_handover → sent_to_customer via POST /order-confirmations/:id/send)?
+  // Nur dokumentarisch — kein echtes E-Mail-Versenden im MVP.
+  sentToCustomerAt: timestamp("sent_to_customer_at", { withTimezone: true }),
+  sentToCustomerEmail: text("sent_to_customer_email"),
+  sentToCustomerNote: text("sent_to_customer_note"),
   createdAt: ts("created_at"),
 });
 

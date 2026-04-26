@@ -274,6 +274,32 @@ export async function ensureSchemaColumns(): Promise<void> {
     CREATE UNIQUE INDEX IF NOT EXISTS "companies_tenant_code_uniq"
       ON "companies" ("tenant_id", "code") WHERE "code" IS NOT NULL
   `);
+  // Task #237: Reverse OC↔Contract creation order. Auf älteren DBs fehlen
+  // diese Spalten noch — wir legen sie idempotent an, damit der reversierte
+  // Flow (OC → send → Vertrags-Draft) ohne `db push` läuft.
+  await db.execute(
+    sql`ALTER TABLE "contracts" ADD COLUMN IF NOT EXISTS "source_order_confirmation_id" text`,
+  );
+  await db.execute(
+    sql`CREATE UNIQUE INDEX IF NOT EXISTS "contracts_tenant_source_oc_uq" ON "contracts" ("tenant_id", "source_order_confirmation_id")`,
+  );
+  await db.execute(
+    sql`ALTER TABLE "order_confirmations" ADD COLUMN IF NOT EXISTS "sent_to_customer_at" timestamp with time zone`,
+  );
+  await db.execute(
+    sql`ALTER TABLE "order_confirmations" ADD COLUMN IF NOT EXISTS "sent_to_customer_email" text`,
+  );
+  await db.execute(
+    sql`ALTER TABLE "order_confirmations" ADD COLUMN IF NOT EXISTS "sent_to_customer_note" text`,
+  );
+  // Task #237: Negotiation-Konkludieren ergänzt outcome + concludedAt. Ältere
+  // Datenbanken haben diese Spalten noch nicht — idempotent ergänzen.
+  await db.execute(
+    sql`ALTER TABLE "negotiations" ADD COLUMN IF NOT EXISTS "outcome" text`,
+  );
+  await db.execute(
+    sql`ALTER TABLE "negotiations" ADD COLUMN IF NOT EXISTS "concluded_at" timestamp with time zone`,
+  );
 }
 
 export async function seedIfEmpty(): Promise<void> {

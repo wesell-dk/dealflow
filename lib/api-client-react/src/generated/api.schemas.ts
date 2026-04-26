@@ -1910,6 +1910,16 @@ export interface Contract {
    * @nullable
    */
   predecessorContractId?: string | null;
+  /**
+   * Wenn der Vertrag automatisch aus dem Kunden-Versand einer Auftragsbestätigung (POST /order-confirmations/:id/send) entstanden ist: id der Quell-OC. Pro Tenant ist diese Beziehung 1:1.
+   * @nullable
+   */
+  sourceOrderConfirmationId?: string | null;
+  /**
+   * Lesefreundliche Nummer der Quell-Auftragsbestätigung (gespiegelt für UI-Anzeige; nicht persistiert).
+   * @nullable
+   */
+  sourceOrderConfirmationNumber?: string | null;
 }
 
 export type ApprovalStageStatus =
@@ -4775,6 +4785,7 @@ export const OrderConfirmationStatus = {
   preparing: "preparing",
   checks_pending: "checks_pending",
   ready_for_handover: "ready_for_handover",
+  sent_to_customer: "sent_to_customer",
   in_onboarding: "in_onboarding",
   completed: "completed",
 } as const;
@@ -4848,6 +4859,26 @@ export type OrderConfirmationDetail = OrderConfirmation & {
   /** @nullable */
   handoverCriticalNotes?: string | null;
   handoverReady?: boolean;
+  /**
+   * Zeitstempel des Versands an den Kunden (POST /order-confirmations/:id/send).
+   * @nullable
+   */
+  sentToCustomerAt?: string | null;
+  /**
+   * Optional protokollierte Empfänger-E-Mail des Kunden-Versands.
+   * @nullable
+   */
+  sentToCustomerEmail?: string | null;
+  /**
+   * Optionaler Vermerk, der mit dem Kunden-Versand mitgeschickt wurde.
+   * @nullable
+   */
+  sentToCustomerNote?: string | null;
+  /**
+   * Nummer/Titel des verlinkten Vertrags (gesetzt sobald per /send ein Draft-Vertrag automatisch erzeugt wurde).
+   * @nullable
+   */
+  contractNumber?: string | null;
   /** @nullable */
   daysSinceHandover?: number | null;
   /** @nullable */
@@ -4856,6 +4887,22 @@ export type OrderConfirmationDetail = OrderConfirmation & {
   escalations: OrderConfirmationDetailEscalationsItem[];
   checks: OrderConfirmationDetailChecksItem[];
 };
+
+/**
+ * Eingabe für POST /order-confirmations/:id/send. Beide Felder optional — ohne Recipient-Email wird der Versand nur intern protokolliert.
+ */
+export interface OrderConfirmationSendInput {
+  /**
+   * Optionale Empfänger-E-Mail beim Kunden (rein dokumentarisch).
+   * @nullable
+   */
+  recipientEmail?: string | null;
+  /**
+   * Optionaler Vermerk, der mit dem Versand abgespeichert wird.
+   * @nullable
+   */
+  note?: string | null;
+}
 
 export interface QuoteConvertToOrderInput {
   /**

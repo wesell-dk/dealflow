@@ -5,6 +5,7 @@ import {
   useGetOrderConfirmation,
   useHandoverOrderConfirmation,
   useCompleteOrderConfirmation,
+  useSendOrderConfirmationToCustomer,
   useListUsers,
   getGetOrderConfirmationQueryKey,
 } from "@workspace/api-client-react";
@@ -26,10 +27,20 @@ import {
 } from "@/components/ui/dialog";
 import {
   ArrowLeft, CheckCircle2, AlertTriangle, XCircle, Clock,
-  ArrowRightCircle, UserCheck, Timer, AlertOctagon, Flag, CheckCheck,
+  ArrowRightCircle, UserCheck, Timer, AlertOctagon, Flag, CheckCheck, Send,
+  FileText,
 } from "lucide-react";
 
-const STEPS = ["preparing", "checks_pending", "ready_for_handover", "in_onboarding", "completed"] as const;
+// Task #237: Statuskette enthält jetzt sent_to_customer zwischen
+// ready_for_handover und in_onboarding (Send → Vertrag-Draft entsteht).
+const STEPS = [
+  "preparing",
+  "checks_pending",
+  "ready_for_handover",
+  "sent_to_customer",
+  "in_onboarding",
+  "completed",
+] as const;
 type Step = typeof STEPS[number];
 
 const checkIcon = (status: string) => {
@@ -41,7 +52,7 @@ const checkIcon = (status: string) => {
 
 const statusVariant = (s: string): "default" | "secondary" | "destructive" | "outline" => {
   if (s === "completed" || s === "in_onboarding") return "default";
-  if (s === "ready_for_handover") return "secondary";
+  if (s === "sent_to_customer" || s === "ready_for_handover") return "secondary";
   if (s === "checks_pending") return "outline";
   return "outline";
 };
@@ -55,6 +66,7 @@ export default function OrderConfirmationDetail() {
   const { data: users } = useListUsers();
   const handover = useHandoverOrderConfirmation();
   const complete = useCompleteOrderConfirmation();
+  const send = useSendOrderConfirmationToCustomer();
 
   const [dialogOpen, setDialogOpen] = useState(false);
   const [form, setForm] = useState({
@@ -65,12 +77,21 @@ export default function OrderConfirmationDetail() {
     note: "",
     criticalNotes: "",
   });
+  const [sendOpen, setSendOpen] = useState(false);
+  const [sendForm, setSendForm] = useState({ recipientEmail: "", note: "" });
 
   if (isLoading) return <p className="text-sm text-muted-foreground">{t("common.loading")}</p>;
   if (!data) return <p className="text-sm text-muted-foreground">{t("common.noData")}</p>;
 
   const currentStepIdx = STEPS.indexOf(data.status as Step);
-  const handoverAllowed = data.status === "ready_for_handover" || data.status === "checks_pending";
+  // Task #237: Send ist nur ab ready_for_handover möglich (Pflicht-Checks ok).
+  const canSend = data.status === "ready_for_handover" && data.handoverReady;
+  // Handover ist ab sent_to_customer möglich; ältere Statuswerte bleiben für
+  // Backwards-Compat erlaubt, falls /send (z. B. via API) übersprungen wurde.
+  const handoverAllowed =
+    data.status === "sent_to_customer" ||
+    data.status === "ready_for_handover" ||
+    data.status === "checks_pending";
   const canHandover = handoverAllowed && data.handoverReady;
   const canComplete = data.status === "in_onboarding";
 
@@ -79,6 +100,19 @@ export default function OrderConfirmationDetail() {
     await handover.mutateAsync({ id, data: form });
     qc.invalidateQueries({ queryKey: getGetOrderConfirmationQueryKey(id) });
     setDialogOpen(false);
+  };
+
+  const submitSend = async () => {
+    await send.mutateAsync({
+      id,
+      data: {
+        recipientEmail: sendForm.recipientEmail.trim() || null,
+        note: sendForm.note.trim() || null,
+      },
+    });
+    qc.invalidateQueries({ queryKey: getGetOrderConfirmationQueryKey(id) });
+    setSendOpen(false);
+    setSendForm({ recipientEmail: "", note: "" });
   };
 
   const doComplete = async () => {
@@ -125,9 +159,75 @@ export default function OrderConfirmationDetail() {
                 </Link>
               </>
             )}
+            {data.contractId && data.contractNumber && (
+              <>
+                {" · "}
+                <Link
+                  href={`/contracts/${data.contractId}`}
+                  className="underline hover:text-foreground"
+                  data-testid="oc-linked-contract-link"
+                >
+                  <FileText className="inline h-3.5 w-3.5 mr-1" />
+                  {data.contractNumber}
+                </Link>
+              </>
+            )}
           </p>
         </div>
-        {(data.status === "preparing" || data.status === "checks_pending" || data.status === "ready_for_handover") && (
+        {/* Task #237: Send-to-customer Aktion (legt Vertrag-Draft an) */}
+        {(data.status === "ready_for_handover" || data.status === "sent_to_customer") && (
+          <Dialog open={sendOpen} onOpenChange={setSendOpen}>
+            <DialogTrigger asChild>
+              <Button
+                variant={data.status === "sent_to_customer" ? "outline" : "default"}
+                disabled={data.status === "sent_to_customer" || !canSend}
+                data-testid="oc-send-button"
+                title={data.status === "sent_to_customer"
+                  ? t("pages.orderConfirmations.alreadySent")
+                  : !canSend ? t("pages.orderConfirmations.handoverBlocked") : undefined}
+              >
+                <Send className="h-4 w-4 mr-2" />
+                {data.status === "sent_to_customer"
+                  ? t("pages.orderConfirmations.sentToCustomer")
+                  : t("pages.orderConfirmations.sendToCustomer")}
+              </Button>
+            </DialogTrigger>
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>{t("pages.orderConfirmations.sendDialogTitle")}</DialogTitle>
+                <DialogDescription>{t("pages.orderConfirmations.sendDialogDescription")}</DialogDescription>
+              </DialogHeader>
+              <div className="grid gap-3 py-2">
+                <div className="grid gap-1.5">
+                  <Label>{t("pages.orderConfirmations.recipientEmail")}</Label>
+                  <Input
+                    type="email"
+                    value={sendForm.recipientEmail}
+                    onChange={e => setSendForm({ ...sendForm, recipientEmail: e.target.value })}
+                    placeholder="customer@example.com"
+                    data-testid="oc-send-recipient-input"
+                  />
+                </div>
+                <div className="grid gap-1.5">
+                  <Label>{t("pages.orderConfirmations.sendNote")}</Label>
+                  <Textarea
+                    rows={2}
+                    value={sendForm.note}
+                    onChange={e => setSendForm({ ...sendForm, note: e.target.value })}
+                    data-testid="oc-send-note-input"
+                  />
+                </div>
+              </div>
+              <DialogFooter>
+                <Button variant="ghost" onClick={() => setSendOpen(false)}>{t("common.cancel")}</Button>
+                <Button onClick={submitSend} disabled={send.isPending} data-testid="oc-send-confirm">
+                  {t("pages.orderConfirmations.confirmSend")}
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+        )}
+        {(data.status === "preparing" || data.status === "checks_pending" || data.status === "ready_for_handover" || data.status === "sent_to_customer") && (
           <Dialog open={dialogOpen} onOpenChange={(o) => canHandover && setDialogOpen(o)}>
             <DialogTrigger asChild>
               <Button

@@ -245,6 +245,7 @@ import type {
   OrderConfirmation,
   OrderConfirmationDetail,
   OrderConfirmationHandoverInput,
+  OrderConfirmationSendInput,
   PatchAmendmentInput,
   PerformanceReport,
   PermissionCatalogEntry,
@@ -17849,6 +17850,99 @@ export const useCompleteOrderConfirmation = <
   TContext
 > => {
   return useMutation(getCompleteOrderConfirmationMutationOptions(options));
+};
+
+/**
+ * @summary Versendet die Auftragsbestätigung an den Kunden (Statuswechsel auf sent_to_customer) und erzeugt idempotent einen Vertrags-Draft, der via sourceOrderConfirmationId zurück verlinkt ist.
+ */
+export const getSendOrderConfirmationToCustomerUrl = (id: string) => {
+  return `/api/v1/order-confirmations/${id}/send`;
+};
+
+export const sendOrderConfirmationToCustomer = async (
+  id: string,
+  orderConfirmationSendInput?: OrderConfirmationSendInput,
+  options?: RequestInit,
+): Promise<OrderConfirmationDetail> => {
+  return customFetch<OrderConfirmationDetail>(
+    getSendOrderConfirmationToCustomerUrl(id),
+    {
+      ...options,
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...options?.headers },
+      body: JSON.stringify(orderConfirmationSendInput),
+    },
+  );
+};
+
+export const getSendOrderConfirmationToCustomerMutationOptions = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof sendOrderConfirmationToCustomer>>,
+    TError,
+    { id: string; data: BodyType<OrderConfirmationSendInput> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof sendOrderConfirmationToCustomer>>,
+  TError,
+  { id: string; data: BodyType<OrderConfirmationSendInput> },
+  TContext
+> => {
+  const mutationKey = ["sendOrderConfirmationToCustomer"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof sendOrderConfirmationToCustomer>>,
+    { id: string; data: BodyType<OrderConfirmationSendInput> }
+  > = (props) => {
+    const { id, data } = props ?? {};
+
+    return sendOrderConfirmationToCustomer(id, data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type SendOrderConfirmationToCustomerMutationResult = NonNullable<
+  Awaited<ReturnType<typeof sendOrderConfirmationToCustomer>>
+>;
+export type SendOrderConfirmationToCustomerMutationBody =
+  BodyType<OrderConfirmationSendInput>;
+export type SendOrderConfirmationToCustomerMutationError = ErrorType<void>;
+
+/**
+ * @summary Versendet die Auftragsbestätigung an den Kunden (Statuswechsel auf sent_to_customer) und erzeugt idempotent einen Vertrags-Draft, der via sourceOrderConfirmationId zurück verlinkt ist.
+ */
+export const useSendOrderConfirmationToCustomer = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof sendOrderConfirmationToCustomer>>,
+    TError,
+    { id: string; data: BodyType<OrderConfirmationSendInput> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof sendOrderConfirmationToCustomer>>,
+  TError,
+  { id: string; data: BodyType<OrderConfirmationSendInput> },
+  TContext
+> => {
+  return useMutation(
+    getSendOrderConfirmationToCustomerMutationOptions(options),
+  );
 };
 
 export const getSearchGdprSubjectsUrl = (params?: SearchGdprSubjectsParams) => {

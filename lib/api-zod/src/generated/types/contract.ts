@@ -40,4 +40,14 @@ export interface Contract {
    * @nullable
    */
   predecessorContractId?: string | null;
+  /**
+   * Wenn der Vertrag automatisch aus dem Kunden-Versand einer Auftragsbestätigung (POST /order-confirmations/:id/send) entstanden ist: id der Quell-OC. Pro Tenant ist diese Beziehung 1:1.
+   * @nullable
+   */
+  sourceOrderConfirmationId?: string | null;
+  /**
+   * Lesefreundliche Nummer der Quell-Auftragsbestätigung (gespiegelt für UI-Anzeige; nicht persistiert).
+   * @nullable
+   */
+  sourceOrderConfirmationNumber?: string | null;
 }

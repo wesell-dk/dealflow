@@ -454,6 +454,7 @@ export * from "./orderConfirmationDetail";
 export * from "./orderConfirmationDetailChecksItem";
 export * from "./orderConfirmationDetailEscalationsItem";
 export * from "./orderConfirmationHandoverInput";
+export * from "./orderConfirmationSendInput";
 export * from "./orderConfirmationStatus";
 export * from "./patchAmendmentInput";
 export * from "./performanceReport";

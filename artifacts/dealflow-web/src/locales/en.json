@@ -462,6 +462,8 @@
       "noAttachments": "No attachments on this version.",
       "languageChanged": "Quote language updated",
       "convertToOrder": "Convert to order",
+      "ocPendingNegotiation": "OC pending negotiation",
+      "ocPendingNegotiationHint": "An active negotiation blocks the automatic order confirmation. It will be created once the negotiation is concluded (accepted).",
       "convertDialogTitle": "Convert quote to order",
       "convertDialogDescription": "A new order confirmation will be created from this accepted quote. Amount and terms are taken from the current version.",
       "convertExpectedDelivery": "Expected delivery date (optional)",
@@ -1175,8 +1177,8 @@
       "title": "Order Confirmations",
       "subtitle": "Confirmed orders and onboarding handover",
       "emptyTitle": "No order confirmations yet",
-      "emptyBody": "Order confirmations are created automatically from signed contracts that pass all required checks.",
-      "emptyHint": "Tip: once a contract is signed and all onboarding prerequisites are met, a new confirmation appears here.",
+      "emptyBody": "Order confirmations are created automatically from accepted quotes — once no negotiation is still open.",
+      "emptyHint": "Tip: accept a quote or conclude an active negotiation to see a new confirmation here.",
       "searchPlaceholder": "Search by number or deal…",
       "create": "New Order Confirmation",
       "handover": "Handover",
@@ -1215,6 +1217,7 @@
         "preparing": "Preparing",
         "checks_pending": "Checks pending",
         "ready_for_handover": "Ready for handover",
+        "sent_to_customer": "Sent to customer",
         "in_onboarding": "In onboarding",
         "completed": "Completed"
       },
@@ -1224,6 +1227,14 @@
         "blocked": "Blocked",
         "pending": "Pending"
       },
+      "sendToCustomer": "Send to customer",
+      "sentToCustomer": "Sent to customer",
+      "alreadySent": "This confirmation has already been sent to the customer.",
+      "sendDialogTitle": "Send order confirmation to customer",
+      "sendDialogDescription": "Marks the confirmation as sent and automatically creates a draft contract that stays linked here.",
+      "recipientEmail": "Recipient email (optional)",
+      "sendNote": "Note (optional)",
+      "confirmSend": "Confirm send",
       "noConfirmations": "No order confirmations yet"
     },
     "copilot": {

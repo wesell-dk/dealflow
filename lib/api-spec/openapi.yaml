@@ -4215,6 +4215,33 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/OrderConfirmationDetail" }
 
+  /order-confirmations/{id}/send:
+    post:
+      operationId: sendOrderConfirmationToCustomer
+      tags: [orderConfirmations]
+      summary: >-
+        Versendet die Auftragsbestätigung an den Kunden (Statuswechsel auf
+        sent_to_customer) und erzeugt idempotent einen Vertrags-Draft, der via
+        sourceOrderConfirmationId zurück verlinkt ist.
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/OrderConfirmationSendInput" }
+      responses:
+        "200":
+          description: ok
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/OrderConfirmationDetail" }
+        "409":
+          description: status transition not allowed (e.g. handover already started)
+
   /gdpr/subjects:
     get:
       operationId: searchGdprSubjects
@@ -8513,6 +8540,17 @@ components:
         predecessorContractId:
           type: ["string", "null"]
           description: "Wenn aus einer Renewal als Folgevertrag erzeugt: id des Vorvertrags."
+        sourceOrderConfirmationId:
+          type: ["string", "null"]
+          description: >-
+            Wenn der Vertrag automatisch aus dem Kunden-Versand einer
+            Auftragsbestätigung (POST /order-confirmations/:id/send) entstanden
+            ist: id der Quell-OC. Pro Tenant ist diese Beziehung 1:1.
+        sourceOrderConfirmationNumber:
+          type: ["string", "null"]
+          description: >-
+            Lesefreundliche Nummer der Quell-Auftragsbestätigung (gespiegelt
+            für UI-Anzeige; nicht persistiert).
 
     ContractInput:
       type: object
@@ -10387,7 +10425,7 @@ components:
         number: { type: string }
         status:
           type: string
-          enum: [preparing, checks_pending, ready_for_handover, in_onboarding, completed]
+          enum: [preparing, checks_pending, ready_for_handover, sent_to_customer, in_onboarding, completed]
         readinessScore: { type: integer }
         totalAmount: { type: number }
         currency: { type: string }
@@ -10428,6 +10466,22 @@ components:
             handoverCriticalNotes:
               type: ["string", "null"]
             handoverReady: { type: boolean }
+            sentToCustomerAt:
+              type: ["string", "null"]
+              format: date-time
+              description: >-
+                Zeitstempel des Versands an den Kunden (POST /order-confirmations/:id/send).
+            sentToCustomerEmail:
+              type: ["string", "null"]
+              description: Optional protokollierte Empfänger-E-Mail des Kunden-Versands.
+            sentToCustomerNote:
+              type: ["string", "null"]
+              description: Optionaler Vermerk, der mit dem Kunden-Versand mitgeschickt wurde.
+            contractNumber:
+              type: ["string", "null"]
+              description: >-
+                Nummer/Titel des verlinkten Vertrags (gesetzt sobald per /send ein
+                Draft-Vertrag automatisch erzeugt wurde).
             daysSinceHandover:
               type: ["integer", "null"]
             slaDeadline:
@@ -10454,6 +10508,19 @@ components:
                   required: { type: boolean }
                   detail:
                     type: ["string", "null"]
+
+    OrderConfirmationSendInput:
+      type: object
+      description: >-
+        Eingabe für POST /order-confirmations/:id/send. Beide Felder optional —
+        ohne Recipient-Email wird der Versand nur intern protokolliert.
+      properties:
+        recipientEmail:
+          type: ["string", "null"]
+          description: Optionale Empfänger-E-Mail beim Kunden (rein dokumentarisch).
+        note:
+          type: ["string", "null"]
+          description: Optionaler Vermerk, der mit dem Versand abgespeichert wird.
 
     QuoteConvertToOrderInput:
       type: object

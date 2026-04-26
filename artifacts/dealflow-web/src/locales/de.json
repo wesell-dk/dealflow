@@ -462,6 +462,8 @@
       "noAttachments": "Keine Anhänge an diese Version gehängt.",
       "languageChanged": "Angebotssprache aktualisiert",
       "convertToOrder": "In Auftrag umwandeln",
+      "ocPendingNegotiation": "OC wartet auf Verhandlungsende",
+      "ocPendingNegotiationHint": "Eine aktive Verhandlung blockiert die automatische Auftragsbestätigung. Beim Abschluss (akzeptiert) wird sie nachträglich erzeugt.",
       "convertDialogTitle": "Angebot in Auftrag umwandeln",
       "convertDialogDescription": "Aus diesem angenommenen Angebot wird eine neue Auftragsbestätigung erstellt. Betrag und Konditionen werden aus der aktuellen Version übernommen.",
       "convertExpectedDelivery": "Voraussichtlicher Liefertermin (optional)",
@@ -1221,6 +1223,7 @@
         "preparing": "In Vorbereitung",
         "checks_pending": "Prüfungen offen",
         "ready_for_handover": "Bereit zur Übergabe",
+        "sent_to_customer": "An Kunden versandt",
         "in_onboarding": "Im Onboarding",
         "completed": "Abgeschlossen"
       },
@@ -1230,10 +1233,18 @@
         "blocked": "Blockiert",
         "pending": "Offen"
       },
+      "sendToCustomer": "An Kunden senden",
+      "sentToCustomer": "An Kunden versandt",
+      "alreadySent": "Diese Bestätigung wurde bereits an den Kunden versandt.",
+      "sendDialogTitle": "Auftragsbestätigung an Kunden senden",
+      "sendDialogDescription": "Markiert die Bestätigung als versandt und legt automatisch einen Vertrags-Draft an, der hier verlinkt bleibt.",
+      "recipientEmail": "Empfänger-E-Mail (optional)",
+      "sendNote": "Notiz (optional)",
+      "confirmSend": "Senden bestätigen",
       "noConfirmations": "Noch keine Auftragsbestätigungen vorhanden",
       "emptyTitle": "Noch keine Auftragsbestätigungen",
-      "emptyBody": "Auftragsbestätigungen entstehen automatisch aus signierten Verträgen mit allen erforderlichen Pflicht-Checks.",
-      "emptyHint": "Tipp: Sobald ein Vertrag signiert ist und alle Onboarding-Voraussetzungen erfüllt sind, erscheint hier eine neue Bestätigung.",
+      "emptyBody": "Auftragsbestätigungen entstehen automatisch aus akzeptierten Angeboten — sobald keine offene Verhandlung mehr läuft.",
+      "emptyHint": "Tipp: Akzeptiere ein Angebot oder schließe eine laufende Verhandlung ab, um hier eine neue Bestätigung zu erhalten.",
       "searchPlaceholder": "Nach Nummer oder Deal suchen…"
     },
     "copilot": {

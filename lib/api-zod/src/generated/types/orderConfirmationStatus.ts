@@ -15,6 +15,7 @@ export const OrderConfirmationStatus = {
   preparing: "preparing",
   checks_pending: "checks_pending",
   ready_for_handover: "ready_for_handover",
+  sent_to_customer: "sent_to_customer",
   in_onboarding: "in_onboarding",
   completed: "completed",
 } as const;

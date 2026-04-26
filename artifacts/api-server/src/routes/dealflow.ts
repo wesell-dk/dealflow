@@ -4217,43 +4217,45 @@ router.post('/quotes/:id/versions', async (req, res) => {
   });
 });
 
-router.post('/quotes/:id/convert-to-order', async (req, res) => {
-  if (!validateInline(req, res, { params: Z.ConvertQuoteToOrderParams, body: Z.ConvertQuoteToOrderBody })) return;
-  const [q] = await db.select().from(quotesTable).where(eq(quotesTable.id, req.params.id));
-  if (!q) { res.status(404).json({ error: 'not found' }); return; }
-  if (!(await gateDeal(req, res, q.dealId))) return;
-  if (q.status !== 'accepted') {
-    res.status(409).json({ error: `quote status must be "accepted" (current: "${q.status}")` });
-    return;
-  }
-  const body = (req.body ?? {}) as { expectedDelivery?: string | null; force?: boolean };
-  const force = body.force === true;
-  const expectedDelivery = body.expectedDelivery && String(body.expectedDelivery).trim().length > 0
-    ? String(body.expectedDelivery)
-    : null;
-
-  // Bestehende Auftragsbestätigung aus diesem Angebot finden — Idempotenz/Doppelklick-Schutz.
+/**
+ * Erzeugt aus einem akzeptierten Angebot idempotent eine Auftragsbestätigung.
+ *
+ * Idempotenz-Anker = `sourceQuoteId`. Existiert bereits eine OC zu diesem
+ * Angebot, wird sie zurückgegeben (created=false), ohne dass eine neue Zeile
+ * eingefügt wird. Der Aufrufer entscheidet, ob das ein 409-Fehler oder ein
+ * stilles Re-Use ist (Auto-Pfade nutzen Re-Use).
+ *
+ * Aufrufer (Task #237 — reversierter OC↔Vertrag-Flow):
+ *  - POST /quotes/:id/convert-to-order        (manueller Trigger; Fallback)
+ *  - applyQuoteAccepted (kein aktive Negotiation)
+ *  - POST /negotiations/:id/conclude (outcome=accepted)
+ */
+async function createOcFromQuote(
+  req: Request,
+  q: typeof quotesTable.$inferSelect,
+  opts: {
+    expectedDelivery?: string | null;
+    trigger: 'manual_convert' | 'quote_accepted' | 'negotiation_concluded';
+  },
+): Promise<{
+  oc: typeof orderConfirmationsTable.$inferSelect;
+  created: boolean;
+}> {
   const existingForQuote = await db.select().from(orderConfirmationsTable)
     .where(eq(orderConfirmationsTable.sourceQuoteId, q.id))
     .orderBy(desc(orderConfirmationsTable.createdAt));
-  if (existingForQuote.length > 0 && !force) {
-    const ex = existingForQuote[0]!;
-    const dealMap = await getDealMap();
-    const userMap = await getUserMap(getScope(req).tenantId);
-    res.status(409).json({
-      error: 'order confirmation already exists for this quote',
-      existing: mapOC(ex, dealMap.get(ex.dealId)?.name ?? 'Unknown', userMap, q.number),
-    });
-    return;
+  if (existingForQuote.length > 0) {
+    return { oc: existingForQuote[0]!, created: false };
   }
 
-  // Quelle: aktuelle Version + Deal für Stamm-Daten.
   const [latestVersion] = await db.select().from(quoteVersionsTable)
     .where(eq(quoteVersionsTable.quoteId, q.id))
     .orderBy(desc(quoteVersionsTable.version))
     .limit(1);
   const [deal] = await db.select().from(dealsTable).where(eq(dealsTable.id, q.dealId));
-  if (!deal) { res.status(404).json({ error: 'deal not found' }); return; }
+  if (!deal) {
+    throw new Error(`createOcFromQuote: deal ${q.dealId} not found`);
+  }
 
   const total = latestVersion ? num(latestVersion.totalAmount) : num(deal.value);
   const ocId = `oc_${randomUUID().slice(0, 8)}`;
@@ -4271,7 +4273,7 @@ router.post('/quotes/:id/convert-to-order', async (req, res) => {
     readinessScore: 20,
     totalAmount: String(total),
     currency: q.currency ?? deal.currency ?? 'EUR',
-    expectedDelivery: expectedDelivery,
+    expectedDelivery: opts.expectedDelivery ?? null,
     handoverAt: null,
     salesOwnerId: deal.ownerId ?? null,
   });
@@ -4283,39 +4285,162 @@ router.post('/quotes/:id/convert-to-order', async (req, res) => {
     detail: `Created from quote ${q.number} (version ${latestVersion?.version ?? q.currentVersion}).`,
   });
 
-  await db.insert(timelineEventsTable).values({
-    id: `tl_${randomUUID().slice(0, 8)}`,
-    tenantId: getScope(req).tenantId,
-    type: 'handover',
-    title: 'Order confirmation created from quote',
-    description: `Quote ${q.number} → order confirmation OC-${year}-${seq}.${force && existingForQuote.length > 0 ? ' Recreated despite existing follow-up confirmation.' : ''}`,
-    actor: getScope(req).user.name,
-    dealId: q.dealId,
-  });
-
-  await writeAuditFromReq(req, {
-    entityType: 'order_confirmation',
-    entityId: ocId,
-    action: 'created_from_quote',
-    summary: `Order confirmation OC-${year}-${seq} created from quote ${q.number}`,
-    after: {
+  const scope = getScope(req);
+  const tenantId = scope?.tenantId;
+  const actor = scope?.user?.name ?? 'System';
+  const triggerLabel = opts.trigger === 'manual_convert'
+    ? 'Quote → OC (manual convert)'
+    : opts.trigger === 'quote_accepted'
+    ? 'Quote → OC (auto on accept, no active negotiation)'
+    : 'Quote → OC (auto on negotiation accepted)';
+  if (tenantId) {
+    await db.insert(timelineEventsTable).values({
+      id: `tl_${randomUUID().slice(0, 8)}`,
+      tenantId,
+      type: 'handover',
+      title: 'Order confirmation created from quote',
+      description: `${triggerLabel}: Quote ${q.number} → order confirmation OC-${year}-${seq}.`,
+      actor,
+      dealId: q.dealId,
+    });
+    await writeAuditFromReq(req, {
+      entityType: 'order_confirmation',
+      entityId: ocId,
+      action: 'created_from_quote',
+      summary: `Order confirmation OC-${year}-${seq} created from quote ${q.number} (${opts.trigger})`,
+      after: {
+        sourceQuoteId: q.id,
+        sourceQuoteVersionId: latestVersion?.id ?? null,
+        total,
+        currency: q.currency,
+        expectedDelivery: opts.expectedDelivery ?? null,
+        trigger: opts.trigger,
+      },
+    });
+    void emitEvent(tenantId, 'order.completed', {
+      orderConfirmationId: ocId,
+      dealId: q.dealId,
       sourceQuoteId: q.id,
-      sourceQuoteVersionId: latestVersion?.id ?? null,
-      total,
-      currency: q.currency,
-      expectedDelivery,
-      forced: force && existingForQuote.length > 0,
-    },
-  });
+      event: 'created_from_quote',
+      trigger: opts.trigger,
+    });
+  }
 
-  void emitEvent(getScope(req).tenantId, 'order.completed', {
-    orderConfirmationId: ocId,
-    dealId: q.dealId,
-    sourceQuoteId: q.id,
-    event: 'created_from_quote',
-  });
+  const [created] = await db.select().from(orderConfirmationsTable)
+    .where(eq(orderConfirmationsTable.id, ocId));
+  return { oc: created!, created: true };
+}
 
-  await respondOcDetail(req, res, ocId, 201);
+/**
+ * Findet die für die Auto-OC relevante Quote eines Deals: bevorzugt die neueste
+ * mit Status `accepted`, sonst null. Wird beim Konkludieren einer Verhandlung
+ * (outcome=accepted) verwendet, um die OC-Auto-Anlage idempotent nachzuholen,
+ * wenn applyQuoteAccepted sie wegen aktiver Verhandlung aufgeschoben hatte.
+ */
+async function findAcceptedQuoteForDeal(
+  dealId: string,
+): Promise<typeof quotesTable.$inferSelect | null> {
+  const accepted = await db.select().from(quotesTable)
+    .where(and(eq(quotesTable.dealId, dealId), eq(quotesTable.status, 'accepted')))
+    .orderBy(desc(quotesTable.createdAt))
+    .limit(1);
+  return accepted[0] ?? null;
+}
+
+/**
+ * Prüft, ob für einen Deal eine aktive Verhandlung läuft. Wenn ja, wird die
+ * automatische OC-Anlage beim Quote-Accept aufgeschoben — sie holt sich der
+ * Negotiation-Conclude-Pfad nach.
+ */
+async function dealHasActiveNegotiation(dealId: string): Promise<boolean> {
+  const rows = await db.select({ id: negotiationsTable.id })
+    .from(negotiationsTable)
+    .where(and(
+      eq(negotiationsTable.dealId, dealId),
+      eq(negotiationsTable.status, 'active'),
+    ))
+    .limit(1);
+  return rows.length > 0;
+}
+
+router.post('/quotes/:id/convert-to-order', async (req, res) => {
+  if (!validateInline(req, res, { params: Z.ConvertQuoteToOrderParams, body: Z.ConvertQuoteToOrderBody })) return;
+  const [q] = await db.select().from(quotesTable).where(eq(quotesTable.id, req.params.id));
+  if (!q) { res.status(404).json({ error: 'not found' }); return; }
+  if (!(await gateDeal(req, res, q.dealId))) return;
+  if (q.status !== 'accepted') {
+    res.status(409).json({ error: `quote status must be "accepted" (current: "${q.status}")` });
+    return;
+  }
+  const body = (req.body ?? {}) as { expectedDelivery?: string | null; force?: boolean };
+  const force = body.force === true;
+  const expectedDelivery = body.expectedDelivery && String(body.expectedDelivery).trim().length > 0
+    ? String(body.expectedDelivery)
+    : null;
+
+  // Mit dem reversierten OC↔Vertrag-Flow (Task #237) wird die OC bereits beim
+  // Annahme-Zeitpunkt der Quote bzw. beim Konkludieren der Verhandlung
+  // automatisch erzeugt. Dieser manuelle Endpoint bleibt als Fallback erhalten,
+  // ist aber idempotent über `sourceQuoteId` — bestehender Eintrag wird via
+  // 409 zurückgemeldet (Doppelklick-Schutz), sofern nicht `force` gesetzt ist.
+  const existingForQuote = await db.select().from(orderConfirmationsTable)
+    .where(eq(orderConfirmationsTable.sourceQuoteId, q.id))
+    .orderBy(desc(orderConfirmationsTable.createdAt));
+  if (existingForQuote.length > 0 && !force) {
+    const ex = existingForQuote[0]!;
+    const dealMap = await getDealMap();
+    const userMap = await getUserMap(getScope(req).tenantId);
+    res.status(409).json({
+      error: 'order confirmation already exists for this quote',
+      existing: mapOC(ex, dealMap.get(ex.dealId)?.name ?? 'Unknown', userMap, q.number),
+    });
+    return;
+  }
+  if (existingForQuote.length > 0 && force) {
+    // Force-Pfad: Recovery — bewusst eine zweite OC zum gleichen Quote anlegen.
+    // Helper würde wegen Idempotenz die existierende zurückgeben, daher hier
+    // direkter Insert.
+    const [latestVersion] = await db.select().from(quoteVersionsTable)
+      .where(eq(quoteVersionsTable.quoteId, q.id))
+      .orderBy(desc(quoteVersionsTable.version))
+      .limit(1);
+    const [deal] = await db.select().from(dealsTable).where(eq(dealsTable.id, q.dealId));
+    if (!deal) { res.status(404).json({ error: 'deal not found' }); return; }
+    const total = latestVersion ? num(latestVersion.totalAmount) : num(deal.value);
+    const ocId = `oc_${randomUUID().slice(0, 8)}`;
+    const year = new Date().getFullYear();
+    const existingCount = await db.select({ c: sql<number>`count(*)::int` }).from(orderConfirmationsTable);
+    const seq = String((existingCount[0]?.c ?? 0) + 1).padStart(3, '0');
+    await db.insert(orderConfirmationsTable).values({
+      id: ocId, dealId: q.dealId, contractId: null,
+      sourceQuoteId: q.id, sourceQuoteVersionId: latestVersion?.id ?? null,
+      number: `OC-${year}-${seq}`, status: 'checks_pending', readinessScore: 20,
+      totalAmount: String(total), currency: q.currency ?? deal.currency ?? 'EUR',
+      expectedDelivery, handoverAt: null,
+      salesOwnerId: deal.ownerId ?? null,
+    });
+    await db.insert(orderConfirmationChecksTable).values({
+      id: `ocx_${randomUUID().slice(0, 8)}`,
+      orderConfirmationId: ocId,
+      label: 'Taken from accepted quote (forced re-create)',
+      status: 'pending',
+      detail: `Force-recreated from quote ${q.number} despite existing OC.`,
+    });
+    await writeAuditFromReq(req, {
+      entityType: 'order_confirmation', entityId: ocId,
+      action: 'created_from_quote',
+      summary: `Order confirmation OC-${year}-${seq} force-recreated from quote ${q.number}`,
+      after: { sourceQuoteId: q.id, total, forced: true },
+    });
+    await respondOcDetail(req, res, ocId, 201);
+    return;
+  }
+
+  const { oc, created } = await createOcFromQuote(req, q, {
+    expectedDelivery,
+    trigger: 'manual_convert',
+  });
+  await respondOcDetail(req, res, oc.id, created ? 201 : 200);
 });
 
 // Gemeinsame Logik für Accept-/Transition-Pfade. Setzt Status, schreibt Audit
@@ -4351,6 +4476,22 @@ async function applyQuoteAccepted(
   }
 
   void emitEvent(getScope(req).tenantId, 'quote.accepted', { quoteId: q!.id, dealId: q!.dealId });
+
+  // Task #237 — reversierter OC↔Vertrag-Flow:
+  // Quote-Annahme erzeugt direkt eine Auftragsbestätigung (idempotent über
+  // sourceQuoteId), sofern für den Deal KEINE aktive Verhandlung läuft.
+  // Bei aktiver Verhandlung wird die Anlage aufgeschoben — sie wird beim
+  // POST /negotiations/:id/conclude (outcome=accepted) nachgeholt. So bleibt
+  // die "single source of truth" beim tatsächlichen Verhandlungs-Outcome.
+  try {
+    if (!(await dealHasActiveNegotiation(q!.dealId))) {
+      await createOcFromQuote(req, q!, { trigger: 'quote_accepted' });
+    }
+  } catch (err) {
+    // Auto-Anlage darf den Quote-Accept nicht blockieren. Fehler ins Log,
+    // manueller Convert-Pfad bleibt als Recovery offen.
+    console.error('[applyQuoteAccepted] auto-OC creation failed', err);
+  }
   return q!;
 }
 
@@ -6230,7 +6371,12 @@ router.delete('/me/delegations/:id', async (req, res) => {
 });
 
 // ── CONTRACTS ──
-function mapContract(c: typeof contractsTable.$inferSelect, dealName: string, clauses?: { severity: string }[]) {
+function mapContract(
+  c: typeof contractsTable.$inferSelect,
+  dealName: string,
+  clauses?: { severity: string }[],
+  sourceOrderConfirmationNumber?: string | null,
+) {
   const sevWeight: Record<string, number> = { high: 25, medium: 10, low: 3 };
   const raw = (clauses ?? []).reduce((s, cl) => s + (sevWeight[cl.severity] ?? 0), 0);
   const riskScore = Math.min(100, raw);
@@ -6243,6 +6389,8 @@ function mapContract(c: typeof contractsTable.$inferSelect, dealName: string, cl
     tenantId: c.tenantId ?? null,
     contractTypeId: c.contractTypeId ?? null,
     predecessorContractId: c.predecessorContractId ?? null,
+    sourceOrderConfirmationId: c.sourceOrderConfirmationId ?? null,
+    sourceOrderConfirmationNumber: sourceOrderConfirmationNumber ?? null,
   };
 }
 
@@ -10778,6 +10926,22 @@ router.post('/negotiations/:id/conclude', async (req, res) => {
       dealId: n.dealId,
     });
   }
+  // Task #237 — reversierter OC↔Vertrag-Flow:
+  // Wenn die Verhandlung mit "accepted" konkludiert, holen wir die beim Quote-
+  // Accept aufgeschobene OC-Auto-Anlage idempotent nach. Voraussetzung: der
+  // Deal hat eine bereits akzeptierte Quote (sonst no-op — der Vertrieb muss
+  // die Quote anschließend explizit akzeptieren, was den anderen Pfad triggert).
+  if (outcome === 'accepted') {
+    try {
+      const acceptedQuote = await findAcceptedQuoteForDeal(n.dealId);
+      if (acceptedQuote) {
+        await createOcFromQuote(req, acceptedQuote, { trigger: 'negotiation_concluded' });
+      }
+    } catch (err) {
+      console.error('[negotiations/conclude] auto-OC creation failed', err);
+    }
+  }
+
   const [updated] = await db.select().from(negotiationsTable).where(eq(negotiationsTable.id, n.id));
   res.status(200).json(mapNegotiation(updated!, dealName));
 });
@@ -10868,35 +11032,24 @@ async function maybeCompletePackageAndCreateOC(
   const active = signers.filter(sg => sg.status !== 'declined');
   const allSigned = active.length > 0 && active.every(sg => sg.status === 'signed');
   if (!allSigned || signers.length === 0) return;
-  if (pkg.status === 'completed' && pkg.orderConfirmationId) return;
+  if (pkg.status === 'completed') return;
   const ctxTenantId = externalCtx?.tenantId ?? getScope(req).tenantId;
-  const dealMap = await getDealMap();
-  const deal = dealMap.get(pkg.dealId);
-  const year = new Date().getFullYear();
-  const ocId = `oc_${randomUUID().slice(0, 8)}`;
-  const existingCount = await db.select({ c: sql<number>`count(*)::int` }).from(orderConfirmationsTable);
-  const seq = String((existingCount[0]?.c ?? 0) + 1).padStart(3, '0');
-  await db.insert(orderConfirmationsTable).values({
-    id: ocId, dealId: pkg.dealId, contractId: null,
-    number: `OC-${year}-${seq}`, status: 'checks_pending', readinessScore: 20,
-    totalAmount: String(num(deal?.value ?? 0)), currency: deal?.currency ?? 'EUR',
-    expectedDelivery: null, handoverAt: null,
-    salesOwnerId: deal?.ownerId ?? null,
-  });
-  await db.insert(orderConfirmationChecksTable).values({
-    id: `ocx_${randomUUID().slice(0, 8)}`,
-    orderConfirmationId: ocId,
-    label: 'Initial check from signature completion',
-    status: 'pending',
-    detail: `Automatically created from signature package ${pkg.id}.`,
-  });
+  // Task #237 — reversierter OC↔Vertrag-Flow:
+  // Vertrags-Signatur erzeugt KEINE neue Auftragsbestätigung mehr — die OC
+  // wird bereits beim Quote-Accept (oder Negotiation-Conclude) angelegt und
+  // läuft eigenständig durch ihren Status (preparing → checks_pending →
+  // ready_for_handover → sent_to_customer → in_onboarding → completed).
+  // Hier passiert nur noch:
+  //   1. Signature-Package auf "completed" setzen
+  //   2. Vertrag(e) signieren (+ Obligations/Deviations/Renewal)
+  //   3. Webhook contract.signed feuern
   await db.update(signaturePackagesTable).set({
-    status: 'completed', orderConfirmationId: ocId,
+    status: 'completed',
   }).where(eq(signaturePackagesTable.id, pkg.id));
   await db.insert(timelineEventsTable).values({
     id: `tl_${randomUUID().slice(0, 8)}`, tenantId: ctxTenantId, type: 'signature',
     title: 'All signatures complete',
-    description: `${pkg.title} completed; order confirmation ${ocId} created.`,
+    description: `${pkg.title} completed.`,
     actor: externalCtx ? 'System (Magic Link)' : 'System', dealId: pkg.dealId,
   });
   if (externalCtx) {
@@ -10905,21 +11058,21 @@ async function maybeCompletePackageAndCreateOC(
       entityType: 'signature_package',
       entityId: pkg.id,
       action: 'completed',
-      summary: `Signature package ${pkg.title} complete; OC ${ocId} created.`,
+      summary: `Signature package ${pkg.title} complete.`,
       actor: externalCtx.actor,
       activeScope: null,
     });
   } else {
     await writeAuditFromReq(req, {    entityType: 'signature_package', entityId: pkg.id,
       action: 'completed',
-      summary: `Signature package ${pkg.title} complete; OC ${ocId} created.`,
+      summary: `Signature package ${pkg.title} complete.`,
     });
   }
   // Fire webhook — contract.signed (tenant-scoped via deal→company).
   const [deal2] = await db.select().from(dealsTable).where(eq(dealsTable.id, pkg.dealId));
   if (deal2) {
     const [co] = await db.select().from(companiesTable).where(eq(companiesTable.id, deal2.companyId));
-    if (co) void emitEvent(co.tenantId, 'contract.signed', { signaturePackageId: pkg.id, dealId: pkg.dealId, orderConfirmationId: ocId });
+    if (co) void emitEvent(co.tenantId, 'contract.signed', { signaturePackageId: pkg.id, dealId: pkg.dealId });
     // MVP Phase 1: Bei Signatur Vertragsstatus auf signed setzen + Obligations
     // automatisch ableiten und Deviations re-evaluieren.
     // WICHTIG: Nur Verträge signieren, die tatsächlich zu diesem Paket gehören.
@@ -12274,6 +12427,21 @@ function mapOC(
   };
 }
 
+/**
+ * Lädt für eine Liste von OCs die Vertragsnummer/-titel der bidirektional
+ * verlinkten Verträge (`order_confirmations.contract_id`). Wird im Detail-
+ * Response der OC angezeigt, sobald per /send ein Vertrags-Draft existiert.
+ */
+async function loadLinkedContractTitles(
+  ocs: Array<typeof orderConfirmationsTable.$inferSelect>,
+): Promise<Map<string, string>> {
+  const ids = Array.from(new Set(ocs.map(o => o.contractId).filter((x): x is string => !!x)));
+  if (ids.length === 0) return new Map();
+  const rows = await db.select({ id: contractsTable.id, title: contractsTable.title })
+    .from(contractsTable).where(inArray(contractsTable.id, ids));
+  return new Map(rows.map(r => [r.id, r.title]));
+}
+
 async function loadSourceQuoteNumbers(
   ocs: Array<typeof orderConfirmationsTable.$inferSelect>,
 ): Promise<Map<string, string>> {
@@ -12290,6 +12458,7 @@ function buildOcDetail(
   users: Map<string, typeof usersTable.$inferSelect>,
   checks: Array<typeof orderConfirmationChecksTable.$inferSelect>,
   sourceQuoteNumber?: string | null,
+  contractNumber?: string | null,
 ) {
   const requiredChecks = checks.filter(c => c.required);
   const handoverReady = requiredChecks.length > 0 && requiredChecks.every(c => c.status === 'ok');
@@ -12308,7 +12477,7 @@ function buildOcDetail(
     slaBreached = o.status !== 'completed' && now > deadline.getTime();
   }
   return {
-    ...mapOC(o, dealName, users),
+    ...mapOC(o, dealName, users, sourceQuoteNumber),
     handoverNote: o.handoverNote ?? null,
     handoverContact: o.handoverContact ?? null,
     handoverContactEmail: o.handoverContactEmail ?? null,
@@ -12317,6 +12486,10 @@ function buildOcDetail(
       : null,
     handoverCriticalNotes: o.handoverCriticalNotes ?? null,
     handoverReady,
+    sentToCustomerAt: iso(o.sentToCustomerAt),
+    sentToCustomerEmail: o.sentToCustomerEmail ?? null,
+    sentToCustomerNote: o.sentToCustomerNote ?? null,
+    contractNumber: contractNumber ?? null,
     daysSinceHandover,
     slaDeadline,
     slaBreached,
@@ -12335,7 +12508,11 @@ router.get('/order-confirmations', async (req, res) => {
   const dealMap = await getDealMap();
   const userMap = await getUserMap(getScope(req).tenantId);
   const reconciled = await Promise.all(rows.map(async (o) => {
-    if (o.status === 'in_onboarding' || o.status === 'completed') return o;
+    // Status-Auto-Transition nur in den frühen Phasen sinnvoll. Sobald die OC
+    // an den Kunden versandt (sent_to_customer), in Onboarding oder fertig ist,
+    // bleiben wir bei der manuellen Status-Steuerung — die Checks werden in
+    // diesen Phasen nicht mehr neu evaluiert (Task #237).
+    if (o.status === 'sent_to_customer' || o.status === 'in_onboarding' || o.status === 'completed') return o;
     const checks = await db.select().from(orderConfirmationChecksTable)
       .where(eq(orderConfirmationChecksTable.orderConfirmationId, o.id));
     return reconcileOcState(req, o, checks);
@@ -12354,7 +12531,9 @@ async function reconcileOcState(
   o: typeof orderConfirmationsTable.$inferSelect,
   checks: Array<typeof orderConfirmationChecksTable.$inferSelect>,
 ): Promise<typeof orderConfirmationsTable.$inferSelect> {
-  if (o.status === 'in_onboarding' || o.status === 'completed') return o;
+  // Task #237: ab sent_to_customer wird der Status manuell weitergeführt
+  // (kein Auto-Downgrade über die Check-Heuristik).
+  if (o.status === 'sent_to_customer' || o.status === 'in_onboarding' || o.status === 'completed') return o;
   const requiredChecks = checks.filter(c => c.required);
   const allOk = requiredChecks.length > 0 && requiredChecks.every(c => c.status === 'ok');
   const anyBlocked = requiredChecks.some(c => c.status === 'blocked');
@@ -12412,7 +12591,13 @@ router.get('/order-confirmations/:id', async (req, res) => {
       .from(quotesTable).where(eq(quotesTable.id, o.sourceQuoteId));
     sourceQuoteNumber = sq?.number ?? null;
   }
-  res.json(buildOcDetail(o, dealMap.get(o.dealId)?.name ?? 'Unknown', userMap, checks, sourceQuoteNumber));
+  let contractNumber: string | null = null;
+  if (o.contractId) {
+    const [ctr] = await db.select({ title: contractsTable.title })
+      .from(contractsTable).where(eq(contractsTable.id, o.contractId));
+    contractNumber = ctr?.title ?? null;
+  }
+  res.json(buildOcDetail(o, dealMap.get(o.dealId)?.name ?? 'Unknown', userMap, checks, sourceQuoteNumber, contractNumber));
 });
 
 async function respondOcDetail(req: Request, res: Response, ocId: string, statusCode = 200) {
@@ -12427,15 +12612,202 @@ async function respondOcDetail(req: Request, res: Response, ocId: string, status
       .from(quotesTable).where(eq(quotesTable.id, u.sourceQuoteId));
     sourceQuoteNumber = sq?.number ?? null;
   }
-  res.status(statusCode).json(buildOcDetail(u!, dealMap.get(u!.dealId)?.name ?? 'Unknown', userMap, checks, sourceQuoteNumber));
+  let contractNumber: string | null = null;
+  if (u?.contractId) {
+    const [ctr] = await db.select({ title: contractsTable.title })
+      .from(contractsTable).where(eq(contractsTable.id, u.contractId));
+    contractNumber = ctr?.title ?? null;
+  }
+  res.status(statusCode).json(buildOcDetail(u!, dealMap.get(u!.dealId)?.name ?? 'Unknown', userMap, checks, sourceQuoteNumber, contractNumber));
 }
+
+/**
+ * Erzeugt aus einer Auftragsbestätigung idempotent einen Vertrags-Draft mit
+ * dem Backlink `sourceOrderConfirmationId`. Wird ausschließlich vom /send-
+ * Endpoint aufgerufen, sobald die OC an den Kunden versandt wurde. Wenn
+ * bereits ein Vertrag mit diesem sourceOrderConfirmationId existiert
+ * (UniqueIndex), wird er zurückgegeben und kein zweiter Draft erzeugt.
+ *
+ * Wir kopieren bewusst:
+ *  - dealId, brandId, companyId, accountId, currency, valueAmount aus dem Deal
+ *  - language → tenant/brand-default
+ *  - contractTypeId → brand-default (falls vorhanden), sonst null (manuelles
+ *    Setzen im Vertrag-Editor möglich; CUAD-Coverage greift erst nach Setzen).
+ */
+async function createDraftContractFromOc(
+  req: Request,
+  oc: typeof orderConfirmationsTable.$inferSelect,
+): Promise<{ contract: typeof contractsTable.$inferSelect; created: boolean }> {
+  const existing = await db.select().from(contractsTable)
+    .where(eq(contractsTable.sourceOrderConfirmationId, oc.id))
+    .limit(1);
+  if (existing.length > 0) {
+    return { contract: existing[0]!, created: false };
+  }
+
+  const [deal] = await db.select().from(dealsTable).where(eq(dealsTable.id, oc.dealId));
+  if (!deal) {
+    throw new Error(`createDraftContractFromOc: deal ${oc.dealId} not found`);
+  }
+  const tenantIdForSeed = getScope(req).tenantId;
+  let companyTenantId: string | null = null;
+  if (deal.companyId) {
+    const [co] = await db.select().from(companiesTable).where(eq(companiesTable.id, deal.companyId));
+    if (co) companyTenantId = co.tenantId;
+  }
+  const effectiveTenantId = companyTenantId ?? tenantIdForSeed;
+  const effectiveBrandId: string | null = deal.brandId ?? null;
+  let brandRow: typeof brandsTable.$inferSelect | undefined;
+  if (effectiveBrandId) {
+    const [b] = await db.select().from(brandsTable).where(eq(brandsTable.id, effectiveBrandId));
+    if (b) brandRow = b;
+  }
+  const language: SupportedLocale = await resolveDefaultLanguage({
+    brandId: effectiveBrandId,
+    tenantId: effectiveTenantId,
+  });
+  let contractTypeId: string | null = null;
+  let playbookId: string | null = null;
+  if (brandRow?.defaultContractTypeId) {
+    const [ct] = await db.select().from(contractTypesTable)
+      .where(eq(contractTypesTable.id, brandRow.defaultContractTypeId));
+    if (ct && ct.active && (ct.tenantId === effectiveTenantId || ct.tenantId === 'tn_root')) {
+      contractTypeId = ct.id;
+      playbookId = ct.defaultPlaybookId ?? null;
+    }
+  }
+
+  const id = `ctr_${randomUUID().slice(0, 8)}`;
+  const title = `Vertrag zu ${oc.number}`;
+  await db.insert(contractsTable).values({
+    id,
+    dealId: oc.dealId,
+    title,
+    status: 'drafting',
+    version: 1,
+    riskLevel: 'low',
+    template: contractTypeId ? 'auto-from-oc' : 'auto-from-oc',
+    language,
+    validUntil: new Date(Date.now() + 365 * 86400000).toISOString().slice(0, 10),
+    tenantId: effectiveTenantId,
+    companyId: deal.companyId ?? null,
+    brandId: effectiveBrandId,
+    accountId: deal.accountId ?? null,
+    contractTypeId,
+    playbookId,
+    currency: oc.currency ?? deal.currency ?? null,
+    valueCurrency: oc.currency ?? deal.currency ?? null,
+    valueAmount: oc.totalAmount != null ? String(oc.totalAmount) : (deal.value != null ? String(deal.value) : null),
+    currentVersion: 1,
+    sourceOrderConfirmationId: oc.id,
+  });
+  // Bidirektionaler Link: OC → Vertrag.
+  await db.update(orderConfirmationsTable).set({ contractId: id })
+    .where(eq(orderConfirmationsTable.id, oc.id));
+  await writeAuditFromReq(req, {
+    entityType: 'contract', entityId: id, action: 'created_from_order_confirmation',
+    summary: `Draft contract ${title} created from order confirmation ${oc.number}`,
+    after: { sourceOrderConfirmationId: oc.id, contractTypeId, language, tenantId: effectiveTenantId },
+  });
+  await db.insert(timelineEventsTable).values({
+    id: `tl_${randomUUID().slice(0, 8)}`, tenantId: effectiveTenantId, type: 'contract',
+    title: 'Vertrag-Draft aus OC erzeugt',
+    description: `${oc.number} wurde an den Kunden versandt; Vertrag-Draft "${title}" automatisch angelegt.`,
+    actor: getScope(req).user?.name ?? 'System',
+    dealId: oc.dealId,
+  });
+  const [created] = await db.select().from(contractsTable).where(eq(contractsTable.id, id));
+  return { contract: created!, created: true };
+}
+
+// Task #237: POST /order-confirmations/:id/send
+// Setzt OC auf sent_to_customer (Übergang aus ready_for_handover) und legt
+// idempotent einen Draft-Vertrag an, der via sourceOrderConfirmationId zurück
+// verlinkt ist. Optionaler Body { recipientEmail?, note? } wird rein
+// dokumentarisch gespeichert — kein echtes E-Mail-Versenden im MVP.
+router.post('/order-confirmations/:id/send', async (req, res) => {
+  const SendBody = z.object({
+    recipientEmail: z.string().trim().max(320).email().optional().nullable(),
+    note: z.string().trim().max(2000).optional().nullable(),
+  }).optional();
+  if (!validateInline(req, res, { body: SendBody })) return;
+  const [o] = await db.select().from(orderConfirmationsTable).where(eq(orderConfirmationsTable.id, req.params.id));
+  if (!o) { res.status(404).json({ error: 'not found' }); return; }
+  if (!(await gateDeal(req, res, o.dealId))) return;
+  // Erlaubt aus ready_for_handover. Idempotent: schon im Status sent_to_customer
+  // antwortet dasselbe Detail (kein neuer Draft, kein doppelter Audit).
+  if (o.status === 'sent_to_customer') {
+    await respondOcDetail(req, res, o.id);
+    return;
+  }
+  if (o.status !== 'ready_for_handover') {
+    res.status(409).json({
+      error: `send not allowed in status ${o.status}`,
+      hint: 'Bestätigung muss zuerst auf ready_for_handover (alle Pflicht-Checks ok) sein.',
+    });
+    return;
+  }
+  // Re-check Pflicht-Checks defensiv, falls ready_for_handover veraltet ist.
+  const checks = await db.select().from(orderConfirmationChecksTable)
+    .where(eq(orderConfirmationChecksTable.orderConfirmationId, o.id));
+  const required = checks.filter(c => c.required);
+  const ready = required.length > 0 && required.every(c => c.status === 'ok');
+  if (!ready) {
+    res.status(400).json({ error: 'required checks not ok', readinessScore: o.readinessScore });
+    return;
+  }
+  const body = (req.body ?? {}) as { recipientEmail?: string | null; note?: string | null };
+  const now = new Date();
+  await db.update(orderConfirmationsTable).set({
+    status: 'sent_to_customer',
+    sentToCustomerAt: now,
+    sentToCustomerEmail: body.recipientEmail?.trim() || null,
+    sentToCustomerNote: body.note?.trim() || null,
+  }).where(eq(orderConfirmationsTable.id, o.id));
+  await writeAuditFromReq(req, {
+    entityType: 'order_confirmation', entityId: o.id, action: 'sent_to_customer',
+    summary: `Order confirmation ${o.number} sent to customer`,
+    before: { status: o.status },
+    after: {
+      status: 'sent_to_customer',
+      sentToCustomerEmail: body.recipientEmail ?? null,
+      sentToCustomerNote: body.note ?? null,
+    },
+  });
+  await db.insert(timelineEventsTable).values({
+    id: `tl_${randomUUID().slice(0, 8)}`, tenantId: getScope(req).tenantId, type: 'handover',
+    title: 'Auftragsbestätigung an Kunden versandt',
+    description: `${o.number} wurde an den Kunden versandt.${body.recipientEmail ? ` (Empfänger: ${body.recipientEmail})` : ''}`,
+    actor: getScope(req).user?.name ?? 'System',
+    dealId: o.dealId,
+  });
+  // Re-load mit gesetzten sent-Feldern, damit der Helper sauber arbeiten kann.
+  const [refreshed] = await db.select().from(orderConfirmationsTable)
+    .where(eq(orderConfirmationsTable.id, o.id));
+  try {
+    await createDraftContractFromOc(req, refreshed!);
+  } catch (err) {
+    // Auto-Vertrag darf den Versand nicht blockieren — die OC bleibt im
+    // Status sent_to_customer und der Draft kann später manuell angelegt
+    // werden (POST /contracts).
+    console.error('[order-confirmations/send] auto-draft contract failed', err);
+  }
+  await respondOcDetail(req, res, o.id);
+});
 
 router.post('/order-confirmations/:id/handover', async (req, res) => {
   if (!validateInline(req, res, { params: Z.HandoverOrderConfirmationParams, body: Z.HandoverOrderConfirmationBody })) return;
   const [o] = await db.select().from(orderConfirmationsTable).where(eq(orderConfirmationsTable.id, req.params.id));
   if (!o) { res.status(404).json({ error: 'not found' }); return; }
   if (!(await gateDeal(req, res, o.dealId))) return;
-  if (o.status !== 'ready_for_handover' && o.status !== 'checks_pending') {
+  // Task #237: Handover ist jetzt ab sent_to_customer erlaubt; ready_for_handover
+  // und checks_pending bleiben für Backwards-Compat zugelassen, damit ältere
+  // UI-Flows ohne expliziten /send-Schritt nicht brechen.
+  if (
+    o.status !== 'sent_to_customer' &&
+    o.status !== 'ready_for_handover' &&
+    o.status !== 'checks_pending'
+  ) {
     res.status(409).json({ error: `handover not allowed in status ${o.status}` }); return;
   }
   const { onboardingOwnerId, contactName, contactEmail, deliveryDate, note, criticalNotes } = req.body ?? {};

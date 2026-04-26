@@ -341,21 +341,24 @@ export function PriceIncreaseStatusBadge({ status, className, testId }: { status
 }
 
 // ─── Order Confirmation Status ──────────────────────────────────────────────
+// Aktueller Backend-Status-Set (Task #237 — reversierter OC↔Vertrag-Flow):
+//   preparing → checks_pending → ready_for_handover → sent_to_customer
+//   → in_onboarding → completed
 const OC_STATUS_TONE: Record<string, Tone> = {
-  pending: "warning",
-  in_progress: "info",
-  ready: "info",
-  handover: "warning",
+  preparing: "muted",
+  checks_pending: "warning",
+  ready_for_handover: "info",
+  sent_to_customer: "info",
+  in_onboarding: "warning",
   completed: "success",
-  blocked: "danger",
 };
 const OC_STATUS_LABEL: Record<string, string> = {
-  pending: "Pending",
-  in_progress: "In progress",
-  ready: "Ready",
-  handover: "Handover",
+  preparing: "Preparing",
+  checks_pending: "Checks pending",
+  ready_for_handover: "Ready for handover",
+  sent_to_customer: "Sent to customer",
+  in_onboarding: "In onboarding",
   completed: "Completed",
-  blocked: "Blocked",
 };
 export function OrderConfirmationStatusBadge({ status, className, testId }: { status: string | null | undefined; className?: string; testId?: string }) {
   const k = (status ?? "").toLowerCase();

@@ -196,7 +196,13 @@ export default function Quote() {
   if (isLoading) return <div className="p-8"><Skeleton className="h-64 w-full" /></div>;
   if (!quote) return <div className="p-8">Quote not found</div>;
 
-  const canConvert = quote.status === "accepted";
+  // Task #237: Auftragsbestätigungen entstehen jetzt automatisch beim
+  // Akzeptieren (oder beim Abschluss einer aktiven Verhandlung). Der manuelle
+  // Convert-Button wird daher nur noch für Edge-Cases gezeigt:
+  //   - Quote ist accepted UND keine Verhandlung blockiert die Auto-Erzeugung.
+  // Solange eine Verhandlung "active" ist, blockiert das Backend den Auto-OC,
+  // und der Button verschwindet hier zugunsten eines Hinweises (siehe unten).
+  const canConvert = quote.status === "accepted" && !activeNegotiation;
   const linkedOrders = quote.orderConfirmations ?? [];
   const versions = quote.versions ?? [];
 
@@ -311,6 +317,19 @@ export default function Quote() {
                 <ClipboardCheck className="h-4 w-4 mr-2" />
                 {t("pages.quote.convertToOrder")}
               </Button>
+            )}
+            {/* Task #237: Wenn der Quote akzeptiert ist, aber eine Verhandlung
+                noch läuft, wartet die Auto-Erzeugung der Auftragsbestätigung
+                auf das Verhandlungsende. */}
+            {quote.status === "accepted" && activeNegotiation && (
+              <Badge
+                variant="outline"
+                className="text-xs"
+                data-testid="quote-oc-pending-negotiation"
+                title={t("pages.quote.ocPendingNegotiationHint")}
+              >
+                {t("pages.quote.ocPendingNegotiation")}
+              </Badge>
             )}
             {actions.length > 0 ? (
               <DropdownMenu>
