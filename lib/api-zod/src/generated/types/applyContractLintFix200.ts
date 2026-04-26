@@ -8,8 +8,7 @@ Multi-tenant, multi-company, multi-brand. Deal-centric.
  * OpenAPI spec version: 0.1.0
  */
 
-export type RequestContractApproval409MissingItem = {
-  cuadCategoryId: string;
-  code: string;
-  name: string;
+export type ApplyContractLintFix200 = {
+  ok: boolean;
+  removedClauseId?: string;
 };

@@ -7,16 +7,31 @@ Multi-tenant, multi-company, multi-brand. Deal-centric.
 
  * OpenAPI spec version: 0.1.0
  */
-import type { RequestContractApproval409Code } from "./requestContractApproval409Code";
-import type { RequestContractApproval409MissingItem } from "./requestContractApproval409MissingItem";
 
-export type RequestContractApproval409 = {
-  error: string;
-  code: RequestContractApproval409Code;
-  missingExpectedCount: number;
-  /** @nullable */
-  contractTypeId?: string | null;
-  /** @nullable */
-  contractTypeName?: string | null;
-  missing: RequestContractApproval409MissingItem[];
-};
+export type RequestContractApproval409 =
+  | {
+      error: string;
+      code: "cuad_required_missing";
+      missingExpectedCount: number;
+      /** @nullable */
+      contractTypeId?: string | null;
+      /** @nullable */
+      contractTypeName?: string | null;
+      missing: {
+        cuadCategoryId: string;
+        code: string;
+        name: string;
+      }[];
+    }
+  | {
+      error: string;
+      code: "lint_errors_present";
+      lintErrorCount: number;
+      lintErrors: {
+        category: string;
+        code: string;
+        message: string;
+        /** @nullable */
+        contractClauseId?: string | null;
+      }[];
+    };

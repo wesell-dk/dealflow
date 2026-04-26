@@ -2380,45 +2380,164 @@ paths:
             application/json:
               schema:
                 type: object
-                required: [approvalId, override, missingExpectedCount]
+                required: [approvalId, override, missingExpectedCount, lintErrorCount]
                 properties:
                   approvalId: { type: string }
                   override: { type: boolean }
                   overrideReason:
                     type: ["string", "null"]
                   missingExpectedCount: { type: integer }
+                  lintErrorCount: { type: integer }
                   contractTypeName:
                     type: ["string", "null"]
         "409":
           description: >
-            Pflicht-CUAD-Kategorien fehlen — Standardweg ist gesperrt. Die
-            UI zeigt die fehlenden Bausteine und bietet Tenant-Admins den
-            Override an.
+            Vorprüfung schlägt fehl — entweder fehlen Pflicht-CUAD-Kategorien
+            (`cuad_required_missing`) oder der Vertragslinter meldet
+            Konsistenz-Fehler (`lint_errors_present`). Tenant-Admins können
+            den Block jeweils via `override: true` mit `overrideReason`
+            (≥10 Zeichen) durchbrechen — der Override wird strukturiert
+            ins Audit-Log geschrieben.
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - type: object
+                    required: [error, code, missingExpectedCount, missing]
+                    properties:
+                      error: { type: string }
+                      code:
+                        type: string
+                        enum: [cuad_required_missing]
+                      missingExpectedCount: { type: integer }
+                      contractTypeId: { type: ["string", "null"] }
+                      contractTypeName: { type: ["string", "null"] }
+                      missing:
+                        type: array
+                        items:
+                          type: object
+                          required: [cuadCategoryId, code, name]
+                          properties:
+                            cuadCategoryId: { type: string }
+                            code: { type: string }
+                            name: { type: string }
+                  - type: object
+                    required: [error, code, lintErrorCount, lintErrors]
+                    properties:
+                      error: { type: string }
+                      code:
+                        type: string
+                        enum: [lint_errors_present]
+                      lintErrorCount: { type: integer }
+                      lintErrors:
+                        type: array
+                        items:
+                          type: object
+                          required: [category, code, message]
+                          properties:
+                            category: { type: string }
+                            code: { type: string }
+                            message: { type: string }
+                            contractClauseId: { type: ["string", "null"] }
+        "403": { description: Override-Versuch ohne Tenant-Admin-Rechte. }
+        "404": { description: Vertrag existiert nicht oder Zugriff verweigert. }
+        "422": { description: override=true ohne ausreichend langen overrideReason. }
+
+  /contracts/{id}/lint:
+    get:
+      operationId: lintContract
+      tags: [contracts]
+      summary: Deterministischer Vertrags-Konsistenz-Linter (Task #230)
+      description: >
+        Liefert eine Liste deterministischer Konsistenz-Findings für den
+        Vertrag — Pflicht-/Verbots-Klauseln, kaputte Querverweise,
+        widersprüchliche Fristen, ungenutzte Definitionen, fehlende Anlagen.
+        Hard-Stop für Approvals: alle `error`-Findings sperren das
+        request-approval-Gate (Override durch Tenant-Admin).
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: ok
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ContractLintReport" }
+        "404": { description: Vertrag existiert nicht oder Zugriff verweigert. }
+
+  /contracts/{id}/lint/ai:
+    post:
+      operationId: lintContractWithAi
+      tags: [contracts]
+      summary: KI-gestützte semantische Konsistenz-Prüfung (Task #230)
+      description: >
+        Ergänzt den deterministischen Linter um semantische Befunde via
+        `contract.consistency`-Prompt (claude-sonnet-4-6). Audit + Cost
+        werden via runStructured/recordAIInvocation geloggt. Antwort
+        enthält sowohl die deterministischen als auch die KI-Findings,
+        damit die UI sie nebeneinander darstellen kann.
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: ok
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ContractLintAiEnvelope" }
+        "404": { description: Vertrag existiert nicht oder Zugriff verweigert. }
+        "503": { description: AI-Provider nicht konfiguriert. }
+
+  /contracts/{id}/lint/apply-fix:
+    post:
+      operationId: applyContractLintFix
+      tags: [contracts]
+      summary: Wendet einen maschinen-anwendbaren Lint-Quick-Fix an (Task #230)
+      description: >
+        Führt den im Finding hinterlegten `fix` aus. Aktuell unterstützt:
+        `add_mandatory_family` (fügt eine Klausel der fehlenden Pflicht-
+        Familie an) und `remove_forbidden_family` (entfernt eine verbotene
+        Klausel). Jede Anwendung wird im Audit-Log mit `lint_fix_applied`
+        protokolliert.
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ApplyContractLintFixInput" }
+      responses:
+        "200":
+          description: Forbidden-Familie entfernt
           content:
             application/json:
               schema:
                 type: object
-                required: [error, code, missingExpectedCount, missing]
+                required: [ok]
                 properties:
-                  error: { type: string }
-                  code:
-                    type: string
-                    enum: [cuad_required_missing]
-                  missingExpectedCount: { type: integer }
-                  contractTypeId: { type: ["string", "null"] }
-                  contractTypeName: { type: ["string", "null"] }
-                  missing:
-                    type: array
-                    items:
-                      type: object
-                      required: [cuadCategoryId, code, name]
-                      properties:
-                        cuadCategoryId: { type: string }
-                        code: { type: string }
-                        name: { type: string }
-        "403": { description: Override-Versuch ohne Tenant-Admin-Rechte. }
-        "404": { description: Vertrag existiert nicht oder Zugriff verweigert. }
-        "422": { description: override=true ohne ausreichend langen overrideReason. }
+                  ok: { type: boolean }
+                  removedClauseId: { type: string }
+        "201":
+          description: Pflicht-Familie hinzugefügt
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [ok]
+                properties:
+                  ok: { type: boolean }
+                  clauseId: { type: string }
+                  familyId: { type: string }
+        "400": { description: Unbekannter oder ungültiger Fix-Kind. }
+        "404": { description: Vertrag oder Klausel nicht gefunden. }
+        "409": { description: Klausel der angeforderten Familie ist bereits am Vertrag. }
 
   /clause-families/{id}/cuad-categories:
     get:
@@ -8059,11 +8178,21 @@ components:
 
     PatchAmendmentInput:
       type: object
+      description: |
+        Patch-Body für `/amendments/{id}`. `override` + `overrideReason`
+        werden NUR beim Übergang nach `out_for_signature` ausgewertet:
+        wenn der Vertrags-Linter `error`-Findings hat, wird die Signatur-
+        Erstellung blockiert (Status 409, Code `lint_errors_present`).
+        Tenant-Admins dürfen den Block via `override: true` +
+        `overrideReason` (≥10 Zeichen) durchbrechen — der Override landet
+        strukturiert im Audit-Log.
       properties:
         status: { type: string }
         effectiveFrom: { type: ["string", "null"] }
         description: { type: ["string", "null"] }
         title: { type: string }
+        override: { type: boolean }
+        overrideReason: { type: string, minLength: 10 }
 
     EffectiveContractState:
       type: object
@@ -9199,6 +9328,114 @@ components:
           oneOf: [{ type: string, format: date-time }, { type: "null" }]
         agreementLevel: { type: string, enum: [low, medium, high] }
         agreementScore: { type: integer, minimum: 0, maximum: 100 }
+
+    ContractLintFinding:
+      type: object
+      description: |
+        Ein einzelner Befund des Vertrags-Linters. `id` ist stabil über
+        wiederholte Aufrufe hinweg, damit React-Listen / Selektionen erhalten
+        bleiben. `fix` ist optional und beschreibt einen maschinen-anwendbaren
+        Quick-Fix (UI rendert dann einen "Fix"-Button).
+      required: [id, category, severity, code, message]
+      properties:
+        id: { type: string }
+        category:
+          type: string
+          enum:
+            - cross_reference
+            - definitions
+            - attachments
+            - mandatory_clauses
+            - forbidden_clauses
+            - numeric_consistency
+            - semantic
+        severity:
+          type: string
+          enum: [info, warn, error]
+        code: { type: string }
+        message: { type: string }
+        contractClauseId:
+          type: ["string", "null"]
+        snippet:
+          type: ["string", "null"]
+        suggestion:
+          type: ["string", "null"]
+        fix:
+          type: ["object", "null"]
+          properties:
+            kind:
+              type: string
+              enum: [add_mandatory_family, remove_forbidden_family]
+            familyId: { type: string }
+            clauseId: { type: string }
+
+    ContractLintReport:
+      type: object
+      required: [contractId, generatedAt, findings, counts]
+      properties:
+        contractId: { type: string }
+        generatedAt: { type: string }
+        findings:
+          type: array
+          items: { $ref: "#/components/schemas/ContractLintFinding" }
+        counts:
+          type: object
+          required: [error, warn, info, total]
+          properties:
+            error: { type: integer }
+            warn: { type: integer }
+            info: { type: integer }
+            total: { type: integer }
+
+    ApplyContractLintFixInput:
+      type: object
+      description: |
+        Body für `/contracts/{id}/lint/apply-fix`. Spiegelt die `fix`-
+        Payloads aus `ContractLintFinding`. Bei `add_mandatory_family`
+        ist `familyId` Pflicht; bei `remove_forbidden_family` ist
+        `clauseId` Pflicht.
+      required: [kind]
+      properties:
+        kind:
+          type: string
+          enum: [add_mandatory_family, remove_forbidden_family]
+        familyId: { type: string }
+        clauseId: { type: string }
+
+    ContractLintAiEnvelope:
+      type: object
+      required: [ok, deterministic, ai, invocationId, model, latencyMs]
+      properties:
+        ok: { type: boolean, enum: [true] }
+        deterministic: { $ref: "#/components/schemas/ContractLintReport" }
+        ai:
+          type: object
+          required: [findings, notes, confidenceLevel, confidenceReason]
+          properties:
+            findings:
+              type: array
+              items:
+                type: object
+                required: [category, severity, message]
+                properties:
+                  category: { type: string }
+                  severity:
+                    type: string
+                    enum: [info, warn, error]
+                  message: { type: string }
+                  contractClauseId: { type: ["string", "null"] }
+                  snippet: { type: ["string", "null"] }
+                  suggestion: { type: ["string", "null"] }
+            notes:
+              type: array
+              items: { type: string }
+            confidenceLevel:
+              type: string
+              enum: [low, medium, high]
+            confidenceReason: { type: string }
+        invocationId: { type: string }
+        model: { type: string }
+        latencyMs: { type: number }
 
     HelpBotInput:
       type: object

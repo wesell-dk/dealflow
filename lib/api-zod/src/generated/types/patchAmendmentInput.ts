@@ -8,6 +8,16 @@ Multi-tenant, multi-company, multi-brand. Deal-centric.
  * OpenAPI spec version: 0.1.0
  */
 
+/**
+ * Patch-Body für `/amendments/{id}`. `override` + `overrideReason`
+werden NUR beim Übergang nach `out_for_signature` ausgewertet:
+wenn der Vertrags-Linter `error`-Findings hat, wird die Signatur-
+Erstellung blockiert (Status 409, Code `lint_errors_present`).
+Tenant-Admins dürfen den Block via `override: true` +
+`overrideReason` (≥10 Zeichen) durchbrechen — der Override landet
+strukturiert im Audit-Log.
+
+ */
 export interface PatchAmendmentInput {
   status?: string;
   /** @nullable */
@@ -15,4 +25,7 @@ export interface PatchAmendmentInput {
   /** @nullable */
   description?: string | null;
   title?: string;
+  override?: boolean;
+  /** @minLength 10 */
+  overrideReason?: string;
 }

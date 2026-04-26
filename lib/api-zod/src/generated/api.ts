@@ -4090,12 +4090,23 @@ export const PatchContractAmendmentParams = zod.object({
   id: zod.coerce.string(),
 });
 
-export const PatchContractAmendmentBody = zod.object({
-  status: zod.string().optional(),
-  effectiveFrom: zod.string().nullish(),
-  description: zod.string().nullish(),
-  title: zod.string().optional(),
-});
+export const patchContractAmendmentBodyOverrideReasonMin = 10;
+
+export const PatchContractAmendmentBody = zod
+  .object({
+    status: zod.string().optional(),
+    effectiveFrom: zod.string().nullish(),
+    description: zod.string().nullish(),
+    title: zod.string().optional(),
+    override: zod.boolean().optional(),
+    overrideReason: zod
+      .string()
+      .min(patchContractAmendmentBodyOverrideReasonMin)
+      .optional(),
+  })
+  .describe(
+    "Patch-Body für `\/amendments\/{id}`. `override` + `overrideReason`\nwerden NUR beim Übergang nach `out_for_signature` ausgewertet:\nwenn der Vertrags-Linter `error`-Findings hat, wird die Signatur-\nErstellung blockiert (Status 409, Code `lint_errors_present`).\nTenant-Admins dürfen den Block via `override: true` +\n`overrideReason` (≥10 Zeichen) durchbrechen — der Override landet\nstrukturiert im Audit-Log.\n",
+  );
 
 export const PatchContractAmendmentResponse = zod
   .object({
@@ -4308,6 +4319,157 @@ export const RequestContractApprovalBody = zod
   .describe(
     "Optionaler Body. Ohne `override` läuft die normale Vorprüfung — fehlende Pflicht-CUAD-Kategorien sperren die Anfrage. Mit `override: true` plus `overrideReason` (≥10 Zeichen) kann ein Tenant-Admin den Block bewusst umgehen; der Override wird im Audit-Log strukturiert protokolliert.\n",
   );
+
+/**
+ * Liefert eine Liste deterministischer Konsistenz-Findings für den Vertrag — Pflicht-/Verbots-Klauseln, kaputte Querverweise, widersprüchliche Fristen, ungenutzte Definitionen, fehlende Anlagen. Hard-Stop für Approvals: alle `error`-Findings sperren das request-approval-Gate (Override durch Tenant-Admin).
+
+ * @summary Deterministischer Vertrags-Konsistenz-Linter (Task
+ */
+export const LintContractParams = zod.object({
+  id: zod.coerce.string(),
+});
+
+export const LintContractResponse = zod.object({
+  contractId: zod.string(),
+  generatedAt: zod.string(),
+  findings: zod.array(
+    zod
+      .object({
+        id: zod.string(),
+        category: zod.enum([
+          "cross_reference",
+          "definitions",
+          "attachments",
+          "mandatory_clauses",
+          "forbidden_clauses",
+          "numeric_consistency",
+          "semantic",
+        ]),
+        severity: zod.enum(["info", "warn", "error"]),
+        code: zod.string(),
+        message: zod.string(),
+        contractClauseId: zod.string().nullish(),
+        snippet: zod.string().nullish(),
+        suggestion: zod.string().nullish(),
+        fix: zod
+          .object({
+            kind: zod
+              .enum(["add_mandatory_family", "remove_forbidden_family"])
+              .optional(),
+            familyId: zod.string().optional(),
+            clauseId: zod.string().optional(),
+          })
+          .nullish(),
+      })
+      .describe(
+        'Ein einzelner Befund des Vertrags-Linters. `id` ist stabil über\nwiederholte Aufrufe hinweg, damit React-Listen \/ Selektionen erhalten\nbleiben. `fix` ist optional und beschreibt einen maschinen-anwendbaren\nQuick-Fix (UI rendert dann einen \"Fix\"-Button).\n',
+      ),
+  ),
+  counts: zod.object({
+    error: zod.number(),
+    warn: zod.number(),
+    info: zod.number(),
+    total: zod.number(),
+  }),
+});
+
+/**
+ * Ergänzt den deterministischen Linter um semantische Befunde via `contract.consistency`-Prompt (claude-sonnet-4-6). Audit + Cost werden via runStructured/recordAIInvocation geloggt. Antwort enthält sowohl die deterministischen als auch die KI-Findings, damit die UI sie nebeneinander darstellen kann.
+
+ * @summary KI-gestützte semantische Konsistenz-Prüfung (Task
+ */
+export const LintContractWithAiParams = zod.object({
+  id: zod.coerce.string(),
+});
+
+export const LintContractWithAiResponse = zod.object({
+  ok: zod.literal(true),
+  deterministic: zod.object({
+    contractId: zod.string(),
+    generatedAt: zod.string(),
+    findings: zod.array(
+      zod
+        .object({
+          id: zod.string(),
+          category: zod.enum([
+            "cross_reference",
+            "definitions",
+            "attachments",
+            "mandatory_clauses",
+            "forbidden_clauses",
+            "numeric_consistency",
+            "semantic",
+          ]),
+          severity: zod.enum(["info", "warn", "error"]),
+          code: zod.string(),
+          message: zod.string(),
+          contractClauseId: zod.string().nullish(),
+          snippet: zod.string().nullish(),
+          suggestion: zod.string().nullish(),
+          fix: zod
+            .object({
+              kind: zod
+                .enum(["add_mandatory_family", "remove_forbidden_family"])
+                .optional(),
+              familyId: zod.string().optional(),
+              clauseId: zod.string().optional(),
+            })
+            .nullish(),
+        })
+        .describe(
+          'Ein einzelner Befund des Vertrags-Linters. `id` ist stabil über\nwiederholte Aufrufe hinweg, damit React-Listen \/ Selektionen erhalten\nbleiben. `fix` ist optional und beschreibt einen maschinen-anwendbaren\nQuick-Fix (UI rendert dann einen \"Fix\"-Button).\n',
+        ),
+    ),
+    counts: zod.object({
+      error: zod.number(),
+      warn: zod.number(),
+      info: zod.number(),
+      total: zod.number(),
+    }),
+  }),
+  ai: zod.object({
+    findings: zod.array(
+      zod.object({
+        category: zod.string(),
+        severity: zod.enum(["info", "warn", "error"]),
+        message: zod.string(),
+        contractClauseId: zod.string().nullish(),
+        snippet: zod.string().nullish(),
+        suggestion: zod.string().nullish(),
+      }),
+    ),
+    notes: zod.array(zod.string()),
+    confidenceLevel: zod.enum(["low", "medium", "high"]),
+    confidenceReason: zod.string(),
+  }),
+  invocationId: zod.string(),
+  model: zod.string(),
+  latencyMs: zod.number(),
+});
+
+/**
+ * Führt den im Finding hinterlegten `fix` aus. Aktuell unterstützt: `add_mandatory_family` (fügt eine Klausel der fehlenden Pflicht- Familie an) und `remove_forbidden_family` (entfernt eine verbotene Klausel). Jede Anwendung wird im Audit-Log mit `lint_fix_applied` protokolliert.
+
+ * @summary Wendet einen maschinen-anwendbaren Lint-Quick-Fix an (Task
+ */
+export const ApplyContractLintFixParams = zod.object({
+  id: zod.coerce.string(),
+});
+
+export const ApplyContractLintFixBody = zod
+  .object({
+    kind: zod.enum(["add_mandatory_family", "remove_forbidden_family"]),
+    familyId: zod.string().optional(),
+    clauseId: zod.string().optional(),
+  })
+  .describe(
+    "Body für `\/contracts\/{id}\/lint\/apply-fix`. Spiegelt die `fix`-\nPayloads aus `ContractLintFinding`. Bei `add_mandatory_family`\nist `familyId` Pflicht; bei `remove_forbidden_family` ist\n`clauseId` Pflicht.\n",
+  );
+
+export const ApplyContractLintFixResponse = zod.object({
+  ok: zod.boolean(),
+  removedClauseId: zod.string().optional(),
+});
 
 export const GetClauseFamilyCuadCategoriesParams = zod.object({
   id: zod.coerce.string(),

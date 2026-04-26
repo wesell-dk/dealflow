@@ -865,6 +865,107 @@ export const clauseImportSegment: PromptDefinition<
   coerceInput: coerceClauseImportSegmentInput,
 };
 
+// ───────────────────────── 12. Contract Consistency Lint (Task #230) ─────────────────────────
+//
+// Semantische Ergänzung zum deterministischen Linter (lib/contractLinter).
+// Der deterministische Linter findet hard signals: fehlende Pflicht-Familien,
+// kaputte Querverweise, widersprüchliche Fristen. Diese KI prüft semantisch:
+//   - widersprüchliche Aussagen, die nicht über Zahlen erkennbar sind
+//   - undefinierte Abkürzungen / Begriffe ohne Definition
+//   - fehlende Abschnitte, die für den Vertragstyp branchenüblich sind
+//
+// Wichtig: KI ergänzt, ersetzt aber nicht die deterministischen Regeln.
+// Findings werden in der UI mit Quelle „ai" markiert und nie als Hard-Stop
+// für Approvals verwendet (Hard-Stop bleibt deterministisch).
+
+const ContractConsistencyFinding = z.object({
+  category: z.union([
+    z.literal("cross_reference"),
+    z.literal("definitions"),
+    z.literal("attachments"),
+    z.literal("mandatory_clauses"),
+    z.literal("forbidden_clauses"),
+    z.literal("numeric_consistency"),
+    z.literal("semantic"),
+  ]),
+  severity: z.union([z.literal("info"), z.literal("warn"), z.literal("error")]),
+  message: z.string().min(4).max(400),
+  contractClauseId: z.string().nullable(),
+  snippet: z.string().max(240).nullable(),
+  suggestion: z.string().min(0).max(300).nullable(),
+});
+
+const ContractConsistencyOutput = z.object({
+  findings: z.array(ContractConsistencyFinding).max(40),
+  notes: z.array(z.string().min(2).max(240)).max(6),
+  confidence: CONFIDENCE_LEVEL,
+  confidenceReason: CONFIDENCE_REASON,
+});
+
+export interface ContractConsistencyInput {
+  contract: {
+    id: string;
+    title: string;
+    contractTypeCode: string | null;
+    language: "de" | "en";
+  };
+  /** Vertragstext, klauselweise nummeriert (1..N), wie er im Editor dargestellt wird. */
+  clauses: Array<{
+    id: string;
+    ordinal: number;
+    family: string;
+    body: string;
+  }>;
+  /** Anzahl der Anlagen. `null` = Anlagen-Tracking ist (noch) nicht aktiv. */
+  attachmentCount: number | null;
+  /** Bereits gefundene deterministische Findings — KI soll nicht doppelt melden. */
+  deterministicFindings: Array<{
+    category: string;
+    severity: string;
+    message: string;
+  }>;
+}
+
+export const contractConsistency: PromptDefinition<
+  ContractConsistencyInput,
+  z.infer<typeof ContractConsistencyOutput>
+> = {
+  key: "contract.consistency",
+  model: "claude-sonnet-4-6",
+  system:
+    "Du bist DealFlow-Copilot im Modus Vertrags-Konsistenz-Prüfung. Du " +
+    "ergänzt einen deterministischen Linter um SEMANTISCHE Befunde, die " +
+    "nicht über Regex / Familien-Vergleich auffindbar sind. Beispiele: " +
+    "ein Abschnitt nennt eine Pflicht ohne Frist; eine Definition wird " +
+    "implizit verwendet, ohne sauber eingeführt zu sein; zwei Klauseln " +
+    "regeln dasselbe Thema unterschiedlich (z. B. Eigentum vs. Lizenz). " +
+    "Wiederhole NIE eine bereits im Input enthaltene deterministische " +
+    "Meldung. Liefere maximal 12 wirklich relevante Befunde. Wenn du " +
+    "unsicher bist, lieber weniger Findings (Konfidenz 'low'). " +
+    SAFE_GERMAN_HINT,
+  buildUser: (input) => {
+    const clauseList = input.clauses
+      .map(c => `§ ${c.ordinal} ${c.family} (id=${c.id})\n${c.body.slice(0, 1500)}`)
+      .join("\n\n");
+    const detList = input.deterministicFindings
+      .map(f => `- [${f.severity}] ${f.category}: ${f.message}`)
+      .join("\n") || "(keine)";
+    return (
+      `Vertrag: ${input.contract.title}\n` +
+      `Typ: ${input.contract.contractTypeCode ?? "—"}, Sprache: ${input.contract.language}\n` +
+      `Anlagen: ${input.attachmentCount}\n\n` +
+      `Bereits deterministisch gemeldet (NICHT wiederholen):\n${detList}\n\n` +
+      `Klauseln:\n${clauseList}`
+    );
+  },
+  outputSchema: ContractConsistencyOutput,
+  toolDescription:
+    "Liefert eine Liste semantischer Konsistenz-Befunde mit category, " +
+    "severity (info/warn/error), message, contractClauseId (oder null) und " +
+    "optionaler suggestion. Plus confidence + confidenceReason.",
+  toolName: "report_contract_consistency",
+};
+
 // ───────────────────────── Bundle ─────────────────────────
 
 export const DEALFLOW_PROMPTS = {
@@ -881,4 +982,5 @@ export const DEALFLOW_PROMPTS = {
   [helpAssistant.key]: helpAssistant,
   [externalContractExtract.key]: externalContractExtract,
   [clauseImportSegment.key]: clauseImportSegment,
+  [contractConsistency.key]: contractConsistency,
 } as const;

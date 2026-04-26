@@ -25,6 +25,7 @@ import {
   getGetContractCuadCoverageQueryKey,
   useListContractTypes,
   useRequestContractApproval,
+  useLintContract,
   useListExternalCollaborators,
   useCreateExternalCollaborator,
   useRevokeExternalCollaborator,
@@ -78,6 +79,37 @@ import { useToast } from "@/hooks/use-toast";
 import { ApiError } from "@workspace/api-client-react";
 import { AiPromptPanel } from "@/components/copilot/ai-prompt-panel";
 import { Breadcrumbs } from "@/components/patterns/breadcrumbs";
+import { LintPanel } from "@/components/contract/lint-panel";
+
+/**
+ * Kleiner Badge für den Konsistenz-Tab — zeigt die Fehler-Anzahl als roter
+ * Badge, sodass User sofort sehen, dass etwas zu prüfen ist. Nutzt denselben
+ * Lint-Endpoint wie das LintPanel; React Query dedupliziert die Anfrage.
+ */
+function LintErrorBadge({ contractId }: { contractId: string }) {
+  const { data } = useLintContract(contractId);
+  const errorCount = data?.counts?.error ?? 0;
+  const warnCount = data?.counts?.warn ?? 0;
+  if (errorCount > 0) {
+    return (
+      <Badge variant="destructive" className="ml-2" data-testid="lint-tab-error-count">
+        {errorCount}
+      </Badge>
+    );
+  }
+  if (warnCount > 0) {
+    return (
+      <Badge
+        variant="outline"
+        className="ml-2 bg-amber-500/10 text-amber-700 border-amber-500/40"
+        data-testid="lint-tab-warn-count"
+      >
+        {warnCount}
+      </Badge>
+    );
+  }
+  return null;
+}
 
 function toneClass(tone: string) {
   switch (tone) {
@@ -283,6 +315,10 @@ export default function Contract() {
           </TabsTrigger>
           <TabsTrigger value="activity" data-testid="contract-tab-activity">
             {t("pages.contracts.tabs.activity")}
+          </TabsTrigger>
+          <TabsTrigger value="lint" data-testid="contract-tab-lint">
+            Konsistenz
+            <LintErrorBadge contractId={id} />
           </TabsTrigger>
           <TabsTrigger value="approvals" data-testid="contract-tab-approvals">
             {t("pages.contracts.tabs.approvals")}
@@ -501,6 +537,10 @@ export default function Contract() {
           <EntityVersions entityType="contract" entityId={id} />
           <ObligationsSection contractId={id} contractStatus={contract.status} />
           <ExternalAccessActivityCard contractId={id} />
+        </TabsContent>
+
+        <TabsContent value="lint" className="mt-4 space-y-6" data-testid="contract-tabpanel-lint">
+          <LintPanel contractId={id} />
         </TabsContent>
 
         <TabsContent value="approvals" className="mt-4 space-y-6" data-testid="contract-tabpanel-approvals">

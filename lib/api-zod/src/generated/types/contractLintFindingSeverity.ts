@@ -8,9 +8,11 @@ Multi-tenant, multi-company, multi-brand. Deal-centric.
  * OpenAPI spec version: 0.1.0
  */
 
-export type RequestContractApproval409Code =
-  (typeof RequestContractApproval409Code)[keyof typeof RequestContractApproval409Code];
+export type ContractLintFindingSeverity =
+  (typeof ContractLintFindingSeverity)[keyof typeof ContractLintFindingSeverity];
 
-export const RequestContractApproval409Code = {
-  cuad_required_missing: "cuad_required_missing",
+export const ContractLintFindingSeverity = {
+  info: "info",
+  warn: "warn",
+  error: "error",
 } as const;

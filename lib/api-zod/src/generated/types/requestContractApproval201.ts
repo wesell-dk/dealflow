@@ -14,6 +14,7 @@ export type RequestContractApproval201 = {
   /** @nullable */
   overrideReason?: string | null;
   missingExpectedCount: number;
+  lintErrorCount: number;
   /** @nullable */
   contractTypeName?: string | null;
 };

@@ -182,6 +182,8 @@ import {
 } from '../lib/ai';
 import { recordRecommendation, clampConfidence, confidenceLevelToScore } from '../lib/ai/recommendations.js';
 import type { HelpAssistantInput } from '../lib/ai/prompts/dealflow';
+import type { ContractConsistencyInput } from '../lib/ai/prompts/dealflow';
+import { runContractLint, type ContractLintInput } from '../lib/contractLinter/index.js';
 import type { DocumentLayoutProfile } from '../pdf/profile.js';
 import { safeParseProfile as safeParseProfileSync } from '../pdf/profile.js';
 import { runAgent, type AgentTrace } from '../lib/ai/agent.js';
@@ -6640,8 +6642,18 @@ router.patch('/amendments/:id', async (req, res) => {
   if (!a) { res.status(404).json({ error: 'not found' }); return; }
   const [c] = await db.select().from(contractsTable).where(eq(contractsTable.id, a.originalContractId));
   if (!c || !(await gateDeal(req, res, c.dealId))) return;
-  const b = req.body;
+  const b = req.body as {
+    status?: string;
+    effectiveFrom?: string | null;
+    description?: string | null;
+    title?: string;
+    override?: boolean;
+    overrideReason?: string;
+  };
   const patch: Partial<typeof contractAmendmentsTable.$inferInsert> = {};
+  let signatureLintOverrideUsed = false;
+  let signatureLintErrorCount = 0;
+  let signatureLintErrorCodes: string[] = [];
   if (typeof b.status === 'string') {
     const allowed = AMENDMENT_TRANSITIONS[a.status] ?? [];
     if (!allowed.includes(b.status)) {
@@ -6650,6 +6662,39 @@ router.patch('/amendments/:id', async (req, res) => {
         allowedNext: allowed,
       });
       return;
+    }
+    // Hard-Stop bei Lint-Fehlern, BEVOR der Übergang nach „out_for_signature"
+    // ein Signatur-Paket erzeugt (Task #230 Step 5: Gate auch für Signatur,
+    // nicht nur Approval). Override-Pfad spiegelt die Approval-Gate-Semantik:
+    // Tenant-Admin + `overrideReason` (≥10 Zeichen) → durchbruch + Audit.
+    if (b.status === 'out_for_signature') {
+      const lintInput = await assembleLintInput(c.id);
+      const lintReport = lintInput ? runContractLint(lintInput) : null;
+      const errCount = lintReport?.counts.error ?? 0;
+      const errs = (lintReport?.findings ?? [])
+        .filter(f => f.severity === 'error')
+        .map(f => ({ category: f.category, code: f.code, message: f.message, contractClauseId: f.contractClauseId ?? null }));
+      const wantOverride = b.override === true;
+      if (errCount > 0 && !wantOverride) {
+        res.status(409).json({
+          error: 'Vertrags-Linter meldet Fehler — Signatur blockiert',
+          code: 'lint_errors_present',
+          lintErrorCount: errCount,
+          lintErrors: errs,
+        });
+        return;
+      }
+      if (wantOverride && errCount > 0) {
+        if (!requireAdmin(req, res)) return;
+        const reasonText = (b.overrideReason ?? '').trim();
+        if (reasonText.length < 10) {
+          res.status(422).json({ error: 'overrideReason ist Pflicht (≥10 Zeichen) für Override' });
+          return;
+        }
+        signatureLintOverrideUsed = true;
+        signatureLintErrorCount = errCount;
+        signatureLintErrorCodes = errs.map(e => e.code);
+      }
     }
     patch.status = b.status;
   }
@@ -6707,9 +6752,18 @@ router.patch('/amendments/:id', async (req, res) => {
           escalationAfterHours: 120,
           deadline: null,
         });
-        await writeAuditFromReq(req, {          entityType: 'contract_amendment', entityId: a.id, action: 'signature_created',
-          summary: `Signature package created for amendment ${a.number}`,
-          after: { packageId: pkgId },
+        await writeAuditFromReq(req, {
+          entityType: 'contract_amendment', entityId: a.id, action: 'signature_created',
+          summary: signatureLintOverrideUsed
+            ? `Signatur-Paket angelegt für Nachtrag ${a.number} via OVERRIDE — ${signatureLintErrorCount} Lint-Fehler ignoriert`
+            : `Signatur-Paket angelegt für Nachtrag ${a.number}`,
+          after: {
+            packageId: pkgId,
+            override: signatureLintOverrideUsed,
+            overrideReason: signatureLintOverrideUsed ? (b.overrideReason ?? null) : null,
+            lintErrorCount: signatureLintErrorCount,
+            lintErrorCodes: signatureLintOverrideUsed ? signatureLintErrorCodes : [],
+          },
         });
       }
     }
@@ -7747,11 +7801,32 @@ router.post('/contracts/:id/request-approval', async (req, res) => {
     return;
   }
 
+  // Vorprüfung: deterministischer Vertragslinter (Task #230). Hard-Stop bei
+  // `error`-Findings (fehlende Pflicht-Klauselfamilie, verbotene Familie).
+  // Override-Pfad teilt sich Logik mit dem CUAD-Gate: Tenant-Admins dürfen
+  // mit `override: true` + `overrideReason` (≥10 Zeichen) durchbrechen.
+  const lintInput = await assembleLintInput(c.id);
+  const lintReport = lintInput ? runContractLint(lintInput) : null;
+  const lintErrorCount = lintReport?.counts.error ?? 0;
+  const lintErrors = (lintReport?.findings ?? [])
+    .filter(f => f.severity === 'error')
+    .map(f => ({ category: f.category, code: f.code, message: f.message, contractClauseId: f.contractClauseId ?? null }));
+
+  if (lintErrorCount > 0 && !wantOverride) {
+    res.status(409).json({
+      error: 'Vertrags-Linter meldet Fehler — Freigabe blockiert',
+      code: 'lint_errors_present',
+      lintErrorCount,
+      lintErrors,
+    });
+    return;
+  }
+
   // Override-Pfad: nur Tenant-Admins (tenantWide) dürfen den Gate umgehen, und
   // nur mit einer ausreichend langen Begründung (Mindestlänge wird bereits via
   // Z.RequestContractApprovalBody erzwungen — hier nochmal als Defence-in-depth,
   // falls ein zukünftiger Patch das Schema lockert).
-  if (wantOverride && missingExpectedCount > 0) {
+  if (wantOverride && (missingExpectedCount > 0 || lintErrorCount > 0)) {
     if (!requireAdmin(req, res)) return;
     const reasonText = (body.overrideReason ?? '').trim();
     if (reasonText.length < 10) {
@@ -7806,21 +7881,25 @@ router.post('/contracts/:id/request-approval', async (req, res) => {
     currentStageIdx: chainFields.currentStageIdx,
   });
 
+  const overrideUsed = wantOverride && (missingExpectedCount > 0 || lintErrorCount > 0);
+
   await writeAuditFromReq(req, {
     entityType: 'contract',
     entityId: c.id,
     action: 'approval_requested',
-    summary: wantOverride && missingExpectedCount > 0
-      ? `Approval requested with OVERRIDE — ${missingExpectedCount} required clause(s) missing`
-      : `Approval requested for contract ${c.title}`,
+    summary: overrideUsed
+      ? `Freigabe angefordert mit OVERRIDE — ${missingExpectedCount} Pflicht-Baustein(e), ${lintErrorCount} Lint-Fehler`
+      : `Freigabe angefordert für Vertrag ${c.title}`,
     after: {
       approvalId,
-      override: wantOverride && missingExpectedCount > 0,
-      overrideReason: wantOverride && missingExpectedCount > 0 ? body.overrideReason ?? null : null,
+      override: overrideUsed,
+      overrideReason: overrideUsed ? body.overrideReason ?? null : null,
       missingExpectedCount,
-      missingExpected: wantOverride && missingExpectedCount > 0
+      missingExpected: overrideUsed
         ? missingExpected.map(m => m.code)
         : [],
+      lintErrorCount,
+      lintErrorCodes: overrideUsed ? lintErrors.map(e => e.code) : [],
       contractTypeId: coverage?.contractTypeId ?? null,
       contractTypeName: coverage?.contractTypeName ?? null,
       chainTemplateId: chainFields.chainTemplateId,
@@ -7831,12 +7910,290 @@ router.post('/contracts/:id/request-approval', async (req, res) => {
 
   res.status(201).json({
     approvalId,
-    override: wantOverride && missingExpectedCount > 0,
-    overrideReason: wantOverride && missingExpectedCount > 0
-      ? body.overrideReason ?? null : null,
+    override: overrideUsed,
+    overrideReason: overrideUsed ? body.overrideReason ?? null : null,
     missingExpectedCount,
+    lintErrorCount,
     contractTypeName: coverage?.contractTypeName ?? null,
   });
+});
+
+// ── Contract Consistency Linter (Task #230) ──
+//
+// Deterministischer Lint-Endpoint, der NICHT die KI bemüht. Liefert
+// Findings zu fehlenden Pflicht-Familien, kaputten Querverweisen,
+// widersprüchlichen Fristen, ungenutzten Definitionen, fehlenden Anlagen.
+// Wird sowohl von der UI (Konsistenz-Tab im Vertragseditor) als auch vom
+// Approval-Gate (siehe `/contracts/:id/request-approval`) verwendet —
+// daher als Helper extrahiert.
+async function assembleLintInput(contractId: string): Promise<ContractLintInput | null> {
+  const [c] = await db.select().from(contractsTable).where(eq(contractsTable.id, contractId));
+  if (!c) return null;
+
+  const clauseRows = await db.select().from(contractClausesTable)
+    .where(eq(contractClausesTable.contractId, c.id))
+    .orderBy(asc(contractClausesTable.id));
+
+  // Variant-Bodies nachladen, damit der Linter über echten Vertragstext arbeitet
+  // und nicht nur über die Klausel-Summary (Regex-Heuristiken brauchen Volltext).
+  const variantIds = clauseRows.map(cl => cl.activeVariantId).filter((x): x is string => Boolean(x));
+  const variantRows = variantIds.length
+    ? await db.select().from(clauseVariantsTable).where(inArray(clauseVariantsTable.id, variantIds))
+    : [];
+  const variantBodyById = new Map<string, string>(variantRows.map(v => [v.id, v.body ?? '']));
+
+  let ct: { id: string; code: string; mandatoryClauseFamilyIds: string[]; forbiddenClauseFamilyIds: string[] } | null = null;
+  if (c.contractTypeId) {
+    const [row] = await db.select().from(contractTypesTable).where(eq(contractTypesTable.id, c.contractTypeId));
+    if (row) {
+      ct = {
+        id: row.id,
+        code: row.code,
+        mandatoryClauseFamilyIds: Array.isArray(row.mandatoryClauseFamilyIds) ? row.mandatoryClauseFamilyIds as string[] : [],
+        forbiddenClauseFamilyIds: Array.isArray(row.forbiddenClauseFamilyIds) ? row.forbiddenClauseFamilyIds as string[] : [],
+      };
+    }
+  }
+
+  const familyIds = Array.from(new Set([
+    ...clauseRows.map(cl => cl.familyId).filter((x): x is string => Boolean(x)),
+    ...(ct?.mandatoryClauseFamilyIds ?? []),
+    ...(ct?.forbiddenClauseFamilyIds ?? []),
+  ]));
+  const familyRows = familyIds.length
+    ? await db.select().from(clauseFamiliesTable).where(inArray(clauseFamiliesTable.id, familyIds))
+    : [];
+  const familyNameById = new Map<string, string>(familyRows.map(f => [f.id, f.name]));
+
+  // Anlagen-Anzahl bestmöglich deterministisch ableiten:
+  // 1) Klauseln, deren Familienname „anlage|annex|appendix|anhang" enthält
+  //    (z. B. „Anlage SLA"), zählen als materialisierte Anlagen.
+  // 2) Wenn keine solchen Klauseln existieren, lassen wir die Anzahl bewusst
+  //    `null` (= unbekannt), damit der Linter keine False-Positive-Warnungen
+  //    für "Anlage X fehlt" emittiert. Sobald ein echtes Contract-Attachments-
+  //    Modell existiert, wird die Zählung hier verfeinert.
+  const attachmentLikeFamilyRe = /\b(anlage|annex|appendix|anhang)\b/i;
+  const derivedAttachmentCount = clauseRows.filter(cl => {
+    const famName = familyNameById.get(cl.familyId ?? '') ?? cl.family ?? '';
+    return attachmentLikeFamilyRe.test(famName);
+  }).length;
+  const attachmentCount: number | null = derivedAttachmentCount > 0 ? derivedAttachmentCount : null;
+
+  return {
+    contract: { id: c.id, title: c.title, body: null },
+    clauses: clauseRows.map((cl, idx) => ({
+      id: cl.id,
+      family: cl.family,
+      familyId: cl.familyId,
+      body: cl.activeVariantId ? variantBodyById.get(cl.activeVariantId) ?? null : null,
+      summary: cl.summary,
+      editedBody: cl.editedBody,
+      editedSummary: cl.editedSummary,
+      ordinal: idx + 1,
+    })),
+    contractType: ct,
+    attachmentCount,
+    familyNameById,
+  };
+}
+
+router.get('/contracts/:id/lint', async (req, res) => {
+  const [c] = await db.select().from(contractsTable).where(eq(contractsTable.id, req.params.id));
+  if (!c) { res.status(404).json({ error: 'not found' }); return; }
+  if (!(await gateDeal(req, res, c.dealId))) return;
+  const input = await assembleLintInput(c.id);
+  if (!input) { res.status(404).json({ error: 'not found' }); return; }
+  const report = runContractLint(input);
+  res.json(report);
+});
+
+router.post('/contracts/:id/lint/ai', async (req, res) => {
+  const [c] = await db.select().from(contractsTable).where(eq(contractsTable.id, req.params.id));
+  if (!c) { res.status(404).json({ error: 'not found' }); return; }
+  if (!(await gateDeal(req, res, c.dealId))) return;
+  if (!isAIConfigured()) {
+    res.status(503).json({ ok: false, error: 'AI provider not configured', code: 'config_error' });
+    return;
+  }
+  const scope = getScope(req);
+  const input = await assembleLintInput(c.id);
+  if (!input) { res.status(404).json({ error: 'not found' }); return; }
+  const deterministic = runContractLint(input);
+
+  let contractTypeCode: string | null = null;
+  if (c.contractTypeId) {
+    const [ct] = await db.select().from(contractTypesTable).where(eq(contractTypesTable.id, c.contractTypeId));
+    contractTypeCode = ct?.code ?? null;
+  }
+  const aiInput: ContractConsistencyInput = {
+    contract: {
+      id: c.id,
+      title: c.title,
+      contractTypeCode,
+      language: (c.language === 'en' ? 'en' : 'de'),
+    },
+    clauses: input.clauses.map(cl => ({
+      id: cl.id,
+      ordinal: cl.ordinal ?? 1,
+      family: cl.family,
+      body: [cl.editedBody ?? cl.body ?? '', cl.editedSummary ?? cl.summary ?? ''].filter(Boolean).join('\n').slice(0, 2000),
+    })),
+    attachmentCount: input.attachmentCount,
+    deterministicFindings: deterministic.findings.map(f => ({
+      category: f.category,
+      severity: f.severity,
+      message: f.message,
+    })),
+  };
+
+  try {
+    const result = await runStructured<ContractConsistencyInput, {
+      findings: Array<{ category: string; severity: 'info' | 'warn' | 'error'; message: string; contractClauseId: string | null; snippet: string | null; suggestion: string | null }>;
+      notes: string[];
+      confidence: 'low' | 'medium' | 'high';
+      confidenceReason: string;
+    }>({
+      promptKey: 'contract.consistency',
+      input: aiInput,
+      scope,
+      entityRef: { entityType: 'contract', entityId: c.id },
+    });
+    res.json({
+      ok: true,
+      deterministic,
+      ai: {
+        findings: result.output.findings,
+        notes: result.output.notes,
+        confidenceLevel: result.output.confidence,
+        confidenceReason: result.output.confidenceReason,
+      },
+      invocationId: result.invocationId,
+      model: result.model,
+      latencyMs: result.latencyMs,
+    });
+  } catch (err) {
+    if (err instanceof AIOrchestrationError) {
+      mapAiOrchestrationErrorToHttp(err, res, 'contract-consistency');
+      return;
+    }
+    throw err;
+  }
+});
+
+// Quick-Fix-Endpoint für Lint-Findings (Task #230 Step 4: „one-click fix").
+// Aktuell unterstützt:
+//   - { kind: 'add_mandatory_family', familyId } → fügt eine Klausel der
+//     fehlenden Pflicht-Familie an (ruft die gleiche Logik wie Quick-Add).
+//   - { kind: 'remove_forbidden_family', clauseId } → entfernt die
+//     verbotene Klausel und schreibt einen Audit-Eintrag.
+// Weitere Fix-Kinds lassen sich additiv ergänzen, ohne die UI anzufassen.
+router.post('/contracts/:id/lint/apply-fix', async (req, res) => {
+  const [c] = await db.select().from(contractsTable).where(eq(contractsTable.id, req.params.id));
+  if (!c) { res.status(404).json({ error: 'not found' }); return; }
+  if (!(await gateDeal(req, res, c.dealId))) return;
+
+  const body = (req.body ?? {}) as {
+    kind?: string;
+    familyId?: string;
+    clauseId?: string;
+    variantId?: string;
+  };
+
+  if (body.kind === 'add_mandatory_family') {
+    if (typeof body.familyId !== 'string' || !body.familyId.trim()) {
+      res.status(400).json({ error: 'familyId is required for add_mandatory_family' }); return;
+    }
+    const familyId = body.familyId.trim();
+    const [fam] = await db.select().from(clauseFamiliesTable).where(eq(clauseFamiliesTable.id, familyId));
+    if (!fam) { res.status(400).json({ error: 'family not found' }); return; }
+    const existingClauses = await db.select().from(contractClausesTable)
+      .where(eq(contractClausesTable.contractId, c.id));
+    if (existingClauses.some(cl => cl.familyId === familyId)) {
+      res.status(409).json({ error: 'clause for this family already exists on contract' }); return;
+    }
+
+    const tenantId = getScope(req).tenantId;
+    const [dealRow] = await db.select().from(dealsTable).where(eq(dealsTable.id, c.dealId));
+    const brandId = dealRow?.brandId ?? null;
+    let brand: typeof brandsTable.$inferSelect | undefined;
+    if (brandId) {
+      const [b] = await db.select().from(brandsTable).where(eq(brandsTable.id, brandId));
+      brand = b;
+    }
+    const familyVariants = await db.select().from(clauseVariantsTable)
+      .where(eq(clauseVariantsTable.familyId, familyId))
+      .orderBy(desc(clauseVariantsTable.severityScore), asc(clauseVariantsTable.name));
+    if (familyVariants.length === 0) {
+      res.status(400).json({ error: 'no variants exist for family' }); return;
+    }
+    const brandDefaultId = brand?.defaultClauseVariants
+      ? (brand.defaultClauseVariants as Record<string, string>)[familyId]
+      : undefined;
+    let chosen = brandDefaultId ? familyVariants.find(v => v.id === brandDefaultId) : undefined;
+    if (!chosen) chosen = familyVariants[0];
+
+    let snapName = chosen.name;
+    let snapSummary = chosen.summary;
+    let snapSeverity = chosen.severity || severityLabelFromScore(chosen.severityScore);
+    let appliedOverride = false;
+    if (brandId) {
+      const ov = await loadBrandOverride(brandId, chosen.id, tenantId);
+      if (ov) {
+        snapName = ov.name ?? chosen.name;
+        snapSummary = ov.summary ?? chosen.summary;
+        snapSeverity = ov.severity ?? (ov.severityScore != null ? severityLabelFromScore(ov.severityScore) : snapSeverity);
+        appliedOverride = true;
+      }
+    }
+    if (!appliedOverride) {
+      const language = normalizeLocale(c.language);
+      const trMap = await loadVariantTranslations([chosen.id]);
+      const tr = pickClauseTranslation(chosen, trMap.get(chosen.id), language);
+      if (tr.name) snapName = tr.name;
+      if (tr.summary) snapSummary = tr.summary;
+    }
+
+    const newClauseId = `cc_${randomUUID().slice(0, 8)}`;
+    await db.insert(contractClausesTable).values({
+      id: newClauseId,
+      contractId: c.id,
+      familyId: fam.id,
+      activeVariantId: chosen.id,
+      family: fam.name,
+      variant: snapName,
+      severity: snapSeverity,
+      summary: snapSummary,
+    });
+    await writeAuditFromReq(req, {
+      entityType: 'contract', entityId: c.id, action: 'lint_fix_applied',
+      summary: `Lint-Fix: Pflicht-Klausel "${fam.name}" hinzugefügt`,
+      after: { fixKind: 'add_mandatory_family', familyId: fam.id, clauseId: newClauseId, variantId: chosen.id },
+    });
+    res.status(201).json({ ok: true, clauseId: newClauseId, familyId: fam.id });
+    return;
+  }
+
+  if (body.kind === 'remove_forbidden_family') {
+    if (typeof body.clauseId !== 'string' || !body.clauseId.trim()) {
+      res.status(400).json({ error: 'clauseId is required for remove_forbidden_family' }); return;
+    }
+    const clauseId = body.clauseId.trim();
+    const [cl] = await db.select().from(contractClausesTable).where(eq(contractClausesTable.id, clauseId));
+    if (!cl || cl.contractId !== c.id) {
+      res.status(404).json({ error: 'clause not found on this contract' }); return;
+    }
+    await db.delete(contractClausesTable).where(eq(contractClausesTable.id, clauseId));
+    await writeAuditFromReq(req, {
+      entityType: 'contract', entityId: c.id, action: 'lint_fix_applied',
+      summary: `Lint-Fix: Verbotene Klausel "${cl.family}" entfernt`,
+      before: { clauseId: cl.id, familyId: cl.familyId, family: cl.family },
+      after: { fixKind: 'remove_forbidden_family' },
+    });
+    res.json({ ok: true, removedClauseId: clauseId });
+    return;
+  }
+
+  res.status(400).json({ error: `unknown fix kind: ${body.kind}` });
 });
 
 router.get('/contract-types/:id/cuad-expectations', async (req, res) => {

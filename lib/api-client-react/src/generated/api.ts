@@ -43,6 +43,9 @@ import type {
   AiSecondOpinionDecisionRequest,
   AiSecondOpinionDecisionResult,
   ApiError,
+  ApplyContractLintFix200,
+  ApplyContractLintFix201,
+  ApplyContractLintFixInput,
   ApprovalCase,
   ApprovalChainTemplate,
   ApprovalChainTemplateInput,
@@ -104,6 +107,8 @@ import type {
   ContractCompatibilityReport,
   ContractDetail,
   ContractInput,
+  ContractLintAiEnvelope,
+  ContractLintReport,
   ContractPatchInput,
   ContractPlaybook,
   ContractPlaybookCreate,
@@ -10444,6 +10449,274 @@ export const useRequestContractApproval = <
   TContext
 > => {
   return useMutation(getRequestContractApprovalMutationOptions(options));
+};
+
+/**
+ * Liefert eine Liste deterministischer Konsistenz-Findings für den Vertrag — Pflicht-/Verbots-Klauseln, kaputte Querverweise, widersprüchliche Fristen, ungenutzte Definitionen, fehlende Anlagen. Hard-Stop für Approvals: alle `error`-Findings sperren das request-approval-Gate (Override durch Tenant-Admin).
+
+ * @summary Deterministischer Vertrags-Konsistenz-Linter (Task
+ */
+export const getLintContractUrl = (id: string) => {
+  return `/api/v1/contracts/${id}/lint`;
+};
+
+export const lintContract = async (
+  id: string,
+  options?: RequestInit,
+): Promise<ContractLintReport> => {
+  return customFetch<ContractLintReport>(getLintContractUrl(id), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getLintContractQueryKey = (id: string) => {
+  return [`/api/v1/contracts/${id}/lint`] as const;
+};
+
+export const getLintContractQueryOptions = <
+  TData = Awaited<ReturnType<typeof lintContract>>,
+  TError = ErrorType<void>,
+>(
+  id: string,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof lintContract>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getLintContractQueryKey(id);
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof lintContract>>> = ({
+    signal,
+  }) => lintContract(id, { signal, ...requestOptions });
+
+  return {
+    queryKey,
+    queryFn,
+    enabled: !!id,
+    ...queryOptions,
+  } as UseQueryOptions<
+    Awaited<ReturnType<typeof lintContract>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type LintContractQueryResult = NonNullable<
+  Awaited<ReturnType<typeof lintContract>>
+>;
+export type LintContractQueryError = ErrorType<void>;
+
+/**
+ * @summary Deterministischer Vertrags-Konsistenz-Linter (Task
+ */
+
+export function useLintContract<
+  TData = Awaited<ReturnType<typeof lintContract>>,
+  TError = ErrorType<void>,
+>(
+  id: string,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof lintContract>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getLintContractQueryOptions(id, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * Ergänzt den deterministischen Linter um semantische Befunde via `contract.consistency`-Prompt (claude-sonnet-4-6). Audit + Cost werden via runStructured/recordAIInvocation geloggt. Antwort enthält sowohl die deterministischen als auch die KI-Findings, damit die UI sie nebeneinander darstellen kann.
+
+ * @summary KI-gestützte semantische Konsistenz-Prüfung (Task
+ */
+export const getLintContractWithAiUrl = (id: string) => {
+  return `/api/v1/contracts/${id}/lint/ai`;
+};
+
+export const lintContractWithAi = async (
+  id: string,
+  options?: RequestInit,
+): Promise<ContractLintAiEnvelope> => {
+  return customFetch<ContractLintAiEnvelope>(getLintContractWithAiUrl(id), {
+    ...options,
+    method: "POST",
+  });
+};
+
+export const getLintContractWithAiMutationOptions = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof lintContractWithAi>>,
+    TError,
+    { id: string },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof lintContractWithAi>>,
+  TError,
+  { id: string },
+  TContext
+> => {
+  const mutationKey = ["lintContractWithAi"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof lintContractWithAi>>,
+    { id: string }
+  > = (props) => {
+    const { id } = props ?? {};
+
+    return lintContractWithAi(id, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type LintContractWithAiMutationResult = NonNullable<
+  Awaited<ReturnType<typeof lintContractWithAi>>
+>;
+
+export type LintContractWithAiMutationError = ErrorType<void>;
+
+/**
+ * @summary KI-gestützte semantische Konsistenz-Prüfung (Task
+ */
+export const useLintContractWithAi = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof lintContractWithAi>>,
+    TError,
+    { id: string },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof lintContractWithAi>>,
+  TError,
+  { id: string },
+  TContext
+> => {
+  return useMutation(getLintContractWithAiMutationOptions(options));
+};
+
+/**
+ * Führt den im Finding hinterlegten `fix` aus. Aktuell unterstützt: `add_mandatory_family` (fügt eine Klausel der fehlenden Pflicht- Familie an) und `remove_forbidden_family` (entfernt eine verbotene Klausel). Jede Anwendung wird im Audit-Log mit `lint_fix_applied` protokolliert.
+
+ * @summary Wendet einen maschinen-anwendbaren Lint-Quick-Fix an (Task
+ */
+export const getApplyContractLintFixUrl = (id: string) => {
+  return `/api/v1/contracts/${id}/lint/apply-fix`;
+};
+
+export const applyContractLintFix = async (
+  id: string,
+  applyContractLintFixInput: ApplyContractLintFixInput,
+  options?: RequestInit,
+): Promise<ApplyContractLintFix200 | ApplyContractLintFix201> => {
+  return customFetch<ApplyContractLintFix200 | ApplyContractLintFix201>(
+    getApplyContractLintFixUrl(id),
+    {
+      ...options,
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...options?.headers },
+      body: JSON.stringify(applyContractLintFixInput),
+    },
+  );
+};
+
+export const getApplyContractLintFixMutationOptions = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof applyContractLintFix>>,
+    TError,
+    { id: string; data: BodyType<ApplyContractLintFixInput> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof applyContractLintFix>>,
+  TError,
+  { id: string; data: BodyType<ApplyContractLintFixInput> },
+  TContext
+> => {
+  const mutationKey = ["applyContractLintFix"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof applyContractLintFix>>,
+    { id: string; data: BodyType<ApplyContractLintFixInput> }
+  > = (props) => {
+    const { id, data } = props ?? {};
+
+    return applyContractLintFix(id, data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type ApplyContractLintFixMutationResult = NonNullable<
+  Awaited<ReturnType<typeof applyContractLintFix>>
+>;
+export type ApplyContractLintFixMutationBody =
+  BodyType<ApplyContractLintFixInput>;
+export type ApplyContractLintFixMutationError = ErrorType<void>;
+
+/**
+ * @summary Wendet einen maschinen-anwendbaren Lint-Quick-Fix an (Task
+ */
+export const useApplyContractLintFix = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof applyContractLintFix>>,
+    TError,
+    { id: string; data: BodyType<ApplyContractLintFixInput> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof applyContractLintFix>>,
+  TError,
+  { id: string; data: BodyType<ApplyContractLintFixInput> },
+  TContext
+> => {
+  return useMutation(getApplyContractLintFixMutationOptions(options));
 };
 
 export const getGetClauseFamilyCuadCategoriesUrl = (id: string) => {

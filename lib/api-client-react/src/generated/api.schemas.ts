@@ -3045,6 +3045,16 @@ export interface CreateAmendmentInput {
   changes?: CreateAmendmentInputChangesItem[];
 }
 
+/**
+ * Patch-Body für `/amendments/{id}`. `override` + `overrideReason`
+werden NUR beim Übergang nach `out_for_signature` ausgewertet:
+wenn der Vertrags-Linter `error`-Findings hat, wird die Signatur-
+Erstellung blockiert (Status 409, Code `lint_errors_present`).
+Tenant-Admins dürfen den Block via `override: true` +
+`overrideReason` (≥10 Zeichen) durchbrechen — der Override landet
+strukturiert im Audit-Log.
+
+ */
 export interface PatchAmendmentInput {
   status?: string;
   /** @nullable */
@@ -3052,6 +3062,9 @@ export interface PatchAmendmentInput {
   /** @nullable */
   description?: string | null;
   title?: string;
+  override?: boolean;
+  /** @minLength 10 */
+  overrideReason?: string;
 }
 
 export interface EffectiveContractState {
@@ -4132,6 +4145,141 @@ export interface AiSecondOpinionDecisionResult {
    * @maximum 100
    */
   agreementScore: number;
+}
+
+export type ContractLintFindingCategory =
+  (typeof ContractLintFindingCategory)[keyof typeof ContractLintFindingCategory];
+
+export const ContractLintFindingCategory = {
+  cross_reference: "cross_reference",
+  definitions: "definitions",
+  attachments: "attachments",
+  mandatory_clauses: "mandatory_clauses",
+  forbidden_clauses: "forbidden_clauses",
+  numeric_consistency: "numeric_consistency",
+  semantic: "semantic",
+} as const;
+
+export type ContractLintFindingSeverity =
+  (typeof ContractLintFindingSeverity)[keyof typeof ContractLintFindingSeverity];
+
+export const ContractLintFindingSeverity = {
+  info: "info",
+  warn: "warn",
+  error: "error",
+} as const;
+
+/**
+ * @nullable
+ */
+export type ContractLintFindingFix = {
+  kind?: "add_mandatory_family" | "remove_forbidden_family";
+  familyId?: string;
+  clauseId?: string;
+} | null;
+
+/**
+ * Ein einzelner Befund des Vertrags-Linters. `id` ist stabil über
+wiederholte Aufrufe hinweg, damit React-Listen / Selektionen erhalten
+bleiben. `fix` ist optional und beschreibt einen maschinen-anwendbaren
+Quick-Fix (UI rendert dann einen "Fix"-Button).
+
+ */
+export interface ContractLintFinding {
+  id: string;
+  category: ContractLintFindingCategory;
+  severity: ContractLintFindingSeverity;
+  code: string;
+  message: string;
+  /** @nullable */
+  contractClauseId?: string | null;
+  /** @nullable */
+  snippet?: string | null;
+  /** @nullable */
+  suggestion?: string | null;
+  /** @nullable */
+  fix?: ContractLintFindingFix;
+}
+
+export type ContractLintReportCounts = {
+  error: number;
+  warn: number;
+  info: number;
+  total: number;
+};
+
+export interface ContractLintReport {
+  contractId: string;
+  generatedAt: string;
+  findings: ContractLintFinding[];
+  counts: ContractLintReportCounts;
+}
+
+export type ApplyContractLintFixInputKind =
+  (typeof ApplyContractLintFixInputKind)[keyof typeof ApplyContractLintFixInputKind];
+
+export const ApplyContractLintFixInputKind = {
+  add_mandatory_family: "add_mandatory_family",
+  remove_forbidden_family: "remove_forbidden_family",
+} as const;
+
+/**
+ * Body für `/contracts/{id}/lint/apply-fix`. Spiegelt die `fix`-
+Payloads aus `ContractLintFinding`. Bei `add_mandatory_family`
+ist `familyId` Pflicht; bei `remove_forbidden_family` ist
+`clauseId` Pflicht.
+
+ */
+export interface ApplyContractLintFixInput {
+  kind: ApplyContractLintFixInputKind;
+  familyId?: string;
+  clauseId?: string;
+}
+
+export type ContractLintAiEnvelopeAiFindingsItemSeverity =
+  (typeof ContractLintAiEnvelopeAiFindingsItemSeverity)[keyof typeof ContractLintAiEnvelopeAiFindingsItemSeverity];
+
+export const ContractLintAiEnvelopeAiFindingsItemSeverity = {
+  info: "info",
+  warn: "warn",
+  error: "error",
+} as const;
+
+export type ContractLintAiEnvelopeAiFindingsItem = {
+  category: string;
+  severity: ContractLintAiEnvelopeAiFindingsItemSeverity;
+  message: string;
+  /** @nullable */
+  contractClauseId?: string | null;
+  /** @nullable */
+  snippet?: string | null;
+  /** @nullable */
+  suggestion?: string | null;
+};
+
+export type ContractLintAiEnvelopeAiConfidenceLevel =
+  (typeof ContractLintAiEnvelopeAiConfidenceLevel)[keyof typeof ContractLintAiEnvelopeAiConfidenceLevel];
+
+export const ContractLintAiEnvelopeAiConfidenceLevel = {
+  low: "low",
+  medium: "medium",
+  high: "high",
+} as const;
+
+export type ContractLintAiEnvelopeAi = {
+  findings: ContractLintAiEnvelopeAiFindingsItem[];
+  notes: string[];
+  confidenceLevel: ContractLintAiEnvelopeAiConfidenceLevel;
+  confidenceReason: string;
+};
+
+export interface ContractLintAiEnvelope {
+  ok: boolean;
+  deterministic: ContractLintReport;
+  ai: ContractLintAiEnvelopeAi;
+  invocationId: string;
+  model: string;
+  latencyMs: number;
 }
 
 export type HelpBotInputHistoryItem = {
@@ -5989,32 +6137,48 @@ export type RequestContractApproval201 = {
   /** @nullable */
   overrideReason?: string | null;
   missingExpectedCount: number;
+  lintErrorCount: number;
   /** @nullable */
   contractTypeName?: string | null;
 };
 
-export type RequestContractApproval409Code =
-  (typeof RequestContractApproval409Code)[keyof typeof RequestContractApproval409Code];
+export type RequestContractApproval409 =
+  | {
+      error: string;
+      code: "cuad_required_missing";
+      missingExpectedCount: number;
+      /** @nullable */
+      contractTypeId?: string | null;
+      /** @nullable */
+      contractTypeName?: string | null;
+      missing: {
+        cuadCategoryId: string;
+        code: string;
+        name: string;
+      }[];
+    }
+  | {
+      error: string;
+      code: "lint_errors_present";
+      lintErrorCount: number;
+      lintErrors: {
+        category: string;
+        code: string;
+        message: string;
+        /** @nullable */
+        contractClauseId?: string | null;
+      }[];
+    };
 
-export const RequestContractApproval409Code = {
-  cuad_required_missing: "cuad_required_missing",
-} as const;
-
-export type RequestContractApproval409MissingItem = {
-  cuadCategoryId: string;
-  code: string;
-  name: string;
+export type ApplyContractLintFix200 = {
+  ok: boolean;
+  removedClauseId?: string;
 };
 
-export type RequestContractApproval409 = {
-  error: string;
-  code: RequestContractApproval409Code;
-  missingExpectedCount: number;
-  /** @nullable */
-  contractTypeId?: string | null;
-  /** @nullable */
-  contractTypeName?: string | null;
-  missing: RequestContractApproval409MissingItem[];
+export type ApplyContractLintFix201 = {
+  ok: boolean;
+  clauseId?: string;
+  familyId?: string;
 };
 
 export type SetClauseFamilyCuadCategoriesBody = {
