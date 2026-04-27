@@ -277,7 +277,9 @@ function PreferencesCard() {
       });
       // i18n direkt umschalten, damit die Begrüßung sofort die richtige
       // Sprache zeigt (sonst greift die Sync erst beim nächsten App-Boot).
-      if (nextLang) setLanguage(nextLang);
+      // `persist: false`, weil wir die Wahl bereits oben über
+      // apiUpdateProfilePreferences gespeichert haben.
+      if (nextLang) setLanguage(nextLang, { persist: false });
       await refresh();
       toast({ title: "Einstellungen gespeichert" });
     } catch (e) {
