@@ -1,0 +1,43 @@
+devDependencies:
+- prettier 3.8.1
+- typescript 5.9.3
+
+. preinstall$ sh -c 'rm -f package-lock.json yarn.lock; case "$npm_config_user_agent" in pnpm/*) ;; *) echo "Use pnpm instead" >&2; exit 1 ;; esac'
+└─ Done in 10ms
+Done in 2.1s using pnpm v9.15.9
+root@synthetix-stag:/opt/app/dealflow# NODE_ENV=development pnpm install && \
+pnpm -r run build && \
+pnpm install --prod
+Scope: all 10 workspace projects
+✔ The modules directories will be removed and reinstalled from scratch. Proceed? (Y/n) · true
+Lockfile is up to date, resolution step is skipped
+Packages: +364
+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+Progress: resolved 364, reused 364, downloaded 0, added 0, done
+
+devDependencies:
++ prettier 3.8.1
++ typescript 5.9.3
+
+. preinstall$ sh -c 'rm -f package-lock.json yarn.lock; case "$npm_config_user_agent" in pnpm/*) ;; *) echo "Use pnpm instead" >&2; exit 1 ;; esac'
+└─ Done in 13ms
+Done in 4.9s using pnpm v9.15.9
+Scope: 9 of 10 workspace projects
+artifacts/mockup-sandbox build$ vite build
+│ failed to load config from /opt/app/dealflow/artifacts/mockup-sandbox/vite.config.ts
+│ error during build:
+│ Error: BASE_PATH environment variable is required but was not provided.
+│     at file:///opt/app/dealflow/artifacts/mockup-sandbox/node_modules/.vite-temp/vite.config.ts.timestamp-1777384897207-272de5f5ca588.mjs:155:9
+│     at ModuleJob.run (node:internal/modules/esm/module_job:325:25)
+│     at async ModuleLoader.import (node:internal/modules/esm/loader:606:24)
+│     at async loadConfigFromBundledFile (file:///opt/app/dealflow/node_modules/.pnpm/vite@7.3.2_@types+node@25.3.5_jiti@2.6.1_lightningcss@1.31.1_tsx@4.21.0_yaml@2.8.2/node_modules/vite/dist/nod…
+│     at async bundleAndLoadConfigFile (file:///opt/app/dealflow/node_modules/.pnpm/vite@7.3.2_@types+node@25.3.5_jiti@2.6.1_lightningcss@1.31.1_tsx@4.21.0_yaml@2.8.2/node_modules/vite/dist/node/…
+│     at async loadConfigFromFile (file:///opt/app/dealflow/node_modules/.pnpm/vite@7.3.2_@types+node@25.3.5_jiti@2.6.1_lightningcss@1.31.1_tsx@4.21.0_yaml@2.8.2/node_modules/vite/dist/node/chunk…
+│     at async resolveConfig (file:///opt/app/dealflow/node_modules/.pnpm/vite@7.3.2_@types+node@25.3.5_jiti@2.6.1_lightningcss@1.31.1_tsx@4.21.0_yaml@2.8.2/node_modules/vite/dist/node/chunks/con…
+│     at async createBuilder (file:///opt/app/dealflow/node_modules/.pnpm/vite@7.3.2_@types+node@25.3.5_jiti@2.6.1_lightningcss@1.31.1_tsx@4.21.0_yaml@2.8.2/node_modules/vite/dist/node/chunks/con…
+│     at async CAC.<anonymous> (file:///opt/app/dealflow/node_modules/.pnpm/vite@7.3.2_@types+node@25.3.5_jiti@2.6.1_lightningcss@1.31.1_tsx@4.21.0_yaml@2.8.2/node_modules/vite/dist/node/cli.js:6…
+└─ Failed in 477ms at /opt/app/dealflow/artifacts/mockup-sandbox
+/opt/app/dealflow/artifacts/mockup-sandbox:
+ ERR_PNPM_RECURSIVE_RUN_FIRST_FAIL  @workspace/mockup-sandbox@2.0.0 build: `vite build`
+Exit status 1
+root@synthetix-stag:/opt/app/dealflow# 
