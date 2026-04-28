@@ -1,0 +1,57 @@
+root@synthetix-stag:/opt/app/dealflow# cd /opt/app/dealflow
+pnpm install                                                       # ohne --frozen-lockfile
+
+pnpm --filter @workspace/db push
+pnpm --filter @workspace/api-server run build
+PORT=1 BASE_PATH=/ pnpm --filter @workspace/dealflow-web run build
+Scope: all 10 workspace projects
+Lockfile is up to date, resolution step is skipped
+Packages: +1
++
+Progress: resolved 1, reused 1, downloaded 0, added 1, done
+
+devDependencies: skipped because NODE_ENV is set to production
+
+. preinstall$ sh -c 'rm -f package-lock.json yarn.lock; case "$npm_config_user_agent" in pnpm/*) ;; *) echo "Use pnpm instead" >&2; exit 1 ;; esac'
+└─ Done in 15ms
+Done in 1.1s using pnpm v9.15.9
+
+> @workspace/db@0.0.0 push /opt/app/dealflow/lib/db
+> drizzle-kit push --config ./drizzle.config.ts
+
+sh: 1: drizzle-kit: not found
+/opt/app/dealflow/lib/db:
+ ERR_PNPM_RECURSIVE_RUN_FIRST_FAIL  @workspace/db@0.0.0 push: `drizzle-kit push --config ./drizzle.config.ts`
+spawn ENOENT
+
+> @workspace/api-server@0.0.0 build /opt/app/dealflow/artifacts/api-server
+> node ./build.mjs
+
+node:internal/modules/esm/resolve:873
+  throw new ERR_MODULE_NOT_FOUND(packageName, fileURLToPath(base), null);
+        ^
+
+Error [ERR_MODULE_NOT_FOUND]: Cannot find package 'esbuild' imported from /opt/app/dealflow/artifacts/api-server/build.mjs
+    at packageResolve (node:internal/modules/esm/resolve:873:9)
+    at moduleResolve (node:internal/modules/esm/resolve:946:18)
+    at defaultResolve (node:internal/modules/esm/resolve:1188:11)
+    at ModuleLoader.defaultResolve (node:internal/modules/esm/loader:708:12)
+    at #cachedDefaultResolve (node:internal/modules/esm/loader:657:25)
+    at ModuleLoader.resolve (node:internal/modules/esm/loader:640:38)
+    at ModuleLoader.getModuleJobForImport (node:internal/modules/esm/loader:264:38)
+    at ModuleJob._link (node:internal/modules/esm/module_job:168:49) {
+  code: 'ERR_MODULE_NOT_FOUND'
+}
+
+Node.js v20.20.2
+/opt/app/dealflow/artifacts/api-server:
+ ERR_PNPM_RECURSIVE_RUN_FIRST_FAIL  @workspace/api-server@0.0.0 build: `node ./build.mjs`
+Exit status 1
+
+> @workspace/dealflow-web@0.0.0 build /opt/app/dealflow/artifacts/dealflow-web
+> vite build --config vite.config.ts
+
+sh: 1: vite: not found
+/opt/app/dealflow/artifacts/dealflow-web:
+ ERR_PNPM_RECURSIVE_RUN_FIRST_FAIL  @workspace/dealflow-web@0.0.0 build: `vite build --config vite.config.ts`
+spawn ENOENT
