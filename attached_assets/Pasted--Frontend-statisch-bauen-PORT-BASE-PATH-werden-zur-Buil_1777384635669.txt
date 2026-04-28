@@ -1,0 +1,53 @@
+
+# Frontend statisch bauen (PORT/BASE_PATH werden zur Build-Zeit gelesen,
+# nur PORT muss gesetzt sein — der Wert ist im Static-Build egal)
+PORT=1 BASE_PATH=/ pnpm --filter @workspace/dealflow-web run build
+# Output liegt in artifacts/dealflow-web/dist/public
+Scope: all 10 workspace projects
+ ERR_PNPM_LOCKFILE_CONFIG_MISMATCH  Cannot proceed with the frozen installation. The current "overrides" configuration doesn't match the value found in the lockfile
+
+Update your lockfile using "pnpm install --no-frozen-lockfile"
+
+> @workspace/db@0.0.0 push /opt/app/dealflow/lib/db
+> drizzle-kit push --config ./drizzle.config.ts
+
+sh: 1: drizzle-kit: not found
+/opt/app/dealflow/lib/db:
+ ERR_PNPM_RECURSIVE_RUN_FIRST_FAIL  @workspace/db@0.0.0 push: `drizzle-kit push --config ./drizzle.config.ts`
+spawn ENOENT
+ WARN   Local package.json exists, but node_modules missing, did you mean to install?
+
+> @workspace/api-server@0.0.0 build /opt/app/dealflow/artifacts/api-server
+> node ./build.mjs
+
+node:internal/modules/esm/resolve:873
+  throw new ERR_MODULE_NOT_FOUND(packageName, fileURLToPath(base), null);
+        ^
+
+Error [ERR_MODULE_NOT_FOUND]: Cannot find package 'esbuild' imported from /opt/app/dealflow/artifacts/api-server/build.mjs
+    at packageResolve (node:internal/modules/esm/resolve:873:9)
+    at moduleResolve (node:internal/modules/esm/resolve:946:18)
+    at defaultResolve (node:internal/modules/esm/resolve:1188:11)
+    at ModuleLoader.defaultResolve (node:internal/modules/esm/loader:708:12)
+    at #cachedDefaultResolve (node:internal/modules/esm/loader:657:25)
+    at ModuleLoader.resolve (node:internal/modules/esm/loader:640:38)
+    at ModuleLoader.getModuleJobForImport (node:internal/modules/esm/loader:264:38)
+    at ModuleJob._link (node:internal/modules/esm/module_job:168:49) {
+  code: 'ERR_MODULE_NOT_FOUND'
+}
+
+Node.js v20.20.2
+/opt/app/dealflow/artifacts/api-server:
+ ERR_PNPM_RECURSIVE_RUN_FIRST_FAIL  @workspace/api-server@0.0.0 build: `node ./build.mjs`
+Exit status 1
+ WARN   Local package.json exists, but node_modules missing, did you mean to install?
+
+> @workspace/dealflow-web@0.0.0 build /opt/app/dealflow/artifacts/dealflow-web
+> vite build --config vite.config.ts
+
+sh: 1: vite: not found
+/opt/app/dealflow/artifacts/dealflow-web:
+ ERR_PNPM_RECURSIVE_RUN_FIRST_FAIL  @workspace/dealflow-web@0.0.0 build: `vite build --config vite.config.ts`
+spawn ENOENT
+ WARN   Local package.json exists, but node_modules missing, did you mean to install?
+root@synthetix-stag:/opt/app/dealflow# 
