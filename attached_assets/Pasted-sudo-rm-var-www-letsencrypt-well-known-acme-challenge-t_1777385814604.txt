@@ -1,0 +1,139 @@
+sudo rm /var/www/letsencrypt/.well-known/acme-challenge/test
+nginx: the configuration file /etc/nginx/nginx.conf syntax is ok
+nginx: configuration file /etc/nginx/nginx.conf test is successful
+  location ^~ /.well-known/acme-challenge/ {
+    root /var/www/letsencrypt;
+hallo
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1" />
+    <title>DealFlow One</title>
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <script type="module" crossorigin src="/assets/index-CvYfK7zs.js"></script>
+    <link rel="stylesheet" crossorigin href="/assets/index-5_G9uiJM.css">
+  </head>
+  <body>
+    <div id="root"></div>
+  </body>
+</html>
+root@synthetix-stag:/opt/app/dealflow# # 1. Welche IP(s) löst die Domain wirklich auf?
+dig +short dealflow.returnz.one
+# muss EXAKT 49.13.17.129 zeigen — keine zweite IP
+
+# 2. Anfrage an LOKALEN nginx zwingen, DNS umgehen
+curl -sv --resolve dealflow.returnz.one:80:127.0.0.1 \
+  http://dealflow.returnz.one/.well-known/acme-challenge/test 2>&1 | tail -25
+
+# 3. Voller Restart, nicht nur reload (falls alte Worker noch laufen)
+sudo systemctl restart nginx
+
+# 4. Welche server-Blöcke auf Port 80 hören
+sudo nginx -T 2>/dev/null | awk '
+  /^[[:space:]]*server[[:space:]]*\{/ {n++; in_srv=1; buf=""}
+  in_srv {buf=buf"\n"$0}
+  /^}/ {if (in_srv && buf ~ /listen[[:space:]]+80[^0-9]/) print "=== block "n" ===" buf; in_srv=0}
+'
+49.13.17.129
+* Added dealflow.returnz.one:80:127.0.0.1 to DNS cache
+* Hostname dealflow.returnz.one was found in DNS cache
+*   Trying 127.0.0.1:80...
+* Connected to dealflow.returnz.one (127.0.0.1) port 80
+> GET /.well-known/acme-challenge/test HTTP/1.1
+> Host: dealflow.returnz.one
+> User-Agent: curl/8.5.0
+> Accept: */*
+> 
+< HTTP/1.1 404 Not Found
+< Server: nginx/1.24.0 (Ubuntu)
+< Date: Tue, 28 Apr 2026 14:16:33 GMT
+< Content-Type: text/html
+< Content-Length: 162
+< Connection: keep-alive
+< 
+{ [162 bytes data]
+* Connection #0 to host dealflow.returnz.one left intact
+<html>
+<head><title>404 Not Found</title></head>
+<body>
+<center><h1>404 Not Found</h1></center>
+<hr><center>nginx/1.24.0 (Ubuntu)</center>
+</body>
+</html>
+=== block 1 ===
+server {
+    listen 80;
+    listen [::]:80;
+    server_name app.returnz.one;
+
+    root /var/www/synthetix/artifacts/synthetix-os/dist/public;
+    index index.html;
+    client_max_body_size 25M;
+
+    location / {
+        try_files $uri $uri/ /index.html;
+    }
+}
+=== block 3 ===
+server {
+    if ($host = betahub.returnz.one) {
+        return 301 https://$host$request_uri;
+    } # managed by Certbot
+
+
+    listen 80;
+    listen [::]:80;
+    server_name betahub.returnz.one;
+    return 404; # managed by Certbot
+
+
+}
+=== block 4 ===
+server {
+  listen 80;
+  server_name dealflow.returnz.one;
+
+  client_max_body_size 50m;
+
+  location ^~ /.well-known/acme-challenge/ {
+    root /var/www/letsencrypt;
+    default_type "text/plain";
+    try_files $uri =404;
+  }
+
+  root /opt/app/dealflow/artifacts/dealflow-web/dist/public;
+  index index.html;
+
+  location /api/ {
+    proxy_pass         http://127.0.0.1:4101;
+    proxy_http_version 1.1;
+    proxy_set_header   Host              $host;
+    proxy_set_header   X-Real-IP         $remote_addr;
+    proxy_set_header   X-Forwarded-For   $proxy_add_x_forwarded_for;
+    proxy_set_header   X-Forwarded-Proto $scheme;
+    proxy_read_timeout 120s;
+  }
+
+  location / {
+    try_files $uri /index.html;
+  }
+}
+=== block 6 ===
+server {
+    if ($host = synthetix.returnz.one) {
+        return 301 https://$host$request_uri;
+    } # managed by Certbot
+
+
+    listen 80;
+    listen [::]:80;
+    server_name synthetix.returnz.one;
+    return 404; # managed by Certbot
+
+
+}
+root@synthetix-stag:/opt/app/dealflow# 
