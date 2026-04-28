@@ -1,0 +1,162 @@
+> @workspace/db@0.0.0 push /opt/app/dealflow/lib/db
+> drizzle-kit push --config ./drizzle.config.ts
+
+Reading config file '/opt/app/dealflow/lib/db/drizzle.config.ts'
+Using 'pg' driver for database querying
+[✓] Pulling schema from database...
++ access_log table will be created
++ account_addresses table will be created
++ accounts table will be created
++ ai_feedback table will be created
++ ai_invocations table will be created
++ ai_recommendations table will be created
++ ai_second_opinions table will be created
++ amendment_clauses table will be created
++ approval_chain_templates table will be created
++ approvals table will be created
++ attachment_library table will be created
++ audit_log table will be created
++ brand_clause_variant_overrides table will be created
++ brand_document_templates table will be created
++ brands table will be created
++ clause_deviations table will be created
++ clause_families table will be created
++ clause_family_cuad_categories table will be created
++ clause_import_jobs table will be created
++ clause_import_suggestions table will be created
++ clause_suggestions table will be created
++ clause_variant_compatibility table will be created
++ clause_variant_translations table will be created
++ clause_variants table will be created
++ companies table will be created
++ contacts table will be created
++ contract_amendments table will be created
++ contract_clauses table will be created
++ contract_comments table will be created
++ contract_playbooks table will be created
++ contract_regulatory_assessments table will be created
++ contract_type_cuad_expectations table will be created
++ contract_types table will be created
++ contracts table will be created
++ copilot_insights table will be created
++ copilot_messages table will be created
++ copilot_threads table will be created
++ cuad_categories table will be created
++ customer_reactions table will be created
++ deals table will be created
++ email_channels table will be created
++ email_send_log table will be created
++ entity_versions table will be created
++ external_collaborator_events table will be created
++ external_collaborators table will be created
++ external_contracts table will be created
++ idempotency_keys table will be created
++ industry_profiles table will be created
++ leads table will be created
++ legal_precedents table will be created
++ legal_sources table will be created
++ line_items table will be created
++ negotiations table will be created
++ notification_channels table will be created
++ obligations table will be created
++ order_confirmation_checks table will be created
++ order_confirmations table will be created
++ price_increase_campaigns table will be created
++ price_increase_letters table will be created
++ price_position_bundle_items table will be created
++ price_position_bundles table will be created
++ price_positions table will be created
++ price_rules table will be created
++ pricing_categories table will be created
++ pricing_category_sequences table will be created
++ pricing_subcategories table will be created
++ quote_attachments table will be created
++ quote_template_sections table will be created
++ quote_templates table will be created
++ quote_versions table will be created
++ quotes table will be created
++ regulatory_framework_versions table will be created
++ regulatory_frameworks table will be created
++ regulatory_requirements table will be created
++ renewal_opportunities table will be created
++ roles table will be created
++ saved_views table will be created
++ sessions table will be created
++ signature_packages table will be created
++ signers table will be created
++ subjects_deletion_log table will be created
++ tenants table will be created
++ timeline_events table will be created
++ uploaded_objects table will be created
++ user_delegations table will be created
++ user_mailbox_connections table will be created
++ webhook_deliveries table will be created
++ webhooks table will be created
++ widget_rate_limits table will be created
+--- all table conflicts resolved ---
+
+
++ scope column will be created
+
++ initials column will be created
+
++ avatar_color column will be created
+
++ password_hash column will be created
+
++ is_active column will be created
+
++ tenant_id column will be created
+
++ tenant_wide column will be created
+
++ scope_company_ids column will be created
+
++ scope_brand_ids column will be created
+
++ active_scope_company_ids column will be created
+
++ active_scope_brand_ids column will be created
+
++ is_platform_admin column will be created
+
++ display_name column will be created
+
++ preferred_language column will be created
+
++ time_zone column will be created
+--- all columns conflicts in users table resolved ---
+
+ Warning  Found data-loss statements:
+· You're about to delete apps table with 1 items
+· You're about to add not-null scope column without default value, which contains 3 items
+· You're about to add not-null initials column without default value, which contains 3 items
+· You're about to delete clerk_user_id column in users table with 3 items
+· You're about to delete active column in users table with 3 items
+· You're about to delete avatar_url column in users table with 3 items
+· You're about to delete created_at column in users table with 3 items
+
+THIS ACTION WILL CAUSE DATA LOSS AND CANNOT BE REVERTED
+
+Do you still want to push changes?
+[x] All changes were aborted
+
+> @workspace/api-server@0.0.0 build /opt/app/dealflow/artifacts/api-server
+> node ./build.mjs
+
+
+  dist/index.mjs                      10.3mb ⚠️
+  dist/pino-worker.mjs               153.4kb
+  dist/pino-file.mjs                 142.0kb
+  dist/pino-pretty.mjs               114.6kb
+  dist/thread-stream-worker.mjs        7.3kb
+  dist/index.mjs.map                  17.9mb
+  dist/pino-worker.mjs.map           256.9kb
+  dist/pino-file.mjs.map             229.0kb
+  dist/pino-pretty.mjs.map           203.9kb
+  dist/thread-stream-worker.mjs.map   12.0kb
+
+⚡ Done in 1224ms
+
+> @workspace/dealflow-web@0.0.0 build /opt/app/dealflow/artifacts/dealflow-web
+> vite build --config vite.config.ts
