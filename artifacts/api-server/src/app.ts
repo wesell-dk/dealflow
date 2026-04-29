@@ -14,6 +14,24 @@ import { logger } from "./lib/logger";
 
 const app: Express = express();
 
+// Iframe-Embedding zulassen: per CSP `frame-ancestors` (löst das alte
+// X-Frame-Options ab und ist viel feiner steuerbar). Default erlaubt die
+// Beta-Hub-Plattform sowie alle returnz.one-Subdomains; per ENV
+// IFRAME_ANCESTORS überschreibbar (Whitespace-getrennte Origin-Liste).
+const IFRAME_ANCESTORS =
+  process.env.IFRAME_ANCESTORS?.trim() ||
+  "https://betahub.returnz.one https://*.returnz.one";
+app.use((_req, res, next) => {
+  res.setHeader(
+    "Content-Security-Policy",
+    `frame-ancestors 'self' ${IFRAME_ANCESTORS};`,
+  );
+  // Falls eine Upstream-Schicht (Helmet, Proxy) X-Frame-Options setzt,
+  // entfernen wir es hier — frame-ancestors hat dann allein das Sagen.
+  res.removeHeader("X-Frame-Options");
+  next();
+});
+
 app.use(
   pinoHttp({
     logger,

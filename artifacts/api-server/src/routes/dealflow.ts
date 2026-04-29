@@ -3,6 +3,7 @@ import { and, asc, desc, eq, inArray, isNotNull, isNull, or, sql, type SQL } fro
 import { randomUUID, randomBytes } from 'node:crypto';
 import { BlockList } from 'node:net';
 import { ObjectStorageService, SidecarUnavailableError } from '../lib/objectStorage';
+import { clientReadableCookieOptions } from '../lib/cookieOpts';
 import { extractTextFromUpload } from '../lib/extractContractText';
 import { validateInline } from '../middlewares/validate';
 import {
@@ -1579,13 +1580,11 @@ router.patch('/orgs/me/active-scope', async (req, res) => {
     companyIds: reqCompanies,
     brandIds: reqBrands,
   });
-  res.cookie(ACTIVE_SCOPE_COOKIE, cookieVal, {
-    httpOnly: false,
-    sameSite: 'lax',
-    secure: process.env.NODE_ENV === 'production',
-    maxAge: 1000 * 60 * 60 * 24 * 30,
-    path: '/',
-  });
+  res.cookie(
+    ACTIVE_SCOPE_COOKIE,
+    cookieVal,
+    clientReadableCookieOptions({ maxAge: 1000 * 60 * 60 * 24 * 30 }),
+  );
   // Audit-Log Snapshot — hier explizit den NEUEN Scope speichern
   // (writeAuditFromReq würde den alten/Pre-Update-Scope nehmen).
   await writeAudit({

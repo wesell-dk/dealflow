@@ -1,0 +1,75 @@
+Meine App soll in einem iframe auf https://betahub.returnz.one laufen 
+können (Beta-Test-Plattform). Aktuell schlägt der Login im iframe 
+fehl, im neuen Tab funktioniert alles. Bitte mache folgende Anpassungen:
+
+## 1. iframe-Embedding erlauben
+
+Entferne `X-Frame-Options` komplett und setze stattdessen für ALLE 
+Responses (HTML, API, Assets):
+
+  Content-Security-Policy: frame-ancestors 'self' https://betahub.returnz.one https://*.returnz.one;
+
+Falls du bereits eine CSP hast: nur die `frame-ancestors`-Direktive 
+ergänzen/anpassen, den Rest unverändert lassen. Sicherstellen, dass 
+keine andere Middleware (Helmet, nginx, CDN) `X-Frame-Options: DENY` 
+oder `SAMEORIGIN` zurücksetzt.
+
+## 2. Cookies iframe-tauglich machen
+
+Alle Session-/Auth-Cookies müssen gesetzt werden mit:
+
+  SameSite=None; Secure; HttpOnly
+
+Ohne `SameSite=None` verwirft Chrome/Safari/Firefox den Cookie im 
+iframe (Third-Party-Context). `Secure` ist Pflicht bei `SameSite=None`. 
+Das gilt für: Session-Cookie, CSRF-Token-Cookie, „Remember me"-Cookie, 
+und alle weiteren Auth-Cookies.
+
+Bitte prüfe Express/Fastify/Next.js Session-Config, evtl. auch 
+`cookie-parser`, `express-session`, `iron-session`, NextAuth/Auth.js, 
+Passport — überall wo Cookies gesetzt werden.
+
+## 3. CORS für betahub.returnz.one
+
+Falls die App fetch/XHR-Calls macht, muss CORS so konfiguriert sein:
+
+  Access-Control-Allow-Origin: https://betahub.returnz.one
+    (nicht *, weil credentials)
+  Access-Control-Allow-Credentials: true
+  Access-Control-Allow-Methods: GET, POST, PUT, PATCH, DELETE, OPTIONS
+  Access-Control-Allow-Headers: Content-Type, Authorization, X-CSRF-Token
+
+OPTIONS-Preflight muss korrekt mit 204 beantwortet werden.
+
+## 4. OAuth/Social-Login im iframe (falls vorhanden)
+
+Google/GitHub/etc. lassen sich nicht im iframe öffnen (X-Frame-Options 
+auf deren Seite). Wenn die App Social-Login hat:
+
+- Den Social-Login-Button in einem **neuen Fenster/Tab** öffnen 
+  (`window.open(url, '_blank')` oder `target="_blank"`), 
+  NICHT direkt im iframe navigieren.
+- Nach erfolgreichem OAuth-Callback: `window.opener.postMessage(...)` 
+  zurück an das iframe schicken, dann `window.close()`.
+
+## 5. Verify
+
+Nach den Änderungen bitte testen:
+
+a) Browser DevTools → Network: Login-POST an die App liefert 
+   Set-Cookie mit `SameSite=None; Secure`.
+b) Browser DevTools → Application → Cookies: der Session-Cookie ist 
+   nach dem Login sichtbar (nicht verworfen).
+c) Folge-Requests senden den Cookie mit (Cookie-Header in Request).
+d) Die App ist im iframe auf betahub.returnz.one nutzbar inkl. Login 
+   und alle internen Navigationen.
+
+## 6. WICHTIG — was NICHT ändern
+
+- Nicht den Auth-Flow umbauen
+- Keine neuen Endpoints erfinden
+- Tokens/Sessions selbst bleiben unverändert
+- Es geht nur um Cookie-Attribute, CSP-Header und CORS-Config
+
+Falls du Helmet, nginx, Cloudflare, Vercel oder einen anderen Layer 
+davor hast: prüfe alle, weil Header dort überschrieben werden können.

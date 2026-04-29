@@ -8,6 +8,7 @@ import {
   SESSION_COOKIE,
   verifyPassword,
 } from "../lib/auth";
+import { authCookieOptions, clearCookieOptions } from "../lib/cookieOpts";
 import { buildScope, hasActiveScopeFilter } from "../lib/scope";
 
 const router: IRouter = Router();
@@ -105,13 +106,7 @@ router.post("/login", async (req, res) => {
     return;
   }
   const sid = await createSession(u.id);
-  res.cookie(SESSION_COOKIE, sid, {
-    httpOnly: true,
-    sameSite: "lax",
-    secure: process.env.NODE_ENV === "production",
-    maxAge: SEVEN_DAYS,
-    path: "/",
-  });
+  res.cookie(SESSION_COOKIE, sid, authCookieOptions({ maxAge: SEVEN_DAYS }));
   res.json({ user: await publicUser(u) });
 });
 
@@ -119,7 +114,7 @@ router.post("/logout", async (req, res) => {
   const cookies = (req as { cookies?: Record<string, string> }).cookies ?? {};
   const sid = cookies[SESSION_COOKIE];
   if (sid) await destroySession(sid);
-  res.clearCookie(SESSION_COOKIE, { path: "/" });
+  res.clearCookie(SESSION_COOKIE, clearCookieOptions());
   res.json({ ok: true });
 });
 
