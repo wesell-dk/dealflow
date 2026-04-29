@@ -13,6 +13,18 @@
 // unverändert durchgereicht.
 const BASE = (import.meta.env.BASE_URL || "/").replace(/\/$/, "");
 
+// Wenn die SPA über einen Cross-Origin-iframe (z. B. betahub.returnz.one)
+// ausgeliefert wird, müssen Asset-URLs absolut auf die DealFlow-Origin
+// zeigen — der Browser lädt `<img src>` immer relativ zur Document-Origin
+// (= betahub) und würde sonst 404 von der Beta-Plattform bekommen. Im
+// Direktzugriff auf dealflow.returnz.one ist `ORIGIN_PREFIX` leer, also
+// bleibt alles relativ.
+const RAW_ORIGIN = (import.meta.env.VITE_API_ORIGIN ?? "").trim().replace(/\/$/, "");
+const ORIGIN_PREFIX =
+  RAW_ORIGIN && typeof window !== "undefined" && window.location.origin !== RAW_ORIGIN
+    ? RAW_ORIGIN
+    : "";
+
 export function toAssetSrc(input: string | null | undefined): string {
   if (!input) return "";
   const v = input.trim();
@@ -32,7 +44,7 @@ export function toAssetSrc(input: string | null | undefined): string {
   if (!path.startsWith("/")) path = `/${path}`;
   if (!path.startsWith("/objects/")) {
     // Unbekanntes Schema — dann besser unverändert lassen, aber mit BASE prefix.
-    return `${BASE}${path}`;
+    return `${ORIGIN_PREFIX}${BASE}${path}`;
   }
-  return `${BASE}/api/storage${path}`;
+  return `${ORIGIN_PREFIX}${BASE}/api/storage${path}`;
 }
